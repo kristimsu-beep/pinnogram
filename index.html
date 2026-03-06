@@ -79,9 +79,10 @@
 
 <script>
     // --- 1. CONFIG ---
-    const API_URL = "https://vyr6dump1k.localto.net";; 
+    const API_URL = "https://vyr6dump1k.localto.net"; // Только одна точка с запятой в конце! 
     const socketProto = API_URL.startsWith("https") ? "wss" : "ws";
     const socketBase = API_URL.replace(/^https?:\/\//, "");
+
 
     let ws, 
         myName = localStorage.getItem("pinnogram_user"), 
@@ -99,6 +100,7 @@
         document.getElementById("chat-screen").style.display = "flex";
         
         ws = new WebSocket(`${socketProto}://${socketBase}/ws/${room}/${encodeURIComponent(name)}`);
+
 
         ws.onmessage = (event) => {
             const raw = event.data;
@@ -240,4 +242,5 @@
 </script>
 </body>
 </html>
+
 
