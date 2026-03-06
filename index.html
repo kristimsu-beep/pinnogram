@@ -80,8 +80,13 @@
 <script>
     // --- 1. CONFIG ---
     const API_URL = "https://vyr6dump1k.localto.net"; // Только одна точка с запятой в конце! 
+    // Автоматически выбираем протокол: wss для https и ws для http
     const socketProto = API_URL.startsWith("https") ? "wss" : "ws";
     const socketBase = API_URL.replace(/^https?:\/\//, "");
+
+// ПОДКЛЮЧАЕМСЯ ЧЕРЕЗ ТУННЕЛЬ, А НЕ ЧЕРЕЗ 127.0.0.1!
+    ws = new WebSocket(`${socketProto}://${socketBase}/ws/${room}/${encodeURIComponent(name)}`);
+
 
 
     let ws, 
@@ -242,5 +247,6 @@
 </script>
 </body>
 </html>
+
 
 
