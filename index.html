@@ -80,7 +80,7 @@
         typingTimeout, 
         isTypingNow = false;
 
-    const API_URL = "http://127.0.0.1:8000";
+    const API_URL = "https://vye6dumplk.localto.net";
     const notifSound = new Audio("https://assets.mixkit.co");
 
     // АВТО-ВХОД: Если в памяти есть и имя, и комната — запускаем чат сразу
@@ -186,35 +186,153 @@
                 div.className = sender === myName ? 'msg msg-right' : 'msg msg-left';
                 div.id = `msg-${msgId}`;
                 
+                <script>
+    // --- НАСТРОЙКИ СЕРВЕРА ---
+    // Твоя ссылка из Localtonet (без слэша в конце)
+    const API_URL = "https://vye6dumplk.localto.net"; 
+
+    // Автоматический расчет протоколов (ws/wss) для работы в интернете
+    const socketProto = API_URL.startsWith("https") ? "wss" : "ws";
+    const socketBase = API_URL.replace(/^https?:\/\//, "");
+
+    let ws, 
+        myName = localStorage.getItem("pinnogram_user"), 
+        myRoom = localStorage.getItem("pinnogram_room"), 
+        typingTimeout, 
+        isTypingNow = false,
+        mediaRecorder, 
+        videoChunks = [];
+
+    const notifSound = document.getElementById("notifSound");
+
+    // АВТО-ВХОД
+    if (myName && myRoom) {
+        startChat(myName, myRoom);
+    }
+
+    function handleTyping() {
+        if (!isTypingNow && ws?.readyState === 1) {
+            isTypingNow = true; 
+            ws.send("__TYPING__");
+            setTimeout(() => { isTypingNow = false; }, 3000);
+        }
+    }
+
+    async function uploadFile() {
+        const fileInput = document.getElementById('fileInput');
+        const file = fileInput.files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
+        const data = await res.json();
+        ws.send(data.url);
+        fileInput.value = '';
+    }
+
+    // ЛОГИКА ЗАПИСИ ПЯТИУГОЛЬНИКОВ
+    async function toggleRecording() {
+        const btn = document.getElementById("recordBtn");
+        if (!mediaRecorder || mediaRecorder.state === "inactive") {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                videoChunks = [];
+                mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) videoChunks.push(e.data); };
+                mediaRecorder.onstop = async () => {
+                    const videoBlob = new Blob(videoChunks, { type: 'video/mp4' });
+                    await uploadVideo(videoBlob);
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                mediaRecorder.start();
+                btn.classList.add("recording");
+                btn.textContent = "🛑";
+            } catch (err) { alert("Нет доступа к камере!"); }
+        } else {
+            mediaRecorder.stop();
+            btn.classList.remove("recording");
+            btn.textContent = "🎥";
+        }
+    }
+
+    async function uploadVideo(blob) {
+        const formData = new FormData();
+        formData.append("file", blob, `video_${Date.now()}.mp4`);
+        const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
+        const data = await res.json();
+        ws.send(data.url);
+    }
+
+    function startChat(name, room) {
+        myName = name; myRoom = room;
+        document.getElementById("login-screen").style.display = "none";
+        document.getElementById("chat-screen").style.display = "flex";
+        
+        // ПОДКЛЮЧЕНИЕ ЧЕРЕЗ ТУННЕЛЬ
+        ws = new WebSocket(`${socketProto}://${socketBase}/ws/${room}/${encodeURIComponent(name)}`);
+
+        ws.onmessage = (event) => {
+            const raw = event.data;
+            const chat = document.getElementById('chat');
+
+            if (raw.startsWith("DELETE_CONFIRM:")) {
+                const id = raw.split(":")[1];
+                document.getElementById(`msg-${id}`)?.remove();
+                return;
+            }
+
+            if (raw.startsWith("TYPING:")) {
+                const typingUser = raw.split(":")[1];
+                document.getElementById("typing-indicator").textContent = `${typingUser} печатает...`;
+                clearTimeout(typingTimeout);
+                typingTimeout = setTimeout(() => document.getElementById("typing-indicator").textContent = "", 2000);
+                return;
+            }
+
+            const div = document.createElement('div');
+            if (raw.startsWith("SYSTEM:")) {
+                div.style.alignSelf = "center"; div.style.fontSize = "11px"; div.style.opacity = "0.5";
+                div.textContent = raw.replace("SYSTEM: ", "");
+            } else {
+                const [idPart, content] = raw.split("|");
+                const msgId = idPart.replace("ID:", "");
+                const timeMatch = content.match(/\[(\d{2}:\d{2})\]/);
+                const time = timeMatch ? timeMatch[1] : "--:--";
+                const userAndText = content.replace(/^\[\d{2}:\d{2}\]\s*/, "");
+                const [sender, ...textParts] = userAndText.split(": ");
+                const text = textParts.join(": ");
+
+                div.className = sender === myName ? 'msg msg-right' : 'msg msg-left';
+                div.id = `msg-${msgId}`;
                 if (sender !== myName) notifSound.play().catch(() => {});
 
-                // Проверка на картинку
-                const isImg = text.startsWith("http") && text.match(/\.(jpg|jpeg|png|gif|webp)$/i);
-                
+                // Распознавание фото и видео (пятиугольников)
+                const isImg = text.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                const isVideo = text.match(/\.(mp4|webm|mov)$/i);
+
                 if (isImg) {
                     const img = document.createElement('img');
                     img.src = text;
-                    img.onclick = () => {
-                        document.getElementById('modal-img').src = text;
-                        document.getElementById('modal').style.display = 'flex';
-                    };
+                    img.onclick = () => { document.getElementById('modal-img').src = text; document.getElementById('modal').style.display = 'flex'; };
                     div.appendChild(img);
+                } else if (isVideo) {
+                    const video = document.createElement('video');
+                    video.src = text; video.autoplay = true; video.loop = true; video.muted = true; video.playsInline = true;
+                    video.onclick = () => video.muted = !video.muted;
+                    div.appendChild(video);
                 } else {
                     const txtSpan = document.createElement('span');
-                    txtSpan.textContent = text; // Защита XSS
+                    txtSpan.textContent = text;
                     div.appendChild(txtSpan);
                 }
                 
                 const timeSpan = document.createElement('span');
-                timeSpan.className = "msg-time";
-                timeSpan.textContent = time;
+                timeSpan.className = "msg-time"; timeSpan.textContent = time;
                 div.appendChild(timeSpan);
                 
                 div.oncontextmenu = (e) => {
                     e.preventDefault();
-                    if (sender === myName && confirm("Удалить сообщение?")) {
-                        ws.send(`__DELETE__:${msgId}`);
-                    }
+                    if (sender === myName && confirm("Удалить сообщение?")) ws.send(`__DELETE__:${msgId}`);
                 };
             }
             chat.appendChild(div);
@@ -224,16 +342,12 @@
 
     function sendMessage() {
         const i = document.getElementById("messageText");
-        if (i.value.trim() && ws) {
-            ws.send(i.value);
-            i.value = '';
-        }
+        if (i.value.trim() && ws) { ws.send(i.value); i.value = ''; }
     }
 
     function saveNameAndStart() {
         const n = document.getElementById("nameInput").value.trim();
-        const r = prompt("Введите ID комнаты (например: general)", "general")?.trim();
-        
+        const r = prompt("ID комнаты (например: general):", "general")?.trim();
         if (n && r) { 
             localStorage.setItem("pinnogram_user", n); 
             localStorage.setItem("pinnogram_room", r); 
@@ -243,14 +357,13 @@
     
     function addEmoji(emoji) {
         const i = document.getElementById("messageText");
-        i.value += emoji;
-        i.focus();
+        i.value += emoji; i.focus();
     }
 
-    document.addEventListener("keypress", (e) => {
-        if (e.key === "Enter") sendMessage();
-    });
+    document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
 </script>
+
 
 </body>
 </html>
+
