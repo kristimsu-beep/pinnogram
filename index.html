@@ -79,15 +79,9 @@
 
 <script>
     // --- 1. CONFIG ---
-    const API_URL = "https://vyr6dump1k.localto.net"; // Только одна точка с запятой в конце! 
-    // Автоматически выбираем протокол: wss для https и ws для http
+    const API_URL = "https://vyr6dump1k.localto.net"; 
     const socketProto = API_URL.startsWith("https") ? "wss" : "ws";
     const socketBase = API_URL.replace(/^https?:\/\//, "");
-
-// ПОДКЛЮЧАЕМСЯ ЧЕРЕЗ ТУННЕЛЬ, А НЕ ЧЕРЕЗ 127.0.0.1!
-    ws = new WebSocket(`${socketProto}://${socketBase}/ws/${room}/${encodeURIComponent(name)}`);
-
-
 
     let ws, 
         myName = localStorage.getItem("pinnogram_user"), 
@@ -104,8 +98,8 @@
         document.getElementById("login-screen").style.display = "none";
         document.getElementById("chat-screen").style.display = "flex";
         
+        // ПРАВИЛЬНОЕ МЕСТО ПОДКЛЮЧЕНИЯ:
         ws = new WebSocket(`${socketProto}://${socketBase}/ws/${room}/${encodeURIComponent(name)}`);
-
 
         ws.onmessage = (event) => {
             const raw = event.data;
@@ -169,7 +163,7 @@
         };
     }
 
-    // --- 3. MEDIA (PHOTO & VIDEO) ---
+    // --- 3. MEDIA ---
     async function uploadFile() {
         const fileInput = document.getElementById('fileInput');
         const file = fileInput.files[0];
@@ -227,7 +221,7 @@
 
     function saveNameAndStart() {
         const n = document.getElementById("nameInput").value.trim();
-        const r = prompt("ID комнаты (напр. general):", "general") || "general";
+        const r = prompt("ID комнаты:", "general") || "general";
         if (n && r) { 
             localStorage.setItem("pinnogram_user", n); 
             localStorage.setItem("pinnogram_room", r); 
@@ -247,6 +241,7 @@
 </script>
 </body>
 </html>
+
 
 
 
