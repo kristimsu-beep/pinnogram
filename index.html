@@ -96,7 +96,9 @@
         document.getElementById("login-screen").style.display = "none";
         document.getElementById("chat-screen").style.display = "flex";
         
-        ws = new WebSocket(`${socketProto}://${socketBase}/ws/${room}/${encodeURIComponent(name)}`);
+        const host = window.location.host;
+        ws = new WebSocket(`${socketProto}://${host}/ws/${room}/${encodeURIComponent(name)}`);
+
 
         ws.onmessage = (event) => {
             const raw = event.data;
@@ -240,3 +242,4 @@
 </script>
 </body>
 </html>
+
