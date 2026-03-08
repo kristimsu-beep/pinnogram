@@ -8,7 +8,7 @@ from starlette.websockets import WebSocketState
 
 app = FastAPI()
 
-# 1. CORS ДОЛЖЕН БЫТЬ В САМОМ НАЧАЛЕ (сразу после app)
+# Важно: CORS ПЕРВЫМ
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,7 +23,6 @@ DB_PATH = "pinnogram.db"
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
-# 2. Роуты
 @app.api_route("/", methods=["GET", "HEAD"])
 async def get_index():
     return FileResponse('index.html')
@@ -38,7 +37,6 @@ async def startup():
             await db.commit()
         except:
             pass 
-
         await db.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,10 +50,10 @@ async def startup():
 
 class ConnectionManager:
     def __init__(self):
-        self.rooms: dict[str, list[WebSocket]] = {}
+        self.rooms = {}
 
     async def connect(self, websocket: WebSocket, room_id: str):
-        await websocket.accept() # Важнейшая строка
+        await websocket.accept()
         if room_id not in self.rooms:
             self.rooms[room_id] = []
         self.rooms[room_id].append(websocket)
@@ -71,15 +69,12 @@ class ConnectionManager:
 
     def disconnect(self, websocket: WebSocket, room_id: str):
         if room_id in self.rooms:
-            try:
+            if websocket in self.rooms[room_id]:
                 self.rooms[room_id].remove(websocket)
-            except ValueError:
-                pass
-            if not self.rooms[room_id]:
-                del self.rooms[room_id]
 
     async def broadcast(self, message: str, room_id: str, username: str = None, text: str = None):
         now = datetime.now().strftime("%H:%M")
+        final_msg = f"ID:0|SYSTEM: {message}"
         
         if username and text:
             async with aiosqlite.connect(DB_PATH) as db:
@@ -88,14 +83,8 @@ class ConnectionManager:
                     (username, text, now, room_id)
                 )
                 msg_id = cursor.lastrowid
-                await db.execute("""
-                    DELETE FROM messages WHERE room_id = ? AND id NOT IN 
-                    (SELECT id FROM messages WHERE room_id = ? ORDER BY id DESC LIMIT 100)
-                """, (room_id, room_id))
                 await db.commit()
                 final_msg = f"ID:{msg_id}|[{now}] {username}: {text}"
-        else:
-            final_msg = f"SYSTEM: {message}"
 
         if room_id in self.rooms:
             for connection in self.rooms[room_id]:
@@ -114,44 +103,35 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
     path = os.path.join(UPLOAD_DIR, name)
     with open(path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-        
-    base_url = str(request.base_url).rstrip("/")
-    return {"url": f"{base_url}/files/{name}"}
+    return {"url": f"{str(request.base_url).rstrip('/')}/files/{name}"}
 
 @app.websocket("/ws/{room_id}/{username}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
     await manager.connect(websocket, room_id)
     await manager.broadcast(f"{username} вошел в чат", room_id)
-    
     try:
         while True:
             data = await websocket.receive_text()
-            
             if data.startswith("__DELETE__:"):
-                msg_id = data.replace("__DELETE__:", "") # Более надежное получение ID
+                msg_id = data.replace("__DELETE__:", "")
                 async with aiosqlite.connect(DB_PATH) as db:
                     await db.execute("DELETE FROM messages WHERE id = ?", (msg_id,))
                     await db.commit()
-                
                 if room_id in manager.rooms:
-                    for connection in manager.rooms[room_id]:
-                        if connection.client_state == WebSocketState.CONNECTED:
-                            await connection.send_text(f"DELETE_CONFIRM:{msg_id}")
-            
+                    for conn in manager.rooms[room_id]:
+                        if conn.client_state == WebSocketState.CONNECTED:
+                            await conn.send_text(f"DELETE_CONFIRM:{msg_id}")
             elif data == "__TYPING__":
                 if room_id in manager.rooms:
-                    for connection in manager.rooms[room_id]:
-                        if connection != websocket and connection.client_state == WebSocketState.CONNECTED:
-                            await connection.send_text(f"TYPING:{username}")
+                    for conn in manager.rooms[room_id]:
+                        if conn != websocket and conn.client_state == WebSocketState.CONNECTED:
+                            await conn.send_text(f"TYPING:{username}")
             else:
                 await manager.broadcast("", room_id, username=username, text=data)
-                
     except WebSocketDisconnect:
         manager.disconnect(websocket, room_id)
         await manager.broadcast(f"{username} покинул чат", room_id)
 
 if __name__ == "__main__":
-    # На Render порт берется из переменной среды
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
-
