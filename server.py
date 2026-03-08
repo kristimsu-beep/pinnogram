@@ -13,9 +13,9 @@ from fastapi import Request
 
 app = FastAPI()
 
-@app.get("/")
+@app.get("/", methods=["GET", "HEAD"])
 async def get_index():
-    return FileResponse('index.html') 
+    return FileResponse('index.html')
 
 # Дальше весь твой остальной код без изменений...
  
@@ -166,3 +166,4 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
