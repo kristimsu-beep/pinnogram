@@ -79,9 +79,10 @@
 
 <script>
     // --- 1. CONFIG ---
-    const API_URL = "https://9d3b7845998d47.lhr.life";
-    const socketProto = API_URL.startsWith("https") ? "wss" : "ws";
-    const socketBase = API_URL.replace(/^https?:\/\//, "");
+    const API_URL = window.location.origin; // Берет адрес текущей страницы
+    const socketProto = window.location.protocol === "https:" ? "wss" : "ws";
+    const socketBase = window.location.host; // Берет домен из адресной строки
+
 
     let ws, 
         myName = localStorage.getItem("pinnogram_user"), 
@@ -167,13 +168,22 @@
     async function uploadFile() {
         const fileInput = document.getElementById('fileInput');
         const file = fileInput.files[0];
-        if (!file || !file.type.startsWith('image/')) return;
-        const compressed = await compressImage(file);
-        const formData = new FormData(); formData.append("file", compressed, file.name);
+        if (!file) return;
+    
+        let fileToSend = file;
+        // Сжимаем только если это изображение
+        if (file.type.startsWith('image/')) {
+            fileToSend = await compressImage(file);
+        }
+    
+        const formData = new FormData(); 
+        formData.append("file", fileToSend, file.name);
         const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
-        const data = await res.json(); ws.send(data.url);
+        const data = await res.json(); 
+        ws.send(data.url);
         fileInput.value = '';
     }
+
 
     async function compressImage(file) {
         return new Promise((resolve) => {
@@ -200,7 +210,8 @@
                 videoChunks = [];
                 mediaRecorder.ondataavailable = (e) => videoChunks.push(e.data);
                 mediaRecorder.onstop = async () => {
-                    const blob = new Blob(videoChunks, { type: 'video/mp4' });
+                    const extension = MediaRecorder.isTypeSupported('video/mp4') ? 'mp4' : 'webm';
+                    const blob = new Blob(videoChunks, { type: `video/${extension}` });
                     const formData = new FormData(); formData.append("file", blob, `v_${Date.now()}.mp4`);
                     const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData });
                     const data = await res.json(); ws.send(data.url);
@@ -241,6 +252,7 @@
 </script>
 </body>
 </html>
+
 
 
 
