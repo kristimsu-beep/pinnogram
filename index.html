@@ -318,18 +318,37 @@ async function initRTCPeer(isCaller) {
             }
             remoteVid.muted = true;
         
-            const forceRender = () => {
+            const forceRender = async () => {
+                console.log("Xiaomi: Начинаем глубокую перезагрузку рендера...");
                 remoteVid.muted = false;
+                
                 const stream = remoteVid.srcObject;
+                
+                // 1. Полностью разрываем связь с видео-чипом
                 remoteVid.srcObject = null;
+                remoteVid.pause();
+                
+                // 2. Даем Xiaomi 100мс на очистку памяти (КРИТИЧНО!)
+                await new Promise(r => setTimeout(r, 100));
+                
+                // 3. Назначаем поток заново
                 remoteVid.srcObject = stream;
                 
-                remoteVid.play().then(() => {
+                try {
+                    await remoteVid.play();
+                    // 4. "Встряхиваем" слой через прозрачность и размер
+                    remoteVid.style.opacity = "0.99";
                     remoteVid.style.width = "101vw";
-                    setTimeout(() => { remoteVid.style.width = "100vw"; }, 100);
-                    console.log("Xiaomi: Рендер принудительно запущен");
-                }).catch(e => console.error("Ошибка play:", e));
+                    setTimeout(() => { 
+                        remoteVid.style.opacity = "1";
+                        remoteVid.style.width = "100vw";
+                    }, 50);
+                    console.log("Xiaomi: Картинка должна появиться!");
+                } catch (e) {
+                    console.error("Xiaomi: Ошибка после перезагрузки:", e);
+                }
             };
+
 
             window.addEventListener('touchstart', forceRender, {once: true});
             window.addEventListener('click', forceRender, {once: true});
@@ -479,6 +498,7 @@ document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessag
 </script>
 </body>
 </html>
+
 
 
 
