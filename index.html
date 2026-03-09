@@ -104,6 +104,13 @@
 ws.onmessage = async (event) => {
     const raw = event.data;
     const chat = document.getElementById('chat');
+        if (raw.includes("ONLINE_LIST:")) {
+        const users = raw.split("ONLINE_LIST:")[1].split(",");
+        // Если у тебя есть элемент в HTML, обнови его
+        console.log("Сейчас в сети:", users); 
+        return;
+    }
+
 
     // 1. Сигналы звонка (WebRTC)
     if (raw.startsWith("RTC_SIGNAL:")) {
@@ -145,16 +152,20 @@ ws.onmessage = async (event) => {
         const timeMatch = content.match(/\[(\d{2}:\d{2})\]/);
         const time = timeMatch ? timeMatch[1] : "--:--";
         
-        // Извлекаем отправителя и текст (решаем проблему с двоеточиями)
+        // Извлекаем отправителя и текст
         const userAndText = content.replace(/^\[\d{2}:\d{2}\]\s*/, "");
         const splitIdx = userAndText.indexOf(": ");
         const sender = userAndText.substring(0, splitIdx);
+        
+        // --- ВОТ ЭТИ СТРОКИ ВАЖНО ВЕРНУТЬ ---
         const text = userAndText.substring(splitIdx + 2);
+        const cleanText = text.trim();
+        const lowerText = cleanText.toLowerCase();
 
         div.className = sender === myName ? 'msg msg-right' : 'msg msg-left';
         div.id = `msg-${msgId}`;
+        // ------------------------------------
 
-        // Имя отправителя (только для чужих)
         if (sender !== myName) {
             const nSpan = document.createElement('span');
             nSpan.className = "msg-sender";
@@ -163,50 +174,48 @@ ws.onmessage = async (event) => {
             document.getElementById("notifSound").play().catch(() => {});
         }
 
-        // Проверка на медиа (картинка или видео)
-        const lowerText = text.toLowerCase().trim();
-        const isImg = lowerText.match(/\.(jpg|jpeg|png|gif|webp|heic)$/);
-        const isVideo = lowerText.match(/\.(mp4|webm|mov|avi)$/);
+        // Проверка на медиа
+        const isImg = /\.(jpg|jpeg|png|gif|webp|heic)(\?.*)?$/i.test(lowerText);
+        const isVideo = /\.(mp4|webm|mov|avi|ogg)(\?.*)?$/i.test(lowerText);
 
         if (isImg) {
             const img = document.createElement('img');
-            img.src = text;
+            img.src = cleanText; 
+            img.style.maxWidth = "100%";
+            img.style.borderRadius = "10px";
             img.onclick = () => { 
-                document.getElementById('modal-img').src = text; 
+                document.getElementById('modal-img').src = cleanText; 
                 document.getElementById('modal').style.display = 'flex'; 
             };
             div.appendChild(img);
         } else if (isVideo) {
             const v = document.createElement('video');
-            v.src = text;
+            v.src = cleanText;
             v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
+            v.controls = true;
             v.onclick = () => v.muted = !v.muted;
             div.appendChild(v);
         } else {
-            // Обычный текст
             const s = document.createElement('span');
             s.textContent = text;
             div.appendChild(s);
         }
 
-        // Время в углу
         const ts = document.createElement('span');
         ts.className = "msg-time";
         ts.textContent = time;
         div.appendChild(ts);
-
-        // Удаление (правый клик)
         div.oncontextmenu = (e) => {
             e.preventDefault();
             if (sender === myName && confirm("Удалить сообщение?")) ws.send(`__DELETE__:${msgId}`);
         };
-    }
+    } // Закрывает else
 
-    chat.appendChild(div);
-    // Плавный скролл вниз
-    setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 100);
-}; // Это закрывает ws.onmessage
-} // <-- ВОТ ЭТОЙ СКОБКИ НЕ ХВАТАЛО! Она закрывает startChat
+    // --- ВОТ ЭТОГО НЕ ХВАТАЛО ---
+    chat.appendChild(div); // Добавляем сообщение в чат
+    setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 100); // Скролл вниз
+}; // Закрывает ws.onmessage
+} // Закрывает startChat
 
 
 let iceQueue = []; // Очередь для кандидатов, которые пришли слишком рано
@@ -251,42 +260,45 @@ async function startCall() {
 async function handleSignalingData(data) {
     if (data.from === myName) return;
 
-    // Входящий звонок
+    // 1. Входящий звонок (Offer)
     if (data.offer) {
-        if (!pc) {
-            if (confirm(`Входящий звонок от ${data.from}! Принять?`)) {
-                await initRTCPeer(false); // Создаем объект, но без оффера
-            } else return;
-        }
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        ws.send("RTC_SIGNAL:" + JSON.stringify({ answer: answer, from: myName }));
+        if (pc && pc.signalingState !== "closed") return; 
 
-        // Разбираем очередь кандидатов, если они накопились
-        while (iceQueue.length > 0) {
-            await pc.addIceCandidate(iceQueue.shift());
+        if (confirm(`Входящий звонок от ${data.from}!`)) {
+            await initRTCPeer(false);
+            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            ws.send("RTC_SIGNAL:" + JSON.stringify({ answer: answer, from: myName }));
+            
+            // Разгружаем очередь кандидатов
+            while (iceQueue.length > 0) {
+                try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
+            }
         }
     } 
     
-    // Ответ на наш звонок
+    // 2. Ответ на твой звонок (Answer)
     else if (data.answer && pc) {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-        while (iceQueue.length > 0) {
-            await pc.addIceCandidate(iceQueue.shift());
-        }
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            while (iceQueue.length > 0) {
+                try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
+            }
+        } catch(e) { console.error("Ошибка Answer:", e); }
     } 
     
-    // ICE Кандидаты (пути подключения)
+    // 3. Сетевые пути (Candidates)
     else if (data.candidate) {
         const cand = new RTCIceCandidate(data.candidate);
-        if (pc && pc.remoteDescription) {
-            await pc.addIceCandidate(cand);
+        if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+            try { await pc.addIceCandidate(cand); } catch(e){}
         } else {
-            iceQueue.push(cand); // Ждем, пока установится RemoteDescription
+            iceQueue.push(cand);
         }
     }
 }
+
 
 
     function endCall() { if(pc)pc.close(); localStream?.getTracks().forEach(t=>t.stop()); document.getElementById('video-call-overlay').style.display='none'; pc=null; }
@@ -344,6 +356,7 @@ async function handleSignalingData(data) {
 </script>
 </body>
 </html>
+
 
 
 
