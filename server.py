@@ -18,8 +18,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = "uploads"
-DB_PATH = "pinnogram.db"
+
+# Если папка /data существует (мы на сервере), используем её, иначе — локальные папки
+if os.path.exists("/data"):
+    DB_PATH = "/data/pinnogram.db"
+    UPLOAD_DIR = "/data/uploads"
+else:
+    DB_PATH = "pinnogram.db"
+    UPLOAD_DIR = "uploads"
+
 
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
@@ -142,4 +149,5 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
