@@ -242,7 +242,20 @@ async function initRTCPeer(isCaller, targetRoom) {
         document.getElementById('localVideo').srcObject = localStream;
         document.getElementById('video-call-overlay').style.display = 'block';
 
-        pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        // В функции initRTCPeer замени создание pc:
+        pc = new RTCPeerConnection({ 
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                // Добавляем открытый релей (на случай, если STUN не справляется)
+                { 
+                    urls: 'turn:openrelay.metered.ca:443', 
+                    username: 'openrelayproject', 
+                    credential: 'openrelayproject' 
+                }
+            ] 
+        });
+
         localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
         pc.onicecandidate = e => {
@@ -251,22 +264,19 @@ async function initRTCPeer(isCaller, targetRoom) {
 
         pc.ontrack = (event) => {
             const remoteVid = document.getElementById('remoteVideo');
-            
-            // 1. Привязываем поток (универсальный способ для iOS/Android)
+            // Используем первый поток из массива, если он есть
             if (event.streams && event.streams[0]) {
                 remoteVid.srcObject = event.streams[0];
             } else {
+                // Если прилетел только трек (часто на Android)
                 if (!remoteVid.srcObject) {
                     remoteVid.srcObject = new MediaStream([event.track]);
                 } else {
                     remoteVid.srcObject.addTrack(event.track);
                 }
             }
-
-            // 2. ВОТ ТОТ САМЫЙ КУСОЧЕК (Принудительный запуск)
-            remoteVid.onloadedmetadata = () => {
-                remoteVid.play().catch(e => console.warn("Автоплей заблокирован:", e));
-            };
+            // Принудительный старт для Chrome Android
+            remoteVid.play().catch(() => {});
         };
 
 
@@ -387,6 +397,7 @@ async function handleSignalingData(data) {
 </script>
 </body>
 </html>
+
 
 
 
