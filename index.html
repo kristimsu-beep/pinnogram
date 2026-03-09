@@ -71,12 +71,15 @@
 </style>
 </head>
 <body>
-    <div id="video-call-overlay">
-        <!-- Измени эту строку в HTML -->
-        <video id="remoteVideo" autoplay playsinline style="background: #222;"></video>
-        <video id="localVideo" autoplay playsinline muted></video>
-        <button onclick="endCall()" style="position:absolute; bottom:30px; left:50%; transform:translateX(-50%); background:red; width:60px; height:60px; border-radius:50% !important;">🛑</button>
-    </div>
+<div id="video-call-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:10000;">
+    <!-- Ссылка на видео должна быть с четким ID -->
+    <video id="remoteVideo" autoplay playsinline style="width:100vw; height:100vh; object-fit:cover; position:absolute; top:0; left:0;"></video>
+    <video id="localVideo" autoplay playsinline muted style="width:100px; height:140px; position:absolute; bottom:20px; right:20px; border:2px solid white; border-radius:10px; object-fit:cover; z-index:10005;"></video>
+    
+    <!-- Кнопка сброса ДОЛЖНА БЫТЬ ВИДИМОЙ -->
+    <button onclick="endCall()" style="position:absolute; bottom:30px; left:50%; transform:translateX(-50%); background:red; width:70px; height:70px; border-radius:50% !important; z-index:10010; font-size:30px; border:none; color:white; cursor:pointer;">🛑</button>
+</div>
+
 
     <div id="modal" onclick="this.style.display='none'"><img id="modal-img"></div>
     <audio id="notifSound" src="https://assets.mixkit.co"></audio>
@@ -291,37 +294,29 @@ async function initRTCPeer(isCaller) {
         });
 
         // Обработка входящего видео
-                pc.ontrack = (event) => {
+       pc.ontrack = (event) => {
             const remoteVid = document.getElementById('remoteVideo');
-            console.log("Получен поток от собеседника:", event.streams);
-
-            // 1. Принудительно задаем размеры и видимость (фикс для Android Chrome)
-            remoteVid.style.display = "block";
-            remoteVid.style.width = "100vw";
-            remoteVid.style.height = "100vh";
-            remoteVid.style.position = "fixed";
-            remoteVid.style.zIndex = "10001";
-
-            remoteVid.muted = true; // Обязательно для автоплея
-            remoteVid.srcObject = null; // Сброс старого слоя
+            console.log("Поток получен, привязываем...");
             
-            // Привязываем поток
-            if (event.streams && event.streams[0]) {
-                remoteVid.srcObject = event.streams[0];
-            } else {
-                remoteVid.srcObject = new MediaStream([event.track]);
-            }
-
-            // 2. Даем браузеру 300мс "продышаться" и запускаем
+            remoteVid.srcObject = event.streams[0];
+        
+            // ХАК: заставляем Android перерисовать слой
             remoteVid.onloadedmetadata = () => {
-                setTimeout(() => {
-                    remoteVid.play().then(() => {
-                        console.log("Автоплей успешно запущен");
-                    }).catch(e => {
-                        console.warn("Автоплей заблокирован, ждем тапа:", e);
-                    });
-                }, 300);
+                remoteVid.play().catch(e => console.log("Автоплей заблокирован"));
             };
+        
+            // ФИНАЛЬНЫЙ ПИНОК: при клике не только включаем звук, но и обновляем стили
+            const fixVideo = () => {
+                remoteVid.muted = false;
+                remoteVid.play();
+                remoteVid.style.opacity = "0.99"; // Микро-изменение для принудительной отрисовки
+                setTimeout(() => remoteVid.style.opacity = "1", 50);
+                console.log("Видео разморожено тапом");
+            };
+            window.addEventListener('touchstart', fixVideo, {once: true});
+            window.addEventListener('click', fixVideo, {once: true});
+        };
+
 
             // 3. Обработчик тапа (Размораживатель)
             const unmuteVideo = () => {
@@ -358,31 +353,36 @@ async function initRTCPeer(isCaller) {
 }
 
 // 2. Обработка входящих сигналов (Signaling)
-// 2. Обработка входящих сигналов (БЕЗ CONFIRM)
 async function handleSignalingData(data) {
     if (data.from === myName) return;
 
+    // 1. Входящий звонок (Offer)
     if (data.offer) {
-        // Если мы уже в процессе звонка - игнорируем повторный оффер
-        if (pc && pc.signalingState !== "stable" && pc.signalingState !== "closed") {
-            console.log("Звонок уже в процессе, игнорируем дубликат");
-            return;
-        }
-        
-        console.log("Принимаем входящий вызов от: " + data.from);
-        await initRTCPeer(false); // Создаем соединение как получатель
-        
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        ws.send("RTC_SIGNAL:" + JSON.stringify({ answer: answer, from: myName }));
-        
-        while (iceQueue.length > 0) {
-            try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
-        }
+        // Если уже звоним или соединение стабильно — не прерываем
+        if (pc && pc.signalingState !== "closed" && pc.signalingState !== "stable") return;
+
+        // Используем setTimeout, чтобы браузер не блокировал confirm
+        setTimeout(async () => {
+            if (confirm(`Входящий звонок от ${data.from}. Принять?`)) {
+                console.log("Принимаем входящий вызов от: " + data.from);
+                
+                await initRTCPeer(false); // Инициализация как получатель
+                
+                await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                ws.send("RTC_SIGNAL:" + JSON.stringify({ answer: answer, from: myName }));
+                
+                // Разгружаем очередь кандидатов
+                while (iceQueue.length > 0) {
+                    try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
+                }
+            }
+        }, 100);
     } 
+    
+    // 2. Ответ на твой звонок (Answer)
     else if (data.answer && pc) {
-        // Проверяем состояние перед установкой ответа
         if (pc.signalingState === "have-local-offer") {
             try {
                 await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
@@ -392,6 +392,8 @@ async function handleSignalingData(data) {
             } catch(e) { console.error("Ошибка установки Answer:", e); }
         }
     } 
+    
+    // 3. Сетевые пути (Candidates)
     else if (data.candidate) {
         const cand = new RTCIceCandidate(data.candidate);
         if (pc && pc.remoteDescription && pc.remoteDescription.type) {
@@ -483,6 +485,7 @@ document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessag
 </script>
 </body>
 </html>
+
 
 
 
