@@ -73,7 +73,7 @@
 <body>
     <div id="video-call-overlay">
         <!-- Измени эту строку в HTML -->
-        <video id="remoteVideo" autoplay playsinline muted></video>
+        <video id="remoteVideo" autoplay playsinline style="background: #222;"></video>
         <video id="localVideo" autoplay playsinline muted></video>
         <button onclick="endCall()" style="position:absolute; bottom:30px; left:50%; transform:translateX(-50%); background:red; width:60px; height:60px; border-radius:50% !important;">🛑</button>
     </div>
@@ -255,11 +255,12 @@ ws.onmessage = async (event) => {
 } // Закрывает startChat
 
 
-let iceQueue = []; // Очередь для кандидатов, которые пришли слишком рано
+let iceQueue = []; 
 
 // 1. Инициализация медиа и создание соединения
 async function initRTCPeer(isCaller) {
     try {
+        // Запрашиваем доступ к камере и микрофону
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         document.getElementById('localVideo').srcObject = localStream;
         document.getElementById('video-call-overlay').style.display = 'block';
@@ -269,7 +270,6 @@ async function initRTCPeer(isCaller) {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
-                // Бесплатный TURN-сервер от OpenRelay (пробрасывает трафик через себя)
                 { 
                     urls: 'turn:openrelay.metered.ca:443', 
                     username: 'openrelayproject', 
@@ -279,51 +279,51 @@ async function initRTCPeer(isCaller) {
         };
 
         pc = new RTCPeerConnection(configuration);
-                // Настройка кодеков для совместимости с Android (VP8)
+
+        // Настройка кодеков (VP8) — КЛЮЧЕВОЙ МОМЕНТ ДЛЯ ANDROID
         localStream.getTracks().forEach(track => {
             const tc = pc.addTransceiver(track, { streams: [localStream] });
             if (track.kind === 'video') {
                 const codecs = RTCRtpSender.getCapabilities('video').codecs;
-                // Ищем VP8, который Android обожает
                 const vp8Codecs = codecs.filter(c => c.mimeType === 'video/VP8');
                 if (vp8Codecs.length > 0) tc.setCodecPreferences(vp8Codecs);
             }
         });
 
+        // Обработка входящего видео
         pc.ontrack = (event) => {
             const remoteVid = document.getElementById('remoteVideo');
-            console.log("Получен поток от собеседника:", event.streams);
+            console.log("Получен поток:", event.streams);
 
-            // Универсальный способ привязки для Android
+            remoteVid.muted = true; // Сначала без звука для автоплея
+            remoteVid.srcObject = null; // Сброс слоя
+            
             if (event.streams && event.streams[0]) {
                 remoteVid.srcObject = event.streams[0];
             } else {
-                // Если прилетел "голый" трек (бывает на Android Chrome)
-                if (!remoteVid.srcObject) {
-                    remoteVid.srcObject = new MediaStream([event.track]);
-                } else {
-                    remoteVid.srcObject.addTrack(event.track);
-                }
+                remoteVid.srcObject = new MediaStream([event.track]);
             }
-            // Внутри ontrack, после remoteVid.play()
-            window.onclick = () => {
-                const remoteVid = document.getElementById('remoteVideo');
-                remoteVid.muted = false; // Включаем звук по клику
-                remoteVid.play();        // Еще раз пинаем воспроизведение
-                console.log("Видео и звук разморожены кликом");
+
+            remoteVid.onloadedmetadata = () => {
+                setTimeout(() => {
+                    remoteVid.play().catch(e => console.warn("Нужен клик:", e));
+                }, 150);
             };
 
-
-            // ПРИНУДИТЕЛЬНЫЙ ПИНОК (Android часто держит видео на паузе)
-            remoteVid.onloadedmetadata = () => {
-                remoteVid.play().catch(e => {
-                    console.warn("Автоплей заблокирован, ждем клика");
-                    // Если не пошло само, видео запустится при тапе по экрану
-                    window.onclick = () => remoteVid.play();
-                });
+            // Размораживатель по клику
+            window.onclick = () => {
+                remoteVid.muted = false;
+                remoteVid.play();
+                // Хак с перерисовкой размера
+                remoteVid.style.width = "99.9%";
+                setTimeout(() => { remoteVid.style.width = "100%"; }, 50);
+                console.log("Видео разморожено кликом");
             };
         };
 
+        pc.onicecandidate = e => {
+            if (e.candidate) ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate, from: myName }));
+        };
 
         if (isCaller) {
             const offer = await pc.createOffer();
@@ -337,34 +337,23 @@ async function initRTCPeer(isCaller) {
     }
 }
 
-// Кнопка "Позвонить" теперь вызывает это:
-async function startCall() {
-    await initRTCPeer(true);
-}
-
-// 2. Обработка входящих сигналов
+// 2. Обработка входящих сигналов (Signaling)
 async function handleSignalingData(data) {
     if (data.from === myName) return;
 
-    // 1. Входящий звонок (Offer)
     if (data.offer) {
         if (pc && pc.signalingState !== "closed") return; 
-
         if (confirm(`Входящий звонок от ${data.from}!`)) {
             await initRTCPeer(false);
             await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             ws.send("RTC_SIGNAL:" + JSON.stringify({ answer: answer, from: myName }));
-            
-            // Разгружаем очередь кандидатов
             while (iceQueue.length > 0) {
                 try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
             }
         }
     } 
-    
-    // 2. Ответ на твой звонок (Answer)
     else if (data.answer && pc) {
         try {
             await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
@@ -373,8 +362,6 @@ async function handleSignalingData(data) {
             }
         } catch(e) { console.error("Ошибка Answer:", e); }
     } 
-    
-    // 3. Сетевые пути (Candidates)
     else if (data.candidate) {
         const cand = new RTCIceCandidate(data.candidate);
         if (pc && pc.remoteDescription && pc.remoteDescription.type) {
@@ -385,61 +372,76 @@ async function handleSignalingData(data) {
     }
 }
 
+// 3. Вспомогательные функции
+function endCall() { 
+    if(pc) pc.close(); 
+    localStream?.getTracks().forEach(t => t.stop()); 
+    document.getElementById('video-call-overlay').style.display = 'none'; 
+    pc = null; 
+}
 
+function startCall() { initRTCPeer(true); }
 
-    function endCall() { if(pc)pc.close(); localStream?.getTracks().forEach(t=>t.stop()); document.getElementById('video-call-overlay').style.display='none'; pc=null; }
-    function saveNameAndStart() {
-        const n = document.getElementById("nameInput").value.trim();
-        const r = prompt("ID комнаты:", "general") || "general";
-        if (n) { localStorage.setItem("pinnogram_user", n); localStorage.setItem("pinnogram_room", r); startChat(n, r); }
-    }
-    function sendMessage() { const i = document.getElementById("messageText"); if(i.value.trim() && ws){ ws.send(i.value); i.value=''; } }
-    function handleTyping() { if(!isTypingNow && ws?.readyState===1){ isTypingNow=true; ws.send("__TYPING__"); setTimeout(()=>isTypingNow=false,3000); } }
-    function addEmoji(e) { const i = document.getElementById("messageText"); i.value += e; i.focus(); }
-    
-    async function uploadFile() {
-        const fileInput = document.getElementById('fileInput');
-        let file = fileInput.files[0]; if(!file) return;
-        if(file.type.startsWith('image/')) file = await compressImage(file);
-        const fd = new FormData(); fd.append("file", file, file.name);
-        const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
-        const d = await res.json(); ws.send(d.url);
-    }
+function saveNameAndStart() {
+    const n = document.getElementById("nameInput").value.trim();
+    const r = prompt("ID комнаты:", "general") || "general";
+    if (n) { localStorage.setItem("pinnogram_user", n); localStorage.setItem("pinnogram_room", r); startChat(n, r); }
+}
 
-    async function compressImage(file) {
-        return new Promise((resolve) => {
-            const reader = new FileReader(); reader.readAsDataURL(file);
-            reader.onload = (e) => {
-                const img = new Image(); img.src = e.target.result;
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const maxW = 800; const scale = maxW / img.width;
-                    canvas.width = maxW; canvas.height = img.height * scale;
-                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-                    canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.7);
-                };
+function sendMessage() { const i = document.getElementById("messageText"); if(i.value.trim() && ws){ ws.send(i.value); i.value=''; } }
+
+function handleTyping() { if(!isTypingNow && ws?.readyState===1){ isTypingNow=true; ws.send("__TYPING__"); setTimeout(()=>isTypingNow=false,3000); } }
+
+function addEmoji(e) { const i = document.getElementById("messageText"); i.value += e; i.focus(); }
+
+async function uploadFile() {
+    const fileInput = document.getElementById('fileInput');
+    // Добавь [0] вот сюда:
+    let file = fileInput.files[0]; 
+    if(!file) return;
+    // ... остальной код без изменений
+    if(file.type.startsWith('image/')) file = await compressImage(file);
+    const fd = new FormData(); fd.append("file", file, file.name);
+    const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
+    const d = await res.json(); ws.send(d.url);
+}
+
+async function compressImage(file) {
+    return new Promise((resolve) => {
+        const reader = new FileReader(); reader.readAsDataURL(file);
+        reader.onload = (e) => {
+            const img = new Image(); img.src = e.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const maxW = 800; const scale = maxW / img.width;
+                canvas.width = maxW; canvas.height = img.height * scale;
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.7);
             };
-        });
-    }
+        };
+    });
+}
 
-    async function toggleRecording() {
-        const btn = document.getElementById("recordBtn");
-        if (!mediaRecorder || mediaRecorder.state === "inactive") {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            mediaRecorder = new MediaRecorder(stream); videoChunks = [];
-            mediaRecorder.ondataavailable = e => videoChunks.push(e.data);
-            mediaRecorder.onstop = async () => {
-                const blob = new Blob(videoChunks, {type:'video/mp4'});
-                const fd = new FormData(); fd.append("file", blob, `v_${Date.now()}.mp4`);
-                const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
-                const d = await res.json(); ws.send(d.url);
-                stream.getTracks().forEach(t=>t.stop());
-            };
-            mediaRecorder.start(); btn.classList.add("recording"); btn.textContent="🛑";
-        } else { mediaRecorder.stop(); btn.classList.remove("recording"); btn.textContent="🎥"; }
-    }
-    document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
+async function toggleRecording() {
+    const btn = document.getElementById("recordBtn");
+    if (!mediaRecorder || mediaRecorder.state === "inactive") {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        mediaRecorder = new MediaRecorder(stream); videoChunks = [];
+        mediaRecorder.ondataavailable = e => videoChunks.push(e.data);
+        mediaRecorder.onstop = async () => {
+            const blob = new Blob(videoChunks, {type:'video/mp4'});
+            const fd = new FormData(); fd.append("file", blob, `v_${Date.now()}.mp4`);
+            const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
+            const d = await res.json(); ws.send(d.url);
+            stream.getTracks().forEach(t=>t.stop());
+        };
+        mediaRecorder.start(); btn.classList.add("recording"); btn.textContent="🛑";
+    } else { mediaRecorder.stop(); btn.classList.remove("recording"); btn.textContent="🎥"; }
+}
+document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
+
 </script>
 </body>
 </html>
+
 
