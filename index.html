@@ -224,12 +224,36 @@ ws.onmessage = async (event) => {
         } catch (e) { alert("Ошибка доступа к камере!"); endCall(); }
     }
 
-    async function handleSignalingData(data) {
-        if (!pc && data.offer) { if(confirm("Входящий звонок!")) await startCall(); else return; }
-        if (data.offer) { await pc.setRemoteDescription(new RTCSessionDescription(data.offer)); const ans = await pc.createAnswer(); await pc.setLocalDescription(ans); ws.send("RTC_SIGNAL:"+JSON.stringify({answer:ans})); }
-        else if (data.answer) { await pc.setRemoteDescription(new RTCSessionDescription(data.answer)); }
-        else if (data.candidate) { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); }
+  async function handleSignalingData(data) {
+    // 1. Входящий звонок (Offer)
+    if (data.offer) {
+        if (!pc) {
+            if (confirm("Входящий звонок! Принять?")) {
+                await startCall(); // Здесь создается pc
+            } else {
+                return;
+            }
+        }
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        ws.send("RTC_SIGNAL:" + JSON.stringify({ answer }));
+    } 
+    
+    // 2. Ответ на наш звонок (Answer)
+    else if (data.answer && pc) {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
     }
+    
+    // 3. Сетевые данные (Candidate) — всегда отдельно
+    if (data.candidate && pc) {
+        try {
+            await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } catch (e) {
+            console.error("Ошибка ICE:", e);
+        }
+    }
+}
 
     function endCall() { if(pc)pc.close(); localStream?.getTracks().forEach(t=>t.stop()); document.getElementById('video-call-overlay').style.display='none'; pc=null; }
     function saveNameAndStart() {
@@ -286,5 +310,6 @@ ws.onmessage = async (event) => {
 </script>
 </body>
 </html>
+
 
 
