@@ -309,60 +309,52 @@ async function initRTCPeer(isCaller) {
 
         // Обработка входящего видео
         // Обработка входящего видео
-        pc.ontrack = (event) => {
+               pc.ontrack = (event) => {
             const remoteVid = document.getElementById('remoteVideo');
-            console.log("Поток пришел. Xiaomi Fix Mode.");
+            console.log("Поток пришел. Xiaomi HyperOS Mode.");
         
+            // Привязываем поток (берем первый стрим или создаем из трека)
             if (event.streams && event.streams[0]) {
                 remoteVid.srcObject = event.streams[0];
             } else if (event.track) {
                 remoteVid.srcObject = new MediaStream([event.track]);
             }
-
-            remoteVid.muted = true;
+            
+            remoteVid.muted = true; // Важно для старта
         
             const forceRender = async () => {
-                // КРИТИЧНО: Ждем полсекунды, чтобы старые запросы "успокоились"
-                await new Promise(r => setTimeout(r, 500));
+                console.log("Xiaomi: Пробуем разморозить видео...");
                 
-                console.log("Xiaomi: Начинаем глубокую перезагрузку рендера...");
+                // 1. Сначала просто пробуем включить звук и играть
                 remoteVid.muted = false;
                 
-                const stream = remoteVid.srcObject;
-                
-                // 1. Полностью разрываем связь
-                remoteVid.srcObject = null;
-                remoteVid.pause();
-                
-                // 2. Увеличиваем паузу до 300мс (Xiaomi 14T быстрый, но шина видео капризная)
-                await new Promise(r => setTimeout(r, 300));
-                
-                // 3. Назначаем поток заново
-                remoteVid.srcObject = stream;
-                
                 try {
-                    // Ждем завершения play() прежде чем менять стили
+                    // 2. Делаем микро-паузу перед play, чтобы убрать AbortError
+                    await new Promise(r => setTimeout(r, 100));
                     await remoteVid.play();
                     
-                    // 4. "Встряхиваем" слой
-                    remoteVid.style.opacity = "0.99";
+                    // 3. "Пинаем" графический слой через CSS фильтры и масштаб
+                    // Это заставляет HyperOS перерисовать экран без перезагрузки потока
+                    remoteVid.style.filter = "brightness(1.01)";
                     remoteVid.style.width = "101vw";
+                    
                     setTimeout(() => { 
-                        remoteVid.style.opacity = "1";
+                        remoteVid.style.filter = "brightness(1)";
                         remoteVid.style.width = "100vw";
-                    }, 100);
-                    console.log("Xiaomi: Картинка должна появиться!");
+                        console.log("Xiaomi: Слой перерисован!");
+                    }, 150);
+                    
                 } catch (e) {
-                    // Если всё еще AbortError, значит тап был слишком ранним
-                    console.error("Xiaomi: Ошибка рендера, попробуй тапнуть еще раз через секунду", e);
+                    console.error("Xiaomi: Ошибка мягкого старта:", e);
+                    // Если совсем не идет — пробуем один раз переткнуть поток (но без null!)
+                    const s = remoteVid.srcObject;
+                    remoteVid.srcObject = s;
                 }
             };
-        
-            // Добавляем обработчик, но даем ему сработать только через время
+
             window.addEventListener('touchstart', forceRender, {once: true});
             window.addEventListener('click', forceRender, {once: true});
         };
-
 
         pc.onicecandidate = e => {
             if (e.candidate) ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate, from: myName }));
@@ -507,6 +499,7 @@ document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessag
 </script>
 </body>
 </html>
+
 
 
 
