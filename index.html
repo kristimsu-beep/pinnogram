@@ -291,35 +291,55 @@ async function initRTCPeer(isCaller) {
         });
 
         // Обработка входящего видео
-        pc.ontrack = (event) => {
+                pc.ontrack = (event) => {
             const remoteVid = document.getElementById('remoteVideo');
-            console.log("Получен поток:", event.streams);
+            console.log("Получен поток от собеседника:", event.streams);
 
-            remoteVid.muted = true; // Сначала без звука для автоплея
-            remoteVid.srcObject = null; // Сброс слоя
+            // 1. Принудительно задаем размеры и видимость (фикс для Android Chrome)
+            remoteVid.style.display = "block";
+            remoteVid.style.width = "100vw";
+            remoteVid.style.height = "100vh";
+            remoteVid.style.position = "fixed";
+            remoteVid.style.zIndex = "10001";
+
+            remoteVid.muted = true; // Обязательно для автоплея
+            remoteVid.srcObject = null; // Сброс старого слоя
             
+            // Привязываем поток
             if (event.streams && event.streams[0]) {
                 remoteVid.srcObject = event.streams[0];
             } else {
                 remoteVid.srcObject = new MediaStream([event.track]);
             }
 
+            // 2. Даем браузеру 300мс "продышаться" и запускаем
             remoteVid.onloadedmetadata = () => {
                 setTimeout(() => {
-                    remoteVid.play().catch(e => console.warn("Нужен клик:", e));
-                }, 150);
+                    remoteVid.play().then(() => {
+                        console.log("Автоплей успешно запущен");
+                    }).catch(e => {
+                        console.warn("Автоплей заблокирован, ждем тапа:", e);
+                    });
+                }, 300);
             };
 
-            // Размораживатель по клику
-            window.onclick = () => {
+            // 3. Обработчик тапа (Размораживатель)
+            const unmuteVideo = () => {
                 remoteVid.muted = false;
                 remoteVid.play();
-                // Хак с перерисовкой размера
+                // Хак с микро-изменением размера для форсирования перерисовки
                 remoteVid.style.width = "99.9%";
                 setTimeout(() => { remoteVid.style.width = "100%"; }, 50);
-                console.log("Видео разморожено кликом");
+                console.log("Видео и звук разморожены тапом");
+                window.removeEventListener('touchstart', unmuteVideo);
+                window.removeEventListener('click', unmuteVideo);
             };
+
+            // Слушаем и клик, и тап (для мобилок touchstart надежнее)
+            window.addEventListener('click', unmuteVideo);
+            window.addEventListener('touchstart', unmuteVideo);
         };
+
 
         pc.onicecandidate = e => {
             if (e.candidate) ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate, from: myName }));
@@ -338,20 +358,23 @@ async function initRTCPeer(isCaller) {
 }
 
 // 2. Обработка входящих сигналов (Signaling)
+// 2. Обработка входящих сигналов (БЕЗ CONFIRM)
 async function handleSignalingData(data) {
     if (data.from === myName) return;
 
     if (data.offer) {
         if (pc && pc.signalingState !== "closed") return; 
-        if (confirm(`Входящий звонок от ${data.from}!`)) {
-            await initRTCPeer(false);
-            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            ws.send("RTC_SIGNAL:" + JSON.stringify({ answer: answer, from: myName }));
-            while (iceQueue.length > 0) {
-                try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
-            }
+        
+        console.log("Принимаем входящий вызов от: " + data.from);
+        
+        await initRTCPeer(false);
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        ws.send("RTC_SIGNAL:" + JSON.stringify({ answer: answer, from: myName }));
+        
+        while (iceQueue.length > 0) {
+            try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
         }
     } 
     else if (data.answer && pc) {
@@ -371,6 +394,15 @@ async function handleSignalingData(data) {
         }
     }
 }
+
+// 3. Вспомогательные функции
+function endCall() { 
+    if(pc) pc.close(); 
+    localStream?.getTracks().forEach(t => t.stop()); 
+    document.getElementById('video-call-overlay').style.display = 'none'; 
+    pc = null; 
+}
+
 
 // 3. Вспомогательные функции
 function endCall() { 
@@ -443,5 +475,6 @@ document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessag
 </script>
 </body>
 </html>
+
 
 
