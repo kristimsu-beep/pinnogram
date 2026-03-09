@@ -18,15 +18,15 @@ app.add_middleware(
 )
 
 # Умные пути для сервера и локального ПК
-if os.path.exists("/data"):
-    DB_PATH = "/data/pinnogram.db"
-    UPLOAD_DIR = "/data/uploads"
-else:
-    DB_PATH = "pinnogram.db"
-    UPLOAD_DIR = "uploads"
+BASE_DIR = "/data" if os.path.exists("/data") else os.getcwd()
 
+# Строим абсолютные пути (это надежнее)
+DB_PATH = os.path.join(BASE_DIR, "pinnogram.db")
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
+
+# Создаем папку, если её нет
 if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.api_route("/", methods=["GET", "HEAD"])
 async def get_index():
@@ -161,4 +161,5 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
