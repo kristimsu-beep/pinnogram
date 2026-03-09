@@ -68,7 +68,8 @@
     <div id="chat-screen">
         <button class="theme-btn" style="position:absolute; top:-35px; right:10px; background:none; color:var(--accent); border:none; cursor:pointer;" onclick="document.body.classList.toggle('light-theme')">🌓 Тема</button>
         <div id="chat"></div>
-        <div id="typing-indicator" style="font-size:12px; color:var(--accent); font-style:italic; margin:5px; height:15px;"></div>
+        <div id="online-list" style="font-size:11px; color:var(--accent); opacity:0.8; margin:2px 5px; height:15px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;"></div>
+
         
         <div class="emoji-bar">
             <span onclick="addEmoji('😊')">😊</span><span onclick="addEmoji('🔥')">🔥</span>
@@ -104,12 +105,19 @@
 ws.onmessage = async (event) => {
     const raw = event.data;
     const chat = document.getElementById('chat');
-        if (raw.includes("ONLINE_LIST:")) {
-        const users = raw.split("ONLINE_LIST:")[1].split(",");
-        // Если у тебя есть элемент в HTML, обнови его
-        console.log("Сейчас в сети:", users); 
+    if (raw.includes("ONLINE_LIST:")) {
+        const parts = raw.split("ONLINE_LIST:");
+        if (parts.length > 1) {
+            const users = parts[1].split(",");
+            const el = document.getElementById("online-list");
+            if (el) {
+                el.textContent = `В сети: ${users.join(", ")}`;
+            }
+            console.log("Обновлен список онлайн:", users);
+        }
         return;
     }
+
 
 
     // 1. Сигналы звонка (WebRTC)
@@ -356,6 +364,7 @@ async function handleSignalingData(data) {
 </script>
 </body>
 </html>
+
 
 
 
