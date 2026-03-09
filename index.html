@@ -68,7 +68,11 @@
     <div id="chat-screen">
         <button class="theme-btn" style="position:absolute; top:-35px; right:10px; background:none; color:var(--accent); border:none; cursor:pointer;" onclick="document.body.classList.toggle('light-theme')">🌓 Тема</button>
         <div id="chat"></div>
+        <!-- 1. Список тех, кто в комнате -->
         <div id="online-list" style="font-size:11px; color:var(--accent); opacity:0.8; margin:2px 5px; height:15px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;"></div>
+        
+        <!-- 2. Индикатор набора текста (НУЖЕН ДЛЯ JS) -->
+        <div id="typing-indicator" style="font-size:12px; color:var(--accent); font-style:italic; margin:5px; height:15px;"></div>
 
         
         <div class="emoji-bar">
@@ -383,6 +387,7 @@ async function handleSignalingData(data) {
 </script>
 </body>
 </html>
+
 
 
 
