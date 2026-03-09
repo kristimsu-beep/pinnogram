@@ -209,48 +209,69 @@ ws.onmessage = async (event) => {
 } // <-- ВОТ ЭТОЙ СКОБКИ НЕ ХВАТАЛО! Она закрывает startChat
 
 
-    async function startCall() {
-        document.getElementById('video-call-overlay').style.display = 'block';
-        try {
-            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            document.getElementById('localVideo').srcObject = localStream;
-            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-            pc.onicecandidate = e => e.candidate && ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate }));
-            pc.ontrack = e => document.getElementById('remoteVideo').srcObject = e.streams[0];
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            ws.send("RTC_SIGNAL:" + JSON.stringify({ offer }));
-        } catch (e) { alert("Ошибка доступа к камере!"); endCall(); }
-    }
+   async function startCall() {
+    document.getElementById('video-call-overlay').style.display = 'block';
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        document.getElementById('localVideo').srcObject = localStream;
+        pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+        
+        // ДОБАВЛЯЕМ from: myName ТУТ
+        pc.onicecandidate = e => e.candidate && ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate, from: myName }));
+        
+        pc.ontrack = e => document.getElementById('remoteVideo').srcObject = e.streams[0];
+        
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        
+        // И ДОБАВЛЯЕМ from: myName ТУТ
+        ws.send("RTC_SIGNAL:" + JSON.stringify({ offer: offer, from: myName }));
+        
+    } catch (e) { alert("Ошибка доступа к камере!"); endCall(); }
+}
+
 
   async function handleSignalingData(data) {
-    // 1. Входящий звонок (Offer)
+    // 0. Игнорируем сигналы от самих себя
+    if (data.from === myName) return;
+
+    // 1. Входящий Оффер (Предложение позвонить)
     if (data.offer) {
+        // Если мы уже в звонке или только что его начали, не принимаем второй оффер
+        if (pc && pc.signalingState !== "stable") return;
+
         if (!pc) {
-            if (confirm("Входящий звонок! Принять?")) {
-                await startCall(); // Здесь создается pc
-            } else {
-                return;
-            }
+            if (confirm(`Входящий звонок от ${data.from || "собеседника"}! Принять?`)) {
+                await startCall(); 
+            } else return;
         }
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        ws.send("RTC_SIGNAL:" + JSON.stringify({ answer }));
+        
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            ws.send("RTC_SIGNAL:" + JSON.stringify({ answer: answer, from: myName }));
+        } catch (e) { console.error("Ошибка при ответе на оффер:", e); }
     } 
     
     // 2. Ответ на наш звонок (Answer)
     else if (data.answer && pc) {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        // Устанавливаем ответ только если мы ждем его (состояние have-local-offer)
+        if (pc.signalingState === "have-local-offer") {
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            } catch (e) { console.error("Ошибка установки ответа:", e); }
+        }
     }
     
-    // 3. Сетевые данные (Candidate) — всегда отдельно
+    // 3. Сетевые данные (Candidate)
     if (data.candidate && pc) {
-        try {
-            await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (e) {
-            console.error("Ошибка ICE:", e);
+        // Кандидатов можно добавлять только КОГДА установлены описания (RemoteDescription)
+        if (pc.remoteDescription && pc.remoteDescription.type) {
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } catch (e) { console.warn("Ошибка ICE:", e); }
         }
     }
 }
@@ -310,6 +331,7 @@ ws.onmessage = async (event) => {
 </script>
 </body>
 </html>
+
 
 
 
