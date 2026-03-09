@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocketState
 import aiofiles
+import httpx
 
 app = FastAPI()
 
@@ -111,15 +112,48 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+
+
+# Вставь свой ключ тут
+IMGBB_API_KEY = "140359baf01acef6aa27e35c55b32f99"
+
 @app.post("/upload")
 async def upload_file(request: Request, file: UploadFile = File(...)):
-    ext = os.path.splitext(file.filename)[1]
-    name = f"{uuid.uuid4()}{ext}"
-    path = os.path.join(UPLOAD_DIR, name)
-    async with aiofiles.open(path, "wb") as buffer:
-        while content := await file.read(1024 * 1024):
+    try:
+        # Читаем содержимое файла в память
+        content = await file.read()
+        
+        # 1. Если это ИЗОБРАЖЕНИЕ — отправляем на ImgBB (навечно)
+        if file.content_type and file.content_type.startswith("image/"):
+            url = f"https://api.imgbb.com/1/upload?key={IMGBB_API_KEY}"
+            async with httpx.AsyncClient() as client:
+                files = {"image": (file.filename, content)}
+                res = await client.post(url, files=files, timeout=30.0)
+                
+                if res.status_code == 200:
+                    # Возвращаем прямую ссылку из облака ImgBB
+                    return {"url": res.json()["data"]["url"]}
+                else:
+                    print(f"ImgBB Error: {res.text}")
+                    # Если облако выдало ошибку, пробуем сохранить локально как запасной вариант
+
+        # 2. Если это ВИДЕО (кружок) или ошибка облака — сохраняем локально на Render
+        # (Эти файлы удалятся через 15 минут простоя, но они будут работать в моменте)
+        ext = os.path.splitext(file.filename)[1]
+        name = f"{uuid.uuid4()}{ext}"
+        path = os.path.join(UPLOAD_DIR, name)
+        
+        async with aiofiles.open(path, "wb") as buffer:
             await buffer.write(content)
-    return {"url": f"{str(request.base_url).rstrip('/')}/files/{name}"}
+            
+        # Формируем ссылку на локальный файл
+        return {"url": f"{str(request.base_url).rstrip('/')}/files/{name}"}
+
+    except Exception as e:
+        print(f"Upload Exception: {e}")
+        return {"url": "error"}
+
+
 
 @app.websocket("/ws/{room_id}/{username}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
@@ -161,5 +195,6 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
