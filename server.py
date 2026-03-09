@@ -51,13 +51,16 @@ async def startup():
 
 class ConnectionManager:
     def __init__(self):
-        self.rooms = {}
+        self.rooms = {} # Структура: {room_id: {username: websocket}}
 
-    async def connect(self, websocket: WebSocket, room_id: str):
+    async def connect(self, websocket: WebSocket, room_id: str, username: str):
         await websocket.accept()
-        if room_id not in self.rooms: self.rooms[room_id] = []
-        self.rooms[room_id].append(websocket)
+        if room_id not in self.rooms:
+            self.rooms[room_id] = {}
+        # Сохраняем сокет конкретного пользователя
+        self.rooms[room_id][username] = websocket
         
+        # 1. Отправляем историю сообщений (как и было)
         async with aiosqlite.connect(DB_PATH) as db:
             async with db.execute(
                 "SELECT id, username, text, timestamp FROM messages WHERE room_id = ? ORDER BY id ASC LIMIT 50", 
@@ -66,10 +69,25 @@ class ConnectionManager:
                 history = await cursor.fetchall()
                 for msg_id, user, text, time in history:
                     await websocket.send_text(f"ID:{msg_id}|[{time}] {user}: {text}")
+        
+        # 2. Рассылаем всем новый список онлайн
+        await self.broadcast_online(room_id)
 
-    def disconnect(self, websocket: WebSocket, room_id: str):
+    def disconnect(self, room_id: str, username: str):
+        if room_id in self.rooms and username in self.rooms[room_id]:
+            del self.rooms[room_id][username]
+        # Запускаем обновление списка онлайн для оставшихся
+        import asyncio
+        asyncio.create_task(self.broadcast_online(room_id))
+
+    async def broadcast_online(self, room_id: str):
         if room_id in self.rooms:
-            if websocket in self.rooms[room_id]: self.rooms[room_id].remove(websocket)
+            users = list(self.rooms[room_id].keys())
+            # Тот самый формат ONLINE_LIST для твоего JS
+            msg = f"ID:0|SYSTEM:ONLINE_LIST:{','.join(users)}"
+            for ws in self.rooms[room_id].values():
+                try: await ws.send_text(msg)
+                except: continue
 
     async def broadcast(self, message: str, room_id: str, username: str = None, text: str = None):
         now = datetime.now().strftime("%H:%M")
@@ -86,9 +104,9 @@ class ConnectionManager:
                 final_msg = f"ID:{msg_id}|[{now}] {username}: {text}"
 
         if room_id in self.rooms:
-            for connection in self.rooms[room_id]:
-                if connection.client_state == WebSocketState.CONNECTED:
-                    try: await connection.send_text(final_msg)
+            for ws in self.rooms[room_id].values():
+                if ws.client_state == WebSocketState.CONNECTED:
+                    try: await ws.send_text(final_msg)
                     except: continue
 
 manager = ConnectionManager()
@@ -105,16 +123,18 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
 
 @app.websocket("/ws/{room_id}/{username}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
-    await manager.connect(websocket, room_id)
+    # Теперь передаем username при коннекте
+    await manager.connect(websocket, room_id, username)
     await manager.broadcast(f"{username} вошел в чат", room_id)
     try:
         while True:
             data = await websocket.receive_text()
-            # Фильтр для звонков (не пишем в БД)
+            
             if data.startswith("RTC_SIGNAL:"):
                 if room_id in manager.rooms:
-                    for conn in manager.rooms[room_id]:
-                        if conn != websocket and conn.client_state == WebSocketState.CONNECTED:
+                    for name, conn in manager.rooms[room_id].items():
+                        # Не шлем сигнал самому себе
+                        if name != username and conn.client_state == WebSocketState.CONNECTED:
                             await conn.send_text(data)
                 continue
             
@@ -124,20 +144,21 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     await db.execute("DELETE FROM messages WHERE id = ?", (msg_id,))
                     await db.commit()
                 if room_id in manager.rooms:
-                    for conn in manager.rooms[room_id]:
-                        if conn.client_state == WebSocketState.CONNECTED:
-                            await conn.send_text(f"DELETE_CONFIRM:{msg_id}")
+                    for conn in manager.rooms[room_id].values():
+                        await conn.send_text(f"DELETE_CONFIRM:{msg_id}")
             elif data == "__TYPING__":
                 if room_id in manager.rooms:
-                    for conn in manager.rooms[room_id]:
-                        if conn != websocket and conn.client_state == WebSocketState.CONNECTED:
+                    for name, conn in manager.rooms[room_id].items():
+                        if name != username:
                             await conn.send_text(f"TYPING:{username}")
             else:
                 await manager.broadcast("", room_id, username=username, text=data)
     except WebSocketDisconnect:
-        manager.disconnect(websocket, room_id)
+        # Передаем параметры для корректного удаления из словаря
+        manager.disconnect(room_id, username)
         await manager.broadcast(f"{username} покинул чат", room_id)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
