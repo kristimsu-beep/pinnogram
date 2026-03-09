@@ -5,3 +5,4 @@ python-multipart
 starlette
 websockets
 aiofiles
+httpx
