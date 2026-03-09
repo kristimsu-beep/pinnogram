@@ -220,7 +220,19 @@ ws.onmessage = async (event) => {
         // ДОБАВЛЯЕМ from: myName ТУТ
         pc.onicecandidate = e => e.candidate && ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate, from: myName }));
         
-        pc.ontrack = e => document.getElementById('remoteVideo').srcObject = e.streams[0];
+        pc.ontrack = (event) => {
+            const remoteVid = document.getElementById('remoteVideo');
+            // Если есть готовый поток - берем его, если нет - создаем из трека
+            if (event.streams && event.streams[0]) {
+                remoteVid.srcObject = event.streams[0];
+            } else {
+                if (!remoteVid.srcObject) {
+                    remoteVid.srcObject = new MediaStream([event.track]);
+                }
+            }
+        };
+
+
         
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
@@ -331,6 +343,7 @@ ws.onmessage = async (event) => {
 </script>
 </body>
 </html>
+
 
 
 
