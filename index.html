@@ -236,26 +236,27 @@ ws.onmessage = async (event) => {
 let iceQueue = []; // Очередь для кандидатов, которые пришли слишком рано
 
 // 1. Инициализация медиа и создание соединения
-async function initRTCPeer(isCaller, targetRoom) {
+async function initRTCPeer(isCaller) {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         document.getElementById('localVideo').srcObject = localStream;
         document.getElementById('video-call-overlay').style.display = 'block';
 
-        // В функции initRTCPeer замени создание pc:
-        pc = new RTCPeerConnection({ 
+        // Конфигурация с TURN-сервером (для Android за NAT/4G)
+        const configuration = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
-                // Добавляем открытый релей (на случай, если STUN не справляется)
+                // Бесплатный TURN-сервер от OpenRelay (пробрасывает трафик через себя)
                 { 
                     urls: 'turn:openrelay.metered.ca:443', 
                     username: 'openrelayproject', 
                     credential: 'openrelayproject' 
                 }
-            ] 
-        });
+            ]
+        };
 
+        pc = new RTCPeerConnection(configuration);
         localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
         pc.onicecandidate = e => {
@@ -264,21 +265,26 @@ async function initRTCPeer(isCaller, targetRoom) {
 
         pc.ontrack = (event) => {
             const remoteVid = document.getElementById('remoteVideo');
-            // Используем первый поток из массива, если он есть
+            // Android-совместимая привязка потока
             if (event.streams && event.streams[0]) {
                 remoteVid.srcObject = event.streams[0];
             } else {
-                // Если прилетел только трек (часто на Android)
                 if (!remoteVid.srcObject) {
                     remoteVid.srcObject = new MediaStream([event.track]);
                 } else {
                     remoteVid.srcObject.addTrack(event.track);
                 }
             }
-            // Принудительный старт для Chrome Android
-            remoteVid.play().catch(() => {});
-        };
 
+            // ПРИНУДИТЕЛЬНЫЙ ПУСК (решает проблему черного экрана на Android)
+            remoteVid.onloadedmetadata = () => {
+                remoteVid.play().catch(err => {
+                    console.log("Автоплей заблокирован, нужен клик:", err);
+                    // Если не пошло само, добавим клик-обработчик на всё окно
+                    window.onclick = () => remoteVid.play();
+                });
+            };
+        };
 
         if (isCaller) {
             const offer = await pc.createOffer();
@@ -287,7 +293,7 @@ async function initRTCPeer(isCaller, targetRoom) {
         }
     } catch (e) { 
         console.error(e);
-        alert("Ошибка доступа к камере/микрофону"); 
+        alert("Ошибка камеры: " + e.message); 
         endCall(); 
     }
 }
@@ -397,6 +403,7 @@ async function handleSignalingData(data) {
 </script>
 </body>
 </html>
+
 
 
 
