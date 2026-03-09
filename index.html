@@ -294,51 +294,41 @@ async function initRTCPeer(isCaller) {
         });
 
         // Обработка входящего видео
-       pc.ontrack = (event) => {
+        // Обработка входящего видео
+        pc.ontrack = (event) => {
             const remoteVid = document.getElementById('remoteVideo');
             console.log("Поток получен, привязываем...");
             
             remoteVid.srcObject = event.streams[0];
+            remoteVid.muted = true; // Важно для автоплея на Android
         
-            // ХАК: заставляем Android перерисовать слой
             remoteVid.onloadedmetadata = () => {
                 remoteVid.play().catch(e => console.log("Автоплей заблокирован"));
             };
         
-            // ФИНАЛЬНЫЙ ПИНОК: при клике не только включаем звук, но и обновляем стили
+            // Единый размораживатель (звук + фикс отрисовки)
             const fixVideo = () => {
                 remoteVid.muted = false;
                 remoteVid.play();
-                remoteVid.style.opacity = "0.99"; // Микро-изменение для принудительной отрисовки
-                setTimeout(() => remoteVid.style.opacity = "1", 50);
-                console.log("Видео разморожено тапом");
-            };
-            window.addEventListener('touchstart', fixVideo, {once: true});
-            window.addEventListener('click', fixVideo, {once: true});
-        };
-
-
-            // 3. Обработчик тапа (Размораживатель)
-            const unmuteVideo = () => {
-                remoteVid.muted = false;
-                remoteVid.play();
-                // Хак с микро-изменением размера для форсирования перерисовки
+                // Хак с микро-изменением для принудительной перерисовки
+                remoteVid.style.opacity = "0.99"; 
                 remoteVid.style.width = "99.9%";
-                setTimeout(() => { remoteVid.style.width = "100%"; }, 50);
-                console.log("Видео и звук разморожены тапом");
-                window.removeEventListener('touchstart', unmuteVideo);
-                window.removeEventListener('click', unmuteVideo);
+                setTimeout(() => { 
+                    remoteVid.style.opacity = "1";
+                    remoteVid.style.width = "100%";
+                }, 50);
+                console.log("Видео разморожено тапом");
+                window.removeEventListener('touchstart', fixVideo);
+                window.removeEventListener('click', fixVideo);
             };
-
-            // Слушаем и клик, и тап (для мобилок touchstart надежнее)
-            window.addEventListener('click', unmuteVideo);
-            window.addEventListener('touchstart', unmuteVideo);
-        };
-
+            window.addEventListener('touchstart', fixVideo);
+            window.addEventListener('click', fixVideo);
+        }; // Вот ТУТ должна быть только одна закрывающая скобка
 
         pc.onicecandidate = e => {
             if (e.candidate) ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate, from: myName }));
         };
+
 
         if (isCaller) {
             const offer = await pc.createOffer();
@@ -485,8 +475,5 @@ document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessag
 </script>
 </body>
 </html>
-
-
-
 
 
