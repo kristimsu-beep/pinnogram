@@ -205,7 +205,8 @@ ws.onmessage = async (event) => {
     chat.appendChild(div);
     // Плавный скролл вниз
     setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 100);
-};
+}; // Это закрывает ws.onmessage
+} // <-- ВОТ ЭТОЙ СКОБКИ НЕ ХВАТАЛО! Она закрывает startChat
 
 
     async function startCall() {
@@ -285,4 +286,5 @@ ws.onmessage = async (event) => {
 </script>
 </body>
 </html>
+
 
