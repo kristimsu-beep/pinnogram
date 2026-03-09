@@ -1,4 +1,4 @@
-import os, shutil, uuid, aiosqlite, uvicorn
+import os, uuid, aiosqlite, uvicorn
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Request
 from fastapi.responses import FileResponse 
@@ -9,7 +9,6 @@ import aiofiles
 
 app = FastAPI()
 
-# Важно: CORS ПЕРВЫМ
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,15 +17,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# Если папка /data существует (мы на сервере), используем её, иначе — локальные папки
+# Умные пути для сервера и локального ПК
 if os.path.exists("/data"):
     DB_PATH = "/data/pinnogram.db"
     UPLOAD_DIR = "/data/uploads"
 else:
     DB_PATH = "pinnogram.db"
     UPLOAD_DIR = "uploads"
-
 
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
@@ -43,15 +40,11 @@ async def startup():
         try:
             await db.execute("ALTER TABLE messages ADD COLUMN room_id TEXT DEFAULT 'general'")
             await db.commit()
-        except:
-            pass 
+        except: pass 
         await db.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT,
-                text TEXT,
-                timestamp TEXT,
-                room_id TEXT DEFAULT 'general'
+                username TEXT, text TEXT, timestamp TEXT, room_id TEXT DEFAULT 'general'
             )
         """)
         await db.commit()
@@ -62,8 +55,7 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket, room_id: str):
         await websocket.accept()
-        if room_id not in self.rooms:
-            self.rooms[room_id] = []
+        if room_id not in self.rooms: self.rooms[room_id] = []
         self.rooms[room_id].append(websocket)
         
         async with aiosqlite.connect(DB_PATH) as db:
@@ -77,8 +69,7 @@ class ConnectionManager:
 
     def disconnect(self, websocket: WebSocket, room_id: str):
         if room_id in self.rooms:
-            if websocket in self.rooms[room_id]:
-                self.rooms[room_id].remove(websocket)
+            if websocket in self.rooms[room_id]: self.rooms[room_id].remove(websocket)
 
     async def broadcast(self, message: str, room_id: str, username: str = None, text: str = None):
         now = datetime.now().strftime("%H:%M")
@@ -97,27 +88,20 @@ class ConnectionManager:
         if room_id in self.rooms:
             for connection in self.rooms[room_id]:
                 if connection.client_state == WebSocketState.CONNECTED:
-                    try:
-                        await connection.send_text(final_msg)
-                    except:
-                        continue
+                    try: await connection.send_text(final_msg)
+                    except: continue
 
 manager = ConnectionManager()
-
 
 @app.post("/upload")
 async def upload_file(request: Request, file: UploadFile = File(...)):
     ext = os.path.splitext(file.filename)[1]
     name = f"{uuid.uuid4()}{ext}"
     path = os.path.join(UPLOAD_DIR, name)
-    
-    # Используем aiofiles для асинхронной записи
     async with aiofiles.open(path, "wb") as buffer:
-        while content := await file.read(1024 * 1024): # Читаем по 1МБ
+        while content := await file.read(1024 * 1024):
             await buffer.write(content)
-            
     return {"url": f"{str(request.base_url).rstrip('/')}/files/{name}"}
-
 
 @app.websocket("/ws/{room_id}/{username}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
@@ -126,6 +110,14 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
     try:
         while True:
             data = await websocket.receive_text()
+            # Фильтр для звонков (не пишем в БД)
+            if data.startswith("RTC_SIGNAL:"):
+                if room_id in manager.rooms:
+                    for conn in manager.rooms[room_id]:
+                        if conn != websocket and conn.client_state == WebSocketState.CONNECTED:
+                            await conn.send_text(data)
+                continue
+            
             if data.startswith("__DELETE__:"):
                 msg_id = data.replace("__DELETE__:", "")
                 async with aiosqlite.connect(DB_PATH) as db:
@@ -149,5 +141,3 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
-
-
