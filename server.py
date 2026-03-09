@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocketState
+import aiofiles
 
 app = FastAPI()
 
@@ -96,14 +97,20 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+
 @app.post("/upload")
 async def upload_file(request: Request, file: UploadFile = File(...)):
     ext = os.path.splitext(file.filename)[1]
     name = f"{uuid.uuid4()}{ext}"
     path = os.path.join(UPLOAD_DIR, name)
-    with open(path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    
+    # Используем aiofiles для асинхронной записи
+    async with aiofiles.open(path, "wb") as buffer:
+        while content := await file.read(1024 * 1024): # Читаем по 1МБ
+            await buffer.write(content)
+            
     return {"url": f"{str(request.base_url).rstrip('/')}/files/{name}"}
+
 
 @app.websocket("/ws/{room_id}/{username}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
@@ -135,3 +142,4 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
