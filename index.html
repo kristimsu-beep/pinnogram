@@ -209,84 +209,85 @@ ws.onmessage = async (event) => {
 } // <-- ВОТ ЭТОЙ СКОБКИ НЕ ХВАТАЛО! Она закрывает startChat
 
 
-   async function startCall() {
-    document.getElementById('video-call-overlay').style.display = 'block';
+let iceQueue = []; // Очередь для кандидатов, которые пришли слишком рано
+
+// 1. Инициализация медиа и создание соединения
+async function initRTCPeer(isCaller, targetRoom) {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         document.getElementById('localVideo').srcObject = localStream;
+        document.getElementById('video-call-overlay').style.display = 'block';
+
         pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
         localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-        
-        // ДОБАВЛЯЕМ from: myName ТУТ
-        pc.onicecandidate = e => e.candidate && ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate, from: myName }));
-        
-        pc.ontrack = (event) => {
-            const remoteVid = document.getElementById('remoteVideo');
-            // Если есть готовый поток - берем его, если нет - создаем из трека
-            if (event.streams && event.streams[0]) {
-                remoteVid.srcObject = event.streams[0];
-            } else {
-                if (!remoteVid.srcObject) {
-                    remoteVid.srcObject = new MediaStream([event.track]);
-                }
-            }
+
+        pc.onicecandidate = e => {
+            if (e.candidate) ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate, from: myName }));
         };
 
+        pc.ontrack = e => {
+            const remoteVid = document.getElementById('remoteVideo');
+            if (e.streams && e.streams[0]) remoteVid.srcObject = e.streams[0];
+        };
 
-        
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        
-        // И ДОБАВЛЯЕМ from: myName ТУТ
-        ws.send("RTC_SIGNAL:" + JSON.stringify({ offer: offer, from: myName }));
-        
-    } catch (e) { alert("Ошибка доступа к камере!"); endCall(); }
+        if (isCaller) {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            ws.send("RTC_SIGNAL:" + JSON.stringify({ offer: offer, from: myName }));
+        }
+    } catch (e) { 
+        console.error(e);
+        alert("Ошибка доступа к камере/микрофону"); 
+        endCall(); 
+    }
 }
 
+// Кнопка "Позвонить" теперь вызывает это:
+async function startCall() {
+    await initRTCPeer(true);
+}
 
-  async function handleSignalingData(data) {
-    // 0. Игнорируем сигналы от самих себя
+// 2. Обработка входящих сигналов
+async function handleSignalingData(data) {
     if (data.from === myName) return;
 
-    // 1. Входящий Оффер (Предложение позвонить)
+    // Входящий звонок
     if (data.offer) {
-        // Если мы уже в звонке или только что его начали, не принимаем второй оффер
-        if (pc && pc.signalingState !== "stable") return;
-
         if (!pc) {
-            if (confirm(`Входящий звонок от ${data.from || "собеседника"}! Принять?`)) {
-                await startCall(); 
+            if (confirm(`Входящий звонок от ${data.from}! Принять?`)) {
+                await initRTCPeer(false); // Создаем объект, но без оффера
             } else return;
         }
-        
-        try {
-            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            ws.send("RTC_SIGNAL:" + JSON.stringify({ answer: answer, from: myName }));
-        } catch (e) { console.error("Ошибка при ответе на оффер:", e); }
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        ws.send("RTC_SIGNAL:" + JSON.stringify({ answer: answer, from: myName }));
+
+        // Разбираем очередь кандидатов, если они накопились
+        while (iceQueue.length > 0) {
+            await pc.addIceCandidate(iceQueue.shift());
+        }
     } 
     
-    // 2. Ответ на наш звонок (Answer)
+    // Ответ на наш звонок
     else if (data.answer && pc) {
-        // Устанавливаем ответ только если мы ждем его (состояние have-local-offer)
-        if (pc.signalingState === "have-local-offer") {
-            try {
-                await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-            } catch (e) { console.error("Ошибка установки ответа:", e); }
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        while (iceQueue.length > 0) {
+            await pc.addIceCandidate(iceQueue.shift());
         }
-    }
+    } 
     
-    // 3. Сетевые данные (Candidate)
-    if (data.candidate && pc) {
-        // Кандидатов можно добавлять только КОГДА установлены описания (RemoteDescription)
-        if (pc.remoteDescription && pc.remoteDescription.type) {
-            try {
-                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-            } catch (e) { console.warn("Ошибка ICE:", e); }
+    // ICE Кандидаты (пути подключения)
+    else if (data.candidate) {
+        const cand = new RTCIceCandidate(data.candidate);
+        if (pc && pc.remoteDescription) {
+            await pc.addIceCandidate(cand);
+        } else {
+            iceQueue.push(cand); // Ждем, пока установится RemoteDescription
         }
     }
 }
+
 
     function endCall() { if(pc)pc.close(); localStream?.getTracks().forEach(t=>t.stop()); document.getElementById('video-call-overlay').style.display='none'; pc=null; }
     function saveNameAndStart() {
@@ -343,6 +344,7 @@ ws.onmessage = async (event) => {
 </script>
 </body>
 </html>
+
 
 
 
