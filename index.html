@@ -172,7 +172,6 @@ ws.onmessage = async (event) => {
 
         div.className = sender === myName ? 'msg msg-right' : 'msg msg-left';
         div.id = `msg-${msgId}`;
-        // ------------------------------------
 
         if (sender !== myName) {
             const nSpan = document.createElement('span');
@@ -182,15 +181,16 @@ ws.onmessage = async (event) => {
             document.getElementById("notifSound").play().catch(() => {});
         }
 
-        // Проверка на медиа
-        const isImg = /\.(jpg|jpeg|png|gif|webp|heic)(\?.*)?$/i.test(lowerText);
-        const isVideo = /\.(mp4|webm|mov|avi|ogg)(\?.*)?$/i.test(lowerText);
+        // Улучшенная проверка на медиа (найдет расширение в любом месте ссылки)
+        const isImg = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"].some(ext => lowerText.includes(ext));
+        const isVideo = [".mp4", ".webm", ".mov", ".avi", ".ogg"].some(ext => lowerText.includes(ext));
 
         if (isImg) {
             const img = document.createElement('img');
             img.src = cleanText; 
             img.style.maxWidth = "100%";
             img.style.borderRadius = "10px";
+            img.style.marginTop = "5px"; // Добавим отступ сверху
             img.onclick = () => { 
                 document.getElementById('modal-img').src = cleanText; 
                 document.getElementById('modal').style.display = 'flex'; 
@@ -201,6 +201,8 @@ ws.onmessage = async (event) => {
             v.src = cleanText;
             v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
             v.controls = true;
+            v.style.maxWidth = "100%";
+            v.style.borderRadius = "10px";
             v.onclick = () => v.muted = !v.muted;
             div.appendChild(v);
         } else {
@@ -208,6 +210,7 @@ ws.onmessage = async (event) => {
             s.textContent = text;
             div.appendChild(s);
         }
+
 
         const ts = document.createElement('span');
         ts.className = "msg-time";
@@ -242,10 +245,26 @@ async function initRTCPeer(isCaller, targetRoom) {
             if (e.candidate) ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate, from: myName }));
         };
 
-        pc.ontrack = e => {
+        pc.ontrack = (event) => {
             const remoteVid = document.getElementById('remoteVideo');
-            if (e.streams && e.streams[0]) remoteVid.srcObject = e.streams[0];
+            
+            // 1. Привязываем поток (универсальный способ для iOS/Android)
+            if (event.streams && event.streams[0]) {
+                remoteVid.srcObject = event.streams[0];
+            } else {
+                if (!remoteVid.srcObject) {
+                    remoteVid.srcObject = new MediaStream([event.track]);
+                } else {
+                    remoteVid.srcObject.addTrack(event.track);
+                }
+            }
+
+            // 2. ВОТ ТОТ САМЫЙ КУСОЧЕК (Принудительный запуск)
+            remoteVid.onloadedmetadata = () => {
+                remoteVid.play().catch(e => console.warn("Автоплей заблокирован:", e));
+            };
         };
+
 
         if (isCaller) {
             const offer = await pc.createOffer();
@@ -364,6 +383,7 @@ async function handleSignalingData(data) {
 </script>
 </body>
 </html>
+
 
 
 
