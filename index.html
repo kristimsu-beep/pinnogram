@@ -37,8 +37,27 @@
     .controls input[type="text"] { flex: 1; padding: 12px 16px; border-radius: 25px; border: none; background: var(--msg-in); color: var(--text); outline: none; font-size: 16px; }
 
     #video-call-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:10000; }
-    #remoteVideo { width:100%; height:100%; object-fit:cover; }
-    #localVideo { width:100px; height:140px; position:absolute; bottom:20px; right:20px; border:2px solid white; border-radius:10px; object-fit:cover; }
+    #remoteVideo { 
+        width: 100%; 
+        height: 100%; 
+        object-fit: cover; 
+        z-index: 10001; 
+        background: #000; 
+    }
+    
+    #localVideo { 
+        width: 100px; 
+        height: 140px; 
+        position: absolute; 
+        bottom: 20px; 
+        right: 20px; 
+        border: 2px solid white; 
+        border-radius: 10px; 
+        object-fit: cover; 
+        z-index: 10002; 
+    }
+
+
 
     #modal { display: none; position: fixed; z-index: 9999; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); align-items: center; justify-content: center; cursor: zoom-out; }
     #modal img { max-width: 95%; max-height: 95%; border-radius: 10px; }
@@ -265,10 +284,13 @@ async function initRTCPeer(isCaller) {
 
         pc.ontrack = (event) => {
             const remoteVid = document.getElementById('remoteVideo');
-            // Android-совместимая привязка потока
+            console.log("Получен поток от собеседника:", event.streams);
+
+            // Универсальный способ привязки для Android
             if (event.streams && event.streams[0]) {
                 remoteVid.srcObject = event.streams[0];
             } else {
+                // Если прилетел "голый" трек (бывает на Android Chrome)
                 if (!remoteVid.srcObject) {
                     remoteVid.srcObject = new MediaStream([event.track]);
                 } else {
@@ -276,15 +298,16 @@ async function initRTCPeer(isCaller) {
                 }
             }
 
-            // ПРИНУДИТЕЛЬНЫЙ ПУСК (решает проблему черного экрана на Android)
+            // ПРИНУДИТЕЛЬНЫЙ ПИНОК (Android часто держит видео на паузе)
             remoteVid.onloadedmetadata = () => {
-                remoteVid.play().catch(err => {
-                    console.log("Автоплей заблокирован, нужен клик:", err);
-                    // Если не пошло само, добавим клик-обработчик на всё окно
+                remoteVid.play().catch(e => {
+                    console.warn("Автоплей заблокирован, ждем клика");
+                    // Если не пошло само, видео запустится при тапе по экрану
                     window.onclick = () => remoteVid.play();
                 });
             };
         };
+
 
         if (isCaller) {
             const offer = await pc.createOffer();
@@ -403,6 +426,7 @@ async function handleSignalingData(data) {
 </script>
 </body>
 </html>
+
 
 
 
