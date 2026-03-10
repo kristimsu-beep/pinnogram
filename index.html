@@ -144,35 +144,32 @@
 ws.onmessage = async (event) => {
     const raw = event.data;
     const chat = document.getElementById('chat');
+
+    // 1. ОБРАБОТКА СЛУЖЕБНЫХ КОМАНД
+    // Список онлайн
     if (raw.includes("ONLINE_LIST:")) {
         const parts = raw.split("ONLINE_LIST:");
         if (parts.length > 1) {
             const users = parts[1].split(",");
-            const el = document.getElementById("online-list");
-            if (el) {
-                el.textContent = `В сети: ${users.join(", ")}`;
-            }
-            console.log("Обновлен список онлайн:", users);
+            document.getElementById("online-list").textContent = `В сети: ${users.join(", ")}`;
         }
         return;
     }
 
-
-
-    // 1. Сигналы звонка (WebRTC)
+    // Сигналы звонка (WebRTC) — КРИТИЧНО ДЛЯ XIAOMI
     if (raw.startsWith("RTC_SIGNAL:")) {
         handleSignalingData(JSON.parse(raw.replace("RTC_SIGNAL:", "")));
         return;
     }
 
-    // 2. Подтверждение удаления
+    // Подтверждение удаления
     if (raw.startsWith("DELETE_CONFIRM:")) {
         const delId = raw.split(":")[1];
         document.getElementById(`msg-${delId}`)?.remove();
         return;
     }
 
-    // 3. Индикатор печати
+    // Индикатор печати
     if (raw.startsWith("TYPING:")) {
         const typingUser = raw.split(":")[1];
         document.getElementById("typing-indicator").textContent = `${typingUser} печатает...`;
@@ -183,98 +180,99 @@ ws.onmessage = async (event) => {
 
     const div = document.createElement('div');
 
-    // 4. Системные сообщения (вход/выход)
+    // 2. СИСТЕМНЫЕ СООБЩЕНИЯ (Вход/Выход)
     if (raw.includes("SYSTEM:")) {
-        div.style.alignSelf = "center"; 
-        div.style.fontSize = "11px"; 
-        div.style.opacity = "0.5";
-        div.style.margin = "10px 0";
+        div.style = "align-self: center; font-size: 11px; opacity: 0.5; margin: 10px 0; text-align: center; width: 100%;";
         div.textContent = raw.split("SYSTEM: ")[1];
-    } else {
-        // 5. Обычные сообщения
-        // 5. Обычные сообщения (Разбор: ID | Время Имя: Текст | Аватарка)
+    } 
+    
+    // 3. ОБЫЧНЫЕ СООБЩЕНИЯ (С АВАТАРКАМИ)
+    else {
         const parts = raw.split("|");
-        const idPart = parts[0];
-        const content = parts[1];
-        const avatarUrl = parts[2] || ""; // Ссылка на аватарку
+        const idPart = parts[0] || "";
+        const content = parts[1] || "";
+        const avatarUrl = parts[2] || "https://www.w3schools.com";
         
         const msgId = idPart.replace("ID:", "");
-        
-        // Извлекаем время [HH:MM]
         const timeMatch = content.match(/\[(\d{2}:\d{2})\]/);
         const time = timeMatch ? timeMatch[1] : "--:--";
         
-        // Извлекаем отправителя и текст
         const userAndText = content.replace(/^\[\d{2}:\d{2}\]\s*/, "");
         const splitIdx = userAndText.indexOf(": ");
         const sender = userAndText.substring(0, splitIdx);
         const text = userAndText.substring(splitIdx + 2);
-        
-        const cleanText = text.trim();
-        const lowerText = cleanText.toLowerCase();
+        const lowerText = text.toLowerCase();
 
         div.className = sender === myName ? 'msg msg-right' : 'msg msg-left';
         div.id = `msg-${msgId}`;
+        div.style.display = "flex";
+        div.style.alignItems = "flex-end";
+        div.style.gap = "8px";
 
-        // --- ДОБАВЛЯЕМ АВАТАРКУ В ЧАТ ---
-        if (avatarUrl) {
+        // Рисуем аватарку слева, если сообщение не наше
+        if (sender !== myName) {
             const avImg = document.createElement('img');
             avImg.src = avatarUrl;
-            avImg.style = "width:30px; height:30px; border-radius:50%; object-fit:cover; margin-bottom:5px; border:1px solid rgba(255,255,255,0.1);";
+            avImg.style = "width:32px; height:32px; border-radius:50%; object-fit:cover; flex-shrink:0; border:1px solid rgba(255,255,255,0.1);";
             div.appendChild(avImg);
         }
+
+        // Контейнер для текстового контента
+        const msgBody = document.createElement('div');
+        msgBody.style = "display: flex; flex-direction: column; max-width: 100%;";
 
         if (sender !== myName) {
             const nSpan = document.createElement('span');
             nSpan.className = "msg-sender";
             nSpan.textContent = sender;
-            div.appendChild(nSpan);
+            msgBody.appendChild(nSpan);
+            // Звук уведомления
             document.getElementById("notifSound").play().catch(() => {});
         }
 
-        // Логика медиа (картинки/видео)
-        const isImg = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"].some(ext => lowerText.includes(ext));
-        const isVideo = [".mp4", ".webm", ".mov", ".avi", ".ogg"].some(ext => lowerText.includes(ext));
+        // Проверка на медиа (Фото/Видео/Текст)
+        const isImg = [".jpg", ".jpeg", ".png", ".gif", ".webp"].some(ext => lowerText.includes(ext));
+        const isVideo = [".mp4", ".webm", ".mov"].some(ext => lowerText.includes(ext));
 
         if (isImg) {
             const img = document.createElement('img');
-            img.src = cleanText; 
-            img.style = "max-width:100%; border-radius:10px; margin-top:5px;";
-            img.onclick = () => { 
-                document.getElementById('modal-img').src = cleanText; 
-                document.getElementById('modal').style.display = 'flex'; 
-            };
-            div.appendChild(img);
+            img.src = text.trim();
+            img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer;";
+            img.onclick = () => { document.getElementById('modal-img').src = img.src; document.getElementById('modal').style.display = 'flex'; };
+            msgBody.appendChild(img);
         } else if (isVideo) {
             const v = document.createElement('video');
-            v.src = cleanText;
-            v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
-            v.controls = true;
+            v.src = text.trim();
+            v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
             v.style = "max-width:100%; border-radius:10px;";
-            div.appendChild(v);
+            msgBody.appendChild(v);
         } else {
             const s = document.createElement('span');
             s.textContent = text;
-            div.appendChild(s);
+            msgBody.appendChild(s);
         }
 
+        // Метка времени
         const ts = document.createElement('span');
         ts.className = "msg-time";
         ts.textContent = time;
-        div.appendChild(ts);
+        msgBody.appendChild(ts);
 
+        div.appendChild(msgBody);
+
+        // Удаление по правому клику (контекстное меню)
         div.oncontextmenu = (e) => {
             e.preventDefault();
             if (sender === myName && confirm("Удалить сообщение?")) ws.send(`__DELETE__:${msgId}`);
         };
+    }
 
-    } // Закрывает else
+    chat.appendChild(div);
+    // Авто-скролл вниз
+    setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 100);
+}; // Конец ws.onmessage
+} // Конец функции startChat
 
-    // --- ВОТ ЭТОГО НЕ ХВАТАЛО ---
-    chat.appendChild(div); // Добавляем сообщение в чат
-    setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 100); // Скролл вниз
-}; // Закрывает ws.onmessage
-} // Закрывает startChat
 
 
 let iceQueue = []; 
@@ -283,24 +281,32 @@ const forceRender = async () => {
     const remoteVid = document.getElementById('remoteVideo');
     if (!remoteVid || !remoteVid.srcObject) return;
 
-    console.log("Xiaomi: Глобальный пинок GPU...");
-    remoteVid.muted = false;
+    console.log("Xiaomi: Пробуем жесткий перезапуск плеера...");
     
     try {
+        remoteVid.muted = false;
+        // ШОКОВАЯ ТЕРАПИЯ: Пауза -> Микропауза -> Старт
+        remoteVid.pause();
+        await new Promise(r => setTimeout(r, 50));
+        
         await remoteVid.play();
-        // Ультра-встряска слоев
-        remoteVid.style.transform = "scale(1.02) translateZ(0)";
-        remoteVid.style.filter = "contrast(1.1)";
+        
+        // Принудительно меняем размеры, чтобы вызвать Reflow всего экрана
+        remoteVid.style.width = "101vw";
+        remoteVid.style.filter = "brightness(1.1) contrast(1.1)";
+        remoteVid.style.transform = "scale(1.05) translateZ(0)";
         
         setTimeout(() => { 
+            remoteVid.style.width = "100vw";
+            remoteVid.style.filter = "brightness(1) contrast(1)";
             remoteVid.style.transform = "scale(1.001) translateZ(0)";
-            remoteVid.style.filter = "contrast(1)";
-            console.log("Xiaomi: Слой принудительно обновлен!");
-        }, 200);
+            console.log("Xiaomi: Рендер принудительно перезапущен!");
+        }, 300);
     } catch (e) {
-        console.error("Ошибка принудительного рендера:", e);
+        console.error("Ошибка жесткого рендера:", e);
     }
 };
+
 
 
 // 1. Инициализация медиа и создание соединения
@@ -422,24 +428,32 @@ async function handleSignalingData(data) {
         if (pc.signalingState === "have-local-offer") {
             try {
                 await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-                console.log("Answer установлен.");
+                console.log("Answer установлен. Готовим видео...");
 
                 while (iceQueue.length > 0) {
                     try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
                 }
                 
-                // Авто-пинок через секунду для Caller
-                setTimeout(() => {
+                // Единый таймер на запуск видео для звонящего
+                setTimeout(async () => {
+                    console.log("Caller: Авто-пинок через 1.5 сек...");
+                    // 1. Сначала вызываем нашу глобальную функцию (она сделает play и GPU-встряску)
+                    await forceRender(); 
+                    
+                    // 2. Дополнительный микро-пинок масштаба для верности
                     const remoteVid = document.getElementById('remoteVideo');
-                    remoteVid.play().catch(() => console.log("Нужен тап для звука"));
-                    // Вызываем встряску
-                    remoteVid.style.transform = "scale(1.01)";
-                    setTimeout(() => { remoteVid.style.transform = "scale(1)"; }, 100);
-                }, 1000);
+                    if (remoteVid) {
+                        remoteVid.style.transform = "scale(1.02) translateZ(0)";
+                        setTimeout(() => { 
+                            remoteVid.style.transform = "scale(1.001) translateZ(0)"; 
+                        }, 200);
+                    }
+                }, 1500);
 
             } catch(e) { console.error("Ошибка установки Answer:", e); }
         }
     }
+
     
     // 3. Сетевые пути (Candidates)
     else if (data.candidate) {
@@ -595,6 +609,7 @@ document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessag
 </script>
 </body>
 </html>
+
 
 
 
