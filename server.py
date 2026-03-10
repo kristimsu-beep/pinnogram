@@ -36,79 +36,92 @@ async def get_index():
 app.mount("/files", StaticFiles(directory=UPLOAD_DIR), name="files")
 
 @app.on_event("startup")
+@app.on_event("startup")
 async def startup():
     async with aiosqlite.connect(DB_PATH) as db:
+        # Добавляем сразу обе колонки на случай обновления старой базы
         try:
             await db.execute("ALTER TABLE messages ADD COLUMN room_id TEXT DEFAULT 'general'")
+            await db.execute("ALTER TABLE messages ADD COLUMN avatar TEXT DEFAULT ''")
             await db.commit()
         except: pass 
+        
+        # В CREATE TABLE обязательно добавляем avatar
         await db.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT, text TEXT, timestamp TEXT, room_id TEXT DEFAULT 'general'
+                username TEXT, text TEXT, timestamp TEXT, 
+                room_id TEXT DEFAULT 'general',
+                avatar TEXT DEFAULT ''
+            )
+        """)
+        # Таблица пользователей для аватарок и паролей
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                password TEXT,
+                avatar TEXT DEFAULT ''
             )
         """)
         await db.commit()
 
 class ConnectionManager:
     def __init__(self):
-        self.rooms = {} # Структура: {room_id: {username: websocket}}
+        self.rooms = {}
 
     async def connect(self, websocket: WebSocket, room_id: str, username: str):
         await websocket.accept()
         if room_id not in self.rooms:
             self.rooms[room_id] = {}
-        # Сохраняем сокет конкретного пользователя
         self.rooms[room_id][username] = websocket
         
-        # 1. Отправляем историю сообщений (как и было)
         async with aiosqlite.connect(DB_PATH) as db:
+            # В истории тоже подтягиваем аватарку
             async with db.execute(
-                "SELECT id, username, text, timestamp FROM messages WHERE room_id = ? ORDER BY id ASC LIMIT 50", 
+                "SELECT id, username, text, timestamp, avatar FROM messages WHERE room_id = ? ORDER BY id ASC LIMIT 50", 
                 (room_id,)
             ) as cursor:
                 history = await cursor.fetchall()
-                for msg_id, user, text, time in history:
-                    await websocket.send_text(f"ID:{msg_id}|[{time}] {user}: {text}")
-        
-        # 2. Рассылаем всем новый список онлайн
+                for msg_id, user, text, time, av in history:
+                    await websocket.send_text(f"ID:{msg_id}|[{time}] {user}: {text}|{av or ''}")
         await self.broadcast_online(room_id)
 
     def disconnect(self, room_id: str, username: str):
         if room_id in self.rooms and username in self.rooms[room_id]:
             del self.rooms[room_id][username]
-        # Запускаем обновление списка онлайн для оставшихся
         import asyncio
         asyncio.create_task(self.broadcast_online(room_id))
 
     async def broadcast_online(self, room_id: str):
         if room_id in self.rooms:
             users = list(self.rooms[room_id].keys())
-            # Тот самый формат ONLINE_LIST для твоего JS
             msg = f"ID:0|SYSTEM:ONLINE_LIST:{','.join(users)}"
             for ws in self.rooms[room_id].values():
                 try: await ws.send_text(msg)
                 except: continue
 
-    async def broadcast(self, message: str, room_id: str, username: str = None, text: str = None):
-        now = datetime.now().strftime("%H:%M")
+    # ИСПРАВЛЕН ОТСТУП (ровно под async def выше)
+    async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None):
+        now = client_time if client_time else datetime.now().strftime("%H:%M")
         final_msg = f"ID:0|SYSTEM: {message}"
         
         if username and text:
             async with aiosqlite.connect(DB_PATH) as db:
-                cursor = await db.execute(
-                    "INSERT INTO messages (username, text, timestamp, room_id) VALUES (?, ?, ?, ?)", 
-                    (username, text, now, room_id)
+                await db.execute(
+                    "INSERT INTO messages (username, text, timestamp, room_id, avatar) VALUES (?, ?, ?, ?, ?)", 
+                    (username, text, now, room_id, avatar)
                 )
-                msg_id = cursor.lastrowid
+                cursor = await db.execute("SELECT last_insert_rowid()")
+                msg_id = (await cursor.fetchone())[0]
                 await db.commit()
-                final_msg = f"ID:{msg_id}|[{now}] {username}: {text}"
-
+                final_msg = f"ID:{msg_id}|[{now}] {username}: {text}|{avatar}"
+    
         if room_id in self.rooms:
             for ws in self.rooms[room_id].values():
                 if ws.client_state == WebSocketState.CONNECTED:
                     try: await ws.send_text(final_msg)
                     except: continue
+
 
 manager = ConnectionManager()
 
@@ -157,21 +170,30 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
 
 @app.websocket("/ws/{room_id}/{username}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
-    # Теперь передаем username при коннекте
+    # 1. Сначала узнаем аватарку пользователя из БД
+    current_avatar = ""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT avatar FROM users WHERE username = ?", (username,)) as cursor:
+            row = await cursor.fetchone()
+            if row: current_avatar = row[0]
+
     await manager.connect(websocket, room_id, username)
-    await manager.broadcast(f"{username} вошел в чат", room_id)
+    # ПРАВИЛЬНЫЙ ПОРЯДОК: room_id ПЕРВЫЙ
+    await manager.broadcast(room_id, message=f"{username} вошел в чат")
+
     try:
         while True:
             data = await websocket.receive_text()
             
+            # RTC сигналы (оставляем как есть)
             if data.startswith("RTC_SIGNAL:"):
                 if room_id in manager.rooms:
                     for name, conn in manager.rooms[room_id].items():
-                        # Не шлем сигнал самому себе
                         if name != username and conn.client_state == WebSocketState.CONNECTED:
                             await conn.send_text(data)
                 continue
-            
+
+            # Удаление
             if data.startswith("__DELETE__:"):
                 msg_id = data.replace("__DELETE__:", "")
                 async with aiosqlite.connect(DB_PATH) as db:
@@ -180,21 +202,45 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                 if room_id in manager.rooms:
                     for conn in manager.rooms[room_id].values():
                         await conn.send_text(f"DELETE_CONFIRM:{msg_id}")
+            
+            # Печать
             elif data == "__TYPING__":
                 if room_id in manager.rooms:
                     for name, conn in manager.rooms[room_id].items():
                         if name != username:
                             await conn.send_text(f"TYPING:{username}")
+            
+            # ОБЫЧНОЕ СООБЩЕНИЕ (с обработкой времени)
             else:
-                await manager.broadcast("", room_id, username=username, text=data)
+                display_text = data
+                msg_time = datetime.now().strftime("%H:%M") # Заглушка
+                
+                # Распаковка времени из JS: "TIME:14:30|Привет"
+                if data.startswith("TIME:"):
+                    try:
+                        parts = data.split("|", 1)
+                        msg_time = parts[0].replace("TIME:", "")
+                        display_text = parts[1]
+                    except: pass
+
+                # Шлем всем в чат (room_id — первый!)
+                await manager.broadcast(
+                    room_id, 
+                    username=username, 
+                    text=display_text, 
+                    avatar=current_avatar, 
+                    client_time=msg_time
+                )
+                
     except WebSocketDisconnect:
-        # Передаем параметры для корректного удаления из словаря
         manager.disconnect(room_id, username)
-        await manager.broadcast(f"{username} покинул чат", room_id)
+        await manager.broadcast(room_id, message=f"{username} покинул чат")
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
