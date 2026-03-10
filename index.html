@@ -309,52 +309,48 @@ async function initRTCPeer(isCaller) {
 
         // Обработка входящего видео
         // Обработка входящего видео
-               pc.ontrack = (event) => {
+                      pc.ontrack = (event) => {
             const remoteVid = document.getElementById('remoteVideo');
             console.log("Поток пришел. Xiaomi HyperOS Mode.");
         
-            // Привязываем поток (берем первый стрим или создаем из трека)
             if (event.streams && event.streams[0]) {
                 remoteVid.srcObject = event.streams[0];
             } else if (event.track) {
                 remoteVid.srcObject = new MediaStream([event.track]);
             }
-            
-            remoteVid.muted = true; // Важно для старта
+            remoteVid.muted = true;
         
             const forceRender = async () => {
                 console.log("Xiaomi: Пробуем разморозить видео...");
-                
-                // 1. Сначала просто пробуем включить звук и играть
                 remoteVid.muted = false;
                 
                 try {
-                    // 2. Делаем микро-паузу перед play, чтобы убрать AbortError
-                    await new Promise(r => setTimeout(r, 100));
+                    await new Promise(r => setTimeout(r, 150));
                     await remoteVid.play();
                     
-                    // 3. "Пинаем" графический слой через CSS фильтры и масштаб
-                    // Это заставляет HyperOS перерисовать экран без перезагрузки потока
-                    remoteVid.style.filter = "brightness(1.01)";
+                    remoteVid.style.transform = "scale(1.02) translateZ(0)";
+                    remoteVid.style.filter = "contrast(1.1)";
                     remoteVid.style.width = "101vw";
                     
                     setTimeout(() => { 
-                        remoteVid.style.filter = "brightness(1)";
+                        remoteVid.style.transform = "scale(1.001) translateZ(0)";
+                        remoteVid.style.filter = "contrast(1)";
                         remoteVid.style.width = "100vw";
-                        console.log("Xiaomi: Слой перерисован!");
-                    }, 150);
-                    
+                        console.log("Xiaomi: GPU принудительно перерисовал слой!");
+                    }, 200);
                 } catch (e) {
-                    console.error("Xiaomi: Ошибка мягкого старта:", e);
-                    // Если совсем не идет — пробуем один раз переткнуть поток (но без null!)
+                    console.error("Xiaomi: Ошибка старта:", e);
                     const s = remoteVid.srcObject;
-                    remoteVid.srcObject = s;
+                    remoteVid.srcObject = null; 
+                    setTimeout(() => { remoteVid.srcObject = s; }, 50);
                 }
             };
 
+            // Слушатели должны быть ЗДЕСЬ (снаружи forceRender)
             window.addEventListener('touchstart', forceRender, {once: true});
             window.addEventListener('click', forceRender, {once: true});
-        };
+        }; // Конец ontrack
+
 
         pc.onicecandidate = e => {
             if (e.candidate) ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate, from: myName }));
@@ -444,7 +440,18 @@ function saveNameAndStart() {
     if (n) { localStorage.setItem("pinnogram_user", n); localStorage.setItem("pinnogram_room", r); startChat(n, r); }
 }
 
-function sendMessage() { const i = document.getElementById("messageText"); if(i.value.trim() && ws){ ws.send(i.value); i.value=''; } }
+function sendMessage() { 
+    const i = document.getElementById("messageText"); 
+    if(i.value.trim() && ws) { 
+        // Получаем время: 14:30
+        const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        
+        // Отправляем сообщение в формате "TIME:14:30|Текст"
+        ws.send(`TIME:${now}|${i.value}`); 
+        i.value = ''; 
+    } 
+}
+
 
 function handleTyping() { if(!isTypingNow && ws?.readyState===1){ isTypingNow=true; ws.send("__TYPING__"); setTimeout(()=>isTypingNow=false,3000); } }
 
@@ -499,6 +506,7 @@ document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessag
 </script>
 </body>
 </html>
+
 
 
 
