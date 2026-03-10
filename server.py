@@ -38,23 +38,27 @@ app.mount("/files", StaticFiles(directory=UPLOAD_DIR), name="files")
 @app.on_event("startup")
 async def startup():
     async with aiosqlite.connect(DB_PATH) as db:
-        # Добавляем сразу обе колонки на случай обновления старой базы
-        try:
-            await db.execute("ALTER TABLE messages ADD COLUMN room_id TEXT DEFAULT 'general'")
-            await db.execute("ALTER TABLE messages ADD COLUMN avatar TEXT DEFAULT ''")
-            await db.commit()
-        except: pass 
-        
-        
-        # Таблица пользователей для аватарок и паролей
+        # Создаем таблицу сообщений с НУЖНЫМИ колонками
         await db.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                username TEXT PRIMARY KEY,
-                password TEXT,
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT, text TEXT, timestamp TEXT, 
+                room_id TEXT DEFAULT 'general',
                 avatar TEXT DEFAULT ''
             )
         """)
+        # Таблица пользователей
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY, password TEXT, avatar TEXT DEFAULT ''
+            )
+        """)
+        # Попытка добавить колонки, если база старая
+        try:
+            await db.execute("ALTER TABLE messages ADD COLUMN avatar TEXT DEFAULT ''")
+        except: pass
         await db.commit()
+
 # 1. Роут для регистрации и входа
 @app.post("/auth")
 async def auth(data: dict):
@@ -200,14 +204,12 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
             if row: current_avatar = row[0]
 
     await manager.connect(websocket, room_id, username)
-    # ПРАВИЛЬНЫЙ ПОРЯДОК: room_id ПЕРВЫЙ
     await manager.broadcast(room_id, message=f"{username} вошел в чат")
 
     try:
         while True:
             data = await websocket.receive_text()
             
-            # RTC сигналы (оставляем как есть)
             if data.startswith("RTC_SIGNAL:"):
                 if room_id in manager.rooms:
                     for name, conn in manager.rooms[room_id].items():
@@ -215,7 +217,6 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                             await conn.send_text(data)
                 continue
 
-            # Удаление
             if data.startswith("__DELETE__:"):
                 msg_id = data.replace("__DELETE__:", "")
                 async with aiosqlite.connect(DB_PATH) as db:
@@ -225,27 +226,30 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     for conn in manager.rooms[room_id].values():
                         await conn.send_text(f"DELETE_CONFIRM:{msg_id}")
             
-            # Печать
             elif data == "__TYPING__":
                 if room_id in manager.rooms:
                     for name, conn in manager.rooms[room_id].items():
                         if name != username:
                             await conn.send_text(f"TYPING:{username}")
             
-            # ОБЫЧНОЕ СООБЩЕНИЕ (с обработкой времени)
+            # ИСПРАВЛЕН ОТСТУП ЗДЕСЬ:
             else:
                 display_text = data
-                msg_time = datetime.now().strftime("%H:%M") # Заглушка
+                msg_time = datetime.now().strftime("%H:%M")
                 
-                # Распаковка времени из JS: "TIME:14:30|Привет"
                 if data.startswith("TIME:"):
                     try:
-                        parts = data.split("|", 1)
+                        parts = data.split("|", 1) 
                         msg_time = parts[0].replace("TIME:", "")
                         display_text = parts[1]
                     except: pass
 
-                # Шлем всем в чат (room_id — первый!)
+                # Получаем аватарку снова (на случай если она сменилась)
+                async with aiosqlite.connect(DB_PATH) as db:
+                    async with db.execute("SELECT avatar FROM users WHERE username = ?", (username,)) as c:
+                        row = await c.fetchone()
+                        if row: current_avatar = row[0]
+                
                 await manager.broadcast(
                     room_id, 
                     username=username, 
@@ -258,10 +262,10 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
         manager.disconnect(room_id, username)
         await manager.broadcast(room_id, message=f"{username} покинул чат")
 
-
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
