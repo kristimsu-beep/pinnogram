@@ -12,7 +12,31 @@
 
     /* Кнопки */
     button { background: var(--msg-out); color: white; border: none; padding: 12px 20px; border-radius: 12px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-    .controls button, .file-btn, .rec-btn { width: 45px; height: 45px; padding: 0; border-radius: 50% !important; display: flex; align-items: center; justify-content: center; }
+    
+    /* Исправленный блок кнопок: теперь идеально круглые */
+    .controls button, .file-btn, .rec-btn { 
+        width: 42px; /* Уменьшил до 42px, чтобы точно всё влезло на Xiaomi */
+        height: 42px; 
+        flex-shrink: 0; /* ЗАПРЕТ НА СПЛЮЩИВАНИЕ */
+        padding: 0; 
+        border-radius: 50% !important; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        font-size: 18px; 
+        border: none;
+        cursor: pointer;
+    }
+
+    /* Фикс для аватарки в кнопках */
+    #user-avatar-icon {
+        width: 40px;
+        height: 40px;
+        flex-shrink: 0; 
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid var(--accent);
+    }
 
     #login-screen { margin: auto; background: var(--panel); padding: 30px; border-radius: 20px; text-align: center; width: 90%; max-width: 350px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
     #login-screen input { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 10px; border: 1px solid #444; background: #222; color: white; outline: none; }
@@ -20,10 +44,10 @@
     #chat-screen { display: none; flex-direction: column; width: 100%; max-width: 600px; height: 100%; position: relative; padding: 10px; }
     #chat { flex: 1; border: 1px solid rgba(255,255,255,0.05); overflow-y: auto; padding: 15px; background: var(--panel); border-radius: 15px; display: flex; flex-direction: column; gap: 6px; }
 
-        /* 1. Общий стиль пузыря */
+    /* Пузыри сообщений */
     .msg { 
         padding: 10px 14px; 
-        border-radius: 18px; /* Сильное скругление */
+        border-radius: 18px; 
         max-width: 75%; 
         font-size: 15px; 
         position: relative; 
@@ -31,57 +55,51 @@
         flex-direction: column; 
         box-shadow: 0 1px 2px rgba(0,0,0,0.2); 
         cursor: pointer;
-        word-break: break-word; /* Не дает тексту вылезать за края */
+        word-break: break-word; 
     }
-
-    /* 2. Свои сообщения (Справа + Синие) */
-    .msg-right { 
-        align-self: flex-end; 
-        background: var(--msg-out); 
-        color: white; 
-        border-bottom-right-radius: 4px; /* Острый уголок снизу справа */
-    }
-
-    /* 3. Чужие сообщения (Слева + Серые) */
-    .msg-left { 
-        align-self: flex-start; 
-        background: var(--msg-in); 
-        color: var(--text); 
-        border-bottom-left-radius: 4px; /* Острый уголок снизу слева */
-    }
-
-    /* 4. Контейнер строки (чтобы аватарка и текст стояли рядом) */
-    .msg-row { 
-        display: flex; 
-        width: 100%; 
-        margin: 6px 0; 
-        gap: 8px; 
-        align-items: flex-end; 
-    }
-
-    /* 5. Служебные элементы внутри пузыря */
+    .msg-right { align-self: flex-end; background: var(--msg-out); color: white; border-bottom-right-radius: 4px; }
+    .msg-left { align-self: flex-start; background: var(--msg-in); color: var(--text); border-bottom-left-radius: 4px; }
+    .msg-row { display: flex; width: 100%; margin: 6px 0; gap: 8px; align-items: flex-end; }
     .msg-sender { font-size: 12px; font-weight: bold; margin-bottom: 2px; color: var(--accent); }
     .msg-time { font-size: 10px; opacity: 0.6; align-self: flex-end; margin-top: 4px; }
     .msg-text { display: block; line-height: 1.4; }
 
-    /* 6. Медиа (Кружки и картинки) */
+    /* Видео и фото */
     .msg video { 
         width: 220px; height: 220px; 
         object-fit: cover; 
         margin: 5px 0; 
         background: #000; 
-        clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); /* Твой фирменный пятиугольник */
+        clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); 
     }
     .msg img { max-width: 100%; border-radius: 12px; margin-top: 5px; }
-
-
 
     .emoji-bar { margin: 5px 0; display: flex; gap: 12px; font-size: 20px; user-select: none; padding-left: 5px; }
     .emoji-bar span { cursor: pointer; transition: 0.2s; }
     .emoji-bar span:hover { transform: scale(1.3); }
 
-    .controls { margin-bottom: 10px; display: flex; gap: 8px; width: 100%; align-items: center; }
-    .controls input[type="text"] { flex: 1; padding: 12px 16px; border-radius: 25px; border: none; background: var(--msg-in); color: var(--text); outline: none; font-size: 16px; }
+    /* Блок управления внизу */
+    .controls { 
+        margin-bottom: 10px; 
+        display: flex; 
+        gap: 6px; 
+        width: 100%; 
+        align-items: center; 
+        padding: 0 5px; /* Боковые отступы, чтобы кнопки не улетали */
+    }
+
+    /* ФИНАЛЬНЫЙ ФИКС ТЕКСТОВОГО ПОЛЯ */
+    .controls input { 
+        flex: 1; 
+        min-width: 0; /* Не дает текстовому полю вытеснять кнопки */
+        padding: 12px 16px; 
+        border-radius: 25px; 
+        border: none; 
+        background: var(--msg-in); 
+        color: var(--text); 
+        outline: none; 
+        font-size: 16px; 
+    }
 
     #video-call-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:10000; }
     #remoteVideo {
@@ -90,40 +108,20 @@
         object-fit: cover;
         background: #000 !important;
         display: block !important;
-        /* ФИКС ДЛЯ XIAOMI: */
         image-rendering: -webkit-optimize-contrast;
         backface-visibility: hidden;
         perspective: 1000;
-        transform: translate3d(0,0,0); /* Принудительный слой GPU */
+        transform: translate3d(0,0,0); 
     }
-
-
-
-
-
-
-    #localVideo { 
-        width: 100px; 
-        height: 140px; 
-        position: absolute; 
-        bottom: 20px; 
-        right: 20px; 
-        border: 2px solid white; 
-        border-radius: 10px; 
-        object-fit: cover; 
-        z-index: 10002; 
-    }
-
-
-
+    #localVideo { width: 100px; height: 140px; position: absolute; bottom: 20px; right: 20px; border: 2px solid white; border-radius: 10px; object-fit: cover; z-index: 10002; }
     #modal { display: none; position: fixed; z-index: 9999; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); align-items: center; justify-content: center; cursor: zoom-out; }
     #modal img { max-width: 95%; max-height: 95%; border-radius: 10px; }
-
     .rec-btn.recording { animation: blink 1s infinite; }
     @keyframes blink { 0% {opacity: 1} 50% {opacity: 0.5} 100% {opacity: 1} }
 
-    @media (max-width: 600px) { #chat-screen { padding: 0; } #chat { border-radius: 0; } .controls { padding: 10px; margin: 0; } }
+    @media (max-width: 600px) { #chat-screen { padding: 0; } #chat { border-radius: 0; } .controls { padding: 5px; margin: 0; } }
 </style>
+
 </head>
 <body>
 <div id="video-call-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:10000;">
@@ -590,15 +588,24 @@ function addEmoji(e) { const i = document.getElementById("messageText"); i.value
 
 async function uploadFile() {
     const fileInput = document.getElementById('fileInput');
-    // Добавь [0] вот сюда:
     let file = fileInput.files[0]; 
     if(!file) return;
-    // ... остальной код без изменений
+
     if(file.type.startsWith('image/')) file = await compressImage(file);
-    const fd = new FormData(); fd.append("file", file, file.name);
-    const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
-    const d = await res.json(); ws.send(d.url);
+    const fd = new FormData(); 
+    fd.append("file", file, file.name);
+
+    try {
+        const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
+        const d = await res.json(); // ЭТО ВОЗВРАЩАЕМ
+        
+        if (d.url && d.url !== "error") {
+            const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+            ws.send(`TIME:${now}|${d.url}`); // Теперь d.url определен!
+        }
+    } catch (e) { console.error("Ошибка загрузки:", e); }
 }
+
 
 async function compressImage(file) {
     return new Promise((resolve) => {
@@ -620,21 +627,38 @@ async function toggleRecording() {
     const btn = document.getElementById("recordBtn");
     if (!mediaRecorder || mediaRecorder.state === "inactive") {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        mediaRecorder = new MediaRecorder(stream); videoChunks = [];
+        mediaRecorder = new MediaRecorder(stream); 
+        videoChunks = [];
         mediaRecorder.ondataavailable = e => videoChunks.push(e.data);
+        
         mediaRecorder.onstop = async () => {
             const blob = new Blob(videoChunks, {type:'video/mp4'});
-            const fd = new FormData(); fd.append("file", blob, `v_${Date.now()}.mp4`);
-            const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
-            const d = await res.json(); ws.send(d.url);
-            stream.getTracks().forEach(t=>t.stop());
+            const fd = new FormData(); 
+            fd.append("file", blob, `v_${Date.now()}.mp4`);
+            
+            try {
+                const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
+                const d = await res.json(); // ДОБАВЛЕНО: ОПРЕДЕЛЯЕМ d
+                if (d.url && d.url !== "error") {
+                    const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                    ws.send(`TIME:${now}|${d.url}`); // ТЕПЕРЬ d.url РАБОТАЕТ
+                }
+            } catch (e) { console.error("Ошибка видео:", e); }
+            stream.getTracks().forEach(t => t.stop());
         };
-        mediaRecorder.start(); btn.classList.add("recording"); btn.textContent="🛑";
-    } else { mediaRecorder.stop(); btn.classList.remove("recording"); btn.textContent="🎥"; }
+        mediaRecorder.start(); 
+        btn.classList.add("recording"); 
+        btn.textContent = "🛑";
+    } else { 
+        mediaRecorder.stop(); 
+        btn.classList.remove("recording"); 
+        btn.textContent = "🎥"; 
+    }
 }
 document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
 
 </script>
 </body>
 </html>
+
 
