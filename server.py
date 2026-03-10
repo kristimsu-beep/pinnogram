@@ -85,11 +85,13 @@ async def update_avatar(data: dict):
     username = data.get("username")
     avatar_url = data.get("avatar")
     async with aiosqlite.connect(DB_PATH) as db:
+        # Сохраняем в профиль юзера навсегда
         await db.execute("UPDATE users SET avatar = ? WHERE username = ?", (avatar_url, username))
-        # Опционально: обновляем аватарку и в старых сообщениях этого юзера
+        # Опционально: обновляем во всех старых сообщениях этого юзера
         await db.execute("UPDATE messages SET avatar = ? WHERE username = ?", (avatar_url, username))
         await db.commit()
-        return {"status": "ok"}
+    return {"status": "ok"}
+
 
 class ConnectionManager:
     def __init__(self):
@@ -210,6 +212,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
         while True:
             data = await websocket.receive_text()
             
+            # RTC сигналы
             if data.startswith("RTC_SIGNAL:"):
                 if room_id in manager.rooms:
                     for name, conn in manager.rooms[room_id].items():
@@ -217,6 +220,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                             await conn.send_text(data)
                 continue
 
+            # Удаление
             if data.startswith("__DELETE__:"):
                 msg_id = data.replace("__DELETE__:", "")
                 async with aiosqlite.connect(DB_PATH) as db:
@@ -226,30 +230,33 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     for conn in manager.rooms[room_id].values():
                         await conn.send_text(f"DELETE_CONFIRM:{msg_id}")
             
+            # Печать (ОТСТУП ИСПРАВЛЕН)
             elif data == "__TYPING__":
                 if room_id in manager.rooms:
                     for name, conn in manager.rooms[room_id].items():
                         if name != username:
                             await conn.send_text(f"TYPING:{username}")
             
-            # ИСПРАВЛЕН ОТСТУП ЗДЕСЬ:
+            # ОБЫЧНОЕ СООБЩЕНИЕ (ОТСТУП ИСПРАВЛЕН)
             else:
                 display_text = data
                 msg_time = datetime.now().strftime("%H:%M")
                 
+                # Разбор времени из JS (TIME:14:30|Текст)
                 if data.startswith("TIME:"):
                     try:
-                        parts = data.split("|", 1) 
+                        parts = data.split("|", 1)
                         msg_time = parts[0].replace("TIME:", "")
                         display_text = parts[1]
                     except: pass
 
-                # Получаем аватарку снова (на случай если она сменилась)
+                # МАГИЯ ВЕЧНОЙ АВАТАРКИ: берем свежую из базы перед отправкой
                 async with aiosqlite.connect(DB_PATH) as db:
                     async with db.execute("SELECT avatar FROM users WHERE username = ?", (username,)) as c:
                         row = await c.fetchone()
                         if row: current_avatar = row[0]
-                
+
+                # Шлем всем: ID | [Время] Имя: Текст | Ссылка_на_аватар
                 await manager.broadcast(
                     room_id, 
                     username=username, 
@@ -257,14 +264,16 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     avatar=current_avatar, 
                     client_time=msg_time
                 )
-                
+
     except WebSocketDisconnect:
         manager.disconnect(room_id, username)
         await manager.broadcast(room_id, message=f"{username} покинул чат")
 
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
