@@ -230,19 +230,19 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     for conn in manager.rooms[room_id].values():
                         await conn.send_text(f"DELETE_CONFIRM:{msg_id}")
             
-            # Печать (ОТСТУП ИСПРАВЛЕН)
+            # Печать
             elif data == "__TYPING__":
                 if room_id in manager.rooms:
                     for name, conn in manager.rooms[room_id].items():
                         if name != username:
                             await conn.send_text(f"TYPING:{username}")
             
-            # ОБЫЧНОЕ СООБЩЕНИЕ (ОТСТУП ИСПРАВЛЕН)
+            # ОБЫЧНОЕ СООБЩЕНИЕ
             else:
                 display_text = data
                 msg_time = datetime.now().strftime("%H:%M")
                 
-                # Разбор времени из JS (TIME:14:30|Текст)
+                # --- ВОЗВРАЩАЕМ РАЗБОР ВРЕМЕНИ ИЗ JS ---
                 if data.startswith("TIME:"):
                     try:
                         parts = data.split("|", 1)
@@ -269,10 +269,10 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
         manager.disconnect(room_id, username)
         await manager.broadcast(room_id, message=f"{username} покинул чат")
 
-
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
