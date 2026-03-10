@@ -278,6 +278,30 @@ ws.onmessage = async (event) => {
 
 
 let iceQueue = []; 
+// ГЛОБАЛЬНЫЙ ПИНОК GPU
+const forceRender = async () => {
+    const remoteVid = document.getElementById('remoteVideo');
+    if (!remoteVid || !remoteVid.srcObject) return;
+
+    console.log("Xiaomi: Глобальный пинок GPU...");
+    remoteVid.muted = false;
+    
+    try {
+        await remoteVid.play();
+        // Ультра-встряска слоев
+        remoteVid.style.transform = "scale(1.02) translateZ(0)";
+        remoteVid.style.filter = "contrast(1.1)";
+        
+        setTimeout(() => { 
+            remoteVid.style.transform = "scale(1.001) translateZ(0)";
+            remoteVid.style.filter = "contrast(1)";
+            console.log("Xiaomi: Слой принудительно обновлен!");
+        }, 200);
+    } catch (e) {
+        console.error("Ошибка принудительного рендера:", e);
+    }
+};
+
 
 // 1. Инициализация медиа и создание соединения
 async function initRTCPeer(isCaller) {
@@ -325,9 +349,9 @@ async function initRTCPeer(isCaller) {
 
         // Обработка входящего видео
         // Обработка входящего видео
-                      pc.ontrack = (event) => {
+       pc.ontrack = (event) => {
             const remoteVid = document.getElementById('remoteVideo');
-            console.log("Поток пришел. Xiaomi HyperOS Mode.");
+            console.log("Поток пришел. Настраиваем события.");
         
             if (event.streams && event.streams[0]) {
                 remoteVid.srcObject = event.streams[0];
@@ -336,41 +360,24 @@ async function initRTCPeer(isCaller) {
             }
             remoteVid.muted = true;
         
-            const forceRender = async () => {
-                console.log("Xiaomi: Пробуем разморозить видео...");
-                remoteVid.muted = false;
-                
-                try {
-                    await new Promise(r => setTimeout(r, 150));
-                    await remoteVid.play();
-                    
-                    remoteVid.style.transform = "scale(1.02) translateZ(0)";
-                    remoteVid.style.filter = "contrast(1.1)";
-                    remoteVid.style.width = "101vw";
-                    
-                    setTimeout(() => { 
-                        remoteVid.style.transform = "scale(1.001) translateZ(0)";
-                        remoteVid.style.filter = "contrast(1)";
-                        remoteVid.style.width = "100vw";
-                        console.log("Xiaomi: GPU принудительно перерисовал слой!");
-                    }, 200);
-                } catch (e) {
-                    console.error("Xiaomi: Ошибка старта:", e);
-                    const s = remoteVid.srcObject;
-                    remoteVid.srcObject = null; 
-                    setTimeout(() => { remoteVid.srcObject = s; }, 50);
-                }
-            };
-
-            // Слушатели должны быть ЗДЕСЬ (снаружи forceRender)
+            // Просто вешаем нашу глобальную функцию на клик и тап
             window.addEventListener('touchstart', forceRender, {once: true});
             window.addEventListener('click', forceRender, {once: true});
-        }; // Конец ontrack
+            
+            // И пробуем "пнуть" через 2 секунды автоматически
+            setTimeout(forceRender, 2000);
+        };
 
 
         pc.onicecandidate = e => {
-            if (e.candidate) ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate, from: myName }));
+            if (e.candidate) {
+                ws.send("RTC_SIGNAL:" + JSON.stringify({ 
+                    candidate: e.candidate, 
+                    from: myName 
+                }));
+            }
         };
+
 
 
         if (isCaller) {
@@ -386,27 +393,23 @@ async function initRTCPeer(isCaller) {
 }
 
 // 2. Обработка входящих сигналов (Signaling)
+// 2. Обработка входящих сигналов (Signaling)
 async function handleSignalingData(data) {
     if (data.from === myName) return;
 
     // 1. Входящий звонок (Offer)
     if (data.offer) {
-        // Если уже звоним или соединение стабильно — не прерываем
         if (pc && pc.signalingState !== "closed" && pc.signalingState !== "stable") return;
 
-        // Используем setTimeout, чтобы браузер не блокировал confirm
         setTimeout(async () => {
             if (confirm(`Входящий звонок от ${data.from}. Принять?`)) {
                 console.log("Принимаем входящий вызов от: " + data.from);
-                
-                await initRTCPeer(false); // Инициализация как получатель
-                
+                await initRTCPeer(false);
                 await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
                 ws.send("RTC_SIGNAL:" + JSON.stringify({ answer: answer, from: myName }));
                 
-                // Разгружаем очередь кандидатов
                 while (iceQueue.length > 0) {
                     try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
                 }
@@ -415,32 +418,28 @@ async function handleSignalingData(data) {
     } 
     
     // 2. Ответ на твой звонок (Answer)
-       else if (data.answer && pc) {
+    else if (data.answer && pc) {
         if (pc.signalingState === "have-local-offer") {
             try {
                 await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-                console.log("Answer получен. Звонящий (Caller) активирует поток.");
+                console.log("Answer установлен.");
 
-                // ПРИНУДИТЕЛЬНЫЙ ПУСК ДЛЯ ЗВОНЯЩЕГО
-                const remoteVid = document.getElementById('remoteVideo');
-                
-                // Пробуем запустить видео сразу (может сработать без звука)
-                remoteVid.play().catch(() => {
-                    console.log("Браузер Caller ждет клика для включения звука");
-                });
-
-                // Разгружаем очередь сетевых кандидатов
                 while (iceQueue.length > 0) {
                     try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
                 }
                 
-                // ВАЖНО: Звонящему тоже нужно тапнуть по экрану один раз, 
-                // чтобы сработал forceRender из блока ontrack и появился звук.
-                
+                // Авто-пинок через секунду для Caller
+                setTimeout(() => {
+                    const remoteVid = document.getElementById('remoteVideo');
+                    remoteVid.play().catch(() => console.log("Нужен тап для звука"));
+                    // Вызываем встряску
+                    remoteVid.style.transform = "scale(1.01)";
+                    setTimeout(() => { remoteVid.style.transform = "scale(1)"; }, 100);
+                }, 1000);
+
             } catch(e) { console.error("Ошибка установки Answer:", e); }
         }
     }
-
     
     // 3. Сетевые пути (Candidates)
     else if (data.candidate) {
@@ -452,6 +451,7 @@ async function handleSignalingData(data) {
         }
     }
 }
+
 
 
 // 3. Вспомогательные функции
