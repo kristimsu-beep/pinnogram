@@ -302,13 +302,17 @@ async function initRTCPeer(isCaller) {
 
         pc = new RTCPeerConnection(configuration);
 
-        // Настройка кодеков (VP8) — КЛЮЧЕВОЙ МОМЕНТ ДЛЯ ANDROID
-        // Настройка кодеков специально для Android (Xiaomi/Samsung)
+        // Настраиваем передачу и прием потоков
         localStream.getTracks().forEach(track => {
-            const tc = pc.addTransceiver(track, { streams: [localStream] });
+            // Создаем трансивер ОДИН РАЗ, привязываем трек и разрешаем ПРИЕМ (sendrecv)
+            const tc = pc.addTransceiver(track, { 
+                streams: [localStream],
+                direction: 'sendrecv' // ГОВОРИМ: "Я и шлю, и принимаю"
+            });
+
+            // Настройка кодеков VP8 (специально для Android/Xiaomi)
             if (track.kind === 'video') {
                 const codecs = RTCRtpSender.getCapabilities('video').codecs;
-                // VP8 — самый стабильный кодек для Android, H.264 часто дает черный экран
                 const preferredCodecs = codecs.filter(c => 
                     c.mimeType === 'video/VP8' || 
                     c.mimeType === 'video/vp8'
@@ -316,6 +320,7 @@ async function initRTCPeer(isCaller) {
                 if (preferredCodecs.length > 0) tc.setCodecPreferences(preferredCodecs);
             }
         });
+
 
 
         // Обработка входящего видео
@@ -410,16 +415,32 @@ async function handleSignalingData(data) {
     } 
     
     // 2. Ответ на твой звонок (Answer)
-    else if (data.answer && pc) {
+       else if (data.answer && pc) {
         if (pc.signalingState === "have-local-offer") {
             try {
                 await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                console.log("Answer получен. Звонящий (Caller) активирует поток.");
+
+                // ПРИНУДИТЕЛЬНЫЙ ПУСК ДЛЯ ЗВОНЯЩЕГО
+                const remoteVid = document.getElementById('remoteVideo');
+                
+                // Пробуем запустить видео сразу (может сработать без звука)
+                remoteVid.play().catch(() => {
+                    console.log("Браузер Caller ждет клика для включения звука");
+                });
+
+                // Разгружаем очередь сетевых кандидатов
                 while (iceQueue.length > 0) {
                     try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
                 }
+                
+                // ВАЖНО: Звонящему тоже нужно тапнуть по экрану один раз, 
+                // чтобы сработал forceRender из блока ontrack и появился звук.
+                
             } catch(e) { console.error("Ошибка установки Answer:", e); }
         }
-    } 
+    }
+
     
     // 3. Сетевые пути (Candidates)
     else if (data.candidate) {
@@ -574,6 +595,7 @@ document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessag
 </script>
 </body>
 </html>
+
 
 
 
