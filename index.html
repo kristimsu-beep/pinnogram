@@ -98,16 +98,13 @@
         <button onclick="saveNameAndStart()">Войти</button>
     </div>
 
-    <div id="chat-screen">
+        <div id="chat-screen">
         <button class="theme-btn" style="position:absolute; top:-35px; right:10px; background:none; color:var(--accent); border:none; cursor:pointer;" onclick="document.body.classList.toggle('light-theme')">🌓 Тема</button>
         <div id="chat"></div>
-        <!-- 1. Список тех, кто в комнате -->
-        <div id="online-list" style="font-size:11px; color:var(--accent); opacity:0.8; margin:2px 5px; height:15px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;"></div>
         
-        <!-- 2. Индикатор набора текста (НУЖЕН ДЛЯ JS) -->
+        <div id="online-list" style="font-size:11px; color:var(--accent); opacity:0.8; margin:2px 5px; height:15px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;"></div>
         <div id="typing-indicator" style="font-size:12px; color:var(--accent); font-style:italic; margin:5px; height:15px;"></div>
 
-        
         <div class="emoji-bar">
             <span onclick="addEmoji('😊')">😊</span><span onclick="addEmoji('🔥')">🔥</span>
             <span onclick="addEmoji('😂')">😂</span><span onclick="addEmoji('❤️')">❤️</span>
@@ -115,7 +112,7 @@
         </div>
 
         <div class="controls">
-            <!-- Кнопка профиля теперь здесь, в общем ряду -->
+            <!-- Аватарка теперь внутри controls, в общем ряду -->
             <img id="user-avatar-icon" onclick="changeAvatar()" src="https://cdn-icons-png.flaticon.com" 
                  style="width:42px; height:42px; border-radius:50%; cursor:pointer; border:2px solid var(--accent); object-fit:cover;">
             
@@ -127,9 +124,9 @@
             <button onclick="sendMessage()">🚀</button>
         </div>
 
-        <button onclick="localStorage.clear(); location.reload();" style="margin-bottom:5px; background:none; color:#555; font-size:10px; text-decoration: underline; border:none; cursor:pointer;">Выйти</button>
-        </div>
- 
+        <button onclick="localStorage.clear(); location.reload();" style="margin:auto 10px 5px; background:none; color:#555; font-size:10px; text-decoration: underline; border:none; cursor:pointer;">Выйти</button>
+    </div> <!-- Один закрывающий div для chat-screen -->
+
 <script>
     const API_URL = window.location.origin;
     const socketProto = window.location.protocol === "https:" ? "wss" : "ws";
@@ -577,6 +574,7 @@ document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessag
 </script>
 </body>
 </html>
+
 
 
 
