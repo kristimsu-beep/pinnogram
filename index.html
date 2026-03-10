@@ -10,298 +10,595 @@
     * { box-sizing: border-box; }
     body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; height: 100vh; margin: 0; transition: 0.3s; overflow: hidden; }
 
-    /* Контейнеры чата */
-    #chat-screen { display: none; flex-direction: column; width: 100%; max-width: 600px; height: 100%; position: relative; padding: 10px; }
-    #chat { flex: 1; overflow-y: auto; padding: 15px; background: var(--panel); border-radius: 15px; display: flex; flex-direction: column; gap: 8px; border: 1px solid rgba(255,255,255,0.05); }
+    /* Кнопки */
+    button { background: var(--msg-out); color: white; border: none; padding: 12px 20px; border-radius: 12px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+    .controls button, .file-btn, .rec-btn { width: 45px; height: 45px; padding: 0; border-radius: 50% !important; display: flex; align-items: center; justify-content: center; }
 
-    /* Сообщения (Telegram Style) */
-    .msg-row { display: flex; gap: 10px; align-items: flex-end; width: 100%; margin-bottom: 4px; }
-    .msg-row-out { flex-direction: row-reverse; }
-
-    .msg { padding: 10px 14px; border-radius: 16px; max-width: 75%; font-size: 15px; position: relative; display: flex; flex-direction: column; box-shadow: 0 1px 2px rgba(0,0,0,0.15); word-break: break-word; cursor: pointer; }
-    .msg-left { background: var(--msg-in); border-bottom-left-radius: 4px; }
-    .msg-right { background: var(--msg-out); color: white; border-bottom-right-radius: 4px; }
+    #login-screen { margin: auto; background: var(--panel); padding: 30px; border-radius: 20px; text-align: center; width: 90%; max-width: 350px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+    #login-screen input { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 10px; border: 1px solid #444; background: #222; color: white; outline: none; }
     
+    #chat-screen { display: none; flex-direction: column; width: 100%; max-width: 600px; height: 100%; position: relative; padding: 10px; }
+    #chat { flex: 1; border: 1px solid rgba(255,255,255,0.05); overflow-y: auto; padding: 15px; background: var(--panel); border-radius: 15px; display: flex; flex-direction: column; gap: 6px; }
+
+    .msg { padding: 8px 12px; border-radius: 16px; max-width: 85%; font-size: 15px; position: relative; display: flex; flex-direction: column; box-shadow: 0 1px 2px rgba(0,0,0,0.15); cursor: pointer; }
+    .msg-left { align-self: flex-start; background: var(--msg-in); border-bottom-left-radius: 4px; }
+    .msg-right { align-self: flex-end; background: var(--msg-out); color: white; border-bottom-right-radius: 4px; }
     .msg-sender { font-size: 12px; font-weight: bold; margin-bottom: 2px; color: var(--accent); }
     .msg-time { font-size: 10px; opacity: 0.6; align-self: flex-end; margin-top: 4px; }
 
-    /* Видео-кружки (clip-path удален для стабильности Xiaomi, заменен на border-radius) */
-    .msg video { width: 200px; height: 200px; object-fit: cover; border-radius: 50% !important; border: 2px solid var(--accent); background: #000; }
+    .msg video { width: 200px; height: 200px; object-fit: cover; margin: 5px 0; background: #000; border-radius: 0 !important; clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); }
     .msg img { max-width: 100%; border-radius: 10px; margin-top: 5px; }
+    .msg-row { 
+    display: flex; 
+    width: 100%; 
+    margin: 8px 0; 
+    gap: 8px; 
+    }
+    .msg { 
+        max-width: 75%; 
+        word-break: break-word; /* Фикс для длинных ссылок и слов */
+    }
+    .msg-text { 
+        display: block; 
+    }
 
-    /* Интерфейс */
+
+    .emoji-bar { margin: 5px 0; display: flex; gap: 12px; font-size: 20px; user-select: none; padding-left: 5px; }
+    .emoji-bar span { cursor: pointer; transition: 0.2s; }
+    .emoji-bar span:hover { transform: scale(1.3); }
+
     .controls { margin-bottom: 10px; display: flex; gap: 8px; width: 100%; align-items: center; }
-    .controls input { flex: 1; padding: 12px 16px; border-radius: 25px; border: none; background: var(--msg-in); color: var(--text); outline: none; }
-    button { background: var(--msg-out); color: white; border: none; padding: 12px 20px; border-radius: 12px; cursor: pointer; font-weight: bold; }
-    .file-btn, .rec-btn { width: 45px; height: 45px; border-radius: 50% !important; display: flex; align-items: center; justify-content: center; padding: 0; }
+    .controls input[type="text"] { flex: 1; padding: 12px 16px; border-radius: 25px; border: none; background: var(--msg-in); color: var(--text); outline: none; font-size: 16px; }
 
-    /* Видеозвонок */
     #video-call-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:10000; }
-    #remoteVideo { width: 100vw; height: 100vh; object-fit: cover; transform: translate3d(0,0,0); }
-    #localVideo { width: 100px; height: 140px; position: absolute; bottom: 100px; right: 20px; border: 2px solid white; border-radius: 10px; object-fit: cover; }
+    #remoteVideo {
+        width: 100vw !important;
+        height: 100vh !important;
+        object-fit: cover;
+        background: #000 !important;
+        display: block !important;
+        /* ФИКС ДЛЯ XIAOMI: */
+        image-rendering: -webkit-optimize-contrast;
+        backface-visibility: hidden;
+        perspective: 1000;
+        transform: translate3d(0,0,0); /* Принудительный слой GPU */
+    }
 
-    #modal { display: none; position: fixed; z-index: 9999; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); align-items: center; justify-content: center; }
-    .rec-btn.recording { animation: blink 1s infinite; background: red !important; }
+
+
+
+
+
+    #localVideo { 
+        width: 100px; 
+        height: 140px; 
+        position: absolute; 
+        bottom: 20px; 
+        right: 20px; 
+        border: 2px solid white; 
+        border-radius: 10px; 
+        object-fit: cover; 
+        z-index: 10002; 
+    }
+
+
+
+    #modal { display: none; position: fixed; z-index: 9999; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); align-items: center; justify-content: center; cursor: zoom-out; }
+    #modal img { max-width: 95%; max-height: 95%; border-radius: 10px; }
+
+    .rec-btn.recording { animation: blink 1s infinite; }
     @keyframes blink { 0% {opacity: 1} 50% {opacity: 0.5} 100% {opacity: 1} }
+
+    @media (max-width: 600px) { #chat-screen { padding: 0; } #chat { border-radius: 0; } .controls { padding: 10px; margin: 0; } }
 </style>
 </head>
 <body>
-
-<div id="video-call-overlay">
-    <video id="remoteVideo" autoplay playsinline></video>
-    <video id="localVideo" autoplay playsinline muted></video>
-    <div style="position:absolute; top:20px; width:100%; text-align:center; color:white; font-size:12px;">Нажмите на экран для звука</div>
-    <button onclick="endCall()" style="position:absolute; bottom:30px; left:50%; transform:translateX(-50%); background:red; width:70px; height:70px; border-radius:50% !important; font-size:30px;">🛑</button>
+<div id="video-call-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:10000;">
+    <!-- Ссылка на видео должна быть с четким ID -->
+    <video id="remoteVideo" autoplay playsinline style="width:100vw; height:100vh; object-fit:cover; position:absolute; top:0; left:0;"></video>
+    <video id="localVideo" autoplay playsinline muted style="width:100px; height:140px; position:absolute; bottom:20px; right:20px; border:2px solid white; border-radius:10px; object-fit:cover; z-index:10005;"></video>
+    
+    <!-- Кнопка сброса ДОЛЖНА БЫТЬ ВИДИМОЙ -->
+    <button onclick="endCall()" style="position:absolute; bottom:30px; left:50%; transform:translateX(-50%); background:red; width:70px; height:70px; border-radius:50% !important; z-index:10010; font-size:30px; border:none; color:white; cursor:pointer;">🛑</button>
 </div>
 
-<div id="modal" onclick="this.style.display='none'"><img id="modal-img" style="max-width:90%"></div>
-<audio id="notifSound" src="https://assets.mixkit.co"></audio>
 
-<div id="login-screen" style="margin-top:100px; text-align:center;">
-    <h2>Pinnogram</h2>
-    <input type="text" id="nameInput" placeholder="Имя..." style="padding:10px; border-radius:10px;"><br><br>
-    <button onclick="saveNameAndStart()">Войти</button>
-</div>
+    <div id="modal" onclick="this.style.display='none'"><img id="modal-img"></div>
+    <audio id="notifSound" src="https://assets.mixkit.co"></audio>
 
-<div id="chat-screen">
-    <div id="chat"></div>
-    <div id="online-list" style="font-size:11px; color:var(--accent); margin:5px;"></div>
-    <div id="typing-indicator" style="font-size:12px; height:15px; margin:5px;"></div>
-    <div class="controls">
-        <img id="user-avatar-icon" onclick="changeAvatar()" src="https://www.w3schools.com" style="width:40px; height:40px; border-radius:50%; cursor:pointer; object-fit:cover;">
-        <input type="file" id="fileInput" style="display:none" onchange="uploadFile()">
-        <button class="file-btn" onclick="document.getElementById('fileInput').click()">📎</button>
-        <button id="recordBtn" class="file-btn rec-btn" onclick="toggleRecording()">🎥</button>
-        <button onclick="startCall()" style="background:#28a745;">📞</button>
-        <input type="text" id="messageText" placeholder="Сообщение..." oninput="handleTyping()">
-        <button onclick="sendMessage()">🚀</button>
+    <div id="login-screen">
+        <h2>Pinnogram</h2>
+        <input type="text" id="nameInput" placeholder="Ваше имя...">
+        <button onclick="saveNameAndStart()">Войти</button>
     </div>
-</div>
+
+        <div id="chat-screen">
+        <button class="theme-btn" style="position:absolute; top:-35px; right:10px; background:none; color:var(--accent); border:none; cursor:pointer;" onclick="document.body.classList.toggle('light-theme')">🌓 Тема</button>
+        <div id="chat"></div>
+        
+        <div id="online-list" style="font-size:11px; color:var(--accent); opacity:0.8; margin:2px 5px; height:15px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;"></div>
+        <div id="typing-indicator" style="font-size:12px; color:var(--accent); font-style:italic; margin:5px; height:15px;"></div>
+
+        <div class="emoji-bar">
+            <span onclick="addEmoji('😊')">😊</span><span onclick="addEmoji('🔥')">🔥</span>
+            <span onclick="addEmoji('😂')">😂</span><span onclick="addEmoji('❤️')">❤️</span>
+            <span onclick="addEmoji('👍')">👍</span>
+        </div>
+
+        <div class="controls">
+            <!-- Аватарка теперь внутри controls, в общем ряду -->
+            <img id="user-avatar-icon" onclick="changeAvatar()" src="https://cdn-icons-png.flaticon.com" 
+                 style="width:42px; height:42px; border-radius:50%; cursor:pointer; border:2px solid var(--accent); object-fit:cover;">
+            
+            <input type="file" id="fileInput" style="display:none" onchange="uploadFile()">
+            <button class="file-btn" onclick="document.getElementById('fileInput').click()">📎</button>
+            <button id="recordBtn" class="file-btn rec-btn" onclick="toggleRecording()">🎥</button>
+            <button onclick="startCall()" style="background:#28a745;">📞</button>
+            <input type="text" id="messageText" placeholder="Сообщение..." oninput="handleTyping()">
+            <button onclick="sendMessage()">🚀</button>
+        </div>
+
+        <button onclick="localStorage.clear(); location.reload();" style="margin:auto 10px 5px; background:none; color:#555; font-size:10px; text-decoration: underline; border:none; cursor:pointer;">Выйти</button>
+    </div> <!-- Один закрывающий div для chat-screen -->
 
 <script>
     const API_URL = window.location.origin;
     const socketProto = window.location.protocol === "https:" ? "wss" : "ws";
-    let ws, myName = localStorage.getItem("pinnogram_user"), pc, localStream, iceQueue = [], mediaRecorder, videoChunks = [];
+    let ws, myName = localStorage.getItem("pinnogram_user"), myRoom = localStorage.getItem("pinnogram_room");
+    let pc, localStream, mediaRecorder, videoChunks = [], typingTimeout, isTypingNow = false;
 
-    if (myName) startChat(myName);
+    if (myName && myRoom) startChat(myName, myRoom);
 
-    function startChat(name) {
-        myName = name;
+    function startChat(name, room) {
+        myName = name; myRoom = room;
         document.getElementById("login-screen").style.display = "none";
         document.getElementById("chat-screen").style.display = "flex";
-        ws = new WebSocket(`${socketProto}://${window.location.host}/ws/general/${encodeURIComponent(name)}`);
+        ws = new WebSocket(`${socketProto}://${window.location.host}/ws/${room}/${encodeURIComponent(name)}`);
 
-        ws.onmessage = async (event) => {
-            const raw = event.data;
-            const chat = document.getElementById('chat');
+ws.onmessage = async (event) => {
+    const raw = event.data;
+    const chat = document.getElementById('chat');
 
-            if (raw.startsWith("RTC_SIGNAL:")) { handleSignalingData(JSON.parse(raw.replace("RTC_SIGNAL:", ""))); return; }
-            if (raw.startsWith("DELETE_CONFIRM:")) { document.getElementById(`msg-${raw.split(":")[1]}`)?.parentElement?.remove(); return; }
-            if (raw.startsWith("TYPING:")) {
-                document.getElementById("typing-indicator").textContent = `${raw.split(":")[1]} печатает...`;
-                setTimeout(() => document.getElementById("typing-indicator").textContent = "", 2000);
-                return;
-            }
-            if (raw.includes("ONLINE_LIST:")) {
-                document.getElementById("online-list").textContent = "В сети: " + raw.split("ONLINE_LIST:")[1];
-                return;
-            }
+    // 1. ОБРАБОТКА СЛУЖЕБНЫХ КОМАНД
+    // Список онлайн
+    if (raw.includes("ONLINE_LIST:")) {
+        const parts = raw.split("ONLINE_LIST:");
+        if (parts.length > 1) {
+            const users = parts[1].split(",");
+            document.getElementById("online-list").textContent = `В сети: ${users.join(", ")}`;
+        }
+        return;
+    }
 
-            const parts = raw.split("|");
-            const msgId = parts[0].replace("ID:","");
-            const content = parts[1];
-            const avatarUrl = parts[2] || "https://www.w3schools.com";
+    // Сигналы звонка (WebRTC) — КРИТИЧНО ДЛЯ XIAOMI
+    if (raw.startsWith("RTC_SIGNAL:")) {
+        handleSignalingData(JSON.parse(raw.replace("RTC_SIGNAL:", "")));
+        return;
+    }
 
-            const row = document.createElement('div');
-            if (raw.includes("SYSTEM:")) {
-                row.style = "align-self:center; font-size:11px; opacity:0.5; margin:5px;";
-                row.textContent = raw.split("SYSTEM: ")[1];
-            } else {
-                const time = (content.match(/\[(\d{2}:\d{2})\]/) || ["","--:--"])[1];
-                const userAndText = content.replace(/^\[\d{2}:\d{2}\]\s*/, "");
-                const sender = userAndText.split(": ")[0];
-                const text = userAndText.split(": ")[1];
+    // Подтверждение удаления
+    if (raw.startsWith("DELETE_CONFIRM:")) {
+        const delId = raw.split(":")[1];
+        document.getElementById(`msg-${delId}`)?.remove();
+        return;
+    }
 
-                row.className = sender === myName ? 'msg-row msg-row-out' : 'msg-row';
-                if (sender !== myName) {
-                    const av = document.createElement('img'); av.src = avatarUrl;
-                    av.style = "width:32px; height:32px; border-radius:50%; object-fit:cover;";
-                    row.appendChild(av);
-                }
+    // Индикатор печати
+    if (raw.startsWith("TYPING:")) {
+        const typingUser = raw.split(":")[1];
+        document.getElementById("typing-indicator").textContent = `${typingUser} печатает...`;
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => document.getElementById("typing-indicator").textContent = "", 2000);
+        return;
+    }
 
-                const msg = document.createElement('div');
-                msg.className = sender === myName ? 'msg msg-right' : 'msg msg-left';
-                msg.id = `msg-${msgId}`;
-                
-                if (sender !== myName) {
-                    const sn = document.createElement('span'); sn.className="msg-sender"; sn.textContent=sender;
-                    msg.appendChild(sn);
-                    document.getElementById("notifSound").play().catch(()=>{});
-                }
+    const div = document.createElement('div');
 
-                const lt = text.toLowerCase();
-                if ([".jpg",".jpeg",".png",".gif",".webp"].some(e => lt.includes(e))) {
-                    const img = document.createElement('img'); img.src = text.trim();
-                    img.onclick = () => { document.getElementById('modal-img').src=img.src; document.getElementById('modal').style.display='flex'; };
-                    msg.appendChild(img);
-                } else if ([".mp4",".webm",".mov"].some(e => lt.includes(e))) {
-                    const v = document.createElement('video'); v.src = text.trim();
-                    v.autoplay=true; v.loop=true; v.muted=true; v.playsInline=true; v.controls=true;
-                    msg.appendChild(v);
-                } else {
-                    const tx = document.createElement('span'); tx.textContent = text;
-                    msg.appendChild(tx);
-                }
+    // 2. СИСТЕМНЫЕ СООБЩЕНИЯ (Вход/Выход)
+    if (raw.includes("SYSTEM:")) {
+        div.style = "align-self: center; font-size: 11px; opacity: 0.5; margin: 10px 0; text-align: center; width: 100%;";
+        div.textContent = raw.split("SYSTEM: ")[1];
+    } 
+    
+    // 3. ОБЫЧНЫЕ СООБЩЕНИЯ (С АВАТАРКАМИ)
+       // ... (внутри ws.onmessage, после системных сообщений)
+    else {
+        const parts = raw.split("|");
+        const idPart = parts[0] || "";
+        const content = parts[1] || "";
+        const avatarUrl = parts[2] || "https://www.w3schools.com"; // Тот самый фикс 403
+        
+        const msgId = idPart.replace("ID:", "");
+        const timeMatch = content.match(/\[(\d{2}:\d{2})\]/);
+        const time = timeMatch ? timeMatch[1] : "--:--";
+        
+        const userAndText = content.replace(/^\[\d{2}:\d{2}\]\s*/, "");
+        const splitIdx = userAndText.indexOf(": ");
+        const sender = userAndText.substring(0, splitIdx);
+        const text = userAndText.substring(splitIdx + 2);
+        const lowerText = text.toLowerCase();
 
-                const tm = document.createElement('span'); tm.className="msg-time"; tm.textContent=time;
-                msg.appendChild(tm);
-                row.appendChild(msg);
+        // ГЛАВНЫЙ КОНТЕЙНЕР (Аватар + Пузырь)
+        div.className = sender === myName ? 'msg-row msg-right' : 'msg-row msg-left';
+        div.style = "display: flex; flex-direction: " + (sender === myName ? 'row-reverse' : 'row') + "; gap: 8px; margin: 4px 0; align-items: flex-end;";
+        div.id = `msg-${msgId}`;
+        div.style.alignSelf = sender === myName ? "flex-end" : "flex-start";
 
-                row.oncontextmenu = (e) => {
-                    e.preventDefault();
-                    if (sender === myName && confirm("Удалить?")) ws.send(`__DELETE__:${msgId}`);
-                };
-            }
-            chat.appendChild(row);
-            chat.scrollTop = chat.scrollHeight;
+        // 1. АВАТАРКА (Сбоку)
+        if (sender !== myName) {
+            const avImg = document.createElement('img');
+            avImg.src = avatarUrl;
+            avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
+            div.appendChild(avImg);
+        }
+
+        // 2. ПУЗЫРЬ СООБЩЕНИЯ (Текст)
+        const msgBubble = document.createElement('div');
+        msgBubble.className = sender === myName ? 'msg msg-right' : 'msg msg-left';
+        msgBubble.style = "padding: 8px 12px; border-radius: 16px; position: relative; display: flex; flex-direction: column;";
+        
+        if (sender !== myName) {
+            const nSpan = document.createElement('span');
+            nSpan.className = "msg-sender";
+            nSpan.style = "font-size: 12px; font-weight: bold; color: var(--accent); margin-bottom: 2px;";
+            nSpan.textContent = sender;
+            msgBubble.appendChild(nSpan);
+            document.getElementById("notifSound").play().catch(() => {});
+        }
+
+        // Логика медиа (картинки/видео)
+        if ([".jpg", ".jpeg", ".png", ".gif"].some(ext => lowerText.includes(ext))) {
+            const img = document.createElement('img');
+            img.src = text.trim();
+            img.style = "max-width: 100%; border-radius: 10px; margin-top: 5px; cursor: pointer;";
+            img.onclick = () => { document.getElementById('modal-img').src = img.src; document.getElementById('modal').style.display = 'flex'; };
+            msgBubble.appendChild(img);
+        } else if ([".mp4", ".webm", ".mov"].some(ext => lowerText.includes(ext))) {
+            const v = document.createElement('video');
+            v.src = text.trim(); v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
+            v.style = "max-width: 100%; border-radius: 10px;";
+            msgBubble.appendChild(v);
+        } else {
+            const s = document.createElement('span');
+            s.textContent = text;
+            msgBubble.appendChild(s);
+        }
+
+        const ts = document.createElement('span');
+        ts.className = "msg-time";
+        ts.textContent = time;
+        msgBubble.appendChild(ts);
+
+        div.appendChild(msgBubble); // Добавляем пузырь в контейнер к аватарке
+
+        div.oncontextmenu = (e) => {
+            e.preventDefault();
+            if (sender === myName && confirm("Удалить?")) ws.send(`__DELETE__:${msgId}`);
         };
     }
 
-    // --- WEBRTC CORE ---
-    const forceRender = async () => {
-        const vid = document.getElementById('remoteVideo');
-        if (!vid || !vid.srcObject) return;
-        try {
-            vid.muted = false; await vid.play();
-            vid.style.transform = "scale(1.02) translateZ(0)";
-            setTimeout(() => vid.style.transform = "scale(1) translateZ(0)", 200);
-        } catch (e) {}
-    };
 
-    async function initRTCPeer(isCaller) {
+    chat.appendChild(div);
+    // Авто-скролл вниз
+    setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 100);
+}; // Конец ws.onmessage
+} // Конец функции startChat
+
+
+
+let iceQueue = []; 
+// ГЛОБАЛЬНЫЙ ПИНОК GPU
+const forceRender = async () => {
+    const remoteVid = document.getElementById('remoteVideo');
+    if (!remoteVid || !remoteVid.srcObject) return;
+    try {
+        console.log("Xiaomi/HyperOS: Активация видео и ЗВУКА...");
+        remoteVid.muted = false; // РАЗБЛОКИРУЕМ ЗВУК
+        remoteVid.volume = 1.0;
+        
+        await remoteVid.play();
+        
+        // Пинок GPU для отрисовки слоя
+        remoteVid.style.transform = "scale(1.002) translateZ(0)";
+        remoteVid.style.filter = "contrast(1.05)";
+    } catch (e) {
+        console.log("Система: Нужен прямой клик пользователя для звука.");
+    }
+};
+
+
+
+
+
+// 1. Инициализация медиа и создание соединения
+async function initRTCPeer(isCaller) {
+    try {
+        // Запрашиваем доступ к камере и микрофону
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         document.getElementById('localVideo').srcObject = localStream;
         document.getElementById('video-call-overlay').style.display = 'block';
 
-        pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }] });
-        localStream.getTracks().forEach(t => pc.addTransceiver(t, { streams: [localStream], direction: 'sendrecv' }));
-
-        pc.ontrack = (e) => {
-            document.getElementById('remoteVideo').srcObject = e.streams[0];
-            window.addEventListener('click', forceRender, {once:true});
-            window.addEventListener('touchstart', forceRender, {once:true});
+        // Конфигурация с TURN-сервером (для Android за NAT/4G)
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { 
+                    urls: 'turn:openrelay.metered.ca:443', 
+                    username: 'openrelayproject', 
+                    credential: 'openrelayproject' 
+                }
+            ]
         };
 
-        pc.onicecandidate = e => e.candidate && ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate, from: myName }));
+        pc = new RTCPeerConnection(configuration);
+
+        // Настраиваем передачу и прием потоков
+        localStream.getTracks().forEach(track => {
+            // Создаем трансивер ОДИН РАЗ, привязываем трек и разрешаем ПРИЕМ (sendrecv)
+            const tc = pc.addTransceiver(track, { 
+                streams: [localStream],
+                direction: 'sendrecv' // ГОВОРИМ: "Я и шлю, и принимаю"
+            });
+
+            // Настройка кодеков VP8 (специально для Android/Xiaomi)
+            if (track.kind === 'video') {
+                const codecs = RTCRtpSender.getCapabilities('video').codecs;
+                const preferredCodecs = codecs.filter(c => 
+                    c.mimeType === 'video/VP8' || 
+                    c.mimeType === 'video/vp8'
+                );
+                if (preferredCodecs.length > 0) tc.setCodecPreferences(preferredCodecs);
+            }
+        });
+
+
+
+        // Обработка входящего видео
+        // Обработка входящего видео
+       pc.ontrack = (event) => {
+            const remoteVid = document.getElementById('remoteVideo');
+            console.log("Поток пришел. Настраиваем события.");
+        
+            if (event.streams && event.streams[0]) {
+                remoteVid.srcObject = event.streams[0];
+            } else if (event.track) {
+                remoteVid.srcObject = new MediaStream([event.track]);
+            }
+            remoteVid.muted = true;
+        
+            // Просто вешаем нашу глобальную функцию на клик и тап
+            window.addEventListener('touchstart', forceRender, {once: true});
+            window.addEventListener('click', forceRender, {once: true});
+            
+            // И пробуем "пнуть" через 2 секунды автоматически
+            setTimeout(forceRender, 2000);
+        };
+
+
+        pc.onicecandidate = e => {
+            if (e.candidate) {
+                ws.send("RTC_SIGNAL:" + JSON.stringify({ 
+                    candidate: e.candidate, 
+                    from: myName 
+                }));
+            }
+        };
+
+
 
         if (isCaller) {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            ws.send("RTC_SIGNAL:" + JSON.stringify({ offer, from: myName }));
+            ws.send("RTC_SIGNAL:" + JSON.stringify({ offer: offer, from: myName }));
         }
+    } catch (e) { 
+        console.error(e);
+        alert("Ошибка камеры: " + e.message); 
+        endCall(); 
     }
+}
 
-    async function handleSignalingData(data) {
-        if (data.from === myName) return;
-        if (data.offer) {
-            if (confirm("Вызов от " + data.from)) {
+// 2. Обработка входящих сигналов (Signaling)
+// 2. Обработка входящих сигналов (Signaling)
+async function handleSignalingData(data) {
+    if (data.from === myName) return;
+
+    // 1. Входящий звонок (Offer)
+    if (data.offer) {
+        if (pc && pc.signalingState !== "closed" && pc.signalingState !== "stable") return;
+
+        setTimeout(async () => {
+            if (confirm(`Входящий звонок от ${data.from}. Принять?`)) {
+                console.log("Принимаем вызов от: " + data.from);
                 await initRTCPeer(false);
                 await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-                const ans = await pc.createAnswer();
-                await pc.setLocalDescription(ans);
-                ws.send("RTC_SIGNAL:" + JSON.stringify({ answer: ans, from: myName }));
-                while(iceQueue.length) pc.addIceCandidate(iceQueue.shift());
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                ws.send("RTC_SIGNAL:" + JSON.stringify({ answer: answer, from: myName }));
+                
+                while (iceQueue.length > 0) {
+                    try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
+                }
             }
-        } else if (data.answer) {
-            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-            while(iceQueue.length) pc.addIceCandidate(iceQueue.shift());
-        } else if (data.candidate) {
-            const c = new RTCIceCandidate(data.candidate);
-            if(pc && pc.remoteDescription) pc.addIceCandidate(c); else iceQueue.push(c);
+        }, 100);
+    } 
+    
+    // 2. Ответ на твой звонок (Answer) — ЧИСТЫЙ БЛОК БЕЗ ТАЙМЕРОВ (ДЛЯ iOS)
+    else if (data.answer && pc) {
+        if (pc.signalingState === "have-local-offer") {
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                console.log("Связь установлена. Нажмите на экран для видео.");
+
+                while (iceQueue.length > 0) {
+                    try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
+                }
+                
+                // На iOS НЕЛЬЗЯ делать авто-play тут. 
+                // Пользователь сам нажмет на экран, сработает forceRender из ontrack.
+                
+            } catch(e) { console.error("Ошибка:", e); }
         }
     }
-
-    // --- AUTH & FILES ---
-    async function saveNameAndStart() {
-        const name = document.getElementById("nameInput").value.trim();
-        const pass = localStorage.getItem("pinnogram_pass") || prompt("Пароль:");
-        if (!name || !pass) return;
-        const res = await fetch(`${API_URL}/auth`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ username: name, password: pass }) });
-        const d = await res.json();
-        if (d.status === "ok") {
-            localStorage.setItem("pinnogram_user", name);
-            localStorage.setItem("pinnogram_pass", pass);
-            document.getElementById("user-avatar-icon").src = d.avatar || "https://www.w3schools.com";
-            startChat(name);
-        } else { alert(d.message); localStorage.removeItem("pinnogram_pass"); }
+    
+    // 3. Сетевые пути (Candidates)
+    else if (data.candidate) {
+        const cand = new RTCIceCandidate(data.candidate);
+        if (pc && pc.signalingState !== "closed" && pc.remoteDescription && pc.remoteDescription.type) {
+            try { 
+                await pc.addIceCandidate(cand); 
+            } catch(e) { console.warn("ICE Error:", e); }
+        } else {
+            iceQueue.push(cand);
+        }
     }
+} // <--- ВОТ ЭТА СКОБКА БЫЛА ПРОПУЩЕНА
 
-    async function changeAvatar() {
-        const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
-        inp.onchange = async () => {
-            const blob = await compressImage(inp.files[0]);
-            const fd = new FormData(); fd.append("file", blob, "avatar.jpg");
-            const d = await (await fetch(`${API_URL}/upload`, {method:"POST", body:fd})).json();
-            if (d.url) {
-                document.getElementById("user-avatar-icon").src = d.url;
-                await fetch(`${API_URL}/update_avatar`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ username: myName, avatar: d.url }) });
-            }
-        };
-        inp.click();
+// 3. Вспомогательные функции
+function endCall() { 
+    if(pc) {
+        try { pc.close(); } catch(e) {}
     }
-
-    function sendMessage() {
-        const i = document.getElementById("messageText");
-        if (!i.value.trim()) return;
-        ws.send(`TIME:${new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}|${i.value}`);
-        i.value = '';
+    if(localStream) {
+        localStream.getTracks().forEach(t => t.stop()); 
     }
+    document.getElementById('video-call-overlay').style.display = 'none'; 
+    pc = null; 
+    iceQueue = []; // Очищаем очередь для нового звонка
+}
 
-    async function uploadFile() {
-        const f = document.getElementById('fileInput').files[0];
-        if (!f) return;
-        const blob = f.type.startsWith('image/') ? await compressImage(f) : f;
-        const fd = new FormData(); fd.append("file", blob, f.name);
-        const d = await (await fetch(`${API_URL}/upload`, {method:"POST", body:fd})).json();
-        ws.send(d.url);
-    }
 
-    async function compressImage(f) {
-        return new Promise(res => {
-            const r = new FileReader(); r.readAsDataURL(f);
-            r.onload = e => {
-                const img = new Image(); img.src = e.target.result;
-                img.onload = () => {
-                    const cv = document.createElement('canvas'); const w = 800; const s = w/img.width;
-                    cv.width = w; cv.height = img.height*s;
-                    cv.getContext('2d').drawImage(img, 0, 0, w, cv.height);
-                    cv.toBlob(b => res(b), 'image/jpeg', 0.7);
-                };
-            };
+
+
+function startCall() { initRTCPeer(true); }
+
+// Функция входа с паролем и проверкой на сервере
+async function saveNameAndStart() {
+    const username = document.getElementById("nameInput").value.trim();
+    if (!username) return;
+    
+    let password = localStorage.getItem("pinnogram_pass") || prompt("Введите пароль для регистрации или входа:");
+    if (!password) return;
+
+    try {
+        const res = await fetch(`${API_URL}/auth`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ username, password })
         });
-    }
+        const data = await res.json();
 
-    async function toggleRecording() {
-        const btn = document.getElementById("recordBtn");
-        if (!mediaRecorder || mediaRecorder.state === "inactive") {
-            const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            mediaRecorder = new MediaRecorder(s); videoChunks = [];
-            mediaRecorder.ondataavailable = e => videoChunks.push(e.data);
-            mediaRecorder.onstop = async () => {
-                const fd = new FormData(); fd.append("file", new Blob(videoChunks, {type:'video/mp4'}), `v_${Date.now()}.mp4`);
-                const d = await (await fetch(`${API_URL}/upload`, {method:"POST", body:fd})).json();
-                ws.send(d.url);
-                s.getTracks().forEach(t=>t.stop());
+        if (data.status === "ok") {
+            localStorage.setItem("pinnogram_user", username);
+            localStorage.setItem("pinnogram_pass", password);
+            localStorage.setItem("pinnogram_room", "general");
+            
+            // Устанавливаем текущую аватарку в кнопку профиля
+            const avIcon = document.getElementById("user-avatar-icon");
+            if(avIcon) avIcon.src = data.avatar || "https://cdn-icons-png.flaticon.com";
+            
+            startChat(username, "general");
+        } else {
+            alert(data.message);
+            localStorage.removeItem("pinnogram_pass");
+        }
+    } catch (e) {
+        alert("Ошибка связи с сервером");
+    }
+}
+
+// Функция смены аватарки
+async function changeAvatar() {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.onchange = async () => {
+        if (!fileInput.files[0]) return;
+        const compressed = await compressImage(fileInput.files[0]);
+        const fd = new FormData();
+        fd.append("file", compressed, "avatar.jpg");
+        
+        const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
+        const d = await res.json();
+        
+        if (d.url) {
+            document.getElementById("user-avatar-icon").src = d.url;
+            await fetch(`${API_URL}/update_avatar`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ username: myName, avatar: d.url })
+            });
+            alert("Аватар обновлен!");
+        }
+    };
+    fileInput.click();
+}
+
+
+function sendMessage() { 
+    const i = document.getElementById("messageText"); 
+    if(i.value.trim() && ws) { 
+        // Получаем время: 14:30
+        const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        
+        // Отправляем сообщение в формате "TIME:14:30|Текст"
+        ws.send(`TIME:${now}|${i.value}`); 
+        i.value = ''; 
+    } 
+}
+
+
+function handleTyping() { if(!isTypingNow && ws?.readyState===1){ isTypingNow=true; ws.send("__TYPING__"); setTimeout(()=>isTypingNow=false,3000); } }
+
+function addEmoji(e) { const i = document.getElementById("messageText"); i.value += e; i.focus(); }
+
+async function uploadFile() {
+    const fileInput = document.getElementById('fileInput');
+    // Добавь [0] вот сюда:
+    let file = fileInput.files[0]; 
+    if(!file) return;
+    // ... остальной код без изменений
+    if(file.type.startsWith('image/')) file = await compressImage(file);
+    const fd = new FormData(); fd.append("file", file, file.name);
+    const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
+    const d = await res.json(); ws.send(d.url);
+}
+
+async function compressImage(file) {
+    return new Promise((resolve) => {
+        const reader = new FileReader(); reader.readAsDataURL(file);
+        reader.onload = (e) => {
+            const img = new Image(); img.src = e.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const maxW = 800; const scale = maxW / img.width;
+                canvas.width = maxW; canvas.height = img.height * scale;
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.7);
             };
-            mediaRecorder.start(); btn.classList.add("recording"); btn.textContent="🛑";
-        } else { mediaRecorder.stop(); btn.classList.remove("recording"); btn.textContent="🎥"; }
-    }
+        };
+    });
+}
 
-    function handleTyping() { ws.send("__TYPING__"); }
-    function addEmoji(e) { document.getElementById("messageText").value += e; }
-    function endCall() { if(pc) pc.close(); localStream?.getTracks().forEach(t=>t.stop()); document.getElementById('video-call-overlay').style.display='none'; }
-    function startCall() { initRTCPeer(true); }
-    document.addEventListener("keypress", e => { if (e.key === "Enter") sendMessage(); });
+async function toggleRecording() {
+    const btn = document.getElementById("recordBtn");
+    if (!mediaRecorder || mediaRecorder.state === "inactive") {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        mediaRecorder = new MediaRecorder(stream); videoChunks = [];
+        mediaRecorder.ondataavailable = e => videoChunks.push(e.data);
+        mediaRecorder.onstop = async () => {
+            const blob = new Blob(videoChunks, {type:'video/mp4'});
+            const fd = new FormData(); fd.append("file", blob, `v_${Date.now()}.mp4`);
+            const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
+            const d = await res.json(); ws.send(d.url);
+            stream.getTracks().forEach(t=>t.stop());
+        };
+        mediaRecorder.start(); btn.classList.add("recording"); btn.textContent="🛑";
+    } else { mediaRecorder.stop(); btn.classList.remove("recording"); btn.textContent="🎥"; }
+}
+document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
+
 </script>
 </body>
 </html>
