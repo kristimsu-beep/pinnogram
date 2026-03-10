@@ -187,11 +187,12 @@ ws.onmessage = async (event) => {
     } 
     
     // 3. ОБЫЧНЫЕ СООБЩЕНИЯ (С АВАТАРКАМИ)
+       // ... (внутри ws.onmessage, после системных сообщений)
     else {
         const parts = raw.split("|");
         const idPart = parts[0] || "";
         const content = parts[1] || "";
-        const avatarUrl = parts[2] || "https://www.w3schools.com";
+        const avatarUrl = parts[2] || "https://www.w3schools.com"; // Тот самый фикс 403
         
         const msgId = idPart.replace("ID:", "");
         const timeMatch = content.match(/\[(\d{2}:\d{2})\]/);
@@ -203,69 +204,65 @@ ws.onmessage = async (event) => {
         const text = userAndText.substring(splitIdx + 2);
         const lowerText = text.toLowerCase();
 
-        div.className = sender === myName ? 'msg msg-right' : 'msg msg-left';
+        // ГЛАВНЫЙ КОНТЕЙНЕР (Аватар + Пузырь)
+        div.className = sender === myName ? 'msg-container msg-out' : 'msg-container msg-in';
         div.id = `msg-${msgId}`;
-        div.style.display = "flex";
-        div.style.alignItems = "flex-end";
-        div.style.gap = "8px";
+        div.style = "display: flex; gap: 8px; margin: 4px 0; max-width: 85%; align-items: flex-end;";
+        div.style.alignSelf = sender === myName ? "flex-end" : "flex-start";
 
-        // Рисуем аватарку слева, если сообщение не наше
+        // 1. АВАТАРКА (Сбоку)
         if (sender !== myName) {
             const avImg = document.createElement('img');
             avImg.src = avatarUrl;
-            avImg.style = "width:32px; height:32px; border-radius:50%; object-fit:cover; flex-shrink:0; border:1px solid rgba(255,255,255,0.1);";
+            avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
             div.appendChild(avImg);
         }
 
-        // Контейнер для текстового контента
-        const msgBody = document.createElement('div');
-        msgBody.style = "display: flex; flex-direction: column; max-width: 100%;";
-
+        // 2. ПУЗЫРЬ СООБЩЕНИЯ (Текст)
+        const msgBubble = document.createElement('div');
+        msgBubble.className = sender === myName ? 'msg msg-right' : 'msg msg-left';
+        msgBubble.style = "padding: 8px 12px; border-radius: 16px; position: relative; display: flex; flex-direction: column;";
+        
         if (sender !== myName) {
             const nSpan = document.createElement('span');
             nSpan.className = "msg-sender";
+            nSpan.style = "font-size: 12px; font-weight: bold; color: var(--accent); margin-bottom: 2px;";
             nSpan.textContent = sender;
-            msgBody.appendChild(nSpan);
-            // Звук уведомления
+            msgBubble.appendChild(nSpan);
             document.getElementById("notifSound").play().catch(() => {});
         }
 
-        // Проверка на медиа (Фото/Видео/Текст)
-        const isImg = [".jpg", ".jpeg", ".png", ".gif", ".webp"].some(ext => lowerText.includes(ext));
-        const isVideo = [".mp4", ".webm", ".mov"].some(ext => lowerText.includes(ext));
-
-        if (isImg) {
+        // Логика медиа (картинки/видео)
+        if ([".jpg", ".jpeg", ".png", ".gif"].some(ext => lowerText.includes(ext))) {
             const img = document.createElement('img');
             img.src = text.trim();
-            img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer;";
+            img.style = "max-width: 100%; border-radius: 10px; margin-top: 5px; cursor: pointer;";
             img.onclick = () => { document.getElementById('modal-img').src = img.src; document.getElementById('modal').style.display = 'flex'; };
-            msgBody.appendChild(img);
-        } else if (isVideo) {
+            msgBubble.appendChild(img);
+        } else if ([".mp4", ".webm", ".mov"].some(ext => lowerText.includes(ext))) {
             const v = document.createElement('video');
-            v.src = text.trim();
-            v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
-            v.style = "max-width:100%; border-radius:10px;";
-            msgBody.appendChild(v);
+            v.src = text.trim(); v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
+            v.style = "max-width: 100%; border-radius: 10px;";
+            msgBubble.appendChild(v);
         } else {
             const s = document.createElement('span');
             s.textContent = text;
-            msgBody.appendChild(s);
+            msgBubble.appendChild(s);
         }
 
-        // Метка времени
         const ts = document.createElement('span');
         ts.className = "msg-time";
         ts.textContent = time;
-        msgBody.appendChild(ts);
+        msgBubble.appendChild(ts);
 
-        div.appendChild(msgBody);
+        div.appendChild(msgBubble); // Добавляем пузырь в контейнер к аватарке
 
-        // Удаление по правому клику (контекстное меню)
         div.oncontextmenu = (e) => {
             e.preventDefault();
-            if (sender === myName && confirm("Удалить сообщение?")) ws.send(`__DELETE__:${msgId}`);
+            if (sender === myName && confirm("Удалить?")) ws.send(`__DELETE__:${msgId}`);
         };
     }
+
 
     chat.appendChild(div);
     // Авто-скролл вниз
@@ -281,31 +278,23 @@ const forceRender = async () => {
     const remoteVid = document.getElementById('remoteVideo');
     if (!remoteVid || !remoteVid.srcObject) return;
 
-    console.log("Xiaomi: Пробуем жесткий перезапуск плеера...");
+    console.log("Система: Попытка ручной активации потока...");
     
     try {
-        remoteVid.muted = false;
-        // ШОКОВАЯ ТЕРАПИЯ: Пауза -> Микропауза -> Старт
-        remoteVid.pause();
-        await new Promise(r => setTimeout(r, 50));
+        remoteVid.muted = false; // Включаем звук
+        remoteVid.setAttribute('autoplay', 'true');
+        remoteVid.setAttribute('playsinline', 'true');
         
-        await remoteVid.play();
+        await remoteVid.play(); // На iOS это сработает ТОЛЬКО по тапу
         
-        // Принудительно меняем размеры, чтобы вызвать Reflow всего экрана
-        remoteVid.style.width = "101vw";
-        remoteVid.style.filter = "brightness(1.1) contrast(1.1)";
-        remoteVid.style.transform = "scale(1.05) translateZ(0)";
-        
-        setTimeout(() => { 
-            remoteVid.style.width = "100vw";
-            remoteVid.style.filter = "brightness(1) contrast(1)";
-            remoteVid.style.transform = "scale(1.001) translateZ(0)";
-            console.log("Xiaomi: Рендер принудительно перезапущен!");
-        }, 300);
+        // Пинок GPU для Xiaomi
+        remoteVid.style.transform = "scale(1.002) translateZ(0)";
+        console.log("Система: Видео ожило!");
     } catch (e) {
-        console.error("Ошибка жесткого рендера:", e);
+        console.log("iOS/Xiaomi: Ждем прямого взаимодействия пользователя...");
     }
 };
+
 
 
 
@@ -409,7 +398,7 @@ async function handleSignalingData(data) {
 
         setTimeout(async () => {
             if (confirm(`Входящий звонок от ${data.from}. Принять?`)) {
-                console.log("Принимаем входящий вызов от: " + data.from);
+                console.log("Принимаем вызов от: " + data.from);
                 await initRTCPeer(false);
                 await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
                 const answer = await pc.createAnswer();
@@ -423,37 +412,23 @@ async function handleSignalingData(data) {
         }, 100);
     } 
     
-    // 2. Ответ на твой звонок (Answer)
+    // 2. Ответ на твой звонок (Answer) — ЧИСТЫЙ БЛОК БЕЗ ТАЙМЕРОВ (ДЛЯ iOS)
     else if (data.answer && pc) {
         if (pc.signalingState === "have-local-offer") {
             try {
                 await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-                console.log("Answer установлен. Готовим видео...");
+                console.log("Связь установлена. Нажмите на экран для видео.");
 
                 while (iceQueue.length > 0) {
                     try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
                 }
                 
-                // Единый таймер на запуск видео для звонящего
-                setTimeout(async () => {
-                    console.log("Caller: Авто-пинок через 1.5 сек...");
-                    // 1. Сначала вызываем нашу глобальную функцию (она сделает play и GPU-встряску)
-                    await forceRender(); 
-                    
-                    // 2. Дополнительный микро-пинок масштаба для верности
-                    const remoteVid = document.getElementById('remoteVideo');
-                    if (remoteVid) {
-                        remoteVid.style.transform = "scale(1.02) translateZ(0)";
-                        setTimeout(() => { 
-                            remoteVid.style.transform = "scale(1.001) translateZ(0)"; 
-                        }, 200);
-                    }
-                }, 1500);
-
-            } catch(e) { console.error("Ошибка установки Answer:", e); }
+                // На iOS НЕЛЬЗЯ делать авто-play тут. 
+                // Пользователь сам нажмет на экран, сработает forceRender из ontrack.
+                
+            } catch(e) { console.error("Ошибка:", e); }
         }
     }
-
     
     // 3. Сетевые пути (Candidates)
     else if (data.candidate) {
@@ -465,6 +440,7 @@ async function handleSignalingData(data) {
         }
     }
 }
+
 
 
 
@@ -609,6 +585,7 @@ document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessag
 </script>
 </body>
 </html>
+
 
 
 
