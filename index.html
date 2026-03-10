@@ -113,13 +113,25 @@
         perspective: 1000;
         transform: translate3d(0,0,0); 
     }
+    /* Добавляем отступ снизу для всего экрана, чтобы жесты смартфона ничего не перекрывали */
+    #chat-screen {
+        padding-bottom: env(safe-area-inset-bottom, 20px);
+    }
+
     #localVideo { width: 100px; height: 140px; position: absolute; bottom: 20px; right: 20px; border: 2px solid white; border-radius: 10px; object-fit: cover; z-index: 10002; }
     #modal { display: none; position: fixed; z-index: 9999; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); align-items: center; justify-content: center; cursor: zoom-out; }
     #modal img { max-width: 95%; max-height: 95%; border-radius: 10px; }
     .rec-btn.recording { animation: blink 1s infinite; }
     @keyframes blink { 0% {opacity: 1} 50% {opacity: 0.5} 100% {opacity: 1} }
 
-    @media (max-width: 600px) { #chat-screen { padding: 0; } #chat { border-radius: 0; } .controls { padding: 5px; margin: 0; } }
+    @media (max-width: 600px) { 
+    #chat-screen { 
+        padding: 5px; 
+        padding-bottom: env(safe-area-inset-bottom, 25px); /* Важно для Xiaomi */
+    } 
+    #chat { border-radius: 0; } 
+    .controls { padding: 5px; margin: 0; } 
+}
 </style>
 
 </head>
@@ -169,7 +181,9 @@
             <button onclick="sendMessage()">🚀</button>
         </div>
 
-        <button onclick="localStorage.clear(); location.reload();" style="margin:auto 10px 5px; background:none; color:#555; font-size:10px; text-decoration: underline; border:none; cursor:pointer;">Выйти</button>
+        <button onclick="localStorage.clear(); location.reload();" 
+        style="margin: 10px auto 20px; background: none; color: #777; font-size: 11px; text-decoration: underline; border: none; cursor: pointer; display: block;">Выйти из аккаунта</button>
+
     </div> <!-- Один закрывающий div для chat-screen -->
 
 <script>
@@ -660,5 +674,6 @@ document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessag
 </script>
 </body>
 </html>
+
 
 
