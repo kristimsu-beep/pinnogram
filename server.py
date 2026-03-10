@@ -36,7 +36,6 @@ async def get_index():
 app.mount("/files", StaticFiles(directory=UPLOAD_DIR), name="files")
 
 @app.on_event("startup")
-@app.on_event("startup")
 async def startup():
     async with aiosqlite.connect(DB_PATH) as db:
         # Добавляем сразу обе колонки на случай обновления старой базы
@@ -46,15 +45,7 @@ async def startup():
             await db.commit()
         except: pass 
         
-        # В CREATE TABLE обязательно добавляем avatar
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT, text TEXT, timestamp TEXT, 
-                room_id TEXT DEFAULT 'general',
-                avatar TEXT DEFAULT ''
-            )
-        """)
+        
         # Таблица пользователей для аватарок и паролей
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -64,6 +55,37 @@ async def startup():
             )
         """)
         await db.commit()
+# 1. Роут для регистрации и входа
+@app.post("/auth")
+async def auth(data: dict):
+    username = data.get("username")
+    password = data.get("password")
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT password, avatar FROM users WHERE username = ?", (username,)) as cursor:
+            user = await cursor.fetchone()
+            if user:
+                if user[0] == password:
+                    return {"status": "ok", "avatar": user[1]}
+                else:
+                    return {"status": "error", "message": "Неверный пароль"}
+            else:
+                # Если пользователя нет — регистрируем
+                await db.execute("INSERT INTO users (username, password, avatar) VALUES (?, ?, ?)", 
+                                (username, password, ""))
+                await db.commit()
+                return {"status": "ok", "avatar": ""}
+
+# 2. Роут для обновления аватарки в базе
+@app.post("/update_avatar")
+async def update_avatar(data: dict):
+    username = data.get("username")
+    avatar_url = data.get("avatar")
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE users SET avatar = ? WHERE username = ?", (avatar_url, username))
+        # Опционально: обновляем аватарку и в старых сообщениях этого юзера
+        await db.execute("UPDATE messages SET avatar = ? WHERE username = ?", (avatar_url, username))
+        await db.commit()
+        return {"status": "ok"}
 
 class ConnectionManager:
     def __init__(self):
@@ -240,6 +262,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
