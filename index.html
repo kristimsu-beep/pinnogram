@@ -115,6 +115,10 @@
         </div>
 
         <div class="controls">
+            <!-- Кнопка профиля теперь здесь, в общем ряду -->
+            <img id="user-avatar-icon" onclick="changeAvatar()" src="https://cdn-icons-png.flaticon.com" 
+                 style="width:42px; height:42px; border-radius:50%; cursor:pointer; border:2px solid var(--accent); object-fit:cover;">
+            
             <input type="file" id="fileInput" style="display:none" onchange="uploadFile()">
             <button class="file-btn" onclick="document.getElementById('fileInput').click()">📎</button>
             <button id="recordBtn" class="file-btn rec-btn" onclick="toggleRecording()">🎥</button>
@@ -122,9 +126,10 @@
             <input type="text" id="messageText" placeholder="Сообщение..." oninput="handleTyping()">
             <button onclick="sendMessage()">🚀</button>
         </div>
-        <button onclick="localStorage.clear(); location.reload();" style="margin-bottom:5px; background:none; color:#555; font-size:10px; text-decoration: underline; border:none; cursor:pointer;">Выйти</button>
-    </div>
 
+        <button onclick="localStorage.clear(); location.reload();" style="margin-bottom:5px; background:none; color:#555; font-size:10px; text-decoration: underline; border:none; cursor:pointer;">Выйти</button>
+        </div>
+ 
 <script>
     const API_URL = window.location.origin;
     const socketProto = window.location.protocol === "https:" ? "wss" : "ws";
@@ -190,7 +195,12 @@ ws.onmessage = async (event) => {
         div.textContent = raw.split("SYSTEM: ")[1];
     } else {
         // 5. Обычные сообщения
-        const [idPart, content] = raw.split("|");
+        // 5. Обычные сообщения (Разбор: ID | Время Имя: Текст | Аватарка)
+        const parts = raw.split("|");
+        const idPart = parts[0];
+        const content = parts[1];
+        const avatarUrl = parts[2] || ""; // Ссылка на аватарку
+        
         const msgId = idPart.replace("ID:", "");
         
         // Извлекаем время [HH:MM]
@@ -201,14 +211,21 @@ ws.onmessage = async (event) => {
         const userAndText = content.replace(/^\[\d{2}:\d{2}\]\s*/, "");
         const splitIdx = userAndText.indexOf(": ");
         const sender = userAndText.substring(0, splitIdx);
-        
-        // --- ВОТ ЭТИ СТРОКИ ВАЖНО ВЕРНУТЬ ---
         const text = userAndText.substring(splitIdx + 2);
+        
         const cleanText = text.trim();
         const lowerText = cleanText.toLowerCase();
 
         div.className = sender === myName ? 'msg msg-right' : 'msg msg-left';
         div.id = `msg-${msgId}`;
+
+        // --- ДОБАВЛЯЕМ АВАТАРКУ В ЧАТ ---
+        if (avatarUrl) {
+            const avImg = document.createElement('img');
+            avImg.src = avatarUrl;
+            avImg.style = "width:30px; height:30px; border-radius:50%; object-fit:cover; margin-bottom:5px; border:1px solid rgba(255,255,255,0.1);";
+            div.appendChild(avImg);
+        }
 
         if (sender !== myName) {
             const nSpan = document.createElement('span');
@@ -218,16 +235,14 @@ ws.onmessage = async (event) => {
             document.getElementById("notifSound").play().catch(() => {});
         }
 
-        // Улучшенная проверка на медиа (найдет расширение в любом месте ссылки)
+        // Логика медиа (картинки/видео)
         const isImg = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"].some(ext => lowerText.includes(ext));
         const isVideo = [".mp4", ".webm", ".mov", ".avi", ".ogg"].some(ext => lowerText.includes(ext));
 
         if (isImg) {
             const img = document.createElement('img');
             img.src = cleanText; 
-            img.style.maxWidth = "100%";
-            img.style.borderRadius = "10px";
-            img.style.marginTop = "5px"; // Добавим отступ сверху
+            img.style = "max-width:100%; border-radius:10px; margin-top:5px;";
             img.onclick = () => { 
                 document.getElementById('modal-img').src = cleanText; 
                 document.getElementById('modal').style.display = 'flex'; 
@@ -238,9 +253,7 @@ ws.onmessage = async (event) => {
             v.src = cleanText;
             v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true;
             v.controls = true;
-            v.style.maxWidth = "100%";
-            v.style.borderRadius = "10px";
-            v.onclick = () => v.muted = !v.muted;
+            v.style = "max-width:100%; border-radius:10px;";
             div.appendChild(v);
         } else {
             const s = document.createElement('span');
@@ -248,15 +261,16 @@ ws.onmessage = async (event) => {
             div.appendChild(s);
         }
 
-
         const ts = document.createElement('span');
         ts.className = "msg-time";
         ts.textContent = time;
         div.appendChild(ts);
+
         div.oncontextmenu = (e) => {
             e.preventDefault();
             if (sender === myName && confirm("Удалить сообщение?")) ws.send(`__DELETE__:${msgId}`);
         };
+
     } // Закрывает else
 
     // --- ВОТ ЭТОГО НЕ ХВАТАЛО ---
@@ -434,11 +448,68 @@ function endCall() {
 
 function startCall() { initRTCPeer(true); }
 
-function saveNameAndStart() {
-    const n = document.getElementById("nameInput").value.trim();
-    const r = prompt("ID комнаты:", "general") || "general";
-    if (n) { localStorage.setItem("pinnogram_user", n); localStorage.setItem("pinnogram_room", r); startChat(n, r); }
+// Функция входа с паролем и проверкой на сервере
+async function saveNameAndStart() {
+    const username = document.getElementById("nameInput").value.trim();
+    if (!username) return;
+    
+    let password = localStorage.getItem("pinnogram_pass") || prompt("Введите пароль для регистрации или входа:");
+    if (!password) return;
+
+    try {
+        const res = await fetch(`${API_URL}/auth`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+
+        if (data.status === "ok") {
+            localStorage.setItem("pinnogram_user", username);
+            localStorage.setItem("pinnogram_pass", password);
+            localStorage.setItem("pinnogram_room", "general");
+            
+            // Устанавливаем текущую аватарку в кнопку профиля
+            const avIcon = document.getElementById("user-avatar-icon");
+            if(avIcon) avIcon.src = data.avatar || "https://cdn-icons-png.flaticon.com";
+            
+            startChat(username, "general");
+        } else {
+            alert(data.message);
+            localStorage.removeItem("pinnogram_pass");
+        }
+    } catch (e) {
+        alert("Ошибка связи с сервером");
+    }
 }
+
+// Функция смены аватарки
+async function changeAvatar() {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.onchange = async () => {
+        if (!fileInput.files[0]) return;
+        const compressed = await compressImage(fileInput.files[0]);
+        const fd = new FormData();
+        fd.append("file", compressed, "avatar.jpg");
+        
+        const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
+        const d = await res.json();
+        
+        if (d.url) {
+            document.getElementById("user-avatar-icon").src = d.url;
+            await fetch(`${API_URL}/update_avatar`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ username: myName, avatar: d.url })
+            });
+            alert("Аватар обновлен!");
+        }
+    };
+    fileInput.click();
+}
+
 
 function sendMessage() { 
     const i = document.getElementById("messageText"); 
@@ -506,6 +577,7 @@ document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessag
 </script>
 </body>
 </html>
+
 
 
 
