@@ -559,17 +559,25 @@ async function saveNameAndStart() {
         });
         const data = await res.json();
 
-        if (data.status === "ok") {
+               if (data.status === "ok") {
             localStorage.setItem("pinnogram_user", username);
             localStorage.setItem("pinnogram_pass", password);
             localStorage.setItem("pinnogram_room", "general");
             
-            // Устанавливаем текущую аватарку в кнопку профиля
+            // 1. ОПРЕДЕЛЯЕМ АВАТАР (база или надежная ПРЯМАЯ ссылка)
+            const finalAvatar = data.avatar || "https://i.ibb.co/4pSbxsh/user-avatar.png";
+            
+            // 2. ЗАПИСЫВАЕМ В ПАМЯТЬ БРАУЗЕРА (только рабочую ссылку!)
+            localStorage.setItem("pinnogram_avatar", finalAvatar);
+            
+            // 3. УСТАНАВЛИВАЕМ В КНОПКУ
             const avIcon = document.getElementById("user-avatar-icon");
-            if(avIcon) avIcon.src = data.avatar || "https://cdn-icons-png.flaticon.com";
+            if (avIcon) avIcon.src = finalAvatar;
             
             startChat(username, "general");
+        
         } else {
+            // ... остальное без изменений
             alert(data.message);
             localStorage.removeItem("pinnogram_pass");
         }
@@ -589,35 +597,35 @@ async function changeAvatar() {
         const fd = new FormData();
         fd.append("file", compressed, "avatar.jpg");
         
-        const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
-        const d = await res.json();
-        
-        if (d.url) {
-            document.getElementById("user-avatar-icon").src = d.url;
-            await fetch(`${API_URL}/update_avatar`, {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({ username: myName, avatar: d.url })
-            });
-            alert("Аватар обновлен!");
-        }
+        try {
+            const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
+            const d = await res.json();
+            
+            if (d.url) {
+                // СОХРАНЯЕМ В ПАМЯТЬ ТЕЛЕФОНА
+                localStorage.setItem("pinnogram_avatar", d.url); 
+                document.getElementById("user-avatar-icon").src = d.url;
+                
+                await fetch(`${API_URL}/update_avatar`, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({ username: myName, avatar: d.url })
+                });
+                alert("Аватар обновлен!");
+            }
+        } catch(e) { console.error("Ошибка смены аватара:", e); }
     };
     fileInput.click();
 }
 
-
 function sendMessage() { 
     const i = document.getElementById("messageText"); 
     if(i.value.trim() && ws) { 
-        // Получаем время: 14:30
         const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-        
-        // Отправляем сообщение в формате "TIME:14:30|Текст"
         ws.send(`TIME:${now}|${i.value}`); 
         i.value = ''; 
     } 
 }
-
 
 function handleTyping() { if(!isTypingNow && ws?.readyState===1){ isTypingNow=true; ws.send("__TYPING__"); setTimeout(()=>isTypingNow=false,3000); } }
 
@@ -627,22 +635,18 @@ async function uploadFile() {
     const fileInput = document.getElementById('fileInput');
     let file = fileInput.files[0]; 
     if(!file) return;
-
     if(file.type.startsWith('image/')) file = await compressImage(file);
     const fd = new FormData(); 
     fd.append("file", file, file.name);
-
     try {
         const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
-        const d = await res.json(); // ЭТО ВОЗВРАЩАЕМ
-        
+        const d = await res.json();
         if (d.url && d.url !== "error") {
             const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-            ws.send(`TIME:${now}|${d.url}`); // Теперь d.url определен!
+            ws.send(`TIME:${now}|${d.url}`);
         }
     } catch (e) { console.error("Ошибка загрузки:", e); }
 }
-
 
 async function compressImage(file) {
     return new Promise((resolve) => {
@@ -667,22 +671,18 @@ async function toggleRecording() {
         mediaRecorder = new MediaRecorder(stream); 
         videoChunks = [];
         mediaRecorder.ondataavailable = e => videoChunks.push(e.data);
-        
         mediaRecorder.onstop = async () => {
             const blob = new Blob(videoChunks, {type:'video/mp4'});
             const fd = new FormData(); 
             fd.append("file", blob, `v_${Date.now()}.mp4`);
-            
             try {
                 const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
                 const d = await res.json();
-                
                 if (d.url && d.url !== "error") {
                     const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
                     ws.send(`TIME:${now}|${d.url}`);
                 }
             } catch (e) { console.error("Ошибка видео:", e); }
-
             stream.getTracks().forEach(t => t.stop());
         };
         mediaRecorder.start(); 
@@ -695,19 +695,18 @@ async function toggleRecording() {
     }
 }
 
-// Слушатель Enter для отправки
 document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
 
-// ВОССТАНОВЛЕНИЕ АВАТАРКИ ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
-window.addEventListener('DOMContentLoaded', () => {
+// ВОССТАНОВЛЕНИЕ АВАТАРКИ ПРИ ЗАГРУЗКЕ (Один универсальный метод)
+window.addEventListener('load', () => {
     const savedAv = localStorage.getItem("pinnogram_avatar");
-    if (savedAv) {
-        const icon = document.getElementById("user-avatar-icon");
-        if (icon) icon.src = savedAv;
+    const avIcon = document.getElementById("user-avatar-icon");
+    if (savedAv && avIcon) {
+        avIcon.src = savedAv;
     }
 });
 
-// Глобальный слушатель клика для прогрева аудио (Xiaomi Fix)
+// Прогрев аудио
 document.body.addEventListener('click', () => {
     const audio = document.getElementById("notifSound");
     if(audio) audio.play().then(() => audio.pause()).catch(() => {});
@@ -716,7 +715,6 @@ document.body.addEventListener('click', () => {
 </script>
 </body>
 </html>
-
 
 
 
