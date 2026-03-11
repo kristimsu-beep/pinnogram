@@ -307,13 +307,15 @@
         ws = new WebSocket(`${socketProto}://${window.location.host}/ws/${room}/${encodeURIComponent(name)}`);
 
 ws.onmessage = async (event) => {
-    // ВНУТРИ ws.onmessage
+    const raw = event.data; // Исправляем ReferenceError
+    const chat = document.getElementById('chat');
+
+    // 1. ОБРАБОТКА СПИСКА ОНЛАЙН
     if (raw.includes("ONLINE_LIST:")) {
         const parts = raw.split("ONLINE_LIST:");
         if (parts.length > 1) {
             const users = parts[1].split(",");
             
-            // 1. НАПОЛНЯЕМ САЙДБАР (МЕНЮ ДИАЛОГОВ)
             const contacts = document.getElementById("contacts-list");
             if (contacts) {
                 contacts.innerHTML = users.map(u => {
@@ -324,17 +326,18 @@ ws.onmessage = async (event) => {
                 }).join("");
             }
 
-            // 2. Остальной код (online-list и admin-users-list)
             const namesOnly = users.map(u => u.split(" (")[0]);
-            document.getElementById("online-list").textContent = `В сети: ${namesOnly.join(", ")}`;
+            const onlineText = document.getElementById("online-list");
+            if (onlineText) onlineText.textContent = `В сети: ${namesOnly.join(", ")}`;
             
             const adminList = document.getElementById("admin-users-list");
-            if (adminList) {
-                adminList.innerHTML = users.map(u => `<div style="color:#00ff00;">> node: ${u}</div>`).join("");
-            }
+            if (adminList) adminList.innerHTML = users.map(u => `<div style="color:#00ff00;">> node: ${u}</div>`).join("");
         }
         return;
     }
+
+    // ... Дальше идут блоки RTC_SIGNAL, DELETE_CONFIRM и т.д.
+
 
 
     // Сигналы звонка (WebRTC)
@@ -822,7 +825,9 @@ async function toggleRecording() {
                 const d = await res.json();
                 if (d.url && d.url !== "error") {
                     const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-                    ws.send(`TIME:${now}|${d.url}`);
+                   const prefix = currentPartner ? `TO_USER:${currentPartner}|` : "";
+                    ws.send(`${prefix}TIME:${now}|${d.url}`);
+
                 }
             } catch (e) { console.error("Ошибка видео:", e); }
             stream.getTracks().forEach(t => t.stop());
@@ -891,3 +896,4 @@ function switchChat(partner) {
 </script>
 </body>
 </html>
+
