@@ -178,6 +178,8 @@
 
 </head>
 <body>
+<link rel="icon" href="data:,">
+
 <!-- СЕКРЕТНОЕ ОКНО АДМИНА -->
 <div id="admin-panel">
     <h3 style="margin:0 0 10px 0; color:#00ff00; border-bottom:1px solid #00ff00; padding-bottom:5px;">📡 NETWORK NODES</h3>
@@ -333,10 +335,6 @@ ws.onmessage = async (event) => {
         const lowerText = text.toLowerCase();
 
         // Если это наше сообщение, сохраняем нашу актуальную аватарку в память
-        if (sender === myName) {
-            localStorage.setItem("pinnogram_avatar", avatarUrl);
-            document.getElementById("user-avatar-icon").src = avatarUrl;
-        }
 
         div.className = 'msg-row';
         div.id = `msg-${msgId}`;
@@ -698,18 +696,28 @@ async function uploadFile() {
     const fileInput = document.getElementById('fileInput');
     let file = fileInput.files[0]; 
     if(!file) return;
+
     if(file.type.startsWith('image/')) file = await compressImage(file);
     const fd = new FormData(); 
     fd.append("file", file, file.name);
+
     try {
         const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
         const d = await res.json();
+        
         if (d.url && d.url !== "error") {
             const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
             ws.send(`TIME:${now}|${d.url}`);
+            
+            // ВОТ ЭТА СТРОЧКА: Сбрасываем выбор, чтобы можно было отправить тот же файл еще раз
+            fileInput.value = ""; 
         }
-    } catch (e) { console.error("Ошибка загрузки:", e); }
+    } catch (e) { 
+        console.error("Ошибка загрузки:", e); 
+        fileInput.value = ""; // Сбрасываем и при ошибке тоже
+    }
 }
+
 
 async function compressImage(file) {
     return new Promise((resolve) => {
@@ -791,6 +799,7 @@ document.body.addEventListener('click', () => {
 </script>
 </body>
 </html>
+
 
 
 
