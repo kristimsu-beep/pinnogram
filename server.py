@@ -225,7 +225,7 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
 
 @app.websocket("/ws/{room_id}/{username}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
-    # 1. Сначала узнаем аватарку пользователя из БД
+    # 1. Узнаем аватарку при входе
     current_avatar = ""
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute("SELECT avatar FROM users WHERE username = ?", (username,)) as cursor:
@@ -233,22 +233,47 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
             if row: current_avatar = row[0]
 
     await manager.connect(websocket, room_id, username)
+    # Системное сообщение о входе (шлем всем)
     await manager.broadcast(room_id, message=f"{username} вошел в чат")
 
     try:
         while True:
             data = await websocket.receive_text()
             
-            # RTC сигналы
-            if data.startswith("RTC_SIGNAL:"):
+            # --- БЛОК 1: ЗАПРОС ИСТОРИИ ---
+            if data.startswith("GET_HISTORY:"):
+                target = data.replace("GET_HISTORY:", "")
+                async with aiosqlite.connect(DB_PATH) as db:
+                    if target in ["null", "general", "None", "undefined"]:
+                        sql = "SELECT id, username, text, timestamp, avatar, to_user FROM messages WHERE room_id = ? AND to_user IS NULL ORDER BY id ASC LIMIT 100"
+                        params = (room_id,)
+                    else:
+                        sql = """
+                            SELECT id, username, text, timestamp, avatar, to_user 
+                            FROM messages 
+                            WHERE room_id = ? 
+                            AND ((username = ? AND to_user = ?) OR (username = ? AND to_user = ?)) 
+                            ORDER BY id ASC LIMIT 100
+                        """
+                        params = (room_id, username, target, target, username)
+                    
+                    async with db.execute(sql, params) as cursor:
+                        history = await cursor.fetchall()
+                        for msg_id, user, text, time, av, to_u in history:
+                            prefix = f"PRIVATE:{to_u}:" if to_u else ""
+                            await websocket.send_text(f"ID:{msg_id}|{prefix}[{time}] {user}: {text}|{av or ''}")
+                continue
+
+            # --- БЛОК 2: RTC СИГНАЛЫ (ЗВОНКИ) ---
+            elif data.startswith("RTC_SIGNAL:"):
                 if room_id in manager.rooms:
                     for name, conn in manager.rooms[room_id].items():
                         if name != username and conn.client_state == WebSocketState.CONNECTED:
                             await conn.send_text(data)
                 continue
 
-            # Удаление
-            if data.startswith("__DELETE__:"):
+            # --- БЛОК 3: УДАЛЕНИЕ ---
+            elif data.startswith("__DELETE__:"):
                 msg_id = data.replace("__DELETE__:", "")
                 async with aiosqlite.connect(DB_PATH) as db:
                     await db.execute("DELETE FROM messages WHERE id = ?", (msg_id,))
@@ -256,33 +281,32 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                 if room_id in manager.rooms:
                     for conn in manager.rooms[room_id].values():
                         await conn.send_text(f"DELETE_CONFIRM:{msg_id}")
-            
-            # Печать
+                continue
+
+            # --- БЛОК 4: ПЕЧАТАЕТ... ---
             elif data == "__TYPING__":
                 if room_id in manager.rooms:
                     for name, conn in manager.rooms[room_id].items():
                         if name != username:
                             await conn.send_text(f"TYPING:{username}")
-            
-            # ОБЫЧНОЕ СООБЩЕНИЕ
-                        # ОБЫЧНОЕ СООБЩЕНИЕ
+                continue
+
+            # --- БЛОК 5: ОТПРАВКА СООБЩЕНИЯ (ОБЩЕЕ ИЛИ ЛС) ---
             else:
                 display_text = data
                 msg_time = datetime.now().strftime("%H:%M")
-                target_user = None  # По умолчанию - общий чат
+                target_user = None
 
-                # 1. ПРОВЕРЯЕМ ПРЕФИКС ЛИЧКИ (из JS)
+                # Разбор ЛС префикса
                 if data.startswith("TO_USER:"):
                     try:
-                        # Формат: TO_USER:Имя|TIME:12:00|Текст
                         parts = data.split("|", 2)
                         target_user = parts[0].replace("TO_USER:", "")
-                        # Переопределяем данные для дальнейшего разбора времени
                         data = "|".join(parts[1:])
                         display_text = data
                     except: pass
 
-                # 2. РАЗБОР ВРЕМЕНИ (как и было)
+                # Разбор времени
                 if data.startswith("TIME:"):
                     try:
                         parts = data.split("|", 1)
@@ -290,27 +314,27 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         display_text = parts[1]
                     except: pass
 
-                # 3. ОБНОВЛЯЕМ АВАТАРКУ
+                # Свежая аватарка
                 async with aiosqlite.connect(DB_PATH) as db:
                     async with db.execute("SELECT avatar FROM users WHERE username = ?", (username,)) as c:
                         row = await c.fetchone()
                         if row: current_avatar = row[0]
 
-                # 4. ОТПРАВЛЯЕМ (теперь с параметром to_user)
                 await manager.broadcast(
                     room_id, 
                     username=username, 
                     text=display_text, 
                     avatar=current_avatar, 
                     client_time=msg_time,
-                    to_user=target_user # ДОБАВЛЕНО
+                    to_user=target_user
                 )
-
 
     except WebSocketDisconnect:
         manager.disconnect(room_id, username)
         await manager.broadcast(room_id, message=f"{username} покинул чат")
 
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
