@@ -251,8 +251,17 @@ ws.onmessage = async (event) => {
         const parts = raw.split("|");
         const idPart = parts[0] || "";
         const content = parts[1] || "";
-        const avatarUrl = parts[2] || "https://cdn-icons-png.flaticon.com";
         
+        // ФИКС 403: Если ссылка на Flaticon, заменяем на рабочую, иначе берем пришедшую
+        // ФИКС 403: Используем ПРЯМУЮ ссылку на файл картинки (с расширением .png)
+        let avatarUrl = parts[2] || "https://i.ibb.co/4pSbxsh/user-avatar.png";
+        
+        // Если ссылка битая (flaticon) или кривая — ставим РАБОЧУЮ заглушку
+        if (avatarUrl.includes("flaticon.com") || avatarUrl.length < 15 || avatarUrl === "https://i.ibb.co") {
+            avatarUrl = "https://i.ibb.co/4pSbxsh/user-avatar.png";
+        }
+
+
         const msgId = idPart.replace("ID:", "");
         const timeMatch = content.match(/\[(\d{2}:\d{2})\]/);
         const time = timeMatch ? timeMatch[1] : "--:--";
@@ -263,24 +272,27 @@ ws.onmessage = async (event) => {
         const text = userAndText.substring(splitIdx + 2);
         const lowerText = text.toLowerCase();
 
-        // 1. ГЛАВНЫЙ КОНТЕЙНЕР-СТРОКА (Flex-ряд)
+        // Если это наше сообщение, сохраняем нашу актуальную аватарку в память
+        if (sender === myName) {
+            localStorage.setItem("pinnogram_avatar", avatarUrl);
+            document.getElementById("user-avatar-icon").src = avatarUrl;
+        }
+
         div.className = 'msg-row';
         div.id = `msg-${msgId}`;
-        // Твои — справа (row-reverse), чужие — слева (row)
         div.style.flexDirection = (sender === myName) ? 'row-reverse' : 'row';
 
-        // 2. АВАТАРКА (Всегда сбоку от пузыря)
         const avImg = document.createElement('img');
         avImg.src = avatarUrl;
         avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
+        
+        // Обработка ошибки загрузки аватарки (если сервер упал)
+        avImg.onerror = () => { avImg.src = "https://i.ibb.co"; };
         div.appendChild(avImg);
 
-        // 3. ПУЗЫРЬ СООБЩЕНИЯ
         const msgBubble = document.createElement('div');
-        // Применяем классы для скругления углов из CSS
         msgBubble.className = (sender === myName) ? 'msg msg-right' : 'msg msg-left';
         
-        // Имя отправителя (только для чужих)
         if (sender !== myName) {
             const nSpan = document.createElement('span');
             nSpan.className = "msg-sender";
@@ -289,18 +301,20 @@ ws.onmessage = async (event) => {
             document.getElementById("notifSound").play().catch(() => {});
         }
 
-        // Логика контента (Текст / Фото / Видео)
+        // Логика контента (Медиа/Текст)
         const isImg = [".jpg", ".jpeg", ".png", ".gif", ".webp"].some(ext => lowerText.includes(ext));
         const isVid = [".mp4", ".webm", ".mov"].some(ext => lowerText.includes(ext));
 
         if (isImg) {
             const img = document.createElement('img');
             img.src = text.trim();
+            img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer;";
             img.onclick = () => { document.getElementById('modal-img').src = img.src; document.getElementById('modal').style.display = 'flex'; };
             msgBubble.appendChild(img);
         } else if (isVid) {
             const v = document.createElement('video');
             v.src = text.trim(); v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
+            v.style = "max-width:100%; border-radius:10px;";
             msgBubble.appendChild(v);
         } else {
             const s = document.createElement('span');
@@ -309,13 +323,12 @@ ws.onmessage = async (event) => {
             msgBubble.appendChild(s);
         }
 
-        // Время (внизу пузыря)
         const ts = document.createElement('span');
         ts.className = "msg-time";
         ts.textContent = time;
         msgBubble.appendChild(ts);
 
-        div.appendChild(msgBubble); // Кладем пузырь в строку
+        div.appendChild(msgBubble);
 
         div.oncontextmenu = (e) => {
             e.preventDefault();
@@ -403,24 +416,34 @@ async function initRTCPeer(isCaller) {
 
         // Обработка входящего видео
         // Обработка входящего видео
-       pc.ontrack = (event) => {
+        pc.ontrack = (event) => {
             const remoteVid = document.getElementById('remoteVideo');
             console.log("Поток пришел. Настраиваем события.");
         
             if (event.streams && event.streams[0]) {
                 remoteVid.srcObject = event.streams[0];
-            } else if (event.track) {
+            } else {
                 remoteVid.srcObject = new MediaStream([event.track]);
             }
-            remoteVid.muted = true;
+
+            // Принудительно включаем звук в свойствах элемента
+            remoteVid.muted = false;
+            remoteVid.setAttribute('playsinline', 'true');
+            remoteVid.setAttribute('autoplay', 'true');
         
-            // Просто вешаем нашу глобальную функцию на клик и тап
-            window.addEventListener('touchstart', forceRender, {once: true});
-            window.addEventListener('click', forceRender, {once: true});
+            // Одноразовые слушатели на ТАП по всему экрану
+            const trigger = () => {
+                forceRender();
+                window.removeEventListener('click', trigger);
+                window.removeEventListener('touchstart', trigger);
+            };
+            window.addEventListener('click', trigger);
+            window.addEventListener('touchstart', trigger);
             
-            // И пробуем "пнуть" через 2 секунды автоматически
-            setTimeout(forceRender, 2000);
+            // Авто-попытка через 1 секунду
+            setTimeout(forceRender, 1000);
         };
+
 
 
         pc.onicecandidate = e => {
@@ -652,12 +675,14 @@ async function toggleRecording() {
             
             try {
                 const res = await fetch(`${API_URL}/upload`, {method:"POST", body:fd});
-                const d = await res.json(); // ДОБАВЛЕНО: ОПРЕДЕЛЯЕМ d
+                const d = await res.json();
+                
                 if (d.url && d.url !== "error") {
                     const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-                    ws.send(`TIME:${now}|${d.url}`); // ТЕПЕРЬ d.url РАБОТАЕТ
+                    ws.send(`TIME:${now}|${d.url}`);
                 }
             } catch (e) { console.error("Ошибка видео:", e); }
+
             stream.getTracks().forEach(t => t.stop());
         };
         mediaRecorder.start(); 
@@ -669,11 +694,30 @@ async function toggleRecording() {
         btn.textContent = "🎥"; 
     }
 }
+
+// Слушатель Enter для отправки
 document.addEventListener("keypress", (e) => { if (e.key === "Enter") sendMessage(); });
+
+// ВОССТАНОВЛЕНИЕ АВАТАРКИ ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+window.addEventListener('DOMContentLoaded', () => {
+    const savedAv = localStorage.getItem("pinnogram_avatar");
+    if (savedAv) {
+        const icon = document.getElementById("user-avatar-icon");
+        if (icon) icon.src = savedAv;
+    }
+});
+
+// Глобальный слушатель клика для прогрева аудио (Xiaomi Fix)
+document.body.addEventListener('click', () => {
+    const audio = document.getElementById("notifSound");
+    if(audio) audio.play().then(() => audio.pause()).catch(() => {});
+}, { once: true });
 
 </script>
 </body>
 </html>
+
+
 
 
 
