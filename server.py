@@ -105,22 +105,6 @@ class ConnectionManager:
         if room_id not in self.rooms:
             self.rooms[room_id] = {}
         self.rooms[room_id][username] = websocket
-        
-        async with aiosqlite.connect(DB_PATH) as db:
-            # Загружаем: Общие (to_user IS NULL) ИЛИ те, где я отправитель ИЛИ я получатель
-            async with db.execute("""
-                SELECT id, username, text, timestamp, avatar, to_user 
-                FROM messages 
-                WHERE room_id = ? 
-                AND (to_user IS NULL OR to_user = ? OR username = ?)
-                ORDER BY id ASC LIMIT 100
-            """, (room_id, username, username)) as cursor:
-                history = await cursor.fetchall()
-                for msg_id, user, text, time, av, to_u in history:
-                    # Добавляем префикс PRIVATE:, если это личка, чтобы JS понял
-                    prefix = f"PRIVATE:{to_u}:" if to_u else ""
-                    await websocket.send_text(f"ID:{msg_id}|{prefix}[{time}] {user}: {text}|{av or ''}")
-
         await self.broadcast_online(room_id)
 
     def disconnect(self, room_id: str, username: str):
@@ -337,4 +321,5 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
