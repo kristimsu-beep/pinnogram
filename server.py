@@ -38,8 +38,7 @@ app.mount("/files", StaticFiles(directory=UPLOAD_DIR), name="files")
 @app.on_event("startup")
 async def startup():
     async with aiosqlite.connect(DB_PATH) as db:
-        # Создаем таблицу сообщений с НУЖНЫМИ колонками
-        # Добавляем колонку to_user (кому)
+        # 1. Создаем таблицы с нуля (если базы еще нет)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,18 +48,24 @@ async def startup():
                 avatar TEXT DEFAULT ''
             )
         """)
-
-        # Таблица пользователей
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY, password TEXT, avatar TEXT DEFAULT ''
             )
         """)
-        # Попытка добавить колонки, если база старая
+
+        # 2. ФИКС ДЛЯ СТАРОЙ БАЗЫ: Добавляем колонки, если их не было
         try:
             await db.execute("ALTER TABLE messages ADD COLUMN avatar TEXT DEFAULT ''")
         except: pass
+        
+        try:
+            # ОБЯЗАТЕЛЬНО ДОБАВЬ ЭТО ДЛЯ ЛИЧКИ:
+            await db.execute("ALTER TABLE messages ADD COLUMN to_user TEXT DEFAULT NULL")
+        except: pass
+        
         await db.commit()
+
 
 # 1. Роут для регистрации и входа
 @app.post("/auth")
@@ -321,5 +326,6 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
