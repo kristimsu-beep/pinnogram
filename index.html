@@ -159,6 +159,35 @@
     #chat-screen {
         padding-bottom: env(safe-area-inset-bottom, 20px);
     }
+    /* Боковая панель чатов */
+    #sidebar {
+        display: none; 
+        position: fixed; 
+        top: 0; left: 0; 
+        width: 280px; height: 100%; 
+        background: var(--panel); 
+        z-index: 1200; 
+        box-shadow: 5px 0 15px rgba(0,0,0,0.5); 
+        padding: 20px; 
+        border-right: 1px solid var(--accent);
+        flex-direction: column;
+    }
+    
+    /* Элемент списка контактов */
+    .contact-item {
+        padding: 12px; 
+        margin-bottom: 8px; 
+        background: var(--msg-in); 
+        border-radius: 10px; 
+        cursor: pointer; 
+        transition: 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .contact-item:hover { background: var(--accent); color: white; }
+    .contact-active { border: 2px solid var(--accent); background: var(--msg-out); }
+
 
     #localVideo { width: 100px; height: 140px; position: absolute; bottom: 20px; right: 20px; border: 2px solid white; border-radius: 10px; object-fit: cover; z-index: 10002; }
     #modal { display: none; position: fixed; z-index: 9999; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); align-items: center; justify-content: center; cursor: zoom-out; }
@@ -178,6 +207,30 @@
 
 </head>
 <body>
+<!-- Кнопка МЕНЮ -->
+<button onclick="toggleSidebar()" style="position:fixed; top:15px; left:15px; background:var(--panel); border:1px solid var(--accent); color:var(--accent); width:40px; height:40px; border-radius:50%; z-index:1100; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:20px;">☰</button>
+
+<!-- БОКОВАЯ ПАНЕЛЬ -->
+<div id="sidebar">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; margin-top:30px;">
+        <h3 style="margin:0; color:var(--accent);">Диалоги</h3>
+        <button onclick="toggleSidebar()" style="background:none; border:none; color:#777; font-size:20px; cursor:pointer;">✕</button>
+    </div>
+    
+    <div onclick="switchChat(null)" id="global-chat-btn" class="contact-item contact-active">
+        <span>🌐</span> <b>Общий чат</b>
+    </div>
+    
+    <div style="font-size:11px; opacity:0.5; margin:15px 0 5px 5px; letter-spacing:1px;">ЛЮДИ ОНЛАЙН</div>
+    <div id="contacts-list" style="overflow-y:auto; flex:1;">
+        <!-- Сюда JS добавит людей -->
+    </div>
+    <button onclick="document.body.classList.toggle('light-theme')" 
+            style="width:100%; margin-top:20px; padding:12px; background:var(--msg-in); border:1px solid var(--accent); color:var(--text); border-radius:10px; cursor:pointer; font-weight:bold;">
+        🌓 Сменить тему
+    </button>
+</div>
+
 <link rel="icon" href="data:,">
 
 <!-- СЕКРЕТНОЕ ОКНО АДМИНА -->
@@ -207,7 +260,6 @@
     </div>
 
         <div id="chat-screen">
-        <button class="theme-btn" style="position:absolute; top:-35px; right:10px; background:none; color:var(--accent); border:none; cursor:pointer;" onclick="document.body.classList.toggle('light-theme')">🌓 Тема</button>
         <div id="chat"></div>
         
         <div id="online-list" style="font-size:11px; color:var(--accent); opacity:0.8; margin:2px 5px; height:15px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;"></div>
@@ -240,6 +292,7 @@
     </div> <!-- Один закрывающий div для chat-screen -->
 
 <script>
+    let currentPartner = null; // null = общий чат, "имя" = личка
     const API_URL = window.location.origin;
     const socketProto = window.location.protocol === "https:" ? "wss" : "ws";
     let ws, myName = localStorage.getItem("pinnogram_user"), myRoom = localStorage.getItem("pinnogram_room");
@@ -254,21 +307,27 @@
         ws = new WebSocket(`${socketProto}://${window.location.host}/ws/${room}/${encodeURIComponent(name)}`);
 
 ws.onmessage = async (event) => {
-    const raw = event.data;
-    const chat = document.getElementById('chat');
-
-    // 1. ОБРАБОТКА СЛУЖЕБНЫХ КОМАНД
-    // Список онлайн
+    // ВНУТРИ ws.onmessage
     if (raw.includes("ONLINE_LIST:")) {
         const parts = raw.split("ONLINE_LIST:");
         if (parts.length > 1) {
-            const users = parts[1].split(","); 
+            const users = parts[1].split(",");
             
-            // Обычный список для нижней полоски (только имена)
+            // 1. НАПОЛНЯЕМ САЙДБАР (МЕНЮ ДИАЛОГОВ)
+            const contacts = document.getElementById("contacts-list");
+            if (contacts) {
+                contacts.innerHTML = users.map(u => {
+                    const name = u.split(" (")[0];
+                    if (name === myName) return "";
+                    const activeClass = (currentPartner === name) ? "contact-active" : "";
+                    return `<div onclick="switchChat('${name}')" class="contact-item ${activeClass}">👤 ${name}</div>`;
+                }).join("");
+            }
+
+            // 2. Остальной код (online-list и admin-users-list)
             const namesOnly = users.map(u => u.split(" (")[0]);
             document.getElementById("online-list").textContent = `В сети: ${namesOnly.join(", ")}`;
             
-            // Хакерский список для Ctrl+B (Имена + IP)
             const adminList = document.getElementById("admin-users-list");
             if (adminList) {
                 adminList.innerHTML = users.map(u => `<div style="color:#00ff00;">> node: ${u}</div>`).join("");
@@ -277,11 +336,15 @@ ws.onmessage = async (event) => {
         return;
     }
 
-    // Сигналы звонка (WebRTC) — КРИТИЧНО ДЛЯ XIAOMI
+
+    // Сигналы звонка (WebRTC)
     if (raw.startsWith("RTC_SIGNAL:")) {
         handleSignalingData(JSON.parse(raw.replace("RTC_SIGNAL:", "")));
         return;
     }
+
+    // Остальные команды (удаление, печать) без изменений...
+
 
     // Подтверждение удаления
     if (raw.startsWith("DELETE_CONFIRM:")) {
@@ -311,30 +374,38 @@ ws.onmessage = async (event) => {
        // ... (внутри ws.onmessage, после системных сообщений)
     else {
         const parts = raw.split("|");
-        const idPart = parts[0] || "";
+        const idPart = parts[0] || "ID:0"; 
         const content = parts[1] || "";
+        const avatarUrlFromSrv = parts[2] || "https://i.ibb.co/4pSbxsh/user-avatar.png";
         
-        // ФИКС 403: Если ссылка на Flaticon, заменяем на рабочую, иначе берем пришедшую
-        // ФИКС 403: Используем ПРЯМУЮ ссылку на файл картинки (с расширением .png)
-        let avatarUrl = parts[2] || "https://i.ibb.co/4pSbxsh/user-avatar.png";
+        // 1. ФИЛЬТР ЛИЧКИ
+        const isPrivate = content.includes("PRIVATE:");
+        if (currentPartner) {
+            // Показываем, если это ЛС от партнера нам или от нас партнеру
+            if (!content.includes(`PRIVATE:${currentPartner}:`) && !content.includes(`PRIVATE:${myName}:`)) return;
+        } else {
+            // В общем чате скрываем любую личку
+            if (isPrivate) return;
+        }
+
+        // 2. ОЧИСТКА ТЕКСТА (Убираем технический префикс PRIVATE:имя: из пузыря)
+        const displayContent = content.replace(/^PRIVATE:.*?:/, "");
         
-        // Если ссылка битая (flaticon) или кривая — ставим РАБОЧУЮ заглушку
+        // 3. АВАТАРКА (Защита от 403)
+        let avatarUrl = avatarUrlFromSrv;
         if (avatarUrl.includes("flaticon.com") || avatarUrl.length < 15 || avatarUrl === "https://i.ibb.co") {
             avatarUrl = "https://i.ibb.co/4pSbxsh/user-avatar.png";
         }
 
-
         const msgId = idPart.replace("ID:", "");
-        const timeMatch = content.match(/\[(\d{2}:\d{2})\]/);
+        const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
         const time = timeMatch ? timeMatch[1] : "--:--";
         
-        const userAndText = content.replace(/^\[\d{2}:\d{2}\]\s*/, "");
+        const userAndText = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
         const splitIdx = userAndText.indexOf(": ");
         const sender = userAndText.substring(0, splitIdx);
         const text = userAndText.substring(splitIdx + 2);
         const lowerText = text.toLowerCase();
-
-        // Если это наше сообщение, сохраняем нашу актуальную аватарку в память
 
         div.className = 'msg-row';
         div.id = `msg-${msgId}`;
@@ -343,12 +414,7 @@ ws.onmessage = async (event) => {
         const avImg = document.createElement('img');
         avImg.src = avatarUrl;
         avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
-        
-        // Обработка ошибки загрузки аватарки (если сервер упал)
-        avImg.onerror = function() { 
-            // Прямая ссылка на файл картинки (.png на конце!)
-            this.src = "https://i.ibb.co/4pSbxsh/user-avatar.png"; 
-        };
+        avImg.onerror = function() { this.src = "https://i.ibb.co/4pSbxsh/user-avatar.png"; };
         div.appendChild(avImg);
 
         const msgBubble = document.createElement('div');
@@ -362,7 +428,7 @@ ws.onmessage = async (event) => {
             document.getElementById("notifSound").play().catch(() => {});
         }
 
-        // Логика контента (Медиа/Текст)
+        // Логика контента (Медиа/Текст) - ОСТАВЛЯЕМ КАК БЫЛО
         const isImg = [".jpg", ".jpeg", ".png", ".gif", ".webp"].some(ext => lowerText.includes(ext));
         const isVid = [".mp4", ".webm", ".mov"].some(ext => lowerText.includes(ext));
 
@@ -388,7 +454,6 @@ ws.onmessage = async (event) => {
         ts.className = "msg-time";
         ts.textContent = time;
         msgBubble.appendChild(ts);
-
         div.appendChild(msgBubble);
 
         div.oncontextmenu = (e) => {
@@ -396,6 +461,7 @@ ws.onmessage = async (event) => {
             if (sender === myName && confirm("Удалить сообщение?")) ws.send(`__DELETE__:${msgId}`);
         };
     }
+
 
 
 
@@ -683,10 +749,15 @@ function sendMessage() {
     const i = document.getElementById("messageText"); 
     if(i.value.trim() && ws) { 
         const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-        ws.send(`TIME:${now}|${i.value}`); 
+        
+        // Если выбран партнер, добавляем секретный префикс для сервера
+        const prefix = currentPartner ? `TO_USER:${currentPartner}|` : "";
+        
+        ws.send(`${prefix}TIME:${now}|${i.value}`); 
         i.value = ''; 
     } 
 }
+
 
 function handleTyping() { if(!isTypingNow && ws?.readyState===1){ isTypingNow=true; ws.send("__TYPING__"); setTimeout(()=>isTypingNow=false,3000); } }
 
@@ -795,14 +866,28 @@ document.body.addEventListener('click', () => {
     const audio = document.getElementById("notifSound");
     if(audio) audio.play().then(() => audio.pause()).catch(() => {});
 }, { once: true });
+function toggleSidebar() {
+    const s = document.getElementById('sidebar');
+    s.style.display = (s.style.display === 'flex' || s.style.display === 'block') ? 'none' : 'flex';
+}
+
+function switchChat(partner) {
+    currentPartner = partner;
+    const chat = document.getElementById('chat');
+    chat.innerHTML = ""; // Очищаем экран при переключении
+    
+    // Подсветка активного чата в меню
+    document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('contact-active'));
+    if (!partner) {
+        document.getElementById('global-chat-btn').classList.add('contact-active');
+    }
+    
+    toggleSidebar();
+    
+    // В идеале тут можно сделать запрос истории с сервера, 
+    // но пока сообщения будут подгружаться при входе сами.
+}
 
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
