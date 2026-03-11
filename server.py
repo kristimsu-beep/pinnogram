@@ -122,11 +122,20 @@ class ConnectionManager:
 
     async def broadcast_online(self, room_id: str):
         if room_id in self.rooms:
-            users = list(self.rooms[room_id].keys())
-            msg = f"ID:0|SYSTEM:ONLINE_LIST:{','.join(users)}"
+            # Собираем список: Имя (IP-адрес)
+            users_with_ips = []
+            for name, ws in self.rooms[room_id].items():
+                ip = ws.client.host if ws.client else "unknown"
+                users_with_ips.append(f"{name} ({ip})")
+            
+            # Отправляем спец-префикс для админ-панели
+            msg = f"ID:0|SYSTEM:ONLINE_LIST:{','.join(users_with_ips)}"
+            
             for ws in self.rooms[room_id].values():
-                try: await ws.send_text(msg)
-                except: continue
+                if ws.client_state == WebSocketState.CONNECTED:
+                    try: await ws.send_text(msg)
+                    except: continue
+
 
     # ИСПРАВЛЕН ОТСТУП (ровно под async def выше)
     async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None):
@@ -272,6 +281,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
