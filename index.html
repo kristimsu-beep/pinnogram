@@ -41,8 +41,17 @@
     #login-screen { margin: auto; background: var(--panel); padding: 30px; border-radius: 20px; text-align: center; width: 90%; max-width: 350px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
     #login-screen input { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 10px; border: 1px solid #444; background: #222; color: white; outline: none; }
     
-    #chat-screen { display: none; flex-direction: column; width: 100%; max-width: 600px; height: 100%; position: relative; padding: 10px; }
-    #chat { flex: 1; border: 1px solid rgba(255,255,255,0.05); overflow-y: auto; padding: 15px; background: var(--panel); border-radius: 15px; display: flex; flex-direction: column; gap: 6px; }
+    #chat-screen { 
+    display: none; 
+    flex-direction: column; 
+    width: 100%; 
+    max-width: 600px; 
+    height: 100%; 
+    position: relative; 
+    padding: 10px;
+    padding-bottom: env(safe-area-inset-bottom, 20px); /* ВОТ ЭТО ДОБАВЬ */
+    }
+
 
     /* Пузыри сообщений */
     .msg { 
@@ -101,6 +110,7 @@
         font-size: 16px; 
     }
     /* Стили для секретного окна админа */
+       /* Стили для секретного окна админа - добавил перенос строк */
     #admin-panel {
         display: none;
         position: fixed;
@@ -108,7 +118,7 @@
         left: 50%;
         transform: translateX(-50%);
         background: rgba(0, 0, 0, 0.95);
-        color: #00ff00; /* Хакерский зеленый */
+        color: #00ff00;
         padding: 20px;
         border-radius: 15px;
         border: 1px solid #00ff00;
@@ -116,8 +126,22 @@
         font-family: monospace;
         box-shadow: 0 0 20px rgba(0, 255, 0, 0.4);
         min-width: 280px;
+        max-width: 90%; /* Чтобы не вылезало на узких экранах */
+        word-wrap: break-word;
     }
 
+    #chat { 
+        flex: 1; 
+        border: 1px solid rgba(255,255,255,0.05); 
+        overflow-y: auto; 
+        padding: 15px; 
+        background: var(--panel); 
+        border-radius: 15px; 
+        display: flex; 
+        flex-direction: column; 
+        gap: 6px; 
+        scroll-behavior: smooth; /* Плавный скролл */
+    }
 
     #video-call-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:10000; }
     #remoteVideo {
@@ -172,7 +196,7 @@
 
 
     <div id="modal" onclick="this.style.display='none'"><img id="modal-img"></div>
-    <audio id="notifSound" src="https://assets.mixkit.co"></audio>
+    <audio id="notifSound" src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3"></audio>
 
     <div id="login-screen">
         <h2>Pinnogram</h2>
@@ -195,8 +219,10 @@
 
         <div class="controls">
             <!-- Аватарка теперь внутри controls, в общем ряду -->
-            <img id="user-avatar-icon" onclick="changeAvatar()" src="https://cdn-icons-png.flaticon.com" 
-                 style="width:42px; height:42px; border-radius:50%; cursor:pointer; border:2px solid var(--accent); object-fit:cover;">
+            <img id="user-avatar-icon" onclick="changeAvatar()" 
+                 src="https://i.ibb.co/4pSbxsh/user-avatar.png" 
+                 style="width:42px; height:42px; border-radius:50%; cursor:pointer; border:2px solid var(--accent); object-fit:cover; flex-shrink:0;">
+
             
             <input type="file" id="fileInput" style="display:none" onchange="uploadFile()">
             <button class="file-btn" onclick="document.getElementById('fileInput').click()">📎</button>
@@ -321,7 +347,10 @@ ws.onmessage = async (event) => {
         avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
         
         // Обработка ошибки загрузки аватарки (если сервер упал)
-        avImg.onerror = () => { avImg.src = "https://i.ibb.co"; };
+        avImg.onerror = function() { 
+            // Прямая ссылка на файл картинки (.png на конце!)
+            this.src = "https://i.ibb.co/4pSbxsh/user-avatar.png"; 
+        };
         div.appendChild(avImg);
 
         const msgBubble = document.createElement('div');
@@ -739,6 +768,19 @@ window.addEventListener('load', () => {
         avIcon.src = savedAv;
     }
 });
+// ОБРАБОТЧИК ДЛЯ АДМИН-ПАНЕЛИ (Ctrl + B)
+document.addEventListener('keydown', (e) => {
+    // Проверяем нажатие Ctrl и английской клавиши B
+    if (e.ctrlKey && e.code === 'KeyB') {
+        e.preventDefault(); // Чтобы браузер не открывал закладки
+        const panel = document.getElementById('admin-panel');
+        if (panel) {
+            // Переключаем видимость: если скрыта - показать, если видна - скрыть
+            panel.style.display = (panel.style.display === 'block') ? 'none' : 'block';
+            console.log("Admin Panel toggled");
+        }
+    }
+});
 
 // Прогрев аудио
 document.body.addEventListener('click', () => {
@@ -749,6 +791,7 @@ document.body.addEventListener('click', () => {
 </script>
 </body>
 </html>
+
 
 
 
