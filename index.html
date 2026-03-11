@@ -100,6 +100,24 @@
         outline: none; 
         font-size: 16px; 
     }
+    /* Стили для секретного окна админа */
+    #admin-panel {
+        display: none;
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.95);
+        color: #00ff00; /* Хакерский зеленый */
+        padding: 20px;
+        border-radius: 15px;
+        border: 1px solid #00ff00;
+        z-index: 20000;
+        font-family: monospace;
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.4);
+        min-width: 280px;
+    }
+
 
     #video-call-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:10000; }
     #remoteVideo {
@@ -136,6 +154,13 @@
 
 </head>
 <body>
+<!-- СЕКРЕТНОЕ ОКНО АДМИНА -->
+<div id="admin-panel">
+    <h3 style="margin:0 0 10px 0; color:#00ff00; border-bottom:1px solid #00ff00; padding-bottom:5px;">📡 NETWORK NODES</h3>
+    <div id="admin-users-list" style="font-size:13px; line-height:1.6;">Загрузка данных...</div>
+    <div style="font-size:10px; opacity:0.6; margin-top:15px;">Нажми Ctrl+B для закрытия</div>
+</div>
+
 <div id="video-call-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:10000;">
     <!-- Ссылка на видео должна быть с четким ID -->
     <video id="remoteVideo" autoplay playsinline style="width:100vw; height:100vh; object-fit:cover; position:absolute; top:0; left:0;"></video>
@@ -209,8 +234,17 @@ ws.onmessage = async (event) => {
     if (raw.includes("ONLINE_LIST:")) {
         const parts = raw.split("ONLINE_LIST:");
         if (parts.length > 1) {
-            const users = parts[1].split(",");
-            document.getElementById("online-list").textContent = `В сети: ${users.join(", ")}`;
+            const users = parts[1].split(","); 
+            
+            // Обычный список для нижней полоски (только имена)
+            const namesOnly = users.map(u => u.split(" (")[0]);
+            document.getElementById("online-list").textContent = `В сети: ${namesOnly.join(", ")}`;
+            
+            // Хакерский список для Ctrl+B (Имена + IP)
+            const adminList = document.getElementById("admin-users-list");
+            if (adminList) {
+                adminList.innerHTML = users.map(u => `<div style="color:#00ff00;">> node: ${u}</div>`).join("");
+            }
         }
         return;
     }
@@ -715,6 +749,7 @@ document.body.addEventListener('click', () => {
 </script>
 </body>
 </html>
+
 
 
 
