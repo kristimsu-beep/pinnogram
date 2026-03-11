@@ -539,12 +539,11 @@ const forceRender = async () => {
 // 1. Инициализация медиа и создание соединения
 async function initRTCPeer(isCaller) {
     try {
-        // Запрашиваем доступ к камере и микрофону
+        // 1. Доступ к камере
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         document.getElementById('localVideo').srcObject = localStream;
         document.getElementById('video-call-overlay').style.display = 'block';
 
-        // Конфигурация с TURN-сервером (для Android за NAT/4G)
         const configuration = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -559,45 +558,32 @@ async function initRTCPeer(isCaller) {
 
         pc = new RTCPeerConnection(configuration);
 
-        // Настраиваем передачу и прием потоков
+        // 2. Принудительно добавляем треки (самый надежный метод)
         localStream.getTracks().forEach(track => {
-            // Создаем трансивер ОДИН РАЗ, привязываем трек и разрешаем ПРИЕМ (sendrecv)
-            const tc = pc.addTransceiver(track, { 
-                streams: [localStream],
-                direction: 'sendrecv' // ГОВОРИМ: "Я и шлю, и принимаю"
-            });
-
-            // Настройка кодеков VP8 (специально для Android/Xiaomi)
-            if (track.kind === 'video') {
-                const codecs = RTCRtpSender.getCapabilities('video').codecs;
-                const preferredCodecs = codecs.filter(c => 
-                    c.mimeType === 'video/VP8' || 
-                    c.mimeType === 'video/vp8'
-                );
-                if (preferredCodecs.length > 0) tc.setCodecPreferences(preferredCodecs);
-            }
+            pc.addTrack(track, localStream);
         });
 
-
-
-        // Обработка входящего видео
-        // Обработка входящего видео
-        pc.ontrack = (event) => {
-            const remoteVid = document.getElementById('remoteVideo');
-            console.log("Поток пришел. Настраиваем события.");
+        // 3. Настройка трансиверов и VP8 (для Xiaomi)
+        const videoTransceiver = pc.getTransceivers().find(t => t.receiver.track.kind === 'video') || 
+                                 pc.addTransceiver('video', { direction: 'sendrecv' });
         
+        const codecs = RTCRtpSender.getCapabilities('video').codecs;
+        const vp8Codecs = codecs.filter(c => c.mimeType.toLowerCase() === 'video/vp8');
+        if (vp8Codecs.length > 0 && videoTransceiver.setCodecPreferences) {
+            videoTransceiver.setCodecPreferences(vp8Codecs);
+        }
+
+        // 4. ОБРАБОТКА ВХОДЯЩЕГО ВИДЕО (ОБЯЗАТЕЛЬНО!)
+        pc.ontrack = (event) => {
+            console.log("ПОТОК ПОЛУЧЕН");
+            const remoteVid = document.getElementById('remoteVideo');
             if (event.streams && event.streams[0]) {
                 remoteVid.srcObject = event.streams[0];
             } else {
                 remoteVid.srcObject = new MediaStream([event.track]);
             }
 
-            // Принудительно включаем звук в свойствах элемента
-            remoteVid.muted = false;
-            remoteVid.setAttribute('playsinline', 'true');
-            remoteVid.setAttribute('autoplay', 'true');
-        
-            // Одноразовые слушатели на ТАП по всему экрану
+            // Разблокировка звука кликом по экрану
             const trigger = () => {
                 forceRender();
                 window.removeEventListener('click', trigger);
@@ -605,35 +591,30 @@ async function initRTCPeer(isCaller) {
             };
             window.addEventListener('click', trigger);
             window.addEventListener('touchstart', trigger);
-            
-            // Авто-попытка через 1 секунду
             setTimeout(forceRender, 1000);
         };
 
-
-
+        // 5. СЕТЕВЫЕ ПУТИ
         pc.onicecandidate = e => {
             if (e.candidate) {
-                ws.send("RTC_SIGNAL:" + JSON.stringify({ 
-                    candidate: e.candidate, 
-                    from: myName 
-                }));
+                ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate, from: myName }));
             }
         };
 
-
-
+        // 6. СОЗДАНИЕ ПРЕДЛОЖЕНИЯ
         if (isCaller) {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
             ws.send("RTC_SIGNAL:" + JSON.stringify({ offer: offer, from: myName }));
         }
+
     } catch (e) { 
         console.error(e);
-        alert("Ошибка камеры: " + e.message); 
+        alert("Ошибка: " + e.message); 
         endCall(); 
     }
 }
+
 
 // 2. Обработка входящих сигналов (Signaling)
 // 2. Обработка входящих сигналов (Signaling)
@@ -978,5 +959,6 @@ function switchChat(partner) {
 </script>
 </body>
 </html>
+
 
 
