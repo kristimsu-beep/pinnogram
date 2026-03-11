@@ -39,14 +39,17 @@ app.mount("/files", StaticFiles(directory=UPLOAD_DIR), name="files")
 async def startup():
     async with aiosqlite.connect(DB_PATH) as db:
         # Создаем таблицу сообщений с НУЖНЫМИ колонками
+        # Добавляем колонку to_user (кому)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT, text TEXT, timestamp TEXT, 
                 room_id TEXT DEFAULT 'general',
+                to_user TEXT DEFAULT NULL, 
                 avatar TEXT DEFAULT ''
             )
         """)
+
         # Таблица пользователей
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -104,14 +107,20 @@ class ConnectionManager:
         self.rooms[room_id][username] = websocket
         
         async with aiosqlite.connect(DB_PATH) as db:
-            # В истории тоже подтягиваем аватарку
-            async with db.execute(
-                "SELECT id, username, text, timestamp, avatar FROM messages WHERE room_id = ? ORDER BY id ASC LIMIT 50", 
-                (room_id,)
-            ) as cursor:
+            # Загружаем: Общие (to_user IS NULL) ИЛИ те, где я отправитель ИЛИ я получатель
+            async with db.execute("""
+                SELECT id, username, text, timestamp, avatar, to_user 
+                FROM messages 
+                WHERE room_id = ? 
+                AND (to_user IS NULL OR to_user = ? OR username = ?)
+                ORDER BY id ASC LIMIT 100
+            """, (room_id, username, username)) as cursor:
                 history = await cursor.fetchall()
-                for msg_id, user, text, time, av in history:
-                    await websocket.send_text(f"ID:{msg_id}|[{time}] {user}: {text}|{av or ''}")
+                for msg_id, user, text, time, av, to_u in history:
+                    # Добавляем префикс PRIVATE:, если это личка, чтобы JS понял
+                    prefix = f"PRIVATE:{to_u}:" if to_u else ""
+                    await websocket.send_text(f"ID:{msg_id}|{prefix}[{time}] {user}: {text}|{av or ''}")
+
         await self.broadcast_online(room_id)
 
     def disconnect(self, room_id: str, username: str):
@@ -122,45 +131,54 @@ class ConnectionManager:
 
     async def broadcast_online(self, room_id: str):
         if room_id in self.rooms:
-            # Собираем список: Имя (IP-адрес)
             users_with_ips = []
             for name, ws in self.rooms[room_id].items():
                 ip = ws.client.host if ws.client else "unknown"
                 users_with_ips.append(f"{name} ({ip})")
             
-            # Отправляем спец-префикс для админ-панели
             msg = f"ID:0|SYSTEM:ONLINE_LIST:{','.join(users_with_ips)}"
-            
             for ws in self.rooms[room_id].values():
                 if ws.client_state == WebSocketState.CONNECTED:
                     try: await ws.send_text(msg)
                     except: continue
 
-
-    # ИСПРАВЛЕН ОТСТУП (ровно под async def выше)
-    async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None):
+    # ИСПРАВЛЕНО: Ровный отступ и безопасное получение ID
+    async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None):
         now = client_time if client_time else datetime.now().strftime("%H:%M")
-        final_msg = f"ID:0|SYSTEM: {message}"
         
         if username and text:
             async with aiosqlite.connect(DB_PATH) as db:
                 await db.execute(
-                    "INSERT INTO messages (username, text, timestamp, room_id, avatar) VALUES (?, ?, ?, ?, ?)", 
-                    (username, text, now, room_id, avatar)
+                    "INSERT INTO messages (username, text, timestamp, room_id, avatar, to_user) VALUES (?, ?, ?, ?, ?, ?)", 
+                    (username, text, now, room_id, avatar, to_user)
                 )
                 cursor = await db.execute("SELECT last_insert_rowid()")
-                msg_id = (await cursor.fetchone())[0]
+                row = await cursor.fetchone()
+                msg_id = row[0] if row else 0
                 await db.commit()
-                final_msg = f"ID:{msg_id}|[{now}] {username}: {text}|{avatar}"
-    
-        if room_id in self.rooms:
+
+                prefix = f"PRIVATE:{to_user}:" if to_user else ""
+                final_msg = f"ID:{msg_id}|{prefix}[{now}] {username}: {text}|{avatar}"
+                
+                if to_user:
+                    for name in [username, to_user]:
+                        if name in self.rooms[room_id]:
+                            try: await self.rooms[room_id][name].send_text(final_msg)
+                            except: continue
+                else:
+                    for ws in self.rooms[room_id].values():
+                        if ws.client_state == WebSocketState.CONNECTED:
+                            try: await ws.send_text(final_msg)
+                            except: continue
+        else:
+            final_msg = f"ID:0|SYSTEM: {message}"
             for ws in self.rooms[room_id].values():
                 if ws.client_state == WebSocketState.CONNECTED:
                     try: await ws.send_text(final_msg)
                     except: continue
 
-
 manager = ConnectionManager()
+
 
 
 
@@ -247,11 +265,24 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                             await conn.send_text(f"TYPING:{username}")
             
             # ОБЫЧНОЕ СООБЩЕНИЕ
+                        # ОБЫЧНОЕ СООБЩЕНИЕ
             else:
                 display_text = data
                 msg_time = datetime.now().strftime("%H:%M")
-                
-                # --- ВОЗВРАЩАЕМ РАЗБОР ВРЕМЕНИ ИЗ JS ---
+                target_user = None  # По умолчанию - общий чат
+
+                # 1. ПРОВЕРЯЕМ ПРЕФИКС ЛИЧКИ (из JS)
+                if data.startswith("TO_USER:"):
+                    try:
+                        # Формат: TO_USER:Имя|TIME:12:00|Текст
+                        parts = data.split("|", 2)
+                        target_user = parts[0].replace("TO_USER:", "")
+                        # Переопределяем данные для дальнейшего разбора времени
+                        data = "|".join(parts[1:])
+                        display_text = data
+                    except: pass
+
+                # 2. РАЗБОР ВРЕМЕНИ (как и было)
                 if data.startswith("TIME:"):
                     try:
                         parts = data.split("|", 1)
@@ -259,20 +290,22 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         display_text = parts[1]
                     except: pass
 
-                # МАГИЯ ВЕЧНОЙ АВАТАРКИ: берем свежую из базы перед отправкой
+                # 3. ОБНОВЛЯЕМ АВАТАРКУ
                 async with aiosqlite.connect(DB_PATH) as db:
                     async with db.execute("SELECT avatar FROM users WHERE username = ?", (username,)) as c:
                         row = await c.fetchone()
                         if row: current_avatar = row[0]
 
-                # Шлем всем: ID | [Время] Имя: Текст | Ссылка_на_аватар
+                # 4. ОТПРАВЛЯЕМ (теперь с параметром to_user)
                 await manager.broadcast(
                     room_id, 
                     username=username, 
                     text=display_text, 
                     avatar=current_avatar, 
-                    client_time=msg_time
+                    client_time=msg_time,
+                    to_user=target_user # ДОБАВЛЕНО
                 )
+
 
     except WebSocketDisconnect:
         manager.disconnect(room_id, username)
@@ -281,12 +314,3 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
-
-
-
-
-
-
-
-
-
