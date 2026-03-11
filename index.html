@@ -290,51 +290,69 @@
         style="margin: 10px auto 20px; background: none; color: #777; font-size: 11px; text-decoration: underline; border: none; cursor: pointer; display: block;">Выйти из аккаунта</button>
 
     </div> <!-- Один закрывающий div для chat-screen -->
-
 <script>
-    let currentPartner = null; // null = общий чат, "имя" = личка
     const API_URL = window.location.origin;
     const socketProto = window.location.protocol === "https:" ? "wss" : "ws";
     let ws, myName = localStorage.getItem("pinnogram_user"), myRoom = localStorage.getItem("pinnogram_room");
+
+    // ОСТАВЛЯЕМ ТОЛЬКО ОДНО ОБЪЯВЛЕНИЕ ТУТ:
+    let currentPartner = localStorage.getItem("pinnogram_last_chat");
+    if (currentPartner === "null" || currentPartner === "undefined") currentPartner = null;
+    
+    // Загружаем счетчики непрочитанных сообщений
+    let unreadCounts = JSON.parse(localStorage.getItem("pinnogram_unread")) || {};
+
     let pc, localStream, mediaRecorder, videoChunks = [], typingTimeout, isTypingNow = false;
 
-    if (myName && myRoom) startChat(myName, myRoom);
+      if (myName && myRoom) startChat(myName, myRoom);
 
     function startChat(name, room) {
         myName = name; myRoom = room;
         document.getElementById("login-screen").style.display = "none";
         document.getElementById("chat-screen").style.display = "flex";
+        
         ws = new WebSocket(`${socketProto}://${window.location.host}/ws/${room}/${encodeURIComponent(name)}`);
 
-ws.onmessage = async (event) => {
-    const raw = event.data; // Исправляем ReferenceError
-    const chat = document.getElementById('chat');
+        // --- НОВЫЙ БЛОК: Запрос истории при подключении ---
+        ws.onopen = () => {
+            console.log("Подключено. Запрашиваю историю для:", currentPartner);
+            // Если currentPartner null, сервер пришлет общий чат
+            ws.send(`GET_HISTORY:${currentPartner}`);
+        };
 
-    // 1. ОБРАБОТКА СПИСКА ОНЛАЙН
-    if (raw.includes("ONLINE_LIST:")) {
-        const parts = raw.split("ONLINE_LIST:");
-        if (parts.length > 1) {
-            const users = parts[1].split(",");
-            
-            const contacts = document.getElementById("contacts-list");
-            if (contacts) {
-                contacts.innerHTML = users.map(u => {
-                    const name = u.split(" (")[0];
-                    if (name === myName) return "";
-                    const activeClass = (currentPartner === name) ? "contact-active" : "";
-                    return `<div onclick="switchChat('${name}')" class="contact-item ${activeClass}">👤 ${name}</div>`;
-                }).join("");
+        ws.onmessage = async (event) => {
+            const raw = event.data;
+            const chat = document.getElementById('chat');
+
+            // 1. ОБРАБОТКА СПИСКА ОНЛАЙН
+            if (raw.includes("ONLINE_LIST:")) {
+                const parts = raw.split("ONLINE_LIST:");
+                if (parts.length > 1) {
+                    const users = parts[1].split(",");
+                    
+                    const contacts = document.getElementById("contacts-list");
+                    if (contacts) {
+                        contacts.innerHTML = users.map(u => {
+                            const name = u.split(" (")[0];
+                            if (name === myName) return "";
+                            const activeClass = (currentPartner === name) ? "contact-active" : "";
+                            return `<div onclick="switchChat('${name}')" class="contact-item ${activeClass}">👤 ${name}</div>`;
+                        }).join("");
+                        
+                        // ОБНОВЛЯЕМ КРАСНЫЕ КРУЖОЧКИ В МЕНЮ
+                        updateUnreadUI(); 
+                    }
+
+                    const namesOnly = users.map(u => u.split(" (")[0]);
+                    const onlineText = document.getElementById("online-list");
+                    if (onlineText) onlineText.textContent = `В сети: ${namesOnly.join(", ")}`;
+                    
+                    const adminList = document.getElementById("admin-users-list");
+                    if (adminList) adminList.innerHTML = users.map(u => `<div style="color:#00ff00;">> node: ${u}</div>`).join("");
+                }
+                return;
             }
 
-            const namesOnly = users.map(u => u.split(" (")[0]);
-            const onlineText = document.getElementById("online-list");
-            if (onlineText) onlineText.textContent = `В сети: ${namesOnly.join(", ")}`;
-            
-            const adminList = document.getElementById("admin-users-list");
-            if (adminList) adminList.innerHTML = users.map(u => `<div style="color:#00ff00;">> node: ${u}</div>`).join("");
-        }
-        return;
-    }
 
     // ... Дальше идут блоки RTC_SIGNAL, DELETE_CONFIRM и т.д.
 
@@ -379,20 +397,39 @@ ws.onmessage = async (event) => {
         const parts = raw.split("|");
         const idPart = parts[0] || "ID:0"; 
         const content = parts[1] || "";
-        const avatarUrlFromSrv = parts[2] || "https://i.ibb.co/4pSbxsh/user-avatar.png";
+        const avatarUrlFromSrv = parts[2] || "https://i.ibb.co";
         
-        // 1. ФИЛЬТР ЛИЧКИ
         const isPrivate = content.includes("PRIVATE:");
+
+        // --- ЛОГИКА СЧЕТЧИКА УВЕДОМЛЕНИЙ ---
+        if (isPrivate) {
+            // Извлекаем отправителя (кто нам пишет)
+            // Ищем текст между PRIVATE: и вторым двоеточием
+            const senderMatch = content.match(/\]\s(.*?):/); 
+            const msgSender = senderMatch ? senderMatch[1] : null;
+
+            // Если пишет КТО-ТО ДРУГОЙ и у нас открыт НЕ его чат
+            if (msgSender && msgSender !== myName && msgSender !== currentPartner) {
+                unreadCounts[msgSender] = (unreadCounts[msgSender] || 0) + 1;
+                saveUnread();    // Сохраняем в память
+                updateUnreadUI(); // Рисуем кружок в меню
+                document.getElementById("notifSound").play().catch(() => {});
+                return; // ВАЖНО: не рисуем сообщение на экране
+            }
+        }
+
+        // --- ОБЫЧНЫЙ ФИЛЬТР ОТОБРАЖЕНИЯ ---
         if (currentPartner) {
-            // Показываем, если это ЛС от партнера нам или от нас партнеру
             if (!content.includes(`PRIVATE:${currentPartner}:`) && !content.includes(`PRIVATE:${myName}:`)) return;
         } else {
-            // В общем чате скрываем любую личку
             if (isPrivate) return;
         }
 
-        // 2. ОЧИСТКА ТЕКСТА (Убираем технический префикс PRIVATE:имя: из пузыря)
+        // Очистка текста от префикса и отрисовка (твой старый код) ...
         const displayContent = content.replace(/^PRIVATE:.*?:/, "");
+        const msgId = idPart.replace("ID:", "");
+        // ... далее создание пузыря сообщения как и было ...
+
         
         // 3. АВАТАРКА (Защита от 403)
         let avatarUrl = avatarUrlFromSrv;
@@ -400,7 +437,6 @@ ws.onmessage = async (event) => {
             avatarUrl = "https://i.ibb.co/4pSbxsh/user-avatar.png";
         }
 
-        const msgId = idPart.replace("ID:", "");
         const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
         const time = timeMatch ? timeMatch[1] : "--:--";
         
@@ -781,7 +817,9 @@ async function uploadFile() {
         
         if (d.url && d.url !== "error") {
             const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-            ws.send(`TIME:${now}|${d.url}`);
+            const prefix = currentPartner ? `TO_USER:${currentPartner}|` : "";
+            ws.send(`${prefix}TIME:${now}|${d.url}`);
+
             
             // ВОТ ЭТА СТРОЧКА: Сбрасываем выбор, чтобы можно было отправить тот же файл еще раз
             fileInput.value = ""; 
@@ -876,24 +914,69 @@ function toggleSidebar() {
     s.style.display = (s.style.display === 'flex' || s.style.display === 'block') ? 'none' : 'flex';
 }
 
+// 1. Сохранение непрочитанных в память телефона
+function saveUnread() {
+    localStorage.setItem("pinnogram_unread", JSON.stringify(unreadCounts));
+}
+
+// 2. Рисование красных ярлыков в боковом меню
+function updateUnreadUI() {
+    const items = document.querySelectorAll('.contact-item');
+    items.forEach(item => {
+        // Вырезаем имя из текста (убираем иконку 👤)
+        const name = item.textContent.replace('👤 ', '').trim();
+        const count = unreadCounts[name] || 0;
+        
+        let badge = item.querySelector('.unread-badge');
+        if (count > 0) {
+            if (!badge) {
+                badge = document.createElement('span');
+                badge.className = 'unread-badge';
+                badge.style = "background:#ff3b30; color:white; border-radius:10px; padding:1px 6px; font-size:11px; margin-left:auto; font-weight:bold; box-shadow:0 0 5px rgba(0,0,0,0.3);";
+                item.appendChild(badge);
+            }
+            badge.textContent = count;
+        } else if (badge) {
+            badge.remove();
+        }
+    });
+}
+
+// 3. Умное переключение чата с подгрузкой истории
 function switchChat(partner) {
     currentPartner = partner;
-    const chat = document.getElementById('chat');
-    chat.innerHTML = ""; // Очищаем экран при переключении
+    // Запоминаем выбор (чтобы не вылетало в общий чат при обновлении)
+    localStorage.setItem("pinnogram_last_chat", partner); 
     
-    // Подсветка активного чата в меню
+    const chat = document.getElementById('chat');
+    chat.innerHTML = "<div style='text-align:center; opacity:0.3; margin-top:20px;'>Загрузка истории...</div>"; 
+
+    // Просим у сервера историю именно для этого чата (партнер или null)
+    ws.send(`GET_HISTORY:${partner}`);
+
+    // Сбрасываем уведомления для этого человека
+    if (partner && unreadCounts[partner]) {
+        unreadCounts[partner] = 0;
+        saveUnread();
+        updateUnreadUI();
+    }
+
+    // Красивая подсветка активного диалога
     document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('contact-active'));
     if (!partner) {
         document.getElementById('global-chat-btn').classList.add('contact-active');
+    } else {
+        // Ищем элемент по тексту и подсвечиваем
+        Array.from(document.querySelectorAll('.contact-item'))
+             .find(el => el.textContent.includes(partner))?.classList.add('contact-active');
     }
     
     toggleSidebar();
-    
-    // В идеале тут можно сделать запрос истории с сервера, 
-    // но пока сообщения будут подгружаться при входе сами.
 }
+
 
 </script>
 </body>
 </html>
+
 
