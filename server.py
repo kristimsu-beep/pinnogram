@@ -412,16 +412,22 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 
                     # ТВОЙ КЛЮЧ И ПРАВИЛЬНАЯ ССЫЛКА
                     GEMINI_KEY = "AIzaSyCPIAV1EzHa_dWcsnXoMVnpjezbSWZnEn8"
-                    AI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
-
+                   # 1. Ссылка (уже правильная)
+                    AI_URL = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+                    
                     try:
                         async with httpx.AsyncClient() as client:
-                            resp = await client.post(AI_URL, json={
-                                "contents": [{"parts": [{"text": display_text}]}]
-                            }, timeout=30.0)
+                            # 2. Добавляем headers!
+                            resp = await client.post(
+                                AI_URL,
+                                headers={"Content-Type": "application/json"}, # <--- Это очень важно
+                                json={"contents": [{"parts": [{"text": display_text}]}]},
+                                timeout=30.0
+                            )
                             
                             ai_data = resp.json()
-                            
+                            # ... дальше твой код обработки ai_data ...
+
                             # 1. Проверяем наличие технической ошибки от Google
                             if "error" in ai_data:
                                 err_msg = ai_data["error"].get("message", "Неизвестная ошибка")
@@ -488,6 +494,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
