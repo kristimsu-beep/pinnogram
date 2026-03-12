@@ -41,6 +41,16 @@ async def get_index():
 
 app.mount("/files", StaticFiles(directory=UPLOAD_DIR), name="files")
 
+# Раздача Service Worker (ОБЯЗАТЕЛЬНО для уведомлений)
+@app.get("/sw.js")
+async def get_sw():
+    return FileResponse("sw.js", media_type="application/javascript")
+
+# Иконка вкладки (чтобы не было 404 в консоли)
+@app.get("/favicon.ico")
+async def get_favicon():
+    return FileResponse("favicon.ico") if os.path.exists("favicon.ico") else None
+
 @app.on_event("startup")
 async def startup():
     async with aiosqlite.connect(DB_PATH) as db:
@@ -420,6 +430,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
