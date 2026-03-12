@@ -363,12 +363,16 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
             # --- БЛОК 5: ОТПРАВКА СООБЩЕНИЯ (ОБЩЕЕ ИЛИ ЛС) ---
                        # --- БЛОК 5: ОТПРАВКА СООБЩЕНИЯ ---
             # --- БЛОК 5: ИСПРАВЛЕННЫЙ РАЗБОР СООБЩЕНИЯ ---
+            # --- БЛОК 5: ИСПРАВЛЕННЫЙ РАЗБОР СООБЩЕНИЯ ---
+                       # --- BLOCK 5: MESSAGE PROCESSING AND AI-BOT ---
+            # --- БЛОК 5: ОБРАБОТКА СООБЩЕНИЙ И ИИ-БОТ ---
+            # --- БЛОК 5: ОБРАБОТКА СООБЩЕНИЙ И ИИ-БОТ ---
             else:
                 display_text = data
                 msg_time = datetime.now().strftime("%H:%M")
                 target_user = None
 
-                # 1. Сначала отрезаем ЛС (TO_USER:имя|...)
+                # 1. Извлекаем личные сообщения
                 if display_text.startswith("TO_USER:"):
                     try:
                         parts = display_text.split("|", 1)
@@ -376,61 +380,96 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         display_text = parts[1]
                     except: pass
 
-                # 2. Теперь отрезаем время (TIME:17:32|...), чтобы оно не лезло в текст сообщения
+                # 2. Извлекаем время
                 if display_text.startswith("TIME:"):
                     try:
                         parts = display_text.split("|", 1)
                         msg_time = parts[0].replace("TIME:", "")
-                        display_text = parts[1] # ВОТ ТУТ мы берем только текст сообщения
+                        display_text = parts[1]
                     except: pass
 
-                # 3. Обновляем аватарку отправителя перед рассылкой
+                # 3. Обновляем аватарку отправителя
+                current_avatar = "https://i.ibb.co"
                 async with aiosqlite.connect(DB_PATH) as db:
                     async with db.execute("SELECT avatar FROM users WHERE username = ?", (username,)) as c:
                         row = await c.fetchone()
                         if row: current_avatar = row[0]
 
-                # 4. Проверяем оффлайн для PUSH
-                is_online = False
-                if target_user and room_id in manager.rooms:
-                    if target_user in manager.rooms[room_id]:
-                        is_online = True
-
-                if target_user and not is_online:
-                    async with aiosqlite.connect(DB_PATH) as db:
-                        async with db.execute("SELECT subscription_json FROM push_subscriptions WHERE username = ?", (target_user,)) as c:
-                            sub_row = await c.fetchone()
-                            if sub_row:
-                                try:
-                                    import asyncio
-                                    # Отправляем в потоке, чтобы чат не лагал
-                                    await asyncio.to_thread(
-                                        webpush,
-                                        subscription_info=json.loads(sub_row[0]),
-                                        data=json.dumps({"title": f"ЛС от {username}", "body": display_text[:50]}),
-                                        vapid_private_key=VAPID_PRIVATE_KEY,
-                                        vapid_claims=VAPID_CLAIMS
-                                    )
-                                except: pass
-
-                # 5. Отправляем в broadcast ЧИСТЫЙ текст и ЧИСТОЕ время
+                # 4. Отправляем ТВОЕ сообщение в чат
                 await manager.broadcast(
-                    room_id, 
-                    username=username, 
-                    text=display_text, 
-                    avatar=current_avatar, 
+                    room_id,
+                    username=username,
+                    text=display_text,
+                    avatar=current_avatar,
                     client_time=msg_time,
                     to_user=target_user
                 )
 
+                # 5. ЛОГИКА ИИ-БОТА
+                if target_user == "AI_BOT":
+                    # Шлем визуальный статус "печатает"
+                    await websocket.send_text(f"TYPING:AI_BOT")
+
+                    # ТВОЙ КЛЮЧ И ПРАВИЛЬНАЯ ССЫЛКА
+                    GEMINI_KEY = "ВСТАВЬ_СВОЙ_КЛЮЧ_ЗДЕСЬ"
+                    AI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+
+                    try:
+                        async with httpx.AsyncClient() as client:
+                            resp = await client.post(AI_URL, json={
+                                "contents": [{"parts": [{"text": display_text}]}]
+                            }, timeout=30.0)
+
+                            ai_data = resp.json()
+                            # Извлекаем текст ответа Gemini
+                            ai_text = ai_data['candidates'][0]['content']['parts'][0]['text']
+
+                            # Отправляем ответ БОТА пользователю
+                            await manager.broadcast(
+                                room_id,
+                                username="AI_BOT",
+                                text=ai_text,
+                                avatar="https://i.ibb.co",
+                                to_user=username
+                            )
+                    except Exception as e:
+                        print(f"AI Error: {e}")
+                        await manager.broadcast(room_id, username="AI_BOT", text="Бот временно недоступен...", to_user=username)
+
+                # 6. Проверка PUSH (если это не бот, а обычный юзер оффлайн)
+                elif target_user and target_user != "AI_BOT":
+                    is_online = False
+                    if room_id in manager.rooms and target_user in manager.rooms[room_id]:
+                        is_online = True
+
+                    if not is_online:
+                        async with aiosqlite.connect(DB_PATH) as db:
+                            async with db.execute("SELECT subscription_json FROM push_subscriptions WHERE username = ?", (target_user,)) as c:
+                                s_row = await c.fetchone()
+                                if s_row:
+                                    try:
+                                        import asyncio
+                                        await asyncio.to_thread(
+                                            webpush,
+                                            subscription_info=json.loads(s_row[0]),
+                                            data=json.dumps({"title": f"ЛС от {username}", "body": display_text[:50]}),
+                                            vapid_private_key=VAPID_PRIVATE_KEY,
+                                            vapid_claims=VAPID_CLAIMS
+                                        )
+                                    except: pass
+
+
+
     except WebSocketDisconnect:
         manager.disconnect(room_id, username)
-        await manager.broadcast(room_id, message=f"{username} покинул чат")
+        await manager.broadcast(room_id, message=f"{username} has left the chat")
 
-# ЗАПУСК
+# START
 if __name__ == "__main__":
+    import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
