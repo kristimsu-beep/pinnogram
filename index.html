@@ -247,6 +247,31 @@
     .voice-msg audio {
         display: none; /* Прячем стандартный плеер, он нам не нужен */
     }
+        .waveform-real {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        height: 25px;
+        width: 100%;
+        position: relative;
+        cursor: pointer;
+        padding: 0 2px;
+    }
+    .wave-bar {
+        flex: 1;
+        background: rgba(255, 255, 255, 0.3); /* Цвет неактивных столбиков */
+        border-radius: 2px;
+        min-width: 2px;
+    }
+    .waveform-overlay {
+        position: absolute;
+        left: 0; top: 0; height: 100%;
+        background: white; /* Цвет прослушанных столбиков */
+        width: 0%;
+        mix-blend-mode: overlay; /* Позволяет видеть столбики под заливкой */
+        pointer-events: none;
+    }
+
 
 
     
@@ -547,24 +572,31 @@
                 }
                 // ПРОВЕРКА КОНТЕНТА (ГОЛОС / ВИДЕО / ФОТО / ТЕКСТ)
                 if (text.startsWith("VOICE:")) {
-                    const audioUrl = text.replace("VOICE:", "");
+                    // Разделяем ссылку на файл и данные волны
+                    const [audioUrl, waveStr] = text.replace("VOICE:", "").split("^");
+                    const waves = waveStr ? waveStr.split(",").map(Number) : [20,40,20,50,30]; // Фоллбек если данных нет
                     const audioId = `audio-${msgId}`;
                     
+                    // Генерируем HTML для каждого столбика на основе громкости
+                    const waveHTML = waves.map(h => `<div class="wave-bar" style="height:${Math.max(15, h)}%"></div>`).join("");
+
                     msgBubble.innerHTML += `
                         <div class="voice-msg">
                             <div class="play-btn" onclick="toggleVoice('${audioId}', this)">▶</div>
                             <div class="voice-progress-wrap">
-                                <div class="waveform" onclick="seekVoice('${audioId}', event, this)">
-                                    <div class="waveform-progress" id="progress-${audioId}"></div>
+                                <div class="waveform-real" onclick="seekVoice('${audioId}', event, this)">
+                                    ${waveHTML}
+                                    <div class="waveform-overlay" id="progress-${audioId}"></div>
                                 </div>
                                 <div class="voice-meta">
                                     <span id="time-${audioId}">0:00</span>
                                     <span>${time}</span>
                                 </div>
                             </div>
-                            <audio id="${audioId}" src="${audioUrl}" ontimeupdate="updateVoiceProgress('${audioId}')" onended="this.previousElementSibling.firstElementChild.textContent='▶'"></audio>
+                            <audio id="${audioId}" src="${audioUrl}" ontimeupdate="updateVoiceProgress('${audioId}')" onended="this.parentElement.parentElement.querySelector('.play-btn').textContent='▶'"></audio>
                         </div>`;
                 }
+
 
                 else {
                     const lowerT = text.toLowerCase();
@@ -814,14 +846,37 @@ function endCall() {
     pc = null; 
     iceQueue = []; // Очищаем очередь для нового звонка
 }
+let audioContext, analyser, dataArray;
+let voiceWaves = []; // Сюда пишем громкость
+
 async function startVoice() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         voiceRecorder = new MediaRecorder(stream);
         voiceChunks = [];
-        
+        voiceWaves = []; // Обнуляем волны
+
+        // Настройка анализатора звука
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(stream);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 32; // Маленький размер для простых столбиков
+        source.connect(analyser);
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        // Интервал записи громкости (каждые 100мс)
+        const waveInterval = setInterval(() => {
+            if (voiceRecorder.state !== "recording") {
+                clearInterval(waveInterval);
+                return;
+            }
+            analyser.getByteFrequencyData(dataArray);
+            const volume = Math.max(...dataArray); 
+            // Сохраняем нормализованное значение (0-100)
+            voiceWaves.push(Math.floor((volume / 255) * 100));
+        }, 100);
+
         document.getElementById('voiceBtn').classList.add('recording');
-        
         voiceRecorder.ondataavailable = e => voiceChunks.push(e.data);
         voiceRecorder.onstop = async () => {
             const blob = new Blob(voiceChunks, { type: 'audio/webm' });
@@ -831,13 +886,17 @@ async function startVoice() {
             const res = await fetch(`${API_URL}/upload`, { method: "POST", body: fd });
             const d = await res.json();
             if (d.url) {
+                const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
                 const prefix = currentPartner ? `TO_USER:${currentPartner}|` : "";
-                ws.send(`${prefix}TIME:${new Date().toLocaleTimeString()}|VOICE:${d.url}`);
+                // ОТПРАВЛЯЕМ ВМЕСТЕ С ДАННЫМИ ВОЛНЫ ЧЕРЕЗ ^
+                ws.send(`${prefix}TIME:${now}|VOICE:${d.url}^${voiceWaves.join(",")}`);
             }
+            audioContext.close();
         };
         voiceRecorder.start();
     } catch(e) { alert("Микрофон недоступен"); }
 }
+
 
 function stopVoice() {
     if (voiceRecorder && voiceRecorder.state !== "inactive") {
@@ -1164,6 +1223,7 @@ function seekVoice(id, event, el) {
 </script>
 </body>
 </html>
+
 
 
 
