@@ -4,5 +4,7 @@ aiosqlite
 python-multipart
 starlette
 websockets
-aiofiles
 httpx
+aiofiles
+pywebpush
+
