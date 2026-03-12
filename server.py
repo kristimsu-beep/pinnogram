@@ -7,6 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocketState
 import aiofiles
 import httpx
+from pywebpush import webpush, WebPushException
+import json
+
 
 app = FastAPI()
 
@@ -20,6 +23,10 @@ app.add_middleware(
 
 # Умные пути для сервера и локального ПК
 BASE_DIR = "/data" if os.path.exists("/data") else os.getcwd()
+
+# Твои ключи (создадим их позже)
+VAPID_PRIVATE_KEY = "ТВОЙ_ПРИВАТНЫЙ_КЛЮЧ"
+VAPID_CLAIMS = {"sub": "mailto:admin@pinnogram.com"}
 
 # Строим абсолютные пути (это надежнее)
 DB_PATH = os.path.join(BASE_DIR, "pinnogram.db")
@@ -38,14 +45,15 @@ app.mount("/files", StaticFiles(directory=UPLOAD_DIR), name="files")
 @app.on_event("startup")
 async def startup():
     async with aiosqlite.connect(DB_PATH) as db:
-        # 1. Создаем таблицы с нуля (если базы еще нет)
+        # 1. Создаем основные таблицы
         await db.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT, text TEXT, timestamp TEXT, 
                 room_id TEXT DEFAULT 'general',
                 to_user TEXT DEFAULT NULL, 
-                avatar TEXT DEFAULT ''
+                avatar TEXT DEFAULT '',
+                is_read INTEGER DEFAULT 0
             )
         """)
         await db.execute("""
@@ -53,19 +61,51 @@ async def startup():
                 username TEXT PRIMARY KEY, password TEXT, avatar TEXT DEFAULT ''
             )
         """)
-
-        # 2. ФИКС ДЛЯ СТАРОЙ БАЗЫ: Добавляем колонки, если их не было
-        try:
-            await db.execute("ALTER TABLE messages ADD COLUMN avatar TEXT DEFAULT ''")
-        except: pass
         
-        try:
-            # ОБЯЗАТЕЛЬНО ДОБАВЬ ЭТО ДЛЯ ЛИЧКИ:
-            await db.execute("ALTER TABLE messages ADD COLUMN to_user TEXT DEFAULT NULL")
-        except: pass
+        # НОВАЯ ТАБЛИЦА: Для хранения подписок на Push-уведомления
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                username TEXT PRIMARY KEY, 
+                subscription_json TEXT
+            )
+        """)
+
+        # 2. ФИКСЫ ДЛЯ СТАРОЙ БАЗЫ (Добавляем то, чего может не хватать)
+        columns = [
+            ("messages", "avatar", "TEXT DEFAULT ''"),
+            ("messages", "to_user", "TEXT DEFAULT NULL"),
+            ("messages", "is_read", "INTEGER DEFAULT 0") # Колонки для галочек
+        ]
+        
+        for table, col, definition in columns:
+            try:
+                await db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
+            except:
+                pass # Если колонка уже есть, SQLite выдаст ошибку, и мы её пропустим
         
         await db.commit()
+@app.post("/subscribe")
+async def subscribe(data: dict):
+    username = data.get("username")
+    sub_json = data.get("subscription") # Это прилетит из браузера
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("INSERT OR REPLACE INTO push_subscriptions VALUES (?, ?)", 
+                        (username, sub_json))
+        await db.commit()
+    return {"status": "ok"}
 
+# 3. Роут для отметки сообщений прочитанными
+@app.post("/read_messages")
+async def read_messages(data: dict):
+    username = data.get("username") # КТО прочитал
+    partner = data.get("partner")   # ЧЬИ сообщения прочитаны
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            UPDATE messages SET is_read = 1 
+            WHERE username = ? AND to_user = ? AND is_read = 0
+        """, (partner, username))
+        await db.commit()
+    return {"status": "ok"}
 
 # 1. Роут для регистрации и входа
 @app.post("/auth")
@@ -132,13 +172,13 @@ class ConnectionManager:
                     except: continue
 
     # ИСПРАВЛЕНО: Ровный отступ и безопасное получение ID
-    async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None):
+        async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None):
         now = client_time if client_time else datetime.now().strftime("%H:%M")
         
         if username and text:
             async with aiosqlite.connect(DB_PATH) as db:
                 await db.execute(
-                    "INSERT INTO messages (username, text, timestamp, room_id, avatar, to_user) VALUES (?, ?, ?, ?, ?, ?)", 
+                    "INSERT INTO messages (username, text, timestamp, room_id, avatar, to_user, is_read) VALUES (?, ?, ?, ?, ?, ?, 0)", 
                     (username, text, now, room_id, avatar, to_user)
                 )
                 cursor = await db.execute("SELECT last_insert_rowid()")
@@ -147,24 +187,45 @@ class ConnectionManager:
                 await db.commit()
 
                 prefix = f"PRIVATE:{to_user}:" if to_user else ""
-                final_msg = f"ID:{msg_id}|{prefix}[{now}] {username}: {text}|{avatar}"
+                # ДОБАВИЛИ |0 ДЛЯ ГАЛОЧЕК
+                final_msg = f"ID:{msg_id}|{prefix}[{now}] {username}: {text}|{avatar}|0"
                 
                 if to_user:
+                    is_online = False
                     for name in [username, to_user]:
-                        if name in self.rooms[room_id]:
+                        if name in self.rooms.get(room_id, {}):
+                            if name == to_user: is_online = True
                             try: await self.rooms[room_id][name].send_text(final_msg)
                             except: continue
+                    
+                    # ЛОГИКА PUSH: Если получатель оффлайн — шлем уведомление
+                    if not is_online:
+                        async with aiosqlite.connect(DB_PATH) as db:
+                            async with db.execute("SELECT subscription_json FROM push_subscriptions WHERE username = ?", (to_user,)) as c:
+                                sub_row = await c.fetchone()
+                                if sub_row:
+                                    try:
+                                        webpush(
+                                            subscription_info=json.loads(sub_row[0]),
+                                            data=json.dumps({"title": f"ЛС от {username}", "body": text[:50]}),
+                                            vapid_private_key=VAPID_PRIVATE_KEY,
+                                            vapid_claims=VAPID_CLAIMS
+                                        )
+                                    except Exception as e: print(f"Push Error: {e}")
                 else:
-                    for ws in self.rooms[room_id].values():
+                    # Обычный бродкаст в общую комнату
+                    for ws in self.rooms.get(room_id, {}).values():
                         if ws.client_state == WebSocketState.CONNECTED:
                             try: await ws.send_text(final_msg)
                             except: continue
         else:
+            # Системные сообщения
             final_msg = f"ID:0|SYSTEM: {message}"
-            for ws in self.rooms[room_id].values():
+            for ws in self.rooms.get(room_id, {}).values():
                 if ws.client_state == WebSocketState.CONNECTED:
                     try: await ws.send_text(final_msg)
                     except: continue
+
 
 manager = ConnectionManager()
 
@@ -230,15 +291,18 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
             data = await websocket.receive_text()
             
             # --- БЛОК 1: ЗАПРОС ИСТОРИИ ---
+            # --- БЛОК 1: ЗАПРОС ИСТОРИИ (С ГАЛОЧКАМИ) ---
             if data.startswith("GET_HISTORY:"):
                 target = data.replace("GET_HISTORY:", "")
                 async with aiosqlite.connect(DB_PATH) as db:
                     if target in ["null", "general", "None", "undefined"]:
-                        sql = "SELECT id, username, text, timestamp, avatar, to_user FROM messages WHERE room_id = ? AND to_user IS NULL ORDER BY id ASC LIMIT 100"
+                        # Добавили is_read в SELECT
+                        sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read FROM messages WHERE room_id = ? AND to_user IS NULL ORDER BY id ASC LIMIT 100"
                         params = (room_id,)
                     else:
+                        # Добавили is_read в SELECT для ЛС
                         sql = """
-                            SELECT id, username, text, timestamp, avatar, to_user 
+                            SELECT id, username, text, timestamp, avatar, to_user, is_read 
                             FROM messages 
                             WHERE room_id = ? 
                             AND ((username = ? AND to_user = ?) OR (username = ? AND to_user = ?)) 
@@ -248,10 +312,12 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     
                     async with db.execute(sql, params) as cursor:
                         history = await cursor.fetchall()
-                        for msg_id, user, text, time, av, to_u in history:
+                        for msg_id, user, text, time, av, to_u, is_read in history:
                             prefix = f"PRIVATE:{to_u}:" if to_u else ""
-                            await websocket.send_text(f"ID:{msg_id}|{prefix}[{time}] {user}: {text}|{av or ''}")
+                            # Теперь отправляем статус прочтения в самом конце через новый разделитель |
+                            await websocket.send_text(f"ID:{msg_id}|{prefix}[{time}] {user}: {text}|{av or ''}|{is_read}")
                 continue
+
 
             # --- БЛОК 2: RTC СИГНАЛЫ (ЗВОНКИ) ---
             elif data.startswith("RTC_SIGNAL:"):
@@ -281,33 +347,42 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                 continue
 
             # --- БЛОК 5: ОТПРАВКА СООБЩЕНИЯ (ОБЩЕЕ ИЛИ ЛС) ---
+                       # --- БЛОК 5: ОТПРАВКА СООБЩЕНИЯ ---
             else:
                 display_text = data
                 msg_time = datetime.now().strftime("%H:%M")
                 target_user = None
 
-                # Разбор ЛС префикса
+                # Разбор префиксов (оставляем как было)
                 if data.startswith("TO_USER:"):
                     try:
                         parts = data.split("|", 2)
                         target_user = parts[0].replace("TO_USER:", "")
-                        data = "|".join(parts[1:])
-                        display_text = data
+                        display_text = "|".join(parts[1:])
                     except: pass
 
-                # Разбор времени
-                if data.startswith("TIME:"):
-                    try:
-                        parts = data.split("|", 1)
-                        msg_time = parts[0].replace("TIME:", "")
-                        display_text = parts[1]
-                    except: pass
+                # Если это ЛС, проверяем, в сети ли получатель
+                is_online = False
+                if target_user and room_id in manager.rooms:
+                    if target_user in manager.rooms[room_id]:
+                        is_online = True
 
-                # Свежая аватарка
-                async with aiosqlite.connect(DB_PATH) as db:
-                    async with db.execute("SELECT avatar FROM users WHERE username = ?", (username,)) as c:
-                        row = await c.fetchone()
-                        if row: current_avatar = row[0]
+                # ЕСЛИ ОФФЛАЙН — ШЛЕМ PUSH
+                if target_user and not is_online:
+                    async with aiosqlite.connect(DB_PATH) as db:
+                        async with db.execute("SELECT subscription_json FROM push_subscriptions WHERE username = ?", (target_user,)) as c:
+                            sub_row = await c.fetchone()
+                            if sub_row:
+                                # Отправка пуша в фоне
+                                try:
+                                    webpush(
+                                        subscription_info=json.loads(sub_row[0]),
+                                        data=json.dumps({"title": f"ЛС от {username}", "body": display_text}),
+                                        vapid_private_key=VAPID_PRIVATE_KEY,
+                                        vapid_claims=VAPID_CLAIMS
+                                    )
+                                except Exception as e:
+                                    print(f"Push Error: {e}")
 
                 await manager.broadcast(
                     room_id, 
@@ -318,6 +393,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     to_user=target_user
                 )
 
+
     except WebSocketDisconnect:
         manager.disconnect(room_id, username)
         await manager.broadcast(room_id, message=f"{username} покинул чат")
@@ -326,6 +402,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
