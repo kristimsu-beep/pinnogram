@@ -433,8 +433,9 @@
 
             // 3. ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ
             if (raw.startsWith("DELETE_CONFIRM:")) {
-                const delId = raw.split(":")[1];
-                document.getElementById(`msg-${delId}`)?.remove();
+                const delId = raw.replace("DELETE_CONFIRM:", ""); // Убираем текст, оставляем только цифры
+                const el = document.getElementById(`msg-${delId}`);
+                if (el) el.remove();
                 return;
             }
 
@@ -448,6 +449,7 @@
             }
 
             // 5. ОТРИСОВКА СООБЩЕНИЙ (С ГАЛОЧКАМИ И ГОЛОСОМ)
+            // 5. ОТРИСОВКА СООБЩЕНИЙ (С ГАЛОЧКАМИ И ГОЛОСОМ)
             const div = document.createElement('div');
             if (raw.includes("SYSTEM:")) {
                 div.style = "align-self: center; font-size: 11px; opacity: 0.5; margin: 10px 0; text-align: center; width: 100%;";
@@ -457,18 +459,10 @@
                 const parts = raw.split("|");
                 const idPart = parts[0] || "ID:0"; 
                 const content = parts[1] || "";
-                const avatarUrlFromSrv = parts[2] || "https://i.ibb.co";
-                const isRead = parts[3] || "0"; // Читаем статус из Питера
+                const avatarUrlFromSrv = parts[2] || "";
+                const isRead = parts[3] || "0"; 
 
                 const isPrivate = content.includes("PRIVATE:");
-
-                // Фильтр лички
-                if (currentPartner) {
-                    if (!content.includes(`PRIVATE:${currentPartner}:`) && !content.includes(`PRIVATE:${myName}:`)) return;
-                } else {
-                    if (isPrivate) return;
-                }
-
                 const displayContent = content.replace(/^PRIVATE:.*?:/, "");
                 const msgId = idPart.replace("ID:", "");
                 const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
@@ -478,13 +472,35 @@
                 const sender = userAndText.substring(0, splitIdx);
                 const text = userAndText.substring(splitIdx + 2).trim();
 
+                // --- ЛОГИКА СЧЕТЧИКА (БЕЙДЖЕЙ) ---
+                if (isPrivate && sender !== myName && sender !== currentPartner) {
+                    unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
+                    saveUnread(); // Сохраняем в память
+                    updateUnreadUI(); // Рисуем кружок
+                    
+                    // Играем звук даже если чат не открыт
+                    const audio = document.getElementById("notifSound");
+                    if(audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
+                    return; // Не рисуем сообщение в чужом чате
+                }
+
+                // Фильтр отображения текущего чата
+                if (currentPartner) {
+                    if (!content.includes(`PRIVATE:${currentPartner}:`) && !content.includes(`PRIVATE:${myName}:`)) return;
+                } else if (isPrivate) return;
+
                 div.className = 'msg-row';
                 div.id = `msg-${msgId}`;
                 div.style.flexDirection = (sender === myName) ? 'row-reverse' : 'row';
 
+                // Аватарка (твой пуленепробиваемый код)
                 const avImg = document.createElement('img');
-                avImg.src = avatarUrlFromSrv.length < 15 ? "https://i.ibb.co/4pSbxsh/user-avatar.png" : avatarUrlFromSrv;
-                avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0;";
+                let finalAv = avatarUrlFromSrv;
+                if (!finalAv || finalAv.length < 15) finalAv = "https://i.ibb.co/4pSbxsh/user-avatar.png";
+                else if (!finalAv.startsWith('http')) finalAv = "https://" + finalAv;
+                avImg.src = finalAv;
+                avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
+                avImg.onerror = function() { this.src = "https://i.ibb.co/4pSbxsh/user-avatar.png"; };
                 div.appendChild(avImg);
 
                 const msgBubble = document.createElement('div');
@@ -495,24 +511,28 @@
                     nSpan.className = "msg-sender";
                     nSpan.textContent = sender;
                     msgBubble.appendChild(nSpan);
+                    
+                    // ЗВУК ДЛЯ ОТКРЫТОГО ЧАТА
+                    const audio = document.getElementById("notifSound");
+                    if(audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
                 }
 
-                // ПРОВЕРКА НА ГОЛОСОВОЕ
                 if (text.startsWith("VOICE:")) {
                     const audioUrl = text.replace("VOICE:", "");
                     msgBubble.innerHTML += `<div class="voice-msg">🎙<audio src="${audioUrl}" controls style="width:140px;height:30px"></audio></div>`;
                 } else {
                     const lowerT = text.toLowerCase();
-                    if ([".jpg", ".png", ".gif"].some(ext => lowerT.includes(ext))) {
+                    const isImg = [".jpg", ".png", ".gif", ".webp"].some(ext => lowerT.includes(ext));
+                    const isVid = [".mp4", ".webm"].some(ext => lowerT.includes(ext));
+                    if (isImg) {
                         msgBubble.innerHTML += `<img src="${text}" style="max-width:100%;border-radius:10px;margin-top:5px" onclick="window.open(this.src)">`;
-                    } else if ([".mp4", ".webm"].some(ext => lowerT.includes(ext))) {
+                    } else if (isVid) {
                         msgBubble.innerHTML += `<video src="${text}" controls style="max-width:100%;border-radius:10px"></video>`;
                     } else {
                         const s = document.createElement('span'); s.className="msg-text"; s.textContent=text; msgBubble.appendChild(s);
                     }
                 }
 
-                // ВРЕМЯ И ГАЛОЧКИ
                 const tsWrap = document.createElement('div');
                 tsWrap.style = "display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:4px;";
                 const ts = document.createElement('span'); ts.className="msg-time"; ts.textContent=time; tsWrap.appendChild(ts);
@@ -524,7 +544,6 @@
                     tsWrap.appendChild(status);
                 }
 
-                // Авто-чтение
                 if (isPrivate && sender === currentPartner && isRead === "0") {
                     fetch(`${API_URL}/read_messages`, {
                         method: "POST",
@@ -535,6 +554,11 @@
 
                 msgBubble.appendChild(tsWrap);
                 div.appendChild(msgBubble);
+                
+                div.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    if (sender === myName && confirm("Удалить?")) ws.send(`__DELETE__:${msgId}`);
+                };
             }
             chat.appendChild(div);
             setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 100);
@@ -1022,6 +1046,7 @@ function switchChat(partner) {
 </script>
 </body>
 </html>
+
 
 
 
