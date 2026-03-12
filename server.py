@@ -10,7 +10,6 @@ import httpx
 from pywebpush import webpush, WebPushException
 import json
 
-
 app = FastAPI()
 
 app.add_middleware(
@@ -24,17 +23,17 @@ app.add_middleware(
 # Умные пути для сервера и локального ПК
 BASE_DIR = "/data" if os.path.exists("/data") else os.getcwd()
 
-# Твои ключи (создадим их позже)
-VAPID_PRIVATE_KEY = "ТВОЙ_ПРИВАТНЫЙ_КЛЮЧ"
-VAPID_CLAIMS = {"sub": "mailto:admin@pinnogram.com"}
+# ТВОИ РЕАЛЬНЫЕ КЛЮЧИ (ПРИВАТНЫЙ ВСТАВЛЕН)
+VAPID_PRIVATE_KEY = "WD8jC5BNBUQtNX_yIRGjWoeA0TySjfToPNxtNLaH9cY"
+VAPID_CLAIMS = {"sub": "mailto:kristimsu@gmail.com"}
 
-# Строим абсолютные пути (это надежнее)
+# Строим абсолютные пути
 DB_PATH = os.path.join(BASE_DIR, "pinnogram.db")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 
-# Создаем папку, если её нет
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 
 @app.api_route("/", methods=["GET", "HEAD"])
 async def get_index():
@@ -402,6 +401,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
