@@ -419,22 +419,41 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                             resp = await client.post(AI_URL, json={
                                 "contents": [{"parts": [{"text": display_text}]}]
                             }, timeout=30.0)
-
+                            
                             ai_data = resp.json()
-                            # Извлекаем текст ответа Gemini
-                            ai_text = ai_data['candidates'][0]['content']['parts'][0]['text']
+                            
+                            # 1. Проверяем наличие технической ошибки от Google
+                            if "error" in ai_data:
+                                err_msg = ai_data["error"].get("message", "Неизвестная ошибка")
+                                await manager.broadcast(room_id, username="AI_BOT", text=f"Ошибка Google: {err_msg}", to_user=username)
+                                continue
 
-                            # Отправляем ответ БОТА пользователю
-                            await manager.broadcast(
-                                room_id,
-                                username="AI_BOT",
-                                text=ai_text,
-                                avatar="https://i.ibb.co/4pSbxsh/user-avatar.png",
-                                to_user=username
-                            )
+                            # 2. БЕЗОПАСНО достаем текст ответа (решаем проблему с 'candidates')
+                            candidates = ai_data.get('candidates', [])
+                            if candidates and len(candidates) > 0:
+                                candidate = candidates[0]
+                                content_obj = candidate.get('content', {})
+                                parts = content_obj.get('parts', [])
+                                
+                                if parts and len(parts) > 0:
+                                    ai_text = parts[0].get('text', 'Пустой ответ от ИИ')
+                                    
+                                    await manager.broadcast(
+                                        room_id, 
+                                        username="AI_BOT", 
+                                        text=ai_text, 
+                                        avatar="https://i.ibb.co", 
+                                        to_user=username 
+                                    )
+                                else:
+                                    await manager.broadcast(room_id, username="AI_BOT", text="ИИ прислал пустые данные.", to_user=username)
+                            else:
+                                # Если Google заблокировал ответ по цензуре или иным причинам
+                                await manager.broadcast(room_id, username="AI_BOT", text="Google отклонил запрос (проверь содержимое или регистр ключа).", to_user=username)
+
                     except Exception as e:
-                        print(f"AI Error: {e}")
-                        await manager.broadcast(room_id, username="AI_BOT", text="Бот временно недоступен...", to_user=username)
+                        print(f"AI Global Error: {e}")
+                        await manager.broadcast(room_id, username="AI_BOT", text=f"Системная ошибка: {str(e)}", to_user=username)
 
                 # 6. Проверка PUSH (если это не бот, а обычный юзер оффлайн)
                 elif target_user and target_user != "AI_BOT":
@@ -469,6 +488,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
