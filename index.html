@@ -383,7 +383,10 @@
         };
 
         ws.onmessage = async (event) => {
-                       // 1. ОБРАБОТКА СПИСКА ОНЛАЙН И КОНТАКТОВ
+            const raw = event.data; // ВОТ ИСПРАВЛЕНИЕ: сначала объявляем raw
+            const chat = document.getElementById('chat');
+
+            // 1. ОБРАБОТКА СПИСКА ОНЛАЙН И КОНТАКТОВ
             if (raw.includes("ONLINE_LIST:")) {
                 const parts = raw.split("ONLINE_LIST:");
                 if (parts.length > 1) {
@@ -394,11 +397,7 @@
                         contactsList.innerHTML = users.map(u => {
                             const name = u.split(" (")[0].trim();
                             if (!name || name === myName) return "";
-                            
-                            // Проверяем, активен ли этот чат сейчас
                             const activeClass = (currentPartner === name) ? "contact-active" : "";
-                            
-                            // Рисуем элемент контакта
                             return `
                                 <div onclick="switchChat('${name}')" class="contact-item ${activeClass}">
                                     <span>👤</span>
@@ -406,203 +405,131 @@
                                     <div id="badge-${name}" class="unread-badge" style="display:none"></div>
                                 </div>`;
                         }).join("");
-                        
-                        // Сразу обновляем красные кружочки непрочитанных
                         updateUnreadUI(); 
                     }
-
-                    // Обновляем строку "В сети" под чатом
                     const namesOnly = users.map(u => u.split(" (")[0]);
-                    const onlineStatus = document.getElementById("online-list");
-                    if (onlineStatus) onlineStatus.textContent = `В сети: ${namesOnly.join(", ")}`;
-                    
-                    // Обновляем секретную панель админа
+                    document.getElementById("online-list").textContent = `В сети: ${namesOnly.join(", ")}`;
                     const adminList = document.getElementById("admin-users-list");
-                    if (adminList) {
-                        adminList.innerHTML = users.map(u => `<div style="color:#00ff00;">> node: ${u}</div>`).join("");
-                    }
+                    if (adminList) adminList.innerHTML = users.map(u => `<div style="color:#00ff00;">> node: ${u}</div>`).join("");
                 }
                 return;
             }
 
-
-
-    // ... Дальше идут блоки RTC_SIGNAL, DELETE_CONFIRM и т.д.
-
-
-
-    // Сигналы звонка (WebRTC)
-    if (raw.startsWith("RTC_SIGNAL:")) {
-        handleSignalingData(JSON.parse(raw.replace("RTC_SIGNAL:", "")));
-        return;
-    }
-
-    // Остальные команды (удаление, печать) без изменений...
-
-
-    // Подтверждение удаления
-    if (raw.startsWith("DELETE_CONFIRM:")) {
-        const delId = raw.split(":")[1];
-        document.getElementById(`msg-${delId}`)?.remove();
-        return;
-    }
-
-    // Индикатор печати
-    if (raw.startsWith("TYPING:")) {
-        const typingUser = raw.split(":")[1];
-        document.getElementById("typing-indicator").textContent = `${typingUser} печатает...`;
-        clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(() => document.getElementById("typing-indicator").textContent = "", 2000);
-        return;
-    }
-
-    const div = document.createElement('div');
-
-    // 2. СИСТЕМНЫЕ СООБЩЕНИЯ (Вход/Выход)
-    if (raw.includes("SYSTEM:")) {
-        div.style = "align-self: center; font-size: 11px; opacity: 0.5; margin: 10px 0; text-align: center; width: 100%;";
-        div.textContent = raw.split("SYSTEM: ")[1];
-    } 
-    
-    // 3. ОБЫЧНЫЕ СООБЩЕНИЯ (С АВАТАРКАМИ)
-       // ... (внутри ws.onmessage, после системных сообщений)
-    else {
-        const parts = raw.split("|");
-        const idPart = parts[0] || "ID:0"; 
-        const content = parts[1] || "";
-        const avatarUrlFromSrv = parts[2] || "https://i.ibb.co/4pSbxsh/user-avatar.png";
-        const isRead = parts[3] || "0"; // НОВЫЙ ПАРАМЕТР: статус прочтения
-
-        const isPrivate = content.includes("PRIVATE:");
-
-        // --- ЛОГИКА СЧЕТЧИКА УВЕДОМЛЕНИЙ ---
-        if (isPrivate) {
-            const senderMatch = content.match(/\]\s(.*?):/); 
-            const msgSender = senderMatch ? senderMatch[1] : null;
-
-            if (msgSender && msgSender !== myName && msgSender !== currentPartner) {
-                unreadCounts[msgSender] = (unreadCounts[msgSender] || 0) + 1;
-                saveUnread(); updateUnreadUI();
-                document.getElementById("notifSound").play().catch(() => {});
-                return; 
+            // 2. СИГНАЛЫ ЗВОНКА (RTC)
+            if (raw.startsWith("RTC_SIGNAL:")) {
+                handleSignalingData(JSON.parse(raw.replace("RTC_SIGNAL:", "")));
+                return;
             }
-        }
 
-        // --- ФИЛЬТР ОТОБРАЖЕНИЯ ---
-        if (currentPartner) {
-            if (!content.includes(`PRIVATE:${currentPartner}:`) && !content.includes(`PRIVATE:${myName}:`)) return;
-        } else {
-            if (isPrivate) return;
-        }
+            // 3. ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ
+            if (raw.startsWith("DELETE_CONFIRM:")) {
+                const delId = raw.split(":")[1];
+                document.getElementById(`msg-${delId}`)?.remove();
+                return;
+            }
 
-        const displayContent = content.replace(/^PRIVATE:.*?:/, "");
-        const msgId = idPart.replace("ID:", "");
+            // 4. ИНДИКАТОР ПЕЧАТИ
+            if (raw.startsWith("TYPING:")) {
+                const typingUser = raw.split(":")[1];
+                document.getElementById("typing-indicator").textContent = `${typingUser} печатает...`;
+                clearTimeout(typingTimeout);
+                typingTimeout = setTimeout(() => document.getElementById("typing-indicator").textContent = "", 2000);
+                return;
+            }
 
-        let avatarUrl = avatarUrlFromSrv;
-        if (avatarUrl.includes("flaticon.com") || avatarUrl.length < 15) {
-            avatarUrl = "https://i.ibb.co/4pSbxsh/user-avatar.png";
-        }
+            // 5. ОТРИСОВКА СООБЩЕНИЙ (С ГАЛОЧКАМИ И ГОЛОСОМ)
+            const div = document.createElement('div');
+            if (raw.includes("SYSTEM:")) {
+                div.style = "align-self: center; font-size: 11px; opacity: 0.5; margin: 10px 0; text-align: center; width: 100%;";
+                div.textContent = raw.split("SYSTEM: ")[1];
+            } 
+            else {
+                const parts = raw.split("|");
+                const idPart = parts[0] || "ID:0"; 
+                const content = parts[1] || "";
+                const avatarUrlFromSrv = parts[2] || "https://i.ibb.co";
+                const isRead = parts[3] || "0"; // Читаем статус из Питера
 
-        const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
-        const time = timeMatch ? timeMatch[1] : "--:--";
-        const userAndText = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
-        const splitIdx = userAndText.indexOf(": ");
-        const sender = userAndText.substring(0, splitIdx);
-        const text = userAndText.substring(splitIdx + 2).trim();
+                const isPrivate = content.includes("PRIVATE:");
 
-        div.className = 'msg-row';
-        div.id = `msg-${msgId}`;
-        div.style.flexDirection = (sender === myName) ? 'row-reverse' : 'row';
+                // Фильтр лички
+                if (currentPartner) {
+                    if (!content.includes(`PRIVATE:${currentPartner}:`) && !content.includes(`PRIVATE:${myName}:`)) return;
+                } else {
+                    if (isPrivate) return;
+                }
 
-        const avImg = document.createElement('img');
-        avImg.src = avatarUrl;
-        avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
-        avImg.onerror = function() { this.src = "https://i.ibb.co/4pSbxsh/user-avatar.png"; };
-        div.appendChild(avImg);
+                const displayContent = content.replace(/^PRIVATE:.*?:/, "");
+                const msgId = idPart.replace("ID:", "");
+                const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
+                const time = timeMatch ? timeMatch[1] : "--:--";
+                const userAndText = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
+                const splitIdx = userAndText.indexOf(": ");
+                const sender = userAndText.substring(0, splitIdx);
+                const text = userAndText.substring(splitIdx + 2).trim();
 
-        const msgBubble = document.createElement('div');
-        msgBubble.className = (sender === myName) ? 'msg msg-right' : 'msg msg-left';
-        
-        if (sender !== myName) {
-            const nSpan = document.createElement('span');
-            nSpan.className = "msg-sender";
-            nSpan.textContent = sender;
-            msgBubble.appendChild(nSpan);
-        }
+                div.className = 'msg-row';
+                div.id = `msg-${msgId}`;
+                div.style.flexDirection = (sender === myName) ? 'row-reverse' : 'row';
 
-        // --- ЛОГИКА КОНТЕНТА (ТЕКСТ / МЕДИА / ГОЛОС) ---
-        const lowerText = text.toLowerCase();
-        const isImg = [".jpg", ".jpeg", ".png", ".gif", ".webp"].some(ext => lowerText.includes(ext));
-        const isVid = [".mp4", ".webm", ".mov"].some(ext => lowerText.includes(ext));
-        const isVoice = text.startsWith("VOICE:"); // НОВЫЙ ТИП: Голосовое
+                const avImg = document.createElement('img');
+                avImg.src = avatarUrlFromSrv.length < 15 ? "https://i.ibb.co" : avatarUrlFromSrv;
+                avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0;";
+                div.appendChild(avImg);
 
-        if (isVoice) {
-            const audioUrl = text.replace("VOICE:", "");
-            msgBubble.innerHTML += `
-                <div class="voice-msg">
-                    <span>🎙</span>
-                    <audio src="${audioUrl}" controls controlsList="nodownload"></audio>
-                </div>`;
-        } else if (isImg) {
-            const img = document.createElement('img');
-            img.src = text;
-            img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer;";
-            img.onclick = () => { document.getElementById('modal-img').src = img.src; document.getElementById('modal').style.display = 'flex'; };
-            msgBubble.appendChild(img);
-        } else if (isVid) {
-            const v = document.createElement('video');
-            v.src = text; v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
-            v.style = "max-width:100%; border-radius:10px;";
-            msgBubble.appendChild(v);
-        } else {
-            const s = document.createElement('span');
-            s.className = "msg-text";
-            s.textContent = text;
-            msgBubble.appendChild(s);
-        }
+                const msgBubble = document.createElement('div');
+                msgBubble.className = (sender === myName) ? 'msg msg-right' : 'msg msg-left';
+                
+                if (sender !== myName) {
+                    const nSpan = document.createElement('span');
+                    nSpan.className = "msg-sender";
+                    nSpan.textContent = sender;
+                    msgBubble.appendChild(nSpan);
+                }
 
-        // --- ГАЛОЧКИ И ВРЕМЯ ---
-        const tsWrap = document.createElement('div');
-        tsWrap.style = "display:flex; align-items:center; justify-content:flex-end; gap:4px; margin-top:4px;";
-        
-        const ts = document.createElement('span');
-        ts.className = "msg-time";
-        ts.textContent = time;
-        tsWrap.appendChild(ts);
+                // ПРОВЕРКА НА ГОЛОСОВОЕ
+                if (text.startsWith("VOICE:")) {
+                    const audioUrl = text.replace("VOICE:", "");
+                    msgBubble.innerHTML += `<div class="voice-msg">🎙<audio src="${audioUrl}" controls style="width:140px;height:30px"></audio></div>`;
+                } else {
+                    const lowerT = text.toLowerCase();
+                    if ([".jpg", ".png", ".gif"].some(ext => lowerT.includes(ext))) {
+                        msgBubble.innerHTML += `<img src="${text}" style="max-width:100%;border-radius:10px;margin-top:5px" onclick="window.open(this.src)">`;
+                    } else if ([".mp4", ".webm"].some(ext => lowerT.includes(ext))) {
+                        msgBubble.innerHTML += `<video src="${text}" controls style="max-width:100%;border-radius:10px"></video>`;
+                    } else {
+                        const s = document.createElement('span'); s.className="msg-text"; s.textContent=text; msgBubble.appendChild(s);
+                    }
+                }
 
-        // Рисуем галочки только для СВОИХ сообщений в ЛС
-        if (sender === myName && currentPartner) {
-            const status = document.createElement('span');
-            status.className = isRead === "1" ? "msg-status read" : "msg-status";
-            status.textContent = isRead === "1" ? "✔✔" : "✔";
-            tsWrap.appendChild(status);
-        }
-                // Если нам пришло сообщение в ОТКРЫТЫЙ чат — помечаем как прочитанное
-        if (isPrivate && sender === currentPartner && isRead === "0") {
-            fetch(`${API_URL}/read_messages`, {
-                method: "POST",
-                headers: {"Content-Type":"application/json"},
-                body: JSON.stringify({ username: myName, partner: currentPartner })
-            });
-        }
+                // ВРЕМЯ И ГАЛОЧКИ
+                const tsWrap = document.createElement('div');
+                tsWrap.style = "display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:4px;";
+                const ts = document.createElement('span'); ts.className="msg-time"; ts.textContent=time; tsWrap.appendChild(ts);
 
+                if (sender === myName && currentPartner) {
+                    const status = document.createElement('span');
+                    status.className = isRead === "1" ? "msg-status read" : "msg-status";
+                    status.textContent = isRead === "1" ? "✔✔" : "✔";
+                    tsWrap.appendChild(status);
+                }
 
-        msgBubble.appendChild(tsWrap);
-        div.appendChild(msgBubble);
+                // Авто-чтение
+                if (isPrivate && sender === currentPartner && isRead === "0") {
+                    fetch(`${API_URL}/read_messages`, {
+                        method: "POST",
+                        headers: {"Content-Type":"application/json"},
+                        body: JSON.stringify({ username: myName, partner: currentPartner })
+                    });
+                }
 
-        div.oncontextmenu = (e) => {
-            e.preventDefault();
-            if (sender === myName && confirm("Удалить?")) ws.send(`__DELETE__:${msgId}`);
+                msgBubble.appendChild(tsWrap);
+                div.appendChild(msgBubble);
+            }
+            chat.appendChild(div);
+            setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 100);
         };
-    }
 
-
-
-
-    chat.appendChild(div);
-    // Авто-скролл вниз
-    setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 100);
-}; // Конец ws.onmessage
 } // Конец функции startChat
 
 
@@ -1087,6 +1014,7 @@ function switchChat(partner) {
 </script>
 </body>
 </html>
+
 
 
 
