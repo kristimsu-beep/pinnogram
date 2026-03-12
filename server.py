@@ -422,10 +422,11 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                     "Authorization": f"Bearer {groq_key}",
                                     "Content-Type": "application/json"
                                 },
-                                json={
-                                    "model": "llama3-8b-8192",
-                                    "messages": [{"role": "user", "content": display_text}]
-                                },
+                            json={
+                                "model": "llama-3.3-70b-versatile", # <--- НОВАЯ МОДЕЛЬ (вместо старой)
+                                "messages": [{"role": "user", "content": display_text}]
+                            },
+
                                 timeout=30.0
                             )
                             
@@ -479,6 +480,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
