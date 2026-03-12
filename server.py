@@ -171,65 +171,67 @@ class ConnectionManager:
                     except: continue
 
     # ИСПРАВЛЕНО: Ровный отступ и безопасное получение ID
-        async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None):
-        now = client_time if client_time else datetime.now().strftime("%H:%M")
+    async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None):        
+        now = client_time if client_time else datetime.now().strftime("%H:%M")        
         
-        if username and text:
-            async with aiosqlite.connect(DB_PATH) as db:
-                await db.execute(
-                    "INSERT INTO messages (username, text, timestamp, room_id, avatar, to_user, is_read) VALUES (?, ?, ?, ?, ?, ?, 0)", 
-                    (username, text, now, room_id, avatar, to_user)
-                )
-                cursor = await db.execute("SELECT last_insert_rowid()")
-                row = await cursor.fetchone()
-                msg_id = row[0] if row else 0
-                await db.commit()
-
-                prefix = f"PRIVATE:{to_user}:" if to_user else ""
-                # ДОБАВИЛИ |0 ДЛЯ ГАЛОЧЕК
-                final_msg = f"ID:{msg_id}|{prefix}[{now}] {username}: {text}|{avatar}|0"
-                
-                if to_user:
-                    is_online = False
-                    for name in [username, to_user]:
-                        if name in self.rooms.get(room_id, {}):
-                            if name == to_user: is_online = True
-                            try: await self.rooms[room_id][name].send_text(final_msg)
-                            except: continue
+        if username and text:        
+            # 1. Открываем БД ОДИН раз (экономим ресурсы)
+            async with aiosqlite.connect(DB_PATH) as db:        
+                cursor = await db.execute(        
+                    "INSERT INTO messages (username, text, timestamp, room_id, avatar, to_user, is_read) VALUES (?, ?, ?, ?, ?, ?, 0)",         
+                    (username, text, now, room_id, avatar, to_user)        
+                )        
+                msg_id = cursor.lastrowid # Так быстрее получать ID
+                await db.commit()        
+    
+                prefix = f"PRIVATE:{to_user}:" if to_user else ""        
+                final_msg = f"ID:{msg_id}|{prefix}[{now}] {username}: {text}|{avatar}|0"        
                     
-                    # ЛОГИКА PUSH: Если получатель оффлайн — шлем уведомление
-                    if not is_online:
-                        async with aiosqlite.connect(DB_PATH) as db:
-                            async with db.execute("SELECT subscription_json FROM push_subscriptions WHERE username = ?", (to_user,)) as c:
-                                sub_row = await c.fetchone()
-                                if sub_row:
-                                    try:
-                                        webpush(
-                                            subscription_info=json.loads(sub_row[0]),
-                                            data=json.dumps({"title": f"ЛС от {username}", "body": text[:50]}),
-                                            vapid_private_key=VAPID_PRIVATE_KEY,
-                                            vapid_claims=VAPID_CLAIMS
-                                        )
-                                    except Exception as e: print(f"Push Error: {e}")
-                else:
-                    # Обычный бродкаст в общую комнату
-                    for ws in self.rooms.get(room_id, {}).values():
-                        if ws.client_state == WebSocketState.CONNECTED:
-                            try: await ws.send_text(final_msg)
-                            except: continue
-        else:
-            # Системные сообщения
-            final_msg = f"ID:0|SYSTEM: {message}"
-            for ws in self.rooms.get(room_id, {}).values():
-                if ws.client_state == WebSocketState.CONNECTED:
-                    try: await ws.send_text(final_msg)
+                if to_user:        
+                    is_online = False        
+                    room_users = self.rooms.get(room_id, {})
+                    
+                    for name in [username, to_user]:        
+                        if name in room_users:        
+                            if name == to_user: is_online = True        
+                            try: 
+                                await room_users[name].send_text(final_msg)        
+                            except: 
+                                continue        
+                        
+                    # 2. Исправленный PUSH (не блокирует сервер)
+                    if not is_online:        
+                        async with db.execute("SELECT subscription_json FROM push_subscriptions WHERE username = ?", (to_user,)) as c:        
+                            sub_row = await c.fetchone()        
+                            if sub_row:        
+                                try:
+                                    # Запускаем в отдельном потоке, чтобы чат не завис на 1 секунду
+                                    await asyncio.to_thread(
+                                        webpush,
+                                        subscription_info=json.loads(sub_row[0]),        
+                                        data=json.dumps({"title": f"ЛС от {username}", "body": text[:50]}),        
+                                        vapid_private_key=VAPID_PRIVATE_KEY,        
+                                        vapid_claims=VAPID_CLAIMS        
+                                    )        
+                                except Exception as e: 
+                                    print(f"Push Error: {e}")        
+                else:        
+                    # Обычный бродкаст
+                    for ws in self.rooms.get(room_id, {}).values():        
+                        if ws.client_state == WebSocketState.CONNECTED:        
+                            try: await ws.send_text(final_msg)        
+                            except: continue        
+        else:        
+            # Системные сообщения        
+            final_msg = f"ID:0|SYSTEM: {message}"        
+            for ws in self.rooms.get(room_id, {}).values():        
+                if ws.client_state == WebSocketState.CONNECTED:        
+                    try: await ws.send_text(final_msg)        
                     except: continue
-
-
-manager = ConnectionManager()
-
-
-
+    
+    manager = ConnectionManager()
+    
+    
 
 # Вставь свой ключ тут
 IMGBB_API_KEY = "140359baf01acef6aa27e35c55b32f99"
@@ -401,6 +403,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
