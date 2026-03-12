@@ -1,3 +1,4 @@
+import asyncio 
 import os, uuid, aiosqlite, uvicorn
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Request
@@ -430,6 +431,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
