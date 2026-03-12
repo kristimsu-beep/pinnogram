@@ -457,7 +457,16 @@
                     const contactsList = document.getElementById("contacts-list");
                     
                     if (contactsList) {
-                        contactsList.innerHTML = users.map(u => {
+                        // 1. Создаем кнопку бота (она всегда сверху)
+                        const aiBotHTML = `
+                            <div onclick="switchChat('AI_BOT')" class="contact-item ${currentPartner === 'AI_BOT' ? 'contact-active' : ''}">
+                                <img src="https://i.ibb.co/4pSbxsh/user-avatar.png" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
+                                <b style="flex:1">Pinnogram AI (Bot)</b>
+                                <div id="badge-AI_BOT" class="unread-badge" style="display:none"></div>
+                            </div>`;
+                    
+                        // 2. Склеиваем бота и реальных юзеров
+                        const usersHTML = users.map(u => {
                             const name = u.split(" (")[0].trim();
                             if (!name || name === myName) return "";
                             const activeClass = (currentPartner === name) ? "contact-active" : "";
@@ -468,8 +477,11 @@
                                     <div id="badge-${name}" class="unread-badge" style="display:none"></div>
                                 </div>`;
                         }).join("");
+                    
+                        contactsList.innerHTML = aiBotHTML + usersHTML;
                         updateUnreadUI(); 
                     }
+
                     const namesOnly = users.map(u => u.split(" (")[0]);
                     document.getElementById("online-list").textContent = `В сети: ${namesOnly.join(", ")}`;
                     const adminList = document.getElementById("admin-users-list");
@@ -1223,6 +1235,7 @@ function seekVoice(id, event, el) {
 </script>
 </body>
 </html>
+
 
 
 
