@@ -359,14 +359,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         if name != username:
                             await conn.send_text(f"TYPING:{username}")
                 continue
-
-            # --- БЛОК 5: ОТПРАВКА СООБЩЕНИЯ (ОБЩЕЕ ИЛИ ЛС) ---
-                       # --- БЛОК 5: ОТПРАВКА СООБЩЕНИЯ ---
-            # --- БЛОК 5: ИСПРАВЛЕННЫЙ РАЗБОР СООБЩЕНИЯ ---
-            # --- БЛОК 5: ИСПРАВЛЕННЫЙ РАЗБОР СООБЩЕНИЯ ---
-                       # --- BLOCK 5: MESSAGE PROCESSING AND AI-BOT ---
-            # --- БЛОК 5: ОБРАБОТКА СООБЩЕНИЙ И ИИ-БОТ ---
-            # --- БЛОК 5: ОБРАБОТКА СООБЩЕНИЙ И ИИ-БОТ ---
+                
             else:
                 display_text = data
                 msg_time = datetime.now().strftime("%H:%M")
@@ -405,61 +398,56 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     to_user=target_user
                 )
 
-                # 5. ЛОГИКА ИИ-БОТА
+                # 5. ЛОГИКА ИИ-БОТА"
+                # ТВОЙ КЛЮЧ И ПРАВИЛЬНАЯ ССЫЛКА
+                # --- ЛОГИКА ИИ БОТА (GROQ - LLAMA 3) ---
+                     # 5. ЛОГИКА ИИ БОТА (GROQ - LLAMA 3)
+                        # 5. ЛОГИКА ИИ БОТА (GROQ - LLAMA 3)
                 if target_user == "AI_BOT":
-                    # Шлем визуальный статус "печатает"
-                    await websocket.send_text(f"TYPING:AI_BOT")
+                    await websocket.send_text("TYPING:AI_BOT")
+                    
+                    groq_key = os.environ.get("GROQ_KEY")
+                    
+                    if not groq_key:
+                        await manager.broadcast(room_id, username="AI_BOT", text="Ошибка: Ключ API не настроен в Render.", to_user=username)
+                        continue
 
-                    # ТВОЙ КЛЮЧ И ПРАВИЛЬНАЯ ССЫЛКА
-                    GEMINI_KEY = "AIzaSyCPIAV1EzHa_dWcsnXoMVnpjezbSWZnEn8"
-                   # 1. Ссылка (уже правильная)
-                    AI_URL = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={GEMINI_KEY}"
+                    AI_URL = "https://api.groq.com/openai/v1/chat/completions"
                     
                     try:
                         async with httpx.AsyncClient() as client:
-                            # 2. Добавляем headers!
                             resp = await client.post(
                                 AI_URL,
-                                headers={"Content-Type": "application/json"}, # <--- Это очень важно
-                                json={"contents": [{"parts": [{"text": display_text}]}]},
+                                headers={
+                                    "Authorization": f"Bearer {groq_key}",
+                                    "Content-Type": "application/json"
+                                },
+                                json={
+                                    "model": "llama3-8b-8192",
+                                    "messages": [{"role": "user", "content": display_text}]
+                                },
                                 timeout=30.0
                             )
                             
                             ai_data = resp.json()
-                            # ... дальше твой код обработки ai_data ...
-
-                            # 1. Проверяем наличие технической ошибки от Google
-                            if "error" in ai_data:
-                                err_msg = ai_data["error"].get("message", "Неизвестная ошибка")
-                                await manager.broadcast(room_id, username="AI_BOT", text=f"Ошибка Google: {err_msg}", to_user=username)
-                                continue
-
-                            # 2. БЕЗОПАСНО достаем текст ответа (решаем проблему с 'candidates')
-                            candidates = ai_data.get('candidates', [])
-                            if candidates and len(candidates) > 0:
-                                candidate = candidates[0]
-                                content_obj = candidate.get('content', {})
-                                parts = content_obj.get('parts', [])
+                            
+                            if "choices" in ai_data and len(ai_data["choices"]) > 0:
+                                ai_text = ai_data['choices'][0]['message']['content']
                                 
-                                if parts and len(parts) > 0:
-                                    ai_text = parts[0].get('text', 'Пустой ответ от ИИ')
-                                    
-                                    await manager.broadcast(
-                                        room_id, 
-                                        username="AI_BOT", 
-                                        text=ai_text, 
-                                        avatar="https://i.ibb.co", 
-                                        to_user=username 
-                                    )
-                                else:
-                                    await manager.broadcast(room_id, username="AI_BOT", text="ИИ прислал пустые данные.", to_user=username)
+                                await manager.broadcast(
+                                    room_id, 
+                                    username="AI_BOT", 
+                                    text=ai_text, 
+                                    avatar="https://i.ibb.co/4pSbxsh/user-avatar.png", 
+                                    to_user=username 
+                                )
                             else:
-                                # Если Google заблокировал ответ по цензуре или иным причинам
-                                await manager.broadcast(room_id, username="AI_BOT", text="Google отклонил запрос (проверь содержимое или регистр ключа).", to_user=username)
+                                err = ai_data.get("error", {}).get("message", "Ошибка ИИ")
+                                await manager.broadcast(room_id, username="AI_BOT", text=f"Groq Error: {err}", to_user=username)
 
                     except Exception as e:
                         print(f"AI Global Error: {e}")
-                        await manager.broadcast(room_id, username="AI_BOT", text=f"Системная ошибка: {str(e)}", to_user=username)
+                        await manager.broadcast(room_id, username="AI_BOT", text="Бот ушел на перезагрузку...", to_user=username)
 
                 # 6. Проверка PUSH (если это не бот, а обычный юзер оффлайн)
                 elif target_user and target_user != "AI_BOT":
@@ -473,7 +461,6 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                 s_row = await c.fetchone()
                                 if s_row:
                                     try:
-                                        import asyncio
                                         await asyncio.to_thread(
                                             webpush,
                                             subscription_info=json.loads(s_row[0]),
@@ -483,17 +470,16 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                         )
                                     except: pass
 
-
-
     except WebSocketDisconnect:
         manager.disconnect(room_id, username)
-        await manager.broadcast(room_id, message=f"{username} has left the chat")
+        await manager.broadcast(room_id, message=f"{username} покинул чат")
 
 # START
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
