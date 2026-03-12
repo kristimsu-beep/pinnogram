@@ -389,7 +389,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     except: pass
 
                 # 3. Обновляем аватарку отправителя
-                current_avatar = "https://i.ibb.co"
+                current_avatar = "https://i.ibb.co/4pSbxsh/user-avatar.png"
                 async with aiosqlite.connect(DB_PATH) as db:
                     async with db.execute("SELECT avatar FROM users WHERE username = ?", (username,)) as c:
                         row = await c.fetchone()
@@ -411,7 +411,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     await websocket.send_text(f"TYPING:AI_BOT")
 
                     # ТВОЙ КЛЮЧ И ПРАВИЛЬНАЯ ССЫЛКА
-                    GEMINI_KEY = "ВСТАВЬ_СВОЙ_КЛЮЧ_ЗДЕСЬ"
+                    GEMINI_KEY = "AIzaSyCPIAV1EzHa_dWcsnXoMVnpjezbSWZnEn8"
                     AI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
 
                     try:
@@ -429,7 +429,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                 room_id,
                                 username="AI_BOT",
                                 text=ai_text,
-                                avatar="https://i.ibb.co",
+                                avatar="https://i.ibb.co/4pSbxsh/user-avatar.png",
                                 to_user=username
                             )
                     except Exception as e:
@@ -469,6 +469,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
