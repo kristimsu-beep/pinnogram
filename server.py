@@ -351,42 +351,58 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 
             # --- БЛОК 5: ОТПРАВКА СООБЩЕНИЯ (ОБЩЕЕ ИЛИ ЛС) ---
                        # --- БЛОК 5: ОТПРАВКА СООБЩЕНИЯ ---
+            # --- БЛОК 5: ИСПРАВЛЕННЫЙ РАЗБОР СООБЩЕНИЯ ---
             else:
                 display_text = data
                 msg_time = datetime.now().strftime("%H:%M")
                 target_user = None
 
-                # Разбор префиксов (оставляем как было)
-                if data.startswith("TO_USER:"):
+                # 1. Сначала отрезаем ЛС (TO_USER:имя|...)
+                if display_text.startswith("TO_USER:"):
                     try:
-                        parts = data.split("|", 2)
+                        parts = display_text.split("|", 1)
                         target_user = parts[0].replace("TO_USER:", "")
-                        display_text = "|".join(parts[1:])
+                        display_text = parts[1]
                     except: pass
 
-                # Если это ЛС, проверяем, в сети ли получатель
+                # 2. Теперь отрезаем время (TIME:17:32|...), чтобы оно не лезло в текст сообщения
+                if display_text.startswith("TIME:"):
+                    try:
+                        parts = display_text.split("|", 1)
+                        msg_time = parts[0].replace("TIME:", "")
+                        display_text = parts[1] # ВОТ ТУТ мы берем только текст сообщения
+                    except: pass
+
+                # 3. Обновляем аватарку отправителя перед рассылкой
+                async with aiosqlite.connect(DB_PATH) as db:
+                    async with db.execute("SELECT avatar FROM users WHERE username = ?", (username,)) as c:
+                        row = await c.fetchone()
+                        if row: current_avatar = row[0]
+
+                # 4. Проверяем оффлайн для PUSH
                 is_online = False
                 if target_user and room_id in manager.rooms:
                     if target_user in manager.rooms[room_id]:
                         is_online = True
 
-                # ЕСЛИ ОФФЛАЙН — ШЛЕМ PUSH
                 if target_user and not is_online:
                     async with aiosqlite.connect(DB_PATH) as db:
                         async with db.execute("SELECT subscription_json FROM push_subscriptions WHERE username = ?", (target_user,)) as c:
                             sub_row = await c.fetchone()
                             if sub_row:
-                                # Отправка пуша в фоне
                                 try:
-                                    webpush(
+                                    import asyncio
+                                    # Отправляем в потоке, чтобы чат не лагал
+                                    await asyncio.to_thread(
+                                        webpush,
                                         subscription_info=json.loads(sub_row[0]),
-                                        data=json.dumps({"title": f"ЛС от {username}", "body": display_text}),
+                                        data=json.dumps({"title": f"ЛС от {username}", "body": display_text[:50]}),
                                         vapid_private_key=VAPID_PRIVATE_KEY,
                                         vapid_claims=VAPID_CLAIMS
                                     )
-                                except Exception as e:
-                                    print(f"Push Error: {e}")
+                                except: pass
 
+                # 5. Отправляем в broadcast ЧИСТЫЙ текст и ЧИСТОЕ время
                 await manager.broadcast(
                     room_id, 
                     username=username, 
@@ -396,15 +412,16 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     to_user=target_user
                 )
 
-
     except WebSocketDisconnect:
         manager.disconnect(room_id, username)
         await manager.broadcast(room_id, message=f"{username} покинул чат")
 
-
+# ЗАПУСК
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
+
 
 
 
