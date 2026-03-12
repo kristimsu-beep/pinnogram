@@ -413,7 +413,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     # ТВОЙ КЛЮЧ И ПРАВИЛЬНАЯ ССЫЛКА
                     GEMINI_KEY = "AIzaSyCPIAV1EzHa_dWcsnXoMVnpjezbSWZnEn8"
                    # 1. Ссылка (уже правильная)
-                    AI_URL = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+                    AI_URL = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={GEMINI_KEY}"
                     
                     try:
                         async with httpx.AsyncClient() as client:
@@ -494,6 +494,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
