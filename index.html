@@ -212,15 +212,17 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        background: rgba(0,0,0,0.1);
-        padding: 8px;
-        border-radius: 12px;
-        min-width: 160px;
+        background: rgba(0,0,0,0.2);
+        padding: 5px 10px;
+        border-radius: 15px;
+        min-width: 180px;
     }
     .voice-msg audio {
+        filter: invert(1); /* Сделает плеер светлым на темном фоне или наоборот */
         height: 30px;
         width: 100%;
     }
+
     
     /* Пульсация при записи голоса */
     .voice-btn.recording {
@@ -1079,6 +1081,7 @@ function switchChat(partner) {
 </script>
 </body>
 </html>
+
 
 
 
