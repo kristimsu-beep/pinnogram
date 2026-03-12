@@ -107,16 +107,18 @@ async def read_messages(data: dict):
     return {"status": "ok"}
 
 # 1. Роут для регистрации и входа
+# 1. Роут для регистрации и входа
 @app.post("/auth")
 async def auth(data: dict):
     username = data.get("username")
     password = data.get("password")
     async with aiosqlite.connect(DB_PATH) as db:
+        # Индексы: 0 - password, 1 - avatar
         async with db.execute("SELECT password, avatar FROM users WHERE username = ?", (username,)) as cursor:
             user = await cursor.fetchone()
             if user:
-                if user[0] == password:
-                    return {"status": "ok", "avatar": user[1]}
+                if str(user[0]) == str(password): # Приводим к строке для надежности
+                    return {"status": "ok", "avatar": user[1]} # ИСПРАВЛЕНО: берем индекс 1
                 else:
                     return {"status": "error", "message": "Неверный пароль"}
             else:
@@ -229,7 +231,7 @@ class ConnectionManager:
                     try: await ws.send_text(final_msg)        
                     except: continue
     
-    manager = ConnectionManager()
+manager = ConnectionManager()
     
     
 
@@ -403,6 +405,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
