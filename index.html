@@ -211,17 +211,43 @@
     .voice-msg {
         display: flex;
         align-items: center;
-        gap: 10px;
-        background: rgba(0,0,0,0.2);
-        padding: 5px 10px;
-        border-radius: 15px;
-        min-width: 180px;
+        gap: 12px;
+        background: linear-gradient(135deg, #1d3557, #457b9d);
+        padding: 10px 15px;
+        border-radius: 20px 20px 20px 5px;
+        min-width: 240px;
+        color: white;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
     }
+    .play-btn {
+        width: 36px; height: 36px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; font-size: 16px;
+    }
+    .voice-progress-wrap {
+        flex: 1; display: flex; flex-direction: column; gap: 4px;
+    }
+    /* Симуляция волны (waveform) */
+    .waveform {
+        height: 20px; width: 100%;
+        background: url('https://www.svgrepo.com/show/343167/waveform.svg') repeat-x;
+        background-size: contain; opacity: 0.5;
+        position: relative; cursor: pointer;
+    }
+    .waveform-progress {
+        position: absolute; left: 0; top: 0; height: 100%;
+        background: white; width: 0%; mix-blend-mode: overlay;
+    }
+    .voice-meta {
+        display: flex; justify-content: space-between; font-size: 10px; opacity: 0.8;
+    }
+
     .voice-msg audio {
-        filter: invert(1); /* Сделает плеер светлым на темном фоне или наоборот */
-        height: 30px;
-        width: 100%;
+        display: none; /* Прячем стандартный плеер, он нам не нужен */
     }
+
 
     
     /* Пульсация при записи голоса */
@@ -473,18 +499,19 @@
                 const splitIdx = userAndText.indexOf(": ");
                 const sender = userAndText.substring(0, splitIdx);
                 const text = userAndText.substring(splitIdx + 2).trim();
-
                 // --- ЛОГИКА СЧЕТЧИКА (БЕЙДЖЕЙ) ---
                 if (isPrivate && sender !== myName && sender !== currentPartner) {
                     unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
                     saveUnread(); // Сохраняем в память
                     updateUnreadUI(); // Рисуем кружок
                     
-                    // Играем звук даже если чат не открыт
+                    // Играем звук уведомления
                     const audio = document.getElementById("notifSound");
                     if(audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
-                    return; // Не рисуем сообщение в чужом чате
+                    
+                    return; // <--- ОБЯЗАТЕЛЬНО! Останавливаем отрисовку сообщения здесь
                 }
+
 
                 // Фильтр отображения текущего чата
                 if (currentPartner) {
@@ -521,12 +548,24 @@
                 // ПРОВЕРКА КОНТЕНТА (ГОЛОС / ВИДЕО / ФОТО / ТЕКСТ)
                 if (text.startsWith("VOICE:")) {
                     const audioUrl = text.replace("VOICE:", "");
+                    const audioId = `audio-${msgId}`;
+                    
                     msgBubble.innerHTML += `
                         <div class="voice-msg">
-                            <span style="font-size:20px; cursor:pointer;" onclick="this.nextElementSibling.paused ? this.nextElementSibling.play() : this.nextElementSibling.pause()">🎙</span>
-                            <audio src="${audioUrl}" controls controlsList="nodownload" style="width:100%; height:30px; filter: invert(1);"></audio>
+                            <div class="play-btn" onclick="toggleVoice('${audioId}', this)">▶</div>
+                            <div class="voice-progress-wrap">
+                                <div class="waveform" onclick="seekVoice('${audioId}', event, this)">
+                                    <div class="waveform-progress" id="progress-${audioId}"></div>
+                                </div>
+                                <div class="voice-meta">
+                                    <span id="time-${audioId}">0:00</span>
+                                    <span>${time}</span>
+                                </div>
+                            </div>
+                            <audio id="${audioId}" src="${audioUrl}" ontimeupdate="updateVoiceProgress('${audioId}')" onended="this.previousElementSibling.firstElementChild.textContent='▶'"></audio>
                         </div>`;
-                } 
+                }
+
                 else {
                     const lowerT = text.toLowerCase();
                     const isImg = [".jpg", ".png", ".gif", ".webp"].some(ext => lowerT.includes(ext));
@@ -1024,26 +1063,38 @@ function saveUnread() {
 
 // 2. Рисование красных ярлыков в боковом меню
 function updateUnreadUI() {
+    // 1. Ищем все контакты в боковом меню
     const items = document.querySelectorAll('.contact-item');
+    
     items.forEach(item => {
-        // Вырезаем имя из текста (убираем иконку 👤)
-        const name = item.textContent.replace('👤 ', '').trim();
+        // 2. Берем имя именно из тега <b> (там оно чистое, без лишних символов)
+        const bTag = item.querySelector('b');
+        if (!bTag) return; // Пропускаем, если это не контакт
+        
+        const name = bTag.textContent.trim();
         const count = unreadCounts[name] || 0;
         
+        // 3. Ищем существующий бейдж (мы его создаем в ONLINE_LIST)
         let badge = item.querySelector('.unread-badge');
+        
         if (count > 0) {
+            // Если сообщений > 0, показываем цифру
             if (!badge) {
-                badge = document.createElement('span');
+                // Если вдруг бейджа нет (хотя он должен быть), создаем его
+                badge = document.createElement('div');
                 badge.className = 'unread-badge';
-                badge.style = "background:#ff3b30; color:white; border-radius:10px; padding:1px 6px; font-size:11px; margin-left:auto; font-weight:bold; box-shadow:0 0 5px rgba(0,0,0,0.3);";
+                badge.style = "background:#ff3b30; color:white; border-radius:10px; padding:2px 6px; font-size:11px; margin-left:auto; font-weight:bold; min-width:18px; text-align:center;";
                 item.appendChild(badge);
             }
+            badge.style.display = "block";
             badge.textContent = count;
         } else if (badge) {
-            badge.remove();
+            // Если прочитано (0), скрываем
+            badge.style.display = "none";
         }
     });
 }
+
 
 // 3. Умное переключение чата с подгрузкой истории
 function switchChat(partner) {
@@ -1076,11 +1127,44 @@ function switchChat(partner) {
     
     toggleSidebar();
 }
+function toggleVoice(id, btn) {
+    const a = document.getElementById(id);
+    if (a.paused) {
+        a.play();
+        btn.textContent = "⏸";
+    } else {
+        a.pause();
+        btn.textContent = "▶";
+    }
+}
+
+function updateVoiceProgress(id) {
+    const a = document.getElementById(id);
+    const prog = document.getElementById(`progress-${id}`);
+    const timeLabel = document.getElementById(`time-${id}`);
+    
+    const percent = (a.currentTime / a.duration) * 100;
+    prog.style.width = percent + "%";
+    
+    const m = Math.floor(a.currentTime / 60);
+    const s = Math.floor(a.currentTime % 60);
+    timeLabel.textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+function seekVoice(id, event, el) {
+    const a = document.getElementById(id);
+    const rect = el.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const percent = x / rect.width;
+    a.currentTime = percent * a.duration;
+}
+
 
 
 </script>
 </body>
 </html>
+
 
 
 
