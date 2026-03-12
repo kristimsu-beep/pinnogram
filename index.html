@@ -516,23 +516,45 @@
                     const audio = document.getElementById("notifSound");
                     if(audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
                 }
-
+                // ПРОВЕРКА КОНТЕНТА (ГОЛОС / ВИДЕО / ФОТО / ТЕКСТ)
                 if (text.startsWith("VOICE:")) {
                     const audioUrl = text.replace("VOICE:", "");
-                    msgBubble.innerHTML += `<div class="voice-msg">🎙<audio src="${audioUrl}" controls style="width:140px;height:30px"></audio></div>`;
-                } else {
+                    msgBubble.innerHTML += `
+                        <div class="voice-msg">
+                            <span style="font-size:20px; cursor:pointer;" onclick="this.nextElementSibling.paused ? this.nextElementSibling.play() : this.nextElementSibling.pause()">🎙</span>
+                            <audio src="${audioUrl}" controls controlsList="nodownload" style="width:100%; height:30px; filter: invert(1);"></audio>
+                        </div>`;
+                } 
+                else {
                     const lowerT = text.toLowerCase();
                     const isImg = [".jpg", ".png", ".gif", ".webp"].some(ext => lowerT.includes(ext));
-                    const isVid = [".mp4", ".webm"].some(ext => lowerT.includes(ext));
-                    if (isImg) {
-                        msgBubble.innerHTML += `<img src="${text}" style="max-width:100%;border-radius:10px;margin-top:5px" onclick="window.open(this.src)">`;
-                    } else if (isVid) {
-                        msgBubble.innerHTML += `<video src="${text}" controls style="max-width:100%;border-radius:10px"></video>`;
+                    const isVid = [".mp4", ".webm", ".mov"].some(ext => lowerT.includes(ext));
+
+                    if (isVid) {
+                        const v = document.createElement('video');
+                        v.src = text; 
+                        v.autoplay = true; 
+                        v.loop = true; // ЦИКЛ ВКЛЮЧЕН
+                        v.muted = true; 
+                        v.playsInline = true; 
+                        v.controls = true;
+                        v.style = "max-width:100%; border-radius:12px;";
+                        msgBubble.appendChild(v);
+                    } else if (isImg) {
+                        const img = document.createElement('img');
+                        img.src = text;
+                        img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer;";
+                        img.onclick = () => { document.getElementById('modal-img').src = img.src; document.getElementById('modal').style.display = 'flex'; };
+                        msgBubble.appendChild(img);
                     } else {
-                        const s = document.createElement('span'); s.className="msg-text"; s.textContent=text; msgBubble.appendChild(s);
+                        const s = document.createElement('span'); 
+                        s.className = "msg-text"; 
+                        s.textContent = text; 
+                        msgBubble.appendChild(s);
                     }
                 }
 
+                // ВРЕМЯ, ГАЛОЧКИ И СЧЕТЧИК (Твой код теперь стоит верно)
                 const tsWrap = document.createElement('div');
                 tsWrap.style = "display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:4px;";
                 const ts = document.createElement('span'); ts.className="msg-time"; ts.textContent=time; tsWrap.appendChild(ts);
@@ -542,6 +564,16 @@
                     status.className = isRead === "1" ? "msg-status read" : "msg-status";
                     status.textContent = isRead === "1" ? "✔✔" : "✔";
                     tsWrap.appendChild(status);
+                }
+
+                if (isPrivate && sender !== myName) {
+                    if (sender !== currentPartner) {
+                        unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
+                        saveUnread();
+                        updateUnreadUI();
+                        document.getElementById("notifSound").play().catch(()=>{});
+                        return; 
+                    }
                 }
 
                 if (isPrivate && sender === currentPartner && isRead === "0") {
@@ -563,6 +595,7 @@
             chat.appendChild(div);
             setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 100);
         };
+
 
 } // Конец функции startChat
 
@@ -1046,6 +1079,7 @@ function switchChat(partner) {
 </script>
 </body>
 </html>
+
 
 
 
