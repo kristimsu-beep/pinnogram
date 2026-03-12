@@ -187,6 +187,42 @@
     }
     .contact-item:hover { background: var(--accent); color: white; }
     .contact-active { border: 2px solid var(--accent); background: var(--msg-out); }
+    /* Стили для галочек (is_read) */
+    .msg-status {
+        font-size: 12px;
+        margin-left: 5px;
+        color: rgba(255,255,255,0.5); /* Серая - доставлено */
+    }
+    .msg-status.read {
+        color: #4fc3f7; /* Голубая - прочитано */
+    }
+    
+    /* Стили для голосовых сообщений */
+    .voice-msg {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: rgba(0,0,0,0.1);
+        padding: 8px;
+        border-radius: 12px;
+        min-width: 160px;
+    }
+    .voice-msg audio {
+        height: 30px;
+        width: 100%;
+    }
+    
+    /* Пульсация при записи голоса */
+    .voice-btn.recording {
+        background: #ff3b30 !important;
+        animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); }
+        70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(255, 59, 48, 0); }
+        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
+    }
+
 
 
     #localVideo { width: 100px; height: 140px; position: absolute; bottom: 20px; right: 20px; border: 2px solid white; border-radius: 10px; object-fit: cover; z-index: 10002; }
@@ -270,20 +306,22 @@
             <span onclick="addEmoji('😂')">😂</span><span onclick="addEmoji('❤️')">❤️</span>
             <span onclick="addEmoji('👍')">👍</span>
         </div>
-
         <div class="controls">
-            <!-- Аватарка теперь внутри controls, в общем ряду -->
-            <img id="user-avatar-icon" onclick="changeAvatar()" 
-                 src="https://i.ibb.co/4pSbxsh/user-avatar.png" 
-                 style="width:42px; height:42px; border-radius:50%; cursor:pointer; border:2px solid var(--accent); object-fit:cover; flex-shrink:0;">
-
+            <img id="user-avatar-icon" onclick="changeAvatar()" src="https://i.ibb.co/4pSbxsh/user-avatar.png">
             
             <input type="file" id="fileInput" style="display:none" onchange="uploadFile()">
             <button class="file-btn" onclick="document.getElementById('fileInput').click()">📎</button>
             <button id="recordBtn" class="file-btn rec-btn" onclick="toggleRecording()">🎥</button>
+            
+            <!-- ДОБАВЬ ЭТУ КНОПКУ -->
+            <button id="voiceBtn" class="file-btn voice-btn" 
+                    onmousedown="startVoice()" onmouseup="stopVoice()" 
+                    ontouchstart="startVoice()" ontouchend="stopVoice()">🎙</button>
+        
             <button onclick="startCall()" style="background:#28a745;">📞</button>
             <input type="text" id="messageText" placeholder="Сообщение..." oninput="handleTyping()">
             <button onclick="sendMessage()">🚀</button>
+        </div>
         </div>
 
         <button onclick="localStorage.clear(); location.reload();" 
@@ -293,18 +331,43 @@
 <script>
     const API_URL = window.location.origin;
     const socketProto = window.location.protocol === "https:" ? "wss" : "ws";
-    let ws, myName = localStorage.getItem("pinnogram_user"), myRoom = localStorage.getItem("pinnogram_room");
+    const VAPID_PUBLIC_KEY = "BLfoNtD9uQWZ2sX_dUiQ698ze7J-JO8lnl8n03AG7Dt1fh1Io831wuAKgqHRcmLNXKMh99BzVusQWvx37jJNZis";
 
-    // ОСТАВЛЯЕМ ТОЛЬКО ОДНО ОБЪЯВЛЕНИЕ ТУТ:
+    let ws, myName = localStorage.getItem("pinnogram_user"), myRoom = localStorage.getItem("pinnogram_room");
     let currentPartner = localStorage.getItem("pinnogram_last_chat");
     if (currentPartner === "null" || currentPartner === "undefined") currentPartner = null;
     
-    // Загружаем счетчики непрочитанных сообщений
     let unreadCounts = JSON.parse(localStorage.getItem("pinnogram_unread")) || {};
-
     let pc, localStream, mediaRecorder, videoChunks = [], typingTimeout, isTypingNow = false;
+    let voiceRecorder, voiceChunks = []; // Для голосовых
 
-      if (myName && myRoom) startChat(myName, myRoom);
+    // Регистрация Service Worker для Push-уведомлений
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').then(reg => {
+                console.log('Service Worker зарегистрирован');
+            }).catch(err => console.error('Ошибка SW:', err));
+        });
+    }
+
+    async function subscribeToPush() {
+        if (!('serviceWorker' in navigator)) return;
+        try {
+            const registration = await navigator.serviceWorker.ready;
+            const subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: VAPID_PUBLIC_KEY
+            });
+            await fetch(`${API_URL}/subscribe`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ username: myName, subscription: JSON.stringify(subscription) })
+            });
+            console.log("Push-подписка активна");
+        } catch (e) { console.warn("Push заблокирован пользователем или не поддерживается"); }
+    }
+
+    if (myName && myRoom) startChat(myName, myRoom);
 
     function startChat(name, room) {
         myName = name; myRoom = room;
@@ -313,45 +376,55 @@
         
         ws = new WebSocket(`${socketProto}://${window.location.host}/ws/${room}/${encodeURIComponent(name)}`);
 
-        // --- НОВЫЙ БЛОК: Запрос истории при подключении ---
         ws.onopen = () => {
-            console.log("Подключено. Запрашиваю историю для:", currentPartner);
-            // Если currentPartner null, сервер пришлет общий чат
+            console.log("Соединение установлено");
             ws.send(`GET_HISTORY:${currentPartner}`);
+            subscribeToPush(); // Запрашиваем пуши при входе
         };
 
         ws.onmessage = async (event) => {
-            const raw = event.data;
-            const chat = document.getElementById('chat');
-
-            // 1. ОБРАБОТКА СПИСКА ОНЛАЙН
+                       // 1. ОБРАБОТКА СПИСКА ОНЛАЙН И КОНТАКТОВ
             if (raw.includes("ONLINE_LIST:")) {
                 const parts = raw.split("ONLINE_LIST:");
                 if (parts.length > 1) {
                     const users = parts[1].split(",");
+                    const contactsList = document.getElementById("contacts-list");
                     
-                    const contacts = document.getElementById("contacts-list");
-                    if (contacts) {
-                        contacts.innerHTML = users.map(u => {
-                            const name = u.split(" (")[0];
-                            if (name === myName) return "";
+                    if (contactsList) {
+                        contactsList.innerHTML = users.map(u => {
+                            const name = u.split(" (")[0].trim();
+                            if (!name || name === myName) return "";
+                            
+                            // Проверяем, активен ли этот чат сейчас
                             const activeClass = (currentPartner === name) ? "contact-active" : "";
-                            return `<div onclick="switchChat('${name}')" class="contact-item ${activeClass}">👤 ${name}</div>`;
+                            
+                            // Рисуем элемент контакта
+                            return `
+                                <div onclick="switchChat('${name}')" class="contact-item ${activeClass}">
+                                    <span>👤</span>
+                                    <b style="flex:1">${name}</b>
+                                    <div id="badge-${name}" class="unread-badge" style="display:none"></div>
+                                </div>`;
                         }).join("");
                         
-                        // ОБНОВЛЯЕМ КРАСНЫЕ КРУЖОЧКИ В МЕНЮ
+                        // Сразу обновляем красные кружочки непрочитанных
                         updateUnreadUI(); 
                     }
 
+                    // Обновляем строку "В сети" под чатом
                     const namesOnly = users.map(u => u.split(" (")[0]);
-                    const onlineText = document.getElementById("online-list");
-                    if (onlineText) onlineText.textContent = `В сети: ${namesOnly.join(", ")}`;
+                    const onlineStatus = document.getElementById("online-list");
+                    if (onlineStatus) onlineStatus.textContent = `В сети: ${namesOnly.join(", ")}`;
                     
+                    // Обновляем секретную панель админа
                     const adminList = document.getElementById("admin-users-list");
-                    if (adminList) adminList.innerHTML = users.map(u => `<div style="color:#00ff00;">> node: ${u}</div>`).join("");
+                    if (adminList) {
+                        adminList.innerHTML = users.map(u => `<div style="color:#00ff00;">> node: ${u}</div>`).join("");
+                    }
                 }
                 return;
             }
+
 
 
     // ... Дальше идут блоки RTC_SIGNAL, DELETE_CONFIRM и т.д.
@@ -397,54 +470,45 @@
         const parts = raw.split("|");
         const idPart = parts[0] || "ID:0"; 
         const content = parts[1] || "";
-        const avatarUrlFromSrv = parts[2] || "https://i.ibb.co";
-        
+        const avatarUrlFromSrv = parts[2] || "https://i.ibb.co/4pSbxsh/user-avatar.png";
+        const isRead = parts[3] || "0"; // НОВЫЙ ПАРАМЕТР: статус прочтения
+
         const isPrivate = content.includes("PRIVATE:");
 
         // --- ЛОГИКА СЧЕТЧИКА УВЕДОМЛЕНИЙ ---
         if (isPrivate) {
-            // Извлекаем отправителя (кто нам пишет)
-            // Ищем текст между PRIVATE: и вторым двоеточием
             const senderMatch = content.match(/\]\s(.*?):/); 
             const msgSender = senderMatch ? senderMatch[1] : null;
 
-            // Если пишет КТО-ТО ДРУГОЙ и у нас открыт НЕ его чат
             if (msgSender && msgSender !== myName && msgSender !== currentPartner) {
                 unreadCounts[msgSender] = (unreadCounts[msgSender] || 0) + 1;
-                saveUnread();    // Сохраняем в память
-                updateUnreadUI(); // Рисуем кружок в меню
+                saveUnread(); updateUnreadUI();
                 document.getElementById("notifSound").play().catch(() => {});
-                return; // ВАЖНО: не рисуем сообщение на экране
+                return; 
             }
         }
 
-        // --- ОБЫЧНЫЙ ФИЛЬТР ОТОБРАЖЕНИЯ ---
+        // --- ФИЛЬТР ОТОБРАЖЕНИЯ ---
         if (currentPartner) {
             if (!content.includes(`PRIVATE:${currentPartner}:`) && !content.includes(`PRIVATE:${myName}:`)) return;
         } else {
             if (isPrivate) return;
         }
 
-        // Очистка текста от префикса и отрисовка (твой старый код) ...
         const displayContent = content.replace(/^PRIVATE:.*?:/, "");
         const msgId = idPart.replace("ID:", "");
-        // ... далее создание пузыря сообщения как и было ...
 
-        
-        // 3. АВАТАРКА (Защита от 403)
         let avatarUrl = avatarUrlFromSrv;
-        if (avatarUrl.includes("flaticon.com") || avatarUrl.length < 15 || avatarUrl === "https://i.ibb.co") {
+        if (avatarUrl.includes("flaticon.com") || avatarUrl.length < 15) {
             avatarUrl = "https://i.ibb.co/4pSbxsh/user-avatar.png";
         }
 
         const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
         const time = timeMatch ? timeMatch[1] : "--:--";
-        
         const userAndText = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
         const splitIdx = userAndText.indexOf(": ");
         const sender = userAndText.substring(0, splitIdx);
-        const text = userAndText.substring(splitIdx + 2);
-        const lowerText = text.toLowerCase();
+        const text = userAndText.substring(splitIdx + 2).trim();
 
         div.className = 'msg-row';
         div.id = `msg-${msgId}`;
@@ -464,22 +528,30 @@
             nSpan.className = "msg-sender";
             nSpan.textContent = sender;
             msgBubble.appendChild(nSpan);
-            document.getElementById("notifSound").play().catch(() => {});
         }
 
-        // Логика контента (Медиа/Текст) - ОСТАВЛЯЕМ КАК БЫЛО
+        // --- ЛОГИКА КОНТЕНТА (ТЕКСТ / МЕДИА / ГОЛОС) ---
+        const lowerText = text.toLowerCase();
         const isImg = [".jpg", ".jpeg", ".png", ".gif", ".webp"].some(ext => lowerText.includes(ext));
         const isVid = [".mp4", ".webm", ".mov"].some(ext => lowerText.includes(ext));
+        const isVoice = text.startsWith("VOICE:"); // НОВЫЙ ТИП: Голосовое
 
-        if (isImg) {
+        if (isVoice) {
+            const audioUrl = text.replace("VOICE:", "");
+            msgBubble.innerHTML += `
+                <div class="voice-msg">
+                    <span>🎙</span>
+                    <audio src="${audioUrl}" controls controlsList="nodownload"></audio>
+                </div>`;
+        } else if (isImg) {
             const img = document.createElement('img');
-            img.src = text.trim();
+            img.src = text;
             img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer;";
             img.onclick = () => { document.getElementById('modal-img').src = img.src; document.getElementById('modal').style.display = 'flex'; };
             msgBubble.appendChild(img);
         } else if (isVid) {
             const v = document.createElement('video');
-            v.src = text.trim(); v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
+            v.src = text; v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
             v.style = "max-width:100%; border-radius:10px;";
             msgBubble.appendChild(v);
         } else {
@@ -489,15 +561,38 @@
             msgBubble.appendChild(s);
         }
 
+        // --- ГАЛОЧКИ И ВРЕМЯ ---
+        const tsWrap = document.createElement('div');
+        tsWrap.style = "display:flex; align-items:center; justify-content:flex-end; gap:4px; margin-top:4px;";
+        
         const ts = document.createElement('span');
         ts.className = "msg-time";
         ts.textContent = time;
-        msgBubble.appendChild(ts);
+        tsWrap.appendChild(ts);
+
+        // Рисуем галочки только для СВОИХ сообщений в ЛС
+        if (sender === myName && currentPartner) {
+            const status = document.createElement('span');
+            status.className = isRead === "1" ? "msg-status read" : "msg-status";
+            status.textContent = isRead === "1" ? "✔✔" : "✔";
+            tsWrap.appendChild(status);
+        }
+                // Если нам пришло сообщение в ОТКРЫТЫЙ чат — помечаем как прочитанное
+        if (isPrivate && sender === currentPartner && isRead === "0") {
+            fetch(`${API_URL}/read_messages`, {
+                method: "POST",
+                headers: {"Content-Type":"application/json"},
+                body: JSON.stringify({ username: myName, partner: currentPartner })
+            });
+        }
+
+
+        msgBubble.appendChild(tsWrap);
         div.appendChild(msgBubble);
 
         div.oncontextmenu = (e) => {
             e.preventDefault();
-            if (sender === myName && confirm("Удалить сообщение?")) ws.send(`__DELETE__:${msgId}`);
+            if (sender === myName && confirm("Удалить?")) ws.send(`__DELETE__:${msgId}`);
         };
     }
 
@@ -683,6 +778,39 @@ function endCall() {
     document.getElementById('video-call-overlay').style.display = 'none'; 
     pc = null; 
     iceQueue = []; // Очищаем очередь для нового звонка
+}
+let voiceRecorder, voiceChunks = [];
+
+async function startVoice() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        voiceRecorder = new MediaRecorder(stream);
+        voiceChunks = [];
+        
+        document.getElementById('voiceBtn').classList.add('recording');
+        
+        voiceRecorder.ondataavailable = e => voiceChunks.push(e.data);
+        voiceRecorder.onstop = async () => {
+            const blob = new Blob(voiceChunks, { type: 'audio/webm' });
+            const fd = new FormData();
+            fd.append("file", blob, `voice_${Date.now()}.webm`);
+            
+            const res = await fetch(`${API_URL}/upload`, { method: "POST", body: fd });
+            const d = await res.json();
+            if (d.url) {
+                const prefix = currentPartner ? `TO_USER:${currentPartner}|` : "";
+                ws.send(`${prefix}TIME:${new Date().toLocaleTimeString()}|VOICE:${d.url}`);
+            }
+        };
+        voiceRecorder.start();
+    } catch(e) { alert("Микрофон недоступен"); }
+}
+
+function stopVoice() {
+    if (voiceRecorder && voiceRecorder.state !== "inactive") {
+        voiceRecorder.stop();
+        document.getElementById('voiceBtn').classList.remove('recording');
+    }
 }
 
 
@@ -959,6 +1087,7 @@ function switchChat(partner) {
 </script>
 </body>
 </html>
+
 
 
 
