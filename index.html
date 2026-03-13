@@ -450,7 +450,40 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
+    /* Пузыри сообщений */
+    .msg-bubble {
+        max-width: 80%;
+        padding: 8px 12px;
+        border-radius: 15px;
+        position: relative;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
     
+    /* Справа (Мои) */
+    .msg-bubble.out {
+        background: #2b5278; /* Синий */
+        color: white;
+        border-bottom-right-radius: 2px;
+    }
+    
+    /* Слева (Чужие) */
+    .msg-bubble.in {
+        background: #182533; /* Темный */
+        color: white;
+        border-bottom-left-radius: 2px;
+    }
+    
+    /* Цитата ответа */
+    .reply-quote {
+        background: rgba(0,0,0,0.2);
+        border-left: 2px solid #2196f3;
+        padding: 4px 8px;
+        margin-bottom: 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+    }
+
 
 
 
@@ -786,25 +819,29 @@
             } 
             else {
                 const parts = raw.split("|");
-                // Разбираем префиксы: ID, REPLY, Текст...
-                const idPart = parts[0] || "ID:0"; 
-                const msgId = idPart.replace("ID:", "");
+                // 1. Всегда первый элемент — это ID
+                const msgId = (parts[0] || "ID:0").replace("ID:", "");
                 
-                // Проверяем, есть ли префикс ответа (REPLY:ID|)
+                // 2. УМНЫЙ РАЗБОР: Проверяем, есть ли префикс ответа (REPLY:ID)
                 let replyId = null;
-                let content = parts[1] || "";
-                if (content.startsWith("REPLY:")) {
-                    const rParts = content.split("|", 2);
-                    replyId = rParts[0].replace("REPLY:", "");
-                    content = rParts[1];
+                let content = "";
+                let avatarUrlFromSrv = "";
+                let isRead = "0";
+
+                if (parts[1] && parts[1].startsWith("REPLY:")) {
+                    // Если есть ответ: индексы сдвигаются на +1
+                    replyId = parts[1].replace("REPLY:", "");
+                    content = parts[2] || "";
+                    avatarUrlFromSrv = parts[3] || "";
+                    isRead = parts[4] || "0";
+                } else {
+                    // Если ответа нет: обычный порядок
+                    content = parts[1] || "";
+                    avatarUrlFromSrv = parts[2] || "";
+                    isRead = parts[3] || "0";
                 }
 
-                const avatarUrlFromSrv = parts[2] || "";
-                const isRead = parts[3] || "0"; 
-
-                // ПРИСВАИВАЕМ ID ЭЛЕМЕНТУ (важно для удаления и правки)
-                div.id = `msg-${msgId}`;
-
+                // --- ПАРСИНГ ТЕКСТА И ВРЕМЕНИ ---
                 const isPrivate = content.includes("PRIVATE:");
                 const displayContent = content.replace(/^PRIVATE:.*?:/, "");
                 const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
@@ -814,39 +851,17 @@
                 const sender = userAndText.substring(0, splitIdx);
                 const text = userAndText.substring(splitIdx + 2).trim();
 
-                // --- ЛОГИКА СЧЕТЧИКА (БЕЙДЖЕЙ) ---
+                // 3. ЛОГИКА СЧЕТЧИКА ДЛЯ ФОНОВЫХ ЧАТОВ
                 if (isPrivate && sender !== myName && sender !== currentPartner) {
                     unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
                     saveUnread();
                     updateUnreadUI();
                     const audio = document.getElementById("notifSound");
                     if(audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
-                    return;
+                    return; // Не рисуем сообщение, если мы в другом чате
                 }
 
-                // --- ВЫЗОВ МЕНЮ (ПК + ТЕЛЕФОНЫ) ---
-                div.oncontextmenu = (e) => {
-                    openMenu(e, msgId, text, sender);
-                };
-
-                // Для мобильных (зажатие на 0.5 сек)
-                let pressTimer;
-                div.ontouchstart = (e) => {
-                    pressTimer = setTimeout(() => {
-                        // Для тач-событий берем координаты первого касания
-                        const touch = e.touches[0];
-                        openMenu({ 
-                            preventDefault: () => e.preventDefault(),
-                            clientX: touch.clientX,
-                            clientY: touch.clientY 
-                        }, msgId, text, sender);
-                    }, 500);
-                };
-                div.ontouchend = () => clearTimeout(pressTimer);
-
-                // Дальше идет создание msgBubble...
-                // Вставь это там, где создаешь внутренности сообщения (msgBubble)
-                // 1. Сначала ПРОВЕРЯЕМ ФИЛЬТРЫ (нужно ли вообще рисовать сообщение)
+                // Фильтр текущего открытого чата
                 if (currentPartner) {
                     const c = content || ""; 
                     if (!c.includes(`PRIVATE:${currentPartner}:`) && !c.includes(`PRIVATE:${myName}:`)) return;
@@ -854,27 +869,31 @@
                     return;
                 }
 
-                // 2. Настраиваем СТРОКУ (контейнер сообщения)
+                // Очистка надписи "Загрузка истории..."
+                if (chat.innerHTML.includes("Загрузка")) chat.innerHTML = "";
+
+                // --- СОЗДАНИЕ ЭЛЕМЕНТОВ ---
+                const div = document.createElement('div');
                 div.className = 'msg-row';
                 div.id = `msg-${msgId}`;
                 div.style.flexDirection = (sender === myName) ? 'row-reverse' : 'row';
 
-                // 3. Создаем АВАТАРКУ
+                // Аватарка
                 const avImg = document.createElement('img');
                 let finalAv = avatarUrlFromSrv;
-                if (!finalAv || finalAv.length < 15) finalAv = "https://i.ibb.co/4pSbxsh/user-avatar.png";
+                if (!finalAv || finalAv.length < 15) finalAv = "https://i.ibb.co";
                 else if (!finalAv.startsWith('http')) finalAv = "https://" + finalAv;
                 avImg.src = finalAv;
                 avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
-                avImg.onerror = function() { this.src = "https://i.ibb.co/4pSbxsh/user-avatar.png"; };
+                avImg.onerror = function() { this.src = "https://i.ibb.co"; };
                 div.appendChild(avImg);
 
-                // 4. Создаем БАБЛ сообщения (ОДИН РАЗ)
+                // Создаем БАБЛ (пузырь)
                 const msgBubble = document.createElement('div');
                 msgBubble.className = (sender === myName) ? 'msg-bubble out' : 'msg-bubble in';
-                
-                // 5. РИСУЕМ ЦИТАТУ ОТВЕТА (если есть)
-                if (replyId && replyId !== "null") {
+
+                // 4. РИСУЕМ ЦИТАТУ ОТВЕТА (если есть)
+                if (replyId && replyId !== "null" && replyId !== "None") {
                     const quote = document.createElement('div');
                     quote.className = 'reply-quote';
                     quote.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:10px;">Ответ на #${replyId}</span>`;
@@ -885,90 +904,48 @@
                     msgBubble.appendChild(quote);
                 }
 
-                // 6. ИМЯ ОТПРАВИТЕЛЯ (если не мы)
+                // Имя отправителя (если не мы)
                 if (sender !== myName) {
                     const nSpan = document.createElement('span');
                     nSpan.className = "msg-sender";
                     nSpan.textContent = sender;
                     msgBubble.appendChild(nSpan);
-                    
-                    // Звук для открытого чата
-                    const audio = document.getElementById("notifSound");
-                    if(audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
                 }
 
-                // ДАЛЕЕ ИДУТ ТВОИ ПРОВЕРКИ КОНТЕНТА (POLL_ID, VOICE и т.д.)
-
-                            // --- ПРОВЕРКА КОНТЕНТА (ОПРОС / ГОЛОС / ВИДЕО / ФОТО / ТЕКСТ) ---
-                
-                // 1. ПРОВЕРКА НА ОПРОС
+                // --- ПРОВЕРКА КОНТЕНТА (Опрос / Голос / Медиа / Текст) ---
                 if (text.startsWith("POLL_ID:")) {
-                    const pollId = text.replace("POLL_ID:", "");
-                    const pollContainer = document.createElement('div');
-                    pollContainer.id = `poll-card-${pollId}`;
-                    msgBubble.appendChild(pollContainer);
-                    loadPollData(pollId); // Функция отрисует карточку с процентами
+                    const pId = text.replace("POLL_ID:", "");
+                    const pCont = document.createElement('div'); pCont.id = `poll-card-${pId}`;
+                    msgBubble.appendChild(pCont); loadPollData(pId);
                 } 
-                // 2. ПРОВЕРКА НА ГОЛОСОВОЕ
-                            // 2. ПРОВЕРКА НА ГОЛОСОВОЕ (ИСПРАВЛЕНО)
                 else if (text.startsWith("VOICE:")) {
-                    const [audioUrl, waveStr] = text.replace("VOICE:", "").split("^");
-                    const waves = waveStr ? waveStr.split(",").map(Number) : [20,40,20,50,30];
+                    const [vUrl, vWaves] = text.replace("VOICE:", "").split("^");
                     const audioId = `audio-${msgId}`;
-                    const waveHTML = waves.map(h => `<div class="wave-bar" style="height:${Math.max(15, h)}%"></div>`).join("");
-
-                    // Создаем контейнер для голосового сообщения
-                    const voiceContainer = document.createElement('div');
-                    voiceContainer.className = "voice-msg-container"; // Можно добавить стиль в CSS
-                    
-                    voiceContainer.innerHTML = `
-                        <div class="voice-msg">
-                            <div class="play-btn" onclick="toggleVoice('${audioId}', this)">▶</div>
-                            <div class="voice-progress-wrap">
-                                <div class="waveform-real" onclick="seekVoice('${audioId}', event, this)">
-                                    <div class="waveform-overlay" id="progress-${audioId}"></div>
-                                    ${waveHTML}
-                                </div>
-                                <div class="voice-meta">
-                                    <span id="time-${audioId}">0:00</span>
-                                </div>
-                            </div>
-                            <audio id="${audioId}" src="${audioUrl}" ontimeupdate="updateVoiceProgress('${audioId}')" onended="this.parentElement.parentElement.querySelector('.play-btn').textContent='▶'"></audio>
-                        </div>`;
-                    
-                    msgBubble.appendChild(voiceContainer);
+                    const vCont = document.createElement('div');
+                    vCont.innerHTML = `<div class="voice-msg"><div class="play-btn" onclick="toggleVoice('${audioId}', this)">▶</div><div id="time-${audioId}">0:00</div><audio id="${audioId}" src="${vUrl}" ontimeupdate="updateVoiceProgress('${audioId}')"></audio></div>`;
+                    msgBubble.appendChild(vCont);
                 }
-
-                // 3. ПРОВЕРКА НА ВИДЕО / ФОТО / ТЕКСТ
                 else {
                     const lowerT = text.toLowerCase();
                     const isImg = [".jpg", ".png", ".gif", ".webp"].some(ext => lowerT.includes(ext));
                     const isVid = [".mp4", ".webm", ".mov"].some(ext => lowerT.includes(ext));
 
                     if (isVid) {
-                        const v = document.createElement('video');
-                        v.src = text; 
-                        v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
-                        v.style = "max-width:100%; border-radius:12px;";
+                        const v = document.createElement('video'); v.src = text; v.autoplay=true; v.loop=true; v.muted=true; v.controls = true; v.style = "max-width:100%; border-radius:12px;";
                         msgBubble.appendChild(v);
                     } else if (isImg) {
-                        const img = document.createElement('img');
-                        img.src = text;
-                        img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer;";
+                        const img = document.createElement('img'); img.src = text; img.style = "max-width:100%; border-radius:10px; cursor:pointer;";
                         img.onclick = () => { document.getElementById('modal-img').src = img.src; document.getElementById('modal').style.display = 'flex'; };
                         msgBubble.appendChild(img);
                     } else {
-                        const s = document.createElement('span'); 
-                        s.className = "msg-text"; 
-                        s.textContent = text; 
+                        const s = document.createElement('span'); s.className = "msg-text"; s.textContent = text;
                         msgBubble.appendChild(s);
                     }
                 }
 
-
-                // ВРЕМЯ, ГАЛОЧКИ И СЧЕТЧИК (Твой код теперь стоит верно)
+                // --- ВРЕМЯ, ГАЛОЧКИ И ОТМЕТКА О ПРОЧТЕНИИ ---
                 const tsWrap = document.createElement('div');
-                tsWrap.style = "display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:4px;";
+                tsWrap.style = "display:flex; align-items:center; justify-content:flex-end; gap:4px; margin-top:4px;";
                 const ts = document.createElement('span'); ts.className="msg-time"; ts.textContent=time; tsWrap.appendChild(ts);
 
                 if (sender === myName && currentPartner) {
@@ -978,17 +955,6 @@
                     tsWrap.appendChild(status);
                 }
 
-                               // 1. ЛОГИКА СЧЕТЧИКА ДЛЯ ФОНОВЫХ ЧАТОВ
-                if (isPrivate && sender !== myName && sender !== currentPartner) {
-                    unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
-                    saveUnread();
-                    updateUnreadUI();
-                    const audio = document.getElementById("notifSound");
-                    if(audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
-                    return; // Не рисуем сообщение, если мы в другом чате
-                }
-
-                // 2. ОТМЕТКА О ПРОЧТЕНИИ
                 if (isPrivate && sender === currentPartner && isRead === "0") {
                     fetch(`${API_URL}/read_messages`, {
                         method: "POST",
@@ -997,25 +963,36 @@
                     });
                 }
 
-                // 3. ФИНАЛЬНАЯ СБОРКА И ОТРИСОВКА
+                // Контекстное меню
+                div.oncontextmenu = (e) => openMenu(e, msgId, text, sender);
+
+                // Долгое нажатие для смартфонов
+                let pressTimer;
+                div.ontouchstart = (e) => {
+                    pressTimer = setTimeout(() => {
+                        const touch = e.touches[0];
+                        openMenu({ 
+                            preventDefault: () => e.preventDefault(),
+                            clientX: touch.clientX,
+                            clientY: touch.clientY 
+                        }, msgId, text, sender);
+                    }, 500);
+                };
+                div.ontouchend = () => clearTimeout(pressTimer);
+
                 msgBubble.appendChild(tsWrap);
                 div.appendChild(msgBubble);
                 chat.appendChild(div);
-                
-                // Авто-прокрутка вниз
                 chat.scrollTop = chat.scrollHeight;
-            } // Конец else (обычные сообщения)
+            } 
         }; // Конец ws.onmessage
 
-        // 4. ГЛОБАЛЬНОЕ ЗАКРЫТИЕ МЕНЮ ПРИ КЛИКЕ МИМО
         document.addEventListener('mousedown', (e) => {
             const menu = document.getElementById('msg-menu');
-            if (menu && !e.target.closest('.context-menu')) {
-                menu.style.display = 'none';
-            }
+            if (menu && !e.target.closest('.context-menu')) { menu.style.display = 'none'; }
         });
-
-} // Конец функции startChat
+} // Конец startChat
+// Конец функции startChat
 
 
 let iceQueue = []; 
@@ -1743,6 +1720,7 @@ document.addEventListener('mousedown', (e) => {
 </script>
 </body>
 </html>
+
 
 
 
