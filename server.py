@@ -510,8 +510,11 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                 await manager.broadcast(room_id, username="AI_BOT", text=f"Groq Error: {err}", to_user=username)
 
                     except Exception as e:
-                        print(f"AI Global Error: {e}")
-                        await manager.broadcast(room_id, username="AI_BOT", text="Бот ушел на перезагрузку...", to_user=username)
+                        # Теперь бот сам скажет, что именно сломалось!
+                        error_details = str(e)
+                        print(f"AI Global Error: {error_details}")
+                        await manager.broadcast(room_id, username="AI_BOT", text=f"⚠️ Системная ошибка: {error_details}", to_user=username)
+
 
                 # 6. Проверка PUSH (если это не бот, а обычный юзер оффлайн)
                 elif target_user and target_user != "AI_BOT":
@@ -543,6 +546,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
