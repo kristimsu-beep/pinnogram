@@ -486,7 +486,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                     "model": "llama-3.3-70b-versatile",
                                     "messages": [
                                         {"role": "system", "content": f"Ты — официальный ИИ-ассистент мессенджера Pinnogram. Твоего собеседника зовут {username}. Будь вежливым и помогай ему."},
-                                        {"role": "user", "content": display_text}
+                                        {"role": "user", "content": clean_text}
                                     ]
                                 },
                                 timeout=30.0
@@ -531,7 +531,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                         await asyncio.to_thread(
                                             webpush,
                                             subscription_info=json.loads(s_row[0]),
-                                            data=json.dumps({"title": f"ЛС от {username}", "body": display_text[:50]}),
+                                            data=json.dumps({"title": f"ЛС от {username}", "body": clean_text[:50]}),
                                             vapid_private_key=VAPID_PRIVATE_KEY,
                                             vapid_claims=VAPID_CLAIMS
                                         )
@@ -546,6 +546,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
