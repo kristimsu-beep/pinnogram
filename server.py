@@ -79,6 +79,25 @@ async def startup():
                 subscription_json TEXT
             )
         """)
+                # Таблица самих опросов
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS polls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                question TEXT,
+                options TEXT, -- Храним варианты через запятую
+                owner TEXT
+            )
+        """)
+        # Таблица голосов
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS poll_votes (
+                poll_id INTEGER,
+                username TEXT,
+                option_index INTEGER,
+                PRIMARY KEY(poll_id, username)
+            )
+        """)
+
 
         # 2. ФИКСЫ ДЛЯ СТАРОЙ БАЗЫ (Добавляем то, чего может не хватать)
         columns = [
@@ -116,6 +135,37 @@ async def read_messages(data: dict):
         """, (partner, username))
         await db.commit()
     return {"status": "ok"}
+
+@app.get("/poll/{poll_id}")
+async def get_poll(poll_id: int, username: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Получаем данные опроса
+        async with db.execute("SELECT question, options, owner FROM polls WHERE id = ?", (poll_id,)) as cur:
+            poll = await cur.fetchone()
+            if not poll: return {"status": "error"}
+            
+        # Получаем все голоса для этого опроса
+        async with db.execute("SELECT option_index, username FROM poll_votes WHERE poll_id = ?", (poll_id,)) as cur:
+            votes = await cur.fetchall()
+            
+        # Формируем ответ
+        options = poll[1].split(",")
+        results = [0] * len(options)
+        my_vote = None
+        
+        for opt_idx, voter in votes:
+            results[opt_idx] += 1
+            if voter == username: my_vote = opt_idx
+            
+        return {
+            "question": poll[0],
+            "options": options,
+            "results": results,
+            "total": len(votes),
+            "my_vote": my_vote,
+            "owner": poll[2]
+        }
+
 
 # 1. Роут для регистрации и входа
 # 1. Роут для регистрации и входа
@@ -359,6 +409,30 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         if name != username:
                             await conn.send_text(f"TYPING:{username}")
                 continue
+                        # --- СОЗДАНИЕ ОПРОСА ---
+            elif data.startswith("POLL_CREATE:"):
+                # Формат: POLL_CREATE:Вопрос|Опция1,Опция2
+                payload = data.replace("POLL_CREATE:", "")
+                q, opts = payload.split("|")
+                async with aiosqlite.connect(DB_PATH) as db:
+                    cur = await db.execute("INSERT INTO polls (question, options, owner) VALUES (?, ?, ?)", (q, opts, username))
+                    p_id = cur.lastrowid
+                    await db.commit()
+                # Рассылаем как системное сообщение
+                await manager.broadcast(room_id, username=username, text=f"POLL_ID:{p_id}", to_user=target_user)
+                continue
+
+            # --- ГОЛОСОВАНИЕ ---
+            elif data.startswith("POLL_VOTE:"):
+                p_id, opt_idx = data.replace("POLL_VOTE:", "").split("|")
+                async with aiosqlite.connect(DB_PATH) as db:
+                    await db.execute("INSERT OR REPLACE INTO poll_votes VALUES (?, ?, ?)", (int(p_id), username, int(opt_idx)))
+                    await db.commit()
+                # Уведомляем всех в комнате, чтобы обновили этот опрос у себя
+                for conn in manager.rooms.get(room_id, {}).values():
+                    await conn.send_text(f"POLL_UPDATE:{p_id}")
+                continue
+
                 
             else:
                 display_text = data
@@ -483,6 +557,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
