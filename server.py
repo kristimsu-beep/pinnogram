@@ -352,48 +352,61 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 
     try:
         while True:
-            data = await websocket.receive_text()
+            raw_data = await websocket.receive_text()
             
-            # --- БЛОК 1: ЗАПРОС ИСТОРИИ ---
-            # --- БЛОК 1: ЗАПРОС ИСТОРИИ (С ГАЛОЧКАМИ) ---
-            if data.startswith("GET_HISTORY:"):
-                target = data.replace("GET_HISTORY:", "")
+            # --- ШАГ 0: УМНАЯ ОЧИСТКА ПРЕФИКСОВ ---
+            # Мы раздеваем сообщение, чтобы достать чистую команду (clean_text)
+            clean_text = raw_data
+            msg_time = datetime.now().strftime("%H:%M")
+            target_user = None
+
+            # Сначала отрезаем TO_USER:
+            if clean_text.startswith("TO_USER:"):
+                try:
+                    parts = clean_text.split("|", 1)
+                    target_user = parts[0].replace("TO_USER:", "")
+                    clean_text = parts[1]
+                except: pass
+
+            # Затем отрезаем TIME:
+            if clean_text.startswith("TIME:"):
+                try:
+                    parts = clean_text.split("|", 1)
+                    msg_time = parts[0].replace("TIME:", "")
+                    clean_text = parts[1]
+                except: pass
+
+            # --- ТЕПЕРЬ ПРОВЕРЯЕМ КОМАНДЫ ПО ЧИСТОМУ ТЕКСТУ (clean_text) ---
+
+            # 1. ЗАПРОС ИСТОРИИ
+            if clean_text.startswith("GET_HISTORY:"):
+                target = clean_text.replace("GET_HISTORY:", "")
                 async with aiosqlite.connect(DB_PATH) as db:
                     if target in ["null", "general", "None", "undefined"]:
-                        # Добавили is_read в SELECT
                         sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read FROM messages WHERE room_id = ? AND to_user IS NULL ORDER BY id ASC LIMIT 100"
                         params = (room_id,)
                     else:
-                        # Добавили is_read в SELECT для ЛС
-                        sql = """
-                            SELECT id, username, text, timestamp, avatar, to_user, is_read 
-                            FROM messages 
-                            WHERE room_id = ? 
-                            AND ((username = ? AND to_user = ?) OR (username = ? AND to_user = ?)) 
-                            ORDER BY id ASC LIMIT 100
-                        """
+                        sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read FROM messages WHERE room_id = ? AND ((username = ? AND to_user = ?) OR (username = ? AND to_user = ?)) ORDER BY id ASC LIMIT 100"
                         params = (room_id, username, target, target, username)
                     
                     async with db.execute(sql, params) as cursor:
                         history = await cursor.fetchall()
-                        for msg_id, user, text, time, av, to_u, is_read in history:
-                            prefix = f"PRIVATE:{to_u}:" if to_u else ""
-                            # Теперь отправляем статус прочтения в самом конце через новый разделитель |
-                            await websocket.send_text(f"ID:{msg_id}|{prefix}[{time}] {user}: {text}|{av or ''}|{is_read}")
+                        for m_id, u, txt, tm, av, to_u, is_r in history:
+                            pfx = f"PRIVATE:{to_u}:" if to_u else ""
+                            await websocket.send_text(f"ID:{m_id}|{pfx}[{tm}] {u}: {txt}|{av or ''}|{is_r}")
                 continue
 
-
-            # --- БЛОК 2: RTC СИГНАЛЫ (ЗВОНКИ) ---
-            elif data.startswith("RTC_SIGNAL:"):
+            # 2. RTC СИГНАЛЫ
+            elif clean_text.startswith("RTC_SIGNAL:"):
                 if room_id in manager.rooms:
                     for name, conn in manager.rooms[room_id].items():
                         if name != username and conn.client_state == WebSocketState.CONNECTED:
-                            await conn.send_text(data)
+                            await conn.send_text(clean_text)
                 continue
 
-            # --- БЛОК 3: УДАЛЕНИЕ ---
-            elif data.startswith("__DELETE__:"):
-                msg_id = data.replace("__DELETE__:", "")
+            # 3. УДАЛЕНИЕ
+            elif clean_text.startswith("__DELETE__:"):
+                msg_id = clean_text.replace("__DELETE__:", "")
                 async with aiosqlite.connect(DB_PATH) as db:
                     await db.execute("DELETE FROM messages WHERE id = ?", (msg_id,))
                     await db.commit()
@@ -402,74 +415,47 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         await conn.send_text(f"DELETE_CONFIRM:{msg_id}")
                 continue
 
-            # --- БЛОК 4: ПЕЧАТАЕТ... ---
-            elif data == "__TYPING__":
+            # 4. ПЕЧАТАЕТ...
+            elif clean_text == "__TYPING__":
                 if room_id in manager.rooms:
                     for name, conn in manager.rooms[room_id].items():
                         if name != username:
                             await conn.send_text(f"TYPING:{username}")
                 continue
-                        # --- СОЗДАНИЕ ОПРОСА ---
-            elif data.startswith("POLL_CREATE:"):
-                # Формат: POLL_CREATE:Вопрос|Опция1,Опция2
-                payload = data.replace("POLL_CREATE:", "")
-                q, opts = payload.split("|")
-                async with aiosqlite.connect(DB_PATH) as db:
-                    cur = await db.execute("INSERT INTO polls (question, options, owner) VALUES (?, ?, ?)", (q, opts, username))
-                    p_id = cur.lastrowid
-                    await db.commit()
-                # Рассылаем как системное сообщение
-                await manager.broadcast(room_id, username=username, text=f"POLL_ID:{p_id}", to_user=target_user)
+
+            # 5. СОЗДАНИЕ ОПРОСА
+            elif clean_text.startswith("POLL_CREATE:"):
+                try:
+                    payload = clean_text.replace("POLL_CREATE:", "")
+                    if "|" not in payload: continue
+                    q, opts = payload.split("|", 1)
+                    async with aiosqlite.connect(DB_PATH) as db:
+                        cur = await db.execute("INSERT INTO polls (question, options, owner) VALUES (?, ?, ?)", (q, opts, username))
+                        p_id = cur.lastrowid
+                        await db.commit()
+                    # Шлем POLL_ID всем участникам
+                    await manager.broadcast(room_id, username=username, text=f"POLL_ID:{p_id}", to_user=target_user)
+                except: pass
                 continue
 
-            # --- ГОЛОСОВАНИЕ ---
-            elif data.startswith("POLL_VOTE:"):
-                p_id, opt_idx = data.replace("POLL_VOTE:", "").split("|")
-                async with aiosqlite.connect(DB_PATH) as db:
-                    await db.execute("INSERT OR REPLACE INTO poll_votes VALUES (?, ?, ?)", (int(p_id), username, int(opt_idx)))
-                    await db.commit()
-                # Уведомляем всех в комнате, чтобы обновили этот опрос у себя
-                for conn in manager.rooms.get(room_id, {}).values():
-                    await conn.send_text(f"POLL_UPDATE:{p_id}")
+            # 6. ГОЛОСОВАНИЕ
+            elif clean_text.startswith("POLL_VOTE:"):
+                try:
+                    p_id, opt_idx = clean_text.replace("POLL_VOTE:", "").split("|")
+                    async with aiosqlite.connect(DB_PATH) as db:
+                        await db.execute("INSERT OR REPLACE INTO poll_votes VALUES (?, ?, ?)", (int(p_id), username, int(opt_idx)))
+                        await db.commit()
+                    for conn in manager.rooms.get(room_id, {}).values():
+                        await conn.send_text(f"POLL_UPDATE:{p_id}")
+                except: pass
                 continue
 
-                
+            # 7. ОБЫЧНОЕ СООБЩЕНИЕ И ИИ
             else:
-                display_text = data
-                msg_time = datetime.now().strftime("%H:%M")
-                target_user = None
-
-                # 1. Извлекаем личные сообщения
-                if display_text.startswith("TO_USER:"):
-                    try:
-                        parts = display_text.split("|", 1)
-                        target_user = parts[0].replace("TO_USER:", "")
-                        display_text = parts[1]
-                    except: pass
-
-                # 2. Извлекаем время
-                if display_text.startswith("TIME:"):
-                    try:
-                        parts = display_text.split("|", 1)
-                        msg_time = parts[0].replace("TIME:", "")
-                        display_text = parts[1]
-                    except: pass
-
-                # 3. Обновляем аватарку отправителя
-                current_avatar = "https://i.ibb.co/4pSbxsh/user-avatar.png"
-                async with aiosqlite.connect(DB_PATH) as db:
-                    async with db.execute("SELECT avatar FROM users WHERE username = ?", (username,)) as c:
-                        row = await c.fetchone()
-                        if row: current_avatar = row[0]
-
-                # 4. Отправляем ТВОЕ сообщение в чат
+                # Отправляем сообщение (чистый текст)
                 await manager.broadcast(
-                    room_id,
-                    username=username,
-                    text=display_text,
-                    avatar=current_avatar,
-                    client_time=msg_time,
-                    to_user=target_user
+                    room_id, username=username, text=clean_text, 
+                    avatar=current_avatar, client_time=msg_time, to_user=target_user
                 )
 
                 # 5. ЛОГИКА ИИ-БОТА"
@@ -557,6 +543,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
