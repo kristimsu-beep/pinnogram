@@ -280,6 +280,48 @@
         background: #ff3b30 !important;
         animation: pulse 1.5s infinite;
     }
+        /* СТИЛИ ДЛЯ ОПРОСОВ В СТИЛЕ ТЕЛЕГРАМ */
+    .poll-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 12px;
+        margin: 8px 0;
+        min-width: 250px;
+        color: white;
+    }
+    .poll-question {
+        font-weight: bold;
+        font-size: 15px;
+        margin-bottom: 12px;
+        display: block;
+    }
+    .poll-option {
+        margin-bottom: 10px;
+        cursor: pointer;
+        position: relative;
+    }
+    .poll-stats {
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        margin-bottom: 4px;
+    }
+    .poll-bar {
+        height: 6px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+    .poll-fill {
+        height: 100%;
+        background: #248bcf; /* Синий цвет как в Телеге */
+        width: 0%;
+        transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .poll-fill.voted { background: #40a7e3; }
+    .voted-mark { color: #40a7e3; font-weight: bold; margin-right: 5px; }
+
     @keyframes pulse {
         0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); }
         70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(255, 59, 48, 0); }
@@ -448,6 +490,13 @@
         ws.onmessage = async (event) => {
             const raw = event.data; // ВОТ ИСПРАВЛЕНИЕ: сначала объявляем raw
             const chat = document.getElementById('chat');
+                    // Обработка опросов
+            if (raw.startsWith("POLL_UPDATE:")) {
+                const pId = raw.replace("POLL_UPDATE:", "");
+                loadPollData(pId); // Перерисовываем проценты
+                return;
+            }
+
 
             // 1. ОБРАБОТКА СПИСКА ОНЛАЙН И КОНТАКТОВ
             if (raw.includes("ONLINE_LIST:")) {
@@ -582,14 +631,21 @@
                     const audio = document.getElementById("notifSound");
                     if(audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
                 }
-                // ПРОВЕРКА КОНТЕНТА (ГОЛОС / ВИДЕО / ФОТО / ТЕКСТ)
-                if (text.startsWith("VOICE:")) {
-                    // Разделяем ссылку на файл и данные волны
+                            // --- ПРОВЕРКА КОНТЕНТА (ОПРОС / ГОЛОС / ВИДЕО / ФОТО / ТЕКСТ) ---
+                
+                // 1. ПРОВЕРКА НА ОПРОС
+                if (text.startsWith("POLL_ID:")) {
+                    const pollId = text.replace("POLL_ID:", "");
+                    const pollContainer = document.createElement('div');
+                    pollContainer.id = `poll-card-${pollId}`;
+                    msgBubble.appendChild(pollContainer);
+                    loadPollData(pollId); // Функция отрисует карточку с процентами
+                } 
+                // 2. ПРОВЕРКА НА ГОЛОСОВОЕ
+                else if (text.startsWith("VOICE:")) {
                     const [audioUrl, waveStr] = text.replace("VOICE:", "").split("^");
-                    const waves = waveStr ? waveStr.split(",").map(Number) : [20,40,20,50,30]; // Фоллбек если данных нет
+                    const waves = waveStr ? waveStr.split(",").map(Number) : [20,40,20,50,30];
                     const audioId = `audio-${msgId}`;
-                    
-                    // Генерируем HTML для каждого столбика на основе громкости
                     const waveHTML = waves.map(h => `<div class="wave-bar" style="height:${Math.max(15, h)}%"></div>`).join("");
 
                     msgBubble.innerHTML += `
@@ -597,8 +653,8 @@
                             <div class="play-btn" onclick="toggleVoice('${audioId}', this)">▶</div>
                             <div class="voice-progress-wrap">
                                 <div class="waveform-real" onclick="seekVoice('${audioId}', event, this)">
-                                    ${waveHTML}
                                     <div class="waveform-overlay" id="progress-${audioId}"></div>
+                                    ${waveHTML}
                                 </div>
                                 <div class="voice-meta">
                                     <span id="time-${audioId}">0:00</span>
@@ -608,8 +664,7 @@
                             <audio id="${audioId}" src="${audioUrl}" ontimeupdate="updateVoiceProgress('${audioId}')" onended="this.parentElement.parentElement.querySelector('.play-btn').textContent='▶'"></audio>
                         </div>`;
                 }
-
-
+                // 3. ПРОВЕРКА НА ВИДЕО / ФОТО / ТЕКСТ
                 else {
                     const lowerT = text.toLowerCase();
                     const isImg = [".jpg", ".png", ".gif", ".webp"].some(ext => lowerT.includes(ext));
@@ -618,11 +673,7 @@
                     if (isVid) {
                         const v = document.createElement('video');
                         v.src = text; 
-                        v.autoplay = true; 
-                        v.loop = true; // ЦИКЛ ВКЛЮЧЕН
-                        v.muted = true; 
-                        v.playsInline = true; 
-                        v.controls = true;
+                        v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
                         v.style = "max-width:100%; border-radius:12px;";
                         msgBubble.appendChild(v);
                     } else if (isImg) {
@@ -638,6 +689,7 @@
                         msgBubble.appendChild(s);
                     }
                 }
+
 
                 // ВРЕМЯ, ГАЛОЧКИ И СЧЕТЧИК (Твой код теперь стоит верно)
                 const tsWrap = document.createElement('div');
@@ -1229,12 +1281,49 @@ function seekVoice(id, event, el) {
     const percent = x / rect.width;
     a.currentTime = percent * a.duration;
 }
+// Загрузка данных опроса и отрисовка "телеграмных" полосок
+async function loadPollData(id) {
+    const res = await fetch(`${API_URL}/poll/${id}?username=${myName}`);
+    const data = await res.json();
+    const container = document.getElementById(`poll-card-${id}`);
+    if (!container || data.status === "error") return;
+
+    let optionsHTML = data.options.map((opt, idx) => {
+        const count = data.results[idx];
+        const percent = data.total > 0 ? Math.round((count / data.total) * 100) : 0;
+        const isMyVote = data.my_vote === idx;
+        
+        return `
+            <div class="poll-option" onclick="voteInPoll(${id}, ${idx})">
+                <div class="poll-stats">
+                    <span>${isMyVote ? '<b style="color:#2196f3">✔</b> ' : ''}${opt}</span>
+                    <span style="opacity:0.7">${percent}% ${count > 0 ? '('+count+')' : ''}</span>
+                </div>
+                <div class="poll-bar">
+                    <div class="poll-fill ${isMyVote ? 'voted' : ''}" style="width: ${percent}%"></div>
+                </div>
+            </div>`;
+    }).join("");
+
+    container.innerHTML = `
+        <div class="poll-card">
+            <div style="font-weight:bold; margin-bottom:12px; font-size:15px;">${data.question}</div>
+            ${optionsHTML}
+            <div style="text-align:center; font-size:10px; opacity:0.4; margin-top:10px;">Всего голосов: ${data.total}</div>
+        </div>`;
+}
+
+// Отправка голоса
+function voteInPoll(pollId, optIdx) {
+    ws.send(`POLL_VOTE:${pollId}|${optIdx}`);
+}
 
 
 
 </script>
 </body>
 </html>
+
 
 
 
