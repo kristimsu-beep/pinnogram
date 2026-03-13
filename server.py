@@ -55,64 +55,62 @@ async def get_favicon():
 @app.on_event("startup")
 async def startup():
     async with aiosqlite.connect(DB_PATH) as db:
-        # 1. Создаем основные таблицы
+        # 1. Создаем основные таблицы (с учетом новых полей)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT, text TEXT, timestamp TEXT, 
+                username TEXT, 
+                text TEXT, 
+                timestamp TEXT, 
                 room_id TEXT DEFAULT 'general',
                 to_user TEXT DEFAULT NULL, 
                 avatar TEXT DEFAULT '',
-                is_read INTEGER DEFAULT 0
+                is_read INTEGER DEFAULT 0,
+                reply_to_id INTEGER DEFAULT NULL -- ПОЛЕ ДЛЯ ОТВЕТОВ
             )
         """)
+        
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY, password TEXT, avatar TEXT DEFAULT ''
             )
         """)
         
-        # НОВАЯ ТАБЛИЦА: Для хранения подписок на Push-уведомления
         await db.execute("""
             CREATE TABLE IF NOT EXISTS push_subscriptions (
-                username TEXT PRIMARY KEY, 
-                subscription_json TEXT
+                username TEXT PRIMARY KEY, subscription_json TEXT
             )
         """)
-                # Таблица самих опросов
+
         await db.execute("""
             CREATE TABLE IF NOT EXISTS polls (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                question TEXT,
-                options TEXT, -- Храним варианты через запятую
-                owner TEXT
+                id INTEGER PRIMARY KEY AUTOINCREMENT, question TEXT, options TEXT, owner TEXT
             )
         """)
-        # Таблица голосов
+
         await db.execute("""
             CREATE TABLE IF NOT EXISTS poll_votes (
-                poll_id INTEGER,
-                username TEXT,
-                option_index INTEGER,
+                poll_id INTEGER, username TEXT, option_index INTEGER,
                 PRIMARY KEY(poll_id, username)
             )
         """)
 
-
-        # 2. ФИКСЫ ДЛЯ СТАРОЙ БАЗЫ (Добавляем то, чего может не хватать)
+        # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
         columns = [
             ("messages", "avatar", "TEXT DEFAULT ''"),
             ("messages", "to_user", "TEXT DEFAULT NULL"),
-            ("messages", "is_read", "INTEGER DEFAULT 0") # Колонки для галочек
+            ("messages", "is_read", "INTEGER DEFAULT 0"),
+            ("messages", "reply_to_id", "INTEGER DEFAULT NULL")# Колонки для галочек
         ]
         
         for table, col, definition in columns:
             try:
                 await db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
             except:
-                pass # Если колонка уже есть, SQLite выдаст ошибку, и мы её пропустим
+                pass # Если колонка уже есть, SQLite просто проигнорирует команду
         
         await db.commit()
+
 @app.post("/subscribe")
 async def subscribe(data: dict):
     username = data.get("username")
@@ -234,21 +232,24 @@ class ConnectionManager:
                     except: continue
 
     # ИСПРАВЛЕНО: Ровный отступ и безопасное получение ID
-    async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None):        
+    async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None, reply_to_id: int = None): # <-- Добавили reply_to_id
         now = client_time if client_time else datetime.now().strftime("%H:%M")        
         
         if username and text:        
-            # 1. Открываем БД ОДИН раз (экономим ресурсы)
             async with aiosqlite.connect(DB_PATH) as db:        
+                # ОБНОВЛЕННЫЙ INSERT (Добавили reply_to_id)
                 cursor = await db.execute(        
-                    "INSERT INTO messages (username, text, timestamp, room_id, avatar, to_user, is_read) VALUES (?, ?, ?, ?, ?, ?, 0)",         
-                    (username, text, now, room_id, avatar, to_user)        
+                    "INSERT INTO messages (username, text, timestamp, room_id, avatar, to_user, is_read, reply_to_id) VALUES (?, ?, ?, ?, ?, ?, 0, ?)",         
+                    (username, text, now, room_id, avatar, to_user, reply_to_id)        
                 )        
-                msg_id = cursor.lastrowid # Так быстрее получать ID
+                msg_id = cursor.lastrowid
                 await db.commit()        
     
-                prefix = f"PRIVATE:{to_user}:" if to_user else ""        
-                final_msg = f"ID:{msg_id}|{prefix}[{now}] {username}: {text}|{avatar}|0"        
+                prefix = f"PRIVATE:{to_user}:" if to_user else ""
+                # Добавляем инфо об ответе в текст сообщения для фронтенда
+                reply_info = f"REPLY:{reply_to_id}|" if reply_to_id else ""
+                final_msg = f"ID:{msg_id}|{reply_info}{prefix}[{now}] {username}: {text}|{avatar}|0"
+      
                     
                 if to_user:        
                     is_online = False        
@@ -378,23 +379,31 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 
             # --- ТЕПЕРЬ ПРОВЕРЯЕМ КОМАНДЫ ПО ЧИСТОМУ ТЕКСТУ (clean_text) ---
 
-            # 1. ЗАПРОС ИСТОРИИ
+            
+            # 1. ЗАПРОС ИСТОРИИ (ИСПРАВЛЕНО)
             if clean_text.startswith("GET_HISTORY:"):
                 target = clean_text.replace("GET_HISTORY:", "")
                 async with aiosqlite.connect(DB_PATH) as db:
                     if target in ["null", "general", "None", "undefined"]:
-                        sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read FROM messages WHERE room_id = ? AND to_user IS NULL ORDER BY id ASC LIMIT 100"
+                        # ДОБАВИЛИ ЗАПЯТУЮ И reply_to_id
+                        sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read, reply_to_id FROM messages WHERE room_id = ? AND to_user IS NULL ORDER BY id ASC LIMIT 100"
                         params = (room_id,)
                     else:
-                        sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read FROM messages WHERE room_id = ? AND ((username = ? AND to_user = ?) OR (username = ? AND to_user = ?)) ORDER BY id ASC LIMIT 100"
+                        # ДОБАВИЛИ ЗАПЯТУЮ И reply_to_id
+                        sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read, reply_to_id FROM messages WHERE room_id = ? AND ((username = ? AND to_user = ?) OR (username = ? AND to_user = ?)) ORDER BY id ASC LIMIT 100"
                         params = (room_id, username, target, target, username)
                     
                     async with db.execute(sql, params) as cursor:
                         history = await cursor.fetchall()
-                        for m_id, u, txt, tm, av, to_u, is_r in history:
+                        # ДОБАВИЛИ r_id В РАСПАКОВКУ
+                        for m_id, u, txt, tm, av, to_u, is_r, r_id in history:
                             pfx = f"PRIVATE:{to_u}:" if to_u else ""
-                            await websocket.send_text(f"ID:{m_id}|{pfx}[{tm}] {u}: {txt}|{av or ''}|{is_r}")
+                            # Добавляем префикс ответа, если он есть, чтобы фронтенд нарисовал цитату
+                            reply_pfx = f"REPLY:{r_id}|" if r_id else ""
+                            await websocket.send_text(f"ID:{m_id}|{reply_pfx}{pfx}[{tm}] {u}: {txt}|{av or ''}|{is_r}")
                 continue
+
+                
 
             # 2. RTC СИГНАЛЫ
             elif clean_text.startswith("RTC_SIGNAL:"):
@@ -414,6 +423,16 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     for conn in manager.rooms[room_id].values():
                         await conn.send_text(f"DELETE_CONFIRM:{msg_id}")
                 continue
+            elif clean_text.startswith("__EDIT__:"):
+                msg_id, new_text = clean_text.replace("__EDIT__:", "").split("|", 1)
+                async with aiosqlite.connect(DB_PATH) as db:
+                    await db.execute("UPDATE messages SET text = ? WHERE id = ?", (new_text, msg_id))
+                    await db.commit()
+                # Рассылаем сигнал обновления
+                for conn in manager.rooms[room_id].values():
+                    await conn.send_text(f"EDIT_CONFIRM:{msg_id}|{new_text}")
+                continue
+
 
             # 4. ПЕЧАТАЕТ...
             elif clean_text == "__TYPING__":
@@ -452,10 +471,28 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 
             # 7. ОБЫЧНОЕ СООБЩЕНИЕ И ИИ
             else:
-                # Отправляем сообщение (чистый текст)
+                current_reply_id = None
+                display_text = clean_text # Твой очищенный текст
+
+                # ПРОВЕРЯЕМ: Если сообщение начинается с REPLY_TO:ID|Текст
+                if display_text.startswith("REPLY_TO:"):
+                    try:
+                        # Убираем префикс, делим по первой палке |
+                        p_data = display_text.replace("REPLY_TO:", "", 1).split("|", 1)
+                        current_reply_id = int(p_data[0])
+                        display_text = p_data[1]
+                    except: 
+                        pass
+
+                # Отправляем сообщение через обновленный broadcast
                 await manager.broadcast(
-                    room_id, username=username, text=clean_text, 
-                    avatar=current_avatar, client_time=msg_time, to_user=target_user
+                    room_id, 
+                    username=username, 
+                    text=display_text, 
+                    avatar=current_avatar, 
+                    client_time=msg_time, 
+                    to_user=target_user,
+                    reply_to_id=current_reply_id # ПЕРЕДАЕМ ID ОТВЕТА
                 )
 
                 # 5. ЛОГИКА ИИ-БОТА"
@@ -546,6 +583,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
