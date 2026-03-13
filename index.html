@@ -404,6 +404,54 @@
     
     @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
+    /* Контекстное меню сообщения */
+    .context-menu {
+        display: none;
+        position: fixed;
+        z-index: 10000;
+        background: #1c1c1c; /* Глубокий темный */
+        border: 1px solid #333;
+        border-radius: 12px;
+        padding: 5px;
+        width: 170px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        animation: menuPop 0.2s ease-out;
+    }
+    
+    @keyframes menuPop {
+        from { opacity: 0; transform: scale(0.9); }
+        to { opacity: 1; transform: scale(1); }
+    }
+    
+    .menu-item {
+        padding: 10px 12px;
+        cursor: pointer;
+        color: white;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+        border-radius: 8px;
+        transition: background 0.2s;
+    }
+    
+    .menu-item:hover { background: rgba(255, 255, 255, 0.1); }
+    
+    /* Цитата ответа внутри бабла */
+    .reply-quote {
+        background: rgba(0, 0, 0, 0.2);
+        border-left: 3px solid var(--accent);
+        padding: 4px 8px;
+        margin-bottom: 6px;
+        font-size: 12px;
+        border-radius: 4px;
+        cursor: pointer;
+        max-height: 40px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+
 
 
 
@@ -520,6 +568,16 @@
                 <button class="apply-bg-btn" onclick="applyCustomGradient()">Применить градиент</button>
             </div>
         </div>
+        <div id="action-preview" style="display:none; background:var(--panel); padding:10px; border-left:3px solid var(--accent); color:white; font-size:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; flex-direction:column; gap:2px;">
+                    <span id="action-type" style="color:var(--accent); font-weight:bold; font-size:10px; text-transform:uppercase;">Ответ</span>
+                    <span id="preview-text" style="opacity:0.7; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px;">Текст...</span>
+                </div>
+                <div onclick="cancelAction()" style="cursor:pointer; font-weight:bold; padding:5px; opacity:0.5;">✕</div>
+            </div>
+        </div>
+
 
         <!-- 4. Панель эмодзи -->
         <div class="emoji-bar">
@@ -551,8 +609,19 @@
         <button onclick="localStorage.clear(); location.reload();" 
         style="margin: 10px auto 20px; background: none; color: #777; font-size: 11px; text-decoration: underline; border: none; cursor: pointer; display: block;">Выйти из аккаунта</button>
     </div>
+        <div id="msg-menu" class="context-menu">
+        <div class="menu-item" onclick="prepareReply()">↩️ Ответ</div>
+        <div class="menu-item" id="edit-menu-btn" onclick="prepareEdit()">✏️ Изменить</div>
+        <div class="menu-item" onclick="copyMsgText()">📋 Копировать</div>
+        <div class="menu-item" onclick="confirmDelete()" style="color:#ff4d4d; border-top:1px solid #333; margin-top:5px; padding-top:10px;">🗑 Удалить</div>
+    </div>
+
 
 <script>
+    let selectedMsgId = null;
+    let selectedMsgText = "";
+    let replyToId = null;
+    let editMsgId = null;
     const API_URL = window.location.origin;
     const socketProto = window.location.protocol === "https:" ? "wss" : "ws";
     const VAPID_PUBLIC_KEY = "BLfoNtD9uQWZ2sX_dUiQ698ze7J-JO8lnl8n03AG7Dt1fh1Io831wuAKgqHRcmLNXKMh99BzVusQWvx37jJNZis";
@@ -665,12 +734,38 @@
             }
 
             // 3. ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ
+          // Внутри ws.onmessage добавим обработку сигнала правки от сервера
+            // 3. ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ
             if (raw.startsWith("DELETE_CONFIRM:")) {
-                const delId = raw.replace("DELETE_CONFIRM:", ""); // Убираем текст, оставляем только цифры
+                const delId = raw.replace("DELETE_CONFIRM:", "");
                 const el = document.getElementById(`msg-${delId}`);
                 if (el) el.remove();
                 return;
             }
+
+            // 3.1 ПОДТВЕРЖДЕНИЕ ПРАВКИ
+            if (raw.startsWith("EDIT_CONFIRM:")) {
+                const parts = raw.replace("EDIT_CONFIRM:", "").split("|", 2);
+                const mId = parts[0];
+                const newTxt = parts[1];
+                const msgEl = document.getElementById(`msg-${mId}`);
+                if (msgEl) {
+                    const textSpan = msgEl.querySelector('.msg-text');
+                    if (textSpan) textSpan.textContent = newTxt;
+                    
+                    if (!msgEl.querySelector('.edited-mark')) {
+                        const mark = document.createElement('span');
+                        mark.className = 'edited-mark';
+                        mark.innerHTML = ' (изм.) ';
+                        mark.style = "font-size:10px; opacity:0.5; margin-right:4px;";
+                        const timeSpan = msgEl.querySelector('.msg-time');
+                        if (timeSpan) timeSpan.before(mark);
+                    }
+                }
+                return;
+            }
+
+
 
             // 4. ИНДИКАТОР ПЕЧАТИ
             if (raw.startsWith("TYPING:")) {
@@ -682,40 +777,91 @@
             }
 
             // 5. ОТРИСОВКА СООБЩЕНИЙ (С ГАЛОЧКАМИ И ГОЛОСОМ)
-            // 5. ОТРИСОВКА СООБЩЕНИЙ (С ГАЛОЧКАМИ И ГОЛОСОМ)
+                        // 5. ОТРИСОВКА СООБЩЕНИЙ (ПРАВКА, ОТВЕТЫ, УДАЛЕНИЕ)
             const div = document.createElement('div');
+            
             if (raw.includes("SYSTEM:")) {
                 div.style = "align-self: center; font-size: 11px; opacity: 0.5; margin: 10px 0; text-align: center; width: 100%;";
                 div.textContent = raw.split("SYSTEM: ")[1];
             } 
             else {
                 const parts = raw.split("|");
+                // Разбираем префиксы: ID, REPLY, Текст...
                 const idPart = parts[0] || "ID:0"; 
-                const content = parts[1] || "";
+                const msgId = idPart.replace("ID:", "");
+                
+                // Проверяем, есть ли префикс ответа (REPLY:ID|)
+                let replyId = null;
+                let content = parts[1] || "";
+                if (content.startsWith("REPLY:")) {
+                    const rParts = content.split("|", 2);
+                    replyId = rParts[0].replace("REPLY:", "");
+                    content = rParts[1];
+                }
+
                 const avatarUrlFromSrv = parts[2] || "";
                 const isRead = parts[3] || "0"; 
 
+                // ПРИСВАИВАЕМ ID ЭЛЕМЕНТУ (важно для удаления и правки)
+                div.id = `msg-${msgId}`;
+
                 const isPrivate = content.includes("PRIVATE:");
                 const displayContent = content.replace(/^PRIVATE:.*?:/, "");
-                const msgId = idPart.replace("ID:", "");
                 const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
                 const time = timeMatch ? timeMatch[1] : "--:--";
                 const userAndText = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
                 const splitIdx = userAndText.indexOf(": ");
                 const sender = userAndText.substring(0, splitIdx);
                 const text = userAndText.substring(splitIdx + 2).trim();
+
                 // --- ЛОГИКА СЧЕТЧИКА (БЕЙДЖЕЙ) ---
                 if (isPrivate && sender !== myName && sender !== currentPartner) {
                     unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
-                    saveUnread(); // Сохраняем в память
-                    updateUnreadUI(); // Рисуем кружок
-                    
-                    // Играем звук уведомления
+                    saveUnread();
+                    updateUnreadUI();
                     const audio = document.getElementById("notifSound");
                     if(audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
-                    
-                    return; // <--- ОБЯЗАТЕЛЬНО! Останавливаем отрисовку сообщения здесь
+                    return;
                 }
+
+                // --- ВЫЗОВ МЕНЮ (ПК + ТЕЛЕФОНЫ) ---
+                div.oncontextmenu = (e) => {
+                    openMenu(e, msgId, text, sender);
+                };
+
+                // Для мобильных (зажатие на 0.5 сек)
+                let pressTimer;
+                div.ontouchstart = (e) => {
+                    pressTimer = setTimeout(() => {
+                        // Для тач-событий берем координаты первого касания
+                        const touch = e.touches[0];
+                        openMenu({ 
+                            preventDefault: () => e.preventDefault(),
+                            clientX: touch.clientX,
+                            clientY: touch.clientY 
+                        }, msgId, text, sender);
+                    }, 500);
+                };
+                div.ontouchend = () => clearTimeout(pressTimer);
+
+                // Дальше идет создание msgBubble...
+                // Вставь это там, где создаешь внутренности сообщения (msgBubble)
+                const msgBubble = document.createElement('div');
+                msgBubble.className = (sender === myName) ? 'msg-bubble out' : 'msg-bubble in';
+                
+                // РИСУЕМ ЦИТАТУ ОТВЕТА
+                if (replyId && replyId !== "null") {
+                    const quote = document.createElement('div');
+                    quote.className = 'reply-quote';
+                    quote.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:10px;">Ответ на #${replyId}</span>`;
+                    // При клике на цитату — прыгаем к оригиналу
+                    quote.onclick = () => {
+                        const target = document.getElementById(`msg-${replyId}`);
+                        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    };
+                    msgBubble.appendChild(quote);
+                }
+
 
 
                 // Фильтр отображения текущего чата
@@ -737,8 +883,6 @@
                 avImg.onerror = function() { this.src = "https://i.ibb.co/4pSbxsh/user-avatar.png"; };
                 div.appendChild(avImg);
 
-                const msgBubble = document.createElement('div');
-                msgBubble.className = (sender === myName) ? 'msg msg-right' : 'msg msg-left';
                 
                 if (sender !== myName) {
                     const nSpan = document.createElement('span');
@@ -761,13 +905,18 @@
                     loadPollData(pollId); // Функция отрисует карточку с процентами
                 } 
                 // 2. ПРОВЕРКА НА ГОЛОСОВОЕ
+                            // 2. ПРОВЕРКА НА ГОЛОСОВОЕ (ИСПРАВЛЕНО)
                 else if (text.startsWith("VOICE:")) {
                     const [audioUrl, waveStr] = text.replace("VOICE:", "").split("^");
                     const waves = waveStr ? waveStr.split(",").map(Number) : [20,40,20,50,30];
                     const audioId = `audio-${msgId}`;
                     const waveHTML = waves.map(h => `<div class="wave-bar" style="height:${Math.max(15, h)}%"></div>`).join("");
 
-                    msgBubble.innerHTML += `
+                    // Создаем контейнер для голосового сообщения
+                    const voiceContainer = document.createElement('div');
+                    voiceContainer.className = "voice-msg-container"; // Можно добавить стиль в CSS
+                    
+                    voiceContainer.innerHTML = `
                         <div class="voice-msg">
                             <div class="play-btn" onclick="toggleVoice('${audioId}', this)">▶</div>
                             <div class="voice-progress-wrap">
@@ -777,12 +926,14 @@
                                 </div>
                                 <div class="voice-meta">
                                     <span id="time-${audioId}">0:00</span>
-                                    <span>${time}</span>
                                 </div>
                             </div>
                             <audio id="${audioId}" src="${audioUrl}" ontimeupdate="updateVoiceProgress('${audioId}')" onended="this.parentElement.parentElement.querySelector('.play-btn').textContent='▶'"></audio>
                         </div>`;
+                    
+                    msgBubble.appendChild(voiceContainer);
                 }
+
                 // 3. ПРОВЕРКА НА ВИДЕО / ФОТО / ТЕКСТ
                 else {
                     const lowerT = text.toLowerCase();
@@ -822,16 +973,17 @@
                     tsWrap.appendChild(status);
                 }
 
-                if (isPrivate && sender !== myName) {
-                    if (sender !== currentPartner) {
-                        unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
-                        saveUnread();
-                        updateUnreadUI();
-                        document.getElementById("notifSound").play().catch(()=>{});
-                        return; 
-                    }
+                               // 1. ЛОГИКА СЧЕТЧИКА ДЛЯ ФОНОВЫХ ЧАТОВ
+                if (isPrivate && sender !== myName && sender !== currentPartner) {
+                    unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
+                    saveUnread();
+                    updateUnreadUI();
+                    const audio = document.getElementById("notifSound");
+                    if(audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
+                    return; // Не рисуем сообщение, если мы в другом чате
                 }
 
+                // 2. ОТМЕТКА О ПРОЧТЕНИИ
                 if (isPrivate && sender === currentPartner && isRead === "0") {
                     fetch(`${API_URL}/read_messages`, {
                         method: "POST",
@@ -840,21 +992,25 @@
                     });
                 }
 
+                // 3. ФИНАЛЬНАЯ СБОРКА И ОТРИСОВКА
                 msgBubble.appendChild(tsWrap);
                 div.appendChild(msgBubble);
+                chat.appendChild(div);
                 
-                div.oncontextmenu = (e) => {
-                    e.preventDefault();
-                    if (sender === myName && confirm("Удалить?")) ws.send(`__DELETE__:${msgId}`);
-                };
-            }
-            chat.appendChild(div);
-            setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 100);
-        };
+                // Авто-прокрутка вниз
+                chat.scrollTop = chat.scrollHeight;
+            } // Конец else (обычные сообщения)
+        }; // Конец ws.onmessage
 
+        // 4. ГЛОБАЛЬНОЕ ЗАКРЫТИЕ МЕНЮ ПРИ КЛИКЕ МИМО
+        document.addEventListener('mousedown', (e) => {
+            const menu = document.getElementById('msg-menu');
+            if (menu && !e.target.closest('.context-menu')) {
+                menu.style.display = 'none';
+            }
+        });
 
 } // Конец функции startChat
-
 
 
 let iceQueue = []; 
@@ -1168,18 +1324,37 @@ async function changeAvatar() {
     fileInput.click();
 }
 
-function sendMessage() { 
-    const i = document.getElementById("messageText"); 
-    if(i.value.trim() && ws) { 
+function sendMessage() {
+    const i = document.getElementById("messageText");
+    const text = i.value.trim();
+
+    if (text && ws) {
         const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         
-        // Если выбран партнер, добавляем секретный префикс для сервера
-        const prefix = currentPartner ? `TO_USER:${currentPartner}|` : "";
-        
-        ws.send(`${prefix}TIME:${now}|${i.value}`); 
-        i.value = ''; 
-    } 
+        // Базовые префиксы (Кому и Время)
+        let prefix = currentPartner ? `TO_USER:${currentPartner}|` : "";
+        let timePrefix = `TIME:${now}|`;
+
+        // 1. ЛОГИКА РЕДАКТИРОВАНИЯ
+        if (editMsgId) {
+            // При редактировании время обычно не меняем, шлем спец-команду
+            ws.send(`${prefix}__EDIT__:${editMsgId}|${text}`);
+        } 
+        // 2. ЛОГИКА ОТВЕТА
+        else if (replyToId) {
+            // Шлем префикс ответа серверу
+            ws.send(`${prefix}${timePrefix}REPLY_TO:${replyToId}|${text}`);
+        } 
+        // 3. ОБЫЧНОЕ СООБЩЕНИЕ
+        else {
+            ws.send(`${prefix}${timePrefix}${text}`);
+        }
+
+        i.value = '';
+        cancelAction(); // Сбрасываем режим правки/ответа (скрываем полоску над полем)
+    }
 }
+
 
 
 function handleTyping() { if(!isTypingNow && ws?.readyState===1){ isTypingNow=true; ws.send("__TYPING__"); setTimeout(()=>isTypingNow=false,3000); } }
@@ -1488,6 +1663,74 @@ window.addEventListener('load', () => {
         }
     }
 });
+// --- ЛОГИКА МЕНЮ, ПРАВКИ И ОТВЕТОВ ---
+
+function openMenu(e, id, text, sender) {
+    e.preventDefault();
+    selectedMsgId = id;
+    selectedMsgText = text;
+
+    const menu = document.getElementById('msg-menu');
+    menu.style.display = 'block';
+    
+    // Позиционируем меню (с проверкой границ экрана)
+    let x = e.clientX || (e.touches ? e.touches[0].clientX : 100);
+    let y = e.clientY || (e.touches ? e.touches[0].clientY : 100);
+    
+    if (x + 180 > window.innerWidth) x -= 180;
+    if (y + 200 > window.innerHeight) y -= 200;
+
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+
+    // "Изменить" только для своих сообщений
+    document.getElementById('edit-menu-btn').style.display = (sender === myName) ? 'flex' : 'none';
+}
+
+function prepareReply() {
+    replyToId = selectedMsgId;
+    editMsgId = null;
+    showPreview("ОТВЕТ", selectedMsgText);
+}
+
+function prepareEdit() {
+    editMsgId = selectedMsgId;
+    replyToId = null;
+    document.getElementById('messageText').value = selectedMsgText;
+    showPreview("ИЗМЕНЕНИЕ", selectedMsgText);
+}
+
+function showPreview(type, text) {
+    document.getElementById('action-type').textContent = type;
+    document.getElementById('preview-text').textContent = text;
+    document.getElementById('action-preview').style.display = 'block';
+    document.getElementById('msg-menu').style.display = 'none';
+    document.getElementById('messageText').focus();
+}
+
+function cancelAction() {
+    editMsgId = null;
+    replyToId = null;
+    document.getElementById('action-preview').style.display = 'none';
+    document.getElementById('messageText').value = "";
+}
+
+function confirmDelete() {
+    if(confirm("Удалить сообщение?")) ws.send(`__DELETE__:${selectedMsgId}`);
+    document.getElementById('msg-menu').style.display = 'none';
+}
+
+function copyMsgText() {
+    navigator.clipboard.writeText(selectedMsgText);
+    document.getElementById('msg-menu').style.display = 'none';
+}
+
+// Закрытие при клике мимо
+document.addEventListener('mousedown', (e) => {
+    if (!e.target.closest('.context-menu')) {
+        document.getElementById('msg-menu').style.display = 'none';
+    }
+});
 
 
 
@@ -1495,6 +1738,7 @@ window.addEventListener('load', () => {
 </script>
 </body>
 </html>
+
 
 
 
