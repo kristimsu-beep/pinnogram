@@ -327,6 +327,75 @@
         70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(255, 59, 48, 0); }
         100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
     }
+    /* Панель настройки фона */
+    .bg-settings-panel {
+        display: none;
+        flex-direction: column;
+        gap: 15px;
+        background: var(--panel);
+        padding: 15px;
+        border-top: 1px solid rgba(255,255,255,0.1);
+        animation: slideUp 0.3s ease;
+    }
+    
+    .bg-presets {
+        display: flex;
+        gap: 10px;
+        overflow-x: auto;
+        padding-bottom: 5px;
+    }
+    
+    .bg-thumb {
+        width: 50px;
+        height: 70px;
+        border-radius: 8px;
+        cursor: pointer;
+        border: 2px solid transparent;
+        flex-shrink: 0;
+        object-fit: cover;
+    }
+    
+    .bg-thumb:hover, .bg-thumb.active { border-color: #2196f3; }
+    
+    .custom-gradient-tool {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px;
+        background: rgba(0,0,0,0.2);
+        border-radius: 10px;
+    }
+    
+    .color-pickers {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        justify-content: space-around;
+    }
+    
+    .color-item { text-align: center; font-size: 11px; opacity: 0.8; }
+    
+    input[type="color"] {
+        display: block;
+        width: 40px;
+        height: 40px;
+        border: none;
+        cursor: pointer;
+        background: none;
+    }
+    
+    .apply-bg-btn {
+        background: #2196f3;
+        color: white;
+        border: none;
+        padding: 8px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: bold;
+    }
+    
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
 
 
 
@@ -400,25 +469,64 @@
         <button onclick="saveNameAndStart()">Войти</button>
     </div>
 
-        <div id="chat-screen">
-        <div id="chat"></div>
-        
+    <div id="chat-screen" style="display:none;">
+        <!-- 1. Верхняя инфо-панель -->
         <div id="online-list" style="font-size:11px; color:var(--accent); opacity:0.8; margin:2px 5px; height:15px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;"></div>
         <div id="typing-indicator" style="font-size:12px; color:var(--accent); font-style:italic; margin:5px; height:15px;"></div>
 
+        <!-- 2. Окно чата -->
+        <div id="chat"></div>
+
+        <!-- 3. Панель настройки фона (ВЫЕЗЖАЕТ НАД КНОПКАМИ) -->
+        <div id="bg-panel" class="bg-settings-panel">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:12px; opacity:0.6;">Фон чата</span>
+                <button onclick="toggleBgSettings()" style="background:none; border:none; color:white; cursor:pointer;">✕</button>
+            </div>
+            
+            <div class="bg-presets">
+                <!-- Твой зеленый фон (ОБЯЗАТЕЛЬНО замени https://i.ibb.co на прямую ссылку после заливки!) -->
+                <img src="https://i.ibb.co/4pSbxsh/user-avatar.png" class="bg-thumb" onclick="setChatBg('url(https://i.ibb.co/4pSbxsh/user-avatar.png)')">
+                <div class="bg-thumb" style="background:#fff;" onclick="setChatBg('#fff')"></div>
+                <div class="bg-thumb" style="background:#000;" onclick="setChatBg('#000')"></div>
+                <div class="bg-thumb" style="background:var(--bg);" onclick="setChatBg('var(--bg)')"></div>
+            </div>
+        
+            <div class="custom-gradient-tool">
+                <div class="color-pickers">
+                    <div class="color-item">
+                        <input type="color" id="color1" value="#8bc34a">
+                        <div style="margin-top:4px">Цвет 1</div>
+                    </div>
+                    <div style="font-size:20px; opacity:0.3">→</div>
+                    <div class="color-item">
+                        <input type="color" id="color2" value="#4caf50">
+                        <div style="margin-top:4px">Цвет 2</div>
+                    </div>
+                </div>
+                <button class="apply-bg-btn" onclick="applyCustomGradient()">Применить градиент</button>
+            </div>
+        </div>
+
+        <!-- 4. Панель эмодзи -->
         <div class="emoji-bar">
             <span onclick="addEmoji('😊')">😊</span><span onclick="addEmoji('🔥')">🔥</span>
             <span onclick="addEmoji('😂')">😂</span><span onclick="addEmoji('❤️')">❤️</span>
             <span onclick="addEmoji('👍')">👍</span>
         </div>
+        
+        <!-- 5. Контроллы (Кнопки) -->
         <div class="controls">
             <img id="user-avatar-icon" onclick="changeAvatar()" src="https://i.ibb.co/4pSbxsh/user-avatar.png">
             
             <input type="file" id="fileInput" style="display:none" onchange="uploadFile()">
             <button class="file-btn" onclick="document.getElementById('fileInput').click()">📎</button>
+            
+            <!-- КНОПКА ПАЛИТРЫ (Открывает настройки фона) -->
+            <button class="file-btn" onclick="toggleBgSettings()">🎨</button>
+
             <button id="recordBtn" class="file-btn rec-btn" onclick="toggleRecording()">🎥</button>
             
-            <!-- ДОБАВЬ ЭТУ КНОПКУ -->
             <button id="voiceBtn" class="file-btn voice-btn" 
                     onmousedown="startVoice()" onmouseup="stopVoice()" 
                     ontouchstart="startVoice()" ontouchend="stopVoice()">🎙</button>
@@ -427,12 +535,11 @@
             <input type="text" id="messageText" placeholder="Сообщение..." oninput="handleTyping()">
             <button onclick="sendMessage()">🚀</button>
         </div>
-        </div>
 
         <button onclick="localStorage.clear(); location.reload();" 
         style="margin: 10px auto 20px; background: none; color: #777; font-size: 11px; text-decoration: underline; border: none; cursor: pointer; display: block;">Выйти из аккаунта</button>
+    </div>
 
-    </div> <!-- Один закрывающий div для chat-screen -->
 <script>
     const API_URL = window.location.origin;
     const socketProto = window.location.protocol === "https:" ? "wss" : "ws";
@@ -1323,6 +1430,52 @@ async function loadPollData(id) {
 function voteInPoll(pollId, optIdx) {
     ws.send(`POLL_VOTE:${pollId}|${optIdx}`);
 }
+// Переключалка видимости панели
+function toggleBgSettings() {
+    const panel = document.getElementById('bg-panel');
+    panel.style.display = (panel.style.display === 'flex') ? 'none' : 'flex';
+}
+
+// Применение картинки или цвета
+function setChatBg(value) {
+    const chat = document.getElementById('chat');
+    if (value.startsWith('url')) {
+        chat.style.backgroundImage = value;
+        chat.style.backgroundColor = 'transparent';
+    } else {
+        chat.style.backgroundImage = 'none';
+        chat.style.backgroundColor = value;
+    }
+    chat.style.backgroundSize = 'cover';
+    localStorage.setItem('pinnogram_chat_bg', value); // Сохраняем навсегда
+}
+
+// Сборка своего градиента
+function applyCustomGradient() {
+    const c1 = document.getElementById('color1').value;
+    const c2 = document.getElementById('color2').value;
+    const gradient = `linear-gradient(180deg, ${c1} 0%, ${c2} 100%)`;
+    
+    const chat = document.getElementById('chat');
+    chat.style.backgroundImage = gradient;
+    chat.style.backgroundColor = 'transparent';
+    
+    localStorage.setItem('pinnogram_chat_bg', gradient);
+}
+
+// ПРИ СТАРТЕ ЧАТА: Восстанавливаем фон
+window.addEventListener('load', () => {
+    const saved = localStorage.getItem('pinnogram_chat_bg');
+    if (saved) {
+        const chat = document.getElementById('chat');
+        if (saved.startsWith('url') || saved.startsWith('linear')) {
+            chat.style.backgroundImage = saved;
+            chat.style.backgroundSize = 'cover';
+        } else {
+            chat.style.backgroundColor = saved;
+        }
+    }
+});
 
 
 
@@ -1330,6 +1483,7 @@ function voteInPoll(pollId, optIdx) {
 </script>
 </body>
 </html>
+
 
 
 
