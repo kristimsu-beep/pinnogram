@@ -336,7 +336,15 @@
         padding: 15px;
         border-top: 1px solid rgba(255,255,255,0.1);
         animation: slideUp 0.3s ease;
+        /* Добавь эти строки, чтобы панель была поверх кнопок */
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        z-index: 2000; 
+        box-shadow: 0 -5px 20px rgba(0,0,0,0.5);
     }
+
     
     .bg-presets {
         display: flex;
@@ -439,6 +447,11 @@
             style="width:100%; margin-top:20px; padding:12px; background:var(--msg-in); border:1px solid var(--accent); color:var(--text); border-radius:10px; cursor:pointer; font-weight:bold;">
         🌓 Сменить тему
     </button>
+    <!-- Вставь это в sidebar -->
+    <button onclick="toggleBgSettings(); toggleSidebar();" 
+            style="width:100%; margin-top:10px; padding:12px; background:var(--panel); border:1px solid var(--accent); color:var(--text); border-radius:10px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:10px;">
+        🎨 Оформление чата
+    </button>
 </div>
 
 <link rel="icon" href="data:,">
@@ -522,8 +535,7 @@
             <input type="file" id="fileInput" style="display:none" onchange="uploadFile()">
             <button class="file-btn" onclick="document.getElementById('fileInput').click()">📎</button>
             
-            <!-- КНОПКА ПАЛИТРЫ (Открывает настройки фона) -->
-            <button class="file-btn" onclick="toggleBgSettings()">🎨</button>
+        
 
             <button id="recordBtn" class="file-btn rec-btn" onclick="toggleRecording()">🎥</button>
             
@@ -1483,6 +1495,7 @@ window.addEventListener('load', () => {
 </script>
 </body>
 </html>
+
 
 
 
