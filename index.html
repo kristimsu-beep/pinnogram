@@ -1282,47 +1282,55 @@ function seekVoice(id, event, el) {
     a.currentTime = percent * a.duration;
 }
 // Загрузка данных опроса и отрисовка "телеграмных" полосок
+// --- ФУНКЦИИ ДЛЯ РАБОТЫ ОПРОСОВ ---
+
 async function loadPollData(id) {
-    const res = await fetch(`${API_URL}/poll/${id}?username=${myName}`);
-    const data = await res.json();
-    const container = document.getElementById(`poll-card-${id}`);
-    if (!container || data.status === "error") return;
+    try {
+        const res = await fetch(`${API_URL}/poll/${id}?username=${myName}`);
+        const data = await res.json();
+        const container = document.getElementById(`poll-card-${id}`);
+        if (!container || data.status === "error") return;
 
-    let optionsHTML = data.options.map((opt, idx) => {
-        const count = data.results[idx];
-        const percent = data.total > 0 ? Math.round((count / data.total) * 100) : 0;
-        const isMyVote = data.my_vote === idx;
-        
-        return `
-            <div class="poll-option" onclick="voteInPoll(${id}, ${idx})">
-                <div class="poll-stats">
-                    <span>${isMyVote ? '<b style="color:#2196f3">✔</b> ' : ''}${opt}</span>
-                    <span style="opacity:0.7">${percent}% ${count > 0 ? '('+count+')' : ''}</span>
-                </div>
-                <div class="poll-bar">
-                    <div class="poll-fill ${isMyVote ? 'voted' : ''}" style="width: ${percent}%"></div>
-                </div>
+        let optionsHTML = data.options.map((opt, idx) => {
+            const count = data.results[idx];
+            const percent = data.total > 0 ? Math.round((count / data.total) * 100) : 0;
+            const isMyVote = data.my_vote === idx;
+            
+            return `
+                <div class="poll-option" onclick="voteInPoll(${id}, ${idx})">
+                    <div class="poll-stats">
+                        <span>${isMyVote ? '<b style="color:#2196f3">✔</b> ' : ''}${opt}</span>
+                        <span style="opacity:0.7">${percent}% ${count > 0 ? '('+count+')' : ''}</span>
+                    </div>
+                    <div class="poll-bar">
+                        <div class="poll-fill ${isMyVote ? 'voted' : ''}" style="width: ${percent}%"></div>
+                    </div>
+                </div>`;
+        }).join("");
+
+        container.innerHTML = `
+            <div class="poll-card">
+                <div style="font-weight:bold; margin-bottom:12px; font-size:15px; color:white;">${data.question}</div>
+                ${optionsHTML}
+                <div style="text-align:center; font-size:10px; opacity:0.4; margin-top:10px; color:white;">Всего голосов: ${data.total}</div>
             </div>`;
-    }).join("");
-
-    container.innerHTML = `
-        <div class="poll-card">
-            <div style="font-weight:bold; margin-bottom:12px; font-size:15px;">${data.question}</div>
-            ${optionsHTML}
-            <div style="text-align:center; font-size:10px; opacity:0.4; margin-top:10px;">Всего голосов: ${data.total}</div>
-        </div>`;
+    } catch (e) {
+        console.error("Ошибка загрузки опроса:", e);
+    }
 }
 
-// Отправка голоса
+// Функция для отправки голоса на сервер
 function voteInPoll(pollId, optIdx) {
     ws.send(`POLL_VOTE:${pollId}|${optIdx}`);
 }
 
 
 
+
 </script>
 </body>
 </html>
+
 
 
 
