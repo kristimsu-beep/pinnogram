@@ -422,15 +422,18 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                     "Authorization": f"Bearer {groq_key}",
                                     "Content-Type": "application/json"
                                 },
-                            json={
-                                "model": "llama-3.3-70b-versatile", # <--- НОВАЯ МОДЕЛЬ (вместо старой)
-                                "messages": [{"role": "user", "content": display_text}]
-                            },
-
+                                json={
+                                    "model": "llama-3.3-70b-versatile",
+                                    "messages": [
+                                        {"role": "system", "content": f"Ты — официальный ИИ-ассистент мессенджера Pinnogram. Твоего собеседника зовут {username}. Будь вежливым и помогай ему."},
+                                        {"role": "user", "content": display_text}
+                                    ]
+                                },
                                 timeout=30.0
-                            )
+                            ) # <--- Скобка должна закрывать post
                             
                             ai_data = resp.json()
+
                             
                             if "choices" in ai_data and len(ai_data["choices"]) > 0:
                                 ai_text = ai_data['choices'][0]['message']['content']
@@ -480,6 +483,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
