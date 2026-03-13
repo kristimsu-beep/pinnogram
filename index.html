@@ -846,34 +846,20 @@
 
                 // Дальше идет создание msgBubble...
                 // Вставь это там, где создаешь внутренности сообщения (msgBubble)
-                const msgBubble = document.createElement('div');
-                msgBubble.className = (sender === myName) ? 'msg-bubble out' : 'msg-bubble in';
-                
-                // РИСУЕМ ЦИТАТУ ОТВЕТА
-                if (replyId && replyId !== "null") {
-                    const quote = document.createElement('div');
-                    quote.className = 'reply-quote';
-                    quote.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:10px;">Ответ на #${replyId}</span>`;
-                    // При клике на цитату — прыгаем к оригиналу
-                    quote.onclick = () => {
-                        const target = document.getElementById(`msg-${replyId}`);
-                        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    };
-                    msgBubble.appendChild(quote);
+                // 1. Сначала ПРОВЕРЯЕМ ФИЛЬТРЫ (нужно ли вообще рисовать сообщение)
+                if (currentPartner) {
+                    const c = content || ""; 
+                    if (!c.includes(`PRIVATE:${currentPartner}:`) && !c.includes(`PRIVATE:${myName}:`)) return;
+                } else if (isPrivate) {
+                    return;
                 }
 
-
-
-                // Фильтр отображения текущего чата
-                if (currentPartner) {
-                    if (!content.includes(`PRIVATE:${currentPartner}:`) && !content.includes(`PRIVATE:${myName}:`)) return;
-                } else if (isPrivate) return;
-
+                // 2. Настраиваем СТРОКУ (контейнер сообщения)
                 div.className = 'msg-row';
                 div.id = `msg-${msgId}`;
                 div.style.flexDirection = (sender === myName) ? 'row-reverse' : 'row';
 
-                // Аватарка (твой пуленепробиваемый код)
+                // 3. Создаем АВАТАРКУ
                 const avImg = document.createElement('img');
                 let finalAv = avatarUrlFromSrv;
                 if (!finalAv || finalAv.length < 15) finalAv = "https://i.ibb.co/4pSbxsh/user-avatar.png";
@@ -883,17 +869,36 @@
                 avImg.onerror = function() { this.src = "https://i.ibb.co/4pSbxsh/user-avatar.png"; };
                 div.appendChild(avImg);
 
+                // 4. Создаем БАБЛ сообщения (ОДИН РАЗ)
+                const msgBubble = document.createElement('div');
+                msgBubble.className = (sender === myName) ? 'msg-bubble out' : 'msg-bubble in';
                 
+                // 5. РИСУЕМ ЦИТАТУ ОТВЕТА (если есть)
+                if (replyId && replyId !== "null") {
+                    const quote = document.createElement('div');
+                    quote.className = 'reply-quote';
+                    quote.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:10px;">Ответ на #${replyId}</span>`;
+                    quote.onclick = () => {
+                        const target = document.getElementById(`msg-${replyId}`);
+                        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    };
+                    msgBubble.appendChild(quote);
+                }
+
+                // 6. ИМЯ ОТПРАВИТЕЛЯ (если не мы)
                 if (sender !== myName) {
                     const nSpan = document.createElement('span');
                     nSpan.className = "msg-sender";
                     nSpan.textContent = sender;
                     msgBubble.appendChild(nSpan);
                     
-                    // ЗВУК ДЛЯ ОТКРЫТОГО ЧАТА
+                    // Звук для открытого чата
                     const audio = document.getElementById("notifSound");
                     if(audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
                 }
+
+                // ДАЛЕЕ ИДУТ ТВОИ ПРОВЕРКИ КОНТЕНТА (POLL_ID, VOICE и т.д.)
+
                             // --- ПРОВЕРКА КОНТЕНТА (ОПРОС / ГОЛОС / ВИДЕО / ФОТО / ТЕКСТ) ---
                 
                 // 1. ПРОВЕРКА НА ОПРОС
@@ -1738,6 +1743,7 @@ document.addEventListener('mousedown', (e) => {
 </script>
 </body>
 </html>
+
 
 
 
