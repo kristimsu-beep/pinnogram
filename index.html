@@ -768,6 +768,7 @@
             }
 
             // 2. УДАЛЕНИЕ И ПРАВКА
+                        // 2. УДАЛЕНИЕ И ПРАВКА
             if (raw.startsWith("DELETE_CONFIRM:")) {
                 const delId = raw.replace("DELETE_CONFIRM:", "");
                 const el = document.getElementById(`msg-${delId}`);
@@ -780,25 +781,25 @@
                 const mId = partsEdit[0];
                 const newTxt = partsEdit[1];
                 const msgEl = document.getElementById(`msg-${mId}`);
+                
                 if (msgEl) {
-                    // 1. Обновляем текст в пузыре
                     const textSpan = msgEl.querySelector('.msg-text');
                     if (textSpan) textSpan.textContent = newTxt;
             
-                    // 2. КРИТИЧНО: Обновляем обработчики меню, чтобы там был НОВЫЙ текст
-                    // Достаем отправителя из текущего элемента (он там уже есть)
-                    const currentSender = msgEl.style.flexDirection === 'row-reverse' ? myName : "Other"; 
+                    // Исправляем: используем глобальную переменную или определяем отправителя
+                    const currentSender = msgEl.style.flexDirection === 'row-reverse' ? (typeof myName !== 'undefined' ? myName : "") : "Other"; 
                     
                     msgEl.oncontextmenu = (e) => openMenu(e, mId, newTxt, currentSender);
-                    // Для тача тоже обновляем
+                    
                     msgEl.ontouchstart = (e) => {
-                        pressTimer = setTimeout(() => {
+                        // Чтобы не было ошибки, используем window.pressTimer или объявляем заранее
+                        window.editPressTimer = setTimeout(() => {
                             const touch = e.touches[0];
                             openMenu({ preventDefault: () => e.preventDefault(), clientX: touch.clientX, clientY: touch.clientY }, mId, newTxt, currentSender);
                         }, 500);
                     };
+                    msgEl.ontouchend = () => clearTimeout(window.editPressTimer);
             
-                    // Добавляем метку (изм.)
                     if (!msgEl.querySelector('.edited-mark')) {
                         const mark = document.createElement('span');
                         mark.className = 'edited-mark';
@@ -811,128 +812,144 @@
                 return;
             }
 
+            // 3. ОТРИСОВКА СООБЩЕНИЙ (ЗДЕСЬ НАЧИНАЕТСЯ ТВОЙ СЛЕДУЮЩИЙ БЛОК)
+            // ...
+
+
                    // 3. ОТРИСОВКА СООБЩЕНИЙ
             const div = document.createElement('div');
             
             // СНАЧАЛА ПРОВЕРЯЕМ НА СИСТЕМНОЕ (без палок |)
                         // 3. ОТРИСОВКА СИСТЕМНЫХ СООБЩЕНИЙ
+            // --- 3. ОТРИСОВКА СИСТЕМНЫХ СООБЩЕНИЙ ---
             if (raw.includes("SYSTEM:")) {
                 const sysDiv = document.createElement('div');
                 sysDiv.className = 'msg-row';
                 sysDiv.style = "display: flex; align-items: center; justify-content: center; margin: 12px 0; width: 100%; gap: 8px;";
 
-                // 1. ИКОНКА СИСТЕМЫ (Настрой ссылку здесь)
                 const sysIcon = document.createElement('img');
                 sysIcon.src = "https://cdn-icons-png.flaticon.com/512/3950/3950815.png"; 
                 sysIcon.style = "width: 18px; height: 18px; border-radius: 50%; opacity: 0.6; filter: grayscale(1);";
-                sysIcon.onerror = function() { this.style.display='none'; }; // Скрыть, если картинка не грузится
+                sysIcon.onerror = function() { this.style.display='none'; };
 
-                // 2. ТЕКСТ СООБЩЕНИЯ
                 const sysText = document.createElement('span');
                 sysText.style = "font-size: 11px; opacity: 0.6; color: var(--accent); font-weight: 500; letter-spacing: 0.3px;";
-                sysText.textContent = raw.split("SYSTEM: ")[1];
+                // Безопасный разбор системного текста
+                sysText.textContent = raw.split("SYSTEM: ")[1] || raw.replace("ID:0|SYSTEM:", "");
 
                 sysDiv.appendChild(sysIcon);
                 sysDiv.appendChild(sysText);
-                
                 chat.appendChild(sysDiv); 
                 chat.scrollTop = chat.scrollHeight;
-                return; // Выходим из ws.onmessage
+                return; 
             }
 
-            
-            // ТЕПЕРЬ ПАРСИМ ОБЫЧНОЕ СООБЩЕНИЕ
+            // --- 4. РАЗБОР ОБЫЧНОГО СООБЩЕНИЯ ---
             const parts = raw.split("|");
             if (parts.length < 2) return; 
 
             const idPart = parts[0] || "ID:0";
             const msgId = idPart.replace("ID:", "");
             
-            // 1. РАЗБОР REPLY И КОНТЕНТА
-            // 1. РАЗБОР REPLY И КОНТЕНТА
             let replyId = null;
             let currentContent = parts[1] || ""; 
             
+            // Извлекаем цитату (Reply), если она есть
             if (currentContent.startsWith("REPLY:")) {
-                // Разбиваем строку: первая часть - REPLY:ID, остальное - само сообщение
                 const rParts = currentContent.split("|");
                 replyId = rParts[0].replace("REPLY:", "");
-                // Собираем текст сообщения обратно (на случай, если в тексте были палки |)
+                // Отрезаем префикс REPLY, оставляя только текст и время
                 currentContent = rParts.slice(1).join("|"); 
             }
 
             const avatarFromSrv = parts[2] || "";
             const isRead = parts[3] || "0";
             
-            // 2. Убираем PRIVATE префикс для парсинга
+            // Определяем приватность
             const isPrivate = currentContent.includes("PRIVATE:");
             const displayContent = currentContent.replace(/^PRIVATE:.*?:/, "");
 
-            // 3. Достаем время
+            // Достаем время [HH:MM]
             const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
             const time = timeMatch ? timeMatch[1] : "--:--";
             
-            // 4. ГЛАВНЫЙ ФИКС: Убираем время из строки
+            // Очищаем строку от времени для поиска Имени и Текста
             const cleanLine = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
             const splitIdx = cleanLine.indexOf(": ");
             
+            // Если не нашли ": ", значит это системный отправитель
             const sender = splitIdx !== -1 ? cleanLine.substring(0, splitIdx) : "System";
             const text = splitIdx !== -1 ? cleanLine.substring(splitIdx + 2).trim() : cleanLine;
 
-            // Проверка счетчика для фоновых чатов (используем currentContent)
-            if (isPrivate && sender !== myName && sender !== currentPartner) {
-                unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
-                if (typeof saveUnread === "function") { saveUnread(); updateUnreadUI(); }
+            // Проверка имени (защита от undefined)
+            const activeUser = typeof myName !== 'undefined' ? myName : "";
+
+            // Проверка счетчика для фоновых чатов
+            if (isPrivate && sender !== activeUser && sender !== currentPartner) {
+                if (typeof unreadCounts !== 'undefined') {
+                    unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
+                    if (typeof saveUnread === "function") saveUnread();
+                    if (typeof updateUnreadUI === "function") updateUnreadUI();
+                }
                 const audio = document.getElementById("notifSound");
                 if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
                 return; 
             }
             
-            // Фильтр текущего чата (ВАЖНО: используем currentContent)
+            // Фильтр текущего чата
+                        // ... (после блока фильтра чата)
+
             if (currentPartner) {
-                if (!currentContent.includes(`PRIVATE:${currentPartner}:`) && !currentContent.includes(`PRIVATE:${myName}:`)) return;
+                const isMine = currentContent.includes(`PRIVATE:${activeUser}:`);
+                const isPartner = currentContent.includes(`PRIVATE:${currentPartner}:`);
+                if (!isMine && !isPartner) return;
             } else if (isPrivate) {
                 return;
             }
 
+            // ВОТ ТУТ СОЗДАЕМ DIV (после всех проверок и return)
+            const div = document.createElement('div');
+            div.id = `msg-${msgId}`;
+            div.className = 'msg-row';
+            div.style.flexDirection = (sender === activeUser) ? 'row-reverse' : 'row'; // Используем activeUser
 
-                div.id = `msg-${msgId}`;
-                div.className = 'msg-row';
-                div.style.flexDirection = (sender === myName) ? 'row-reverse' : 'row';
+            // Аватарка
+            const avImg = document.createElement('img');
+            // Исправь путь к дефолтной аватарке, если i.ibb не грузит
+            avImg.src = avatarFromSrv && avatarFromSrv.length > 15 ? avatarFromSrv : "https://i.ibb.co/4pSbxsh/user-avatar.png";
+            avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
+            avImg.onerror = function() { this.src = "https://i.ibb.co/4pSbxsh/user-avatar.png"; };
+            div.appendChild(avImg);
 
-                // Аватарка
-                const avImg = document.createElement('img');
-                avImg.src = avatarFromSrv && avatarFromSrv.length > 15 ? avatarFromSrv : "https://i.ibb.co/4pSbxsh/user-avatar.png";
-                avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
-                avImg.onerror = function() { this.src = "https://i.ibb.co"; };
-                div.appendChild(avImg);
+            const msgBubble = document.createElement('div');
+            msgBubble.className = (sender === activeUser) ? 'msg msg-right' : 'msg msg-left';
 
-                const msgBubble = document.createElement('div');
-                msgBubble.className = (sender === myName) ? 'msg msg-right' : 'msg msg-left';
+            // Меню (Контекстное)
+            div.oncontextmenu = (e) => { if(typeof openMenu === "function") openMenu(e, msgId, text, sender); };
+            
+            // Тач-события (исправлено pressTimer)
+            let pressTimer; 
+            div.ontouchstart = (e) => {
+                pressTimer = setTimeout(() => {
+                    const touch = e.touches[0];
+                    if(typeof openMenu === "function") openMenu({ preventDefault: () => e.preventDefault(), clientX: touch.clientX, clientY: touch.clientY }, msgId, text, sender);
+                }, 500);
+            };
+            div.ontouchend = () => clearTimeout(pressTimer);
 
-                // Меню
-                div.oncontextmenu = (e) => { if(typeof openMenu === "function") openMenu(e, msgId, text, sender); };
-                let pressTimer;
-                div.ontouchstart = (e) => {
-                    pressTimer = setTimeout(() => {
-                        const touch = e.touches[0];
-                        if(typeof openMenu === "function") openMenu({ preventDefault: () => e.preventDefault(), clientX: touch.clientX, clientY: touch.clientY }, msgId, text, sender);
-                    }, 500);
+            // Цитата ответа
+            if (replyId && replyId !== "null") {
+                const quote = document.createElement('div');
+                quote.className = 'reply-quote';
+                quote.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:10px;">Ответ на #${replyId}</span>`;
+                quote.onclick = (e) => {
+                    e.stopPropagation();
+                    const target = document.getElementById(`msg-${replyId}`);
+                    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 };
-                div.ontouchend = () => clearTimeout(pressTimer);
+                msgBubble.appendChild(quote);
+            }
 
-                // Цитата ответа
-                if (replyId && replyId !== "null") {
-                    const quote = document.createElement('div');
-                    quote.className = 'reply-quote';
-                    quote.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:10px;">Ответ на #${replyId}</span>`;
-                    quote.onclick = (e) => {
-                        e.stopPropagation();
-                        const target = document.getElementById(`msg-${replyId}`);
-                        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    };
-                    msgBubble.appendChild(quote);
-                }
 
                 if (sender !== myName) {
                     const nSpan = document.createElement('span');
@@ -1274,7 +1291,9 @@ function startCall() { initRTCPeer(true); }
 
 // Функция входа с паролем и проверкой на сервере
 async function saveNameAndStart() {
-    const username = document.getElementById("nameInput").value.trim();
+    // 1. ПРОВЕРЯЕМ ID (убедись, что в HTML это nameInput)
+    const nameEl = document.getElementById("nameInput") || document.getElementById("userName");
+    const username = nameEl.value.trim();
     if (!username) return;
     
     let password = localStorage.getItem("pinnogram_pass") || prompt("Введите пароль для регистрации или входа:");
@@ -1286,34 +1305,43 @@ async function saveNameAndStart() {
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({ username, password })
         });
+        
+        if (!res.ok) throw new Error("Server error");
         const data = await res.json();
 
-               if (data.status === "ok") {
+        if (data.status === "ok") {
+            // Сохраняем данные
             localStorage.setItem("pinnogram_user", username);
             localStorage.setItem("pinnogram_pass", password);
             localStorage.setItem("pinnogram_room", "general");
             
-            // 1. ОПРЕДЕЛЯЕМ АВАТАР (база или надежная ПРЯМАЯ ссылка)
+            // Глобальная переменная для чата
+            myName = username; 
+
+            // Аватарка
             const finalAvatar = data.avatar || "https://i.ibb.co/4pSbxsh/user-avatar.png";
-            
-            // 2. ЗАПИСЫВАЕМ В ПАМЯТЬ БРАУЗЕРА (только рабочую ссылку!)
             localStorage.setItem("pinnogram_avatar", finalAvatar);
             
-            // 3. УСТАНАВЛИВАЕМ В КНОПКУ
             const avIcon = document.getElementById("user-avatar-icon");
             if (avIcon) avIcon.src = finalAvatar;
             
-            startChat(username, "general");
+            // Прячем экран входа
+            document.getElementById("login-screen").style.display = "none";
+            document.getElementById("app-screen").style.display = "flex";
+
+            // ЗАПУСК
+            startChat(); 
         
         } else {
-            // ... остальное без изменений
             alert(data.message);
             localStorage.removeItem("pinnogram_pass");
         }
     } catch (e) {
-        alert("Ошибка связи с сервером");
+        console.error(e);
+        alert("Ошибка связи с сервером. Проверьте API_URL.");
     }
 }
+
 
 // Функция смены аватарки
 async function changeAvatar() {
@@ -1805,6 +1833,7 @@ document.addEventListener('mousedown', (e) => {
 
 </body>
 </html>
+
 
 
 
