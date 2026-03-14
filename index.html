@@ -812,14 +812,7 @@
                 return;
             }
 
-            // 3. ОТРИСОВКА СООБЩЕНИЙ (ЗДЕСЬ НАЧИНАЕТСЯ ТВОЙ СЛЕДУЮЩИЙ БЛОК)
-            // ...
 
-
-                   // 3. ОТРИСОВКА СООБЩЕНИЙ
-            
-            // СНАЧАЛА ПРОВЕРЯЕМ НА СИСТЕМНОЕ (без палок |)
-                        // 3. ОТРИСОВКА СИСТЕМНЫХ СООБЩЕНИЙ
             // --- 3. ОТРИСОВКА СИСТЕМНЫХ СООБЩЕНИЙ ---
             if (raw.includes("SYSTEM:")) {
                 const sysDiv = document.createElement('div');
@@ -1042,12 +1035,12 @@
 
 
         // Обработчик закрытия меню (важно!)
-        document.addEventListener('mousedown', (e) => {
+      document.addEventListener('mousedown', (e) => {
             const menu = document.getElementById('msg-menu');
             if (menu && !e.target.closest('.context-menu')) menu.style.display = 'none';
         });
 
-} // Конец функции startChat
+} // <--- ЭТА СКОБКА ЗАКРЫВАЕТ функцию startChat (ОСТАВЬ ОДНУ)
 
 
 
@@ -1284,10 +1277,9 @@ function stopVoice() {
     }
 }
 
-
-
-
-function startCall() { initRTCPeer(true); }
+function startCall() { 
+    initRTCPeer(true); 
+}
 
 // Функция входа с паролем и проверкой на сервере
 async function saveNameAndStart() {
@@ -1833,6 +1825,7 @@ document.addEventListener('mousedown', (e) => {
 
 </body>
 </html>
+
 
 
 
