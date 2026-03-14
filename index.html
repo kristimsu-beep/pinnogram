@@ -666,259 +666,233 @@
             subscribeToPush(); // Запрашиваем пуши при входе
         };
 
-ws.onmessage = async (event) => {
-    const raw = event.data;
-    const chat = document.getElementById('chat');
+        ws.onmessage = async (event) => {
+            const raw = event.data;
+            const chat = document.getElementById('chat');
 
-    // --- 1. СИСТЕМНЫЕ СИГНАЛЫ (Опросы, Печать, Онлайн) ---
-    if (raw.startsWith("POLL_UPDATE:")) {
-        const pId = raw.replace("POLL_UPDATE:", "");
-        if (typeof loadPollData === "function") loadPollData(pId);
-        return;
-    }
-
-    if (raw.includes("ONLINE_LIST:")) {
-        const parts = raw.split("ONLINE_LIST:");
-        if (parts.length > 1) {
-            const users = parts[1].split(",");
-            const contactsList = document.getElementById("contacts-list");
-            if (contactsList) {
-                const aiBotHTML = `<div onclick="switchChat('AI_BOT')" class="contact-item ${currentPartner === 'AI_BOT' ? 'contact-active' : ''}">
-                    <img src="https://i.ibb.co" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
-                    <b style="flex:1">Pinnogram AI (Bot)</b>
-                    <div id="badge-AI_BOT" class="unread-badge" style="display:none"></div>
-                </div>`;
-                const usersHTML = users.map(u => {
-                    const name = u.split(" (")[0].trim();
-                    if (!name || name === myName) return "";
-                    return `<div onclick="switchChat('${name}')" class="contact-item ${currentPartner === name ? 'contact-active' : ''}">
-                        <span>👤</span><b style="flex:1">${name}</b>
-                        <div id="badge-${name}" class="unread-badge" style="display:none"></div>
-                    </div>`;
-                }).join("");
-                contactsList.innerHTML = aiBotHTML + usersHTML;
-                if (typeof updateUnreadUI === "function") updateUnreadUI();
+            // 1. СИСТЕМНЫЕ СИГНАЛЫ
+            if (raw.startsWith("POLL_UPDATE:")) {
+                const pId = raw.replace("POLL_UPDATE:", "");
+                if (typeof loadPollData === "function") loadPollData(pId);
+                return;
             }
-            document.getElementById("online-list").textContent = `В сети: ${users.map(u => u.split(" (")[0]).join(", ")}`;
-        }
-        return;
-    }
 
-    if (raw.startsWith("RTC_SIGNAL:")) {
-        if (typeof handleSignalingData === "function") handleSignalingData(JSON.parse(raw.replace("RTC_SIGNAL:", "")));
-        return;
-    }
-
-    if (raw.startsWith("TYPING:")) {
-        const typingUser = raw.split(":")[1];
-        const ind = document.getElementById("typing-indicator");
-        if (ind) {
-            ind.textContent = `${typingUser} печатает...`;
-            clearTimeout(typingTimeout);
-            typingTimeout = setTimeout(() => ind.textContent = "", 2000);
-        }
-        return;
-    }
-
-    // --- 2. СИГНАЛЫ РЕДАКТИРОВАНИЯ И УДАЛЕНИЯ ---
-    if (raw.startsWith("DELETE_CONFIRM:")) {
-        const delId = raw.replace("DELETE_CONFIRM:", "");
-        const el = document.getElementById(`msg-${delId}`);
-        if (el) el.remove();
-        return;
-    }
-
-    if (raw.startsWith("EDIT_CONFIRM:")) {
-        const partsEdit = raw.replace("EDIT_CONFIRM:", "").split("|", 2);
-        const mId = partsEdit[0];
-        const newTxt = partsEdit[1];
-        const msgEl = document.getElementById(`msg-${mId}`);
-        if (msgEl) {
-            const textSpan = msgEl.querySelector('.msg-text');
-            if (textSpan) textSpan.textContent = newTxt;
-            if (!msgEl.querySelector('.edited-mark')) {
-                const mark = document.createElement('span');
-                mark.className = 'edited-mark';
-                mark.style = "font-size:10px; opacity:0.5; margin-right:4px;";
-                mark.innerHTML = " (изм.) ";
-                const timeSpan = msgEl.querySelector('.msg-time');
-                if (timeSpan) timeSpan.before(mark);
+            if (raw.includes("ONLINE_LIST:")) {
+                const parts = raw.split("ONLINE_LIST:");
+                if (parts.length > 1) {
+                    const users = parts[1].split(",");
+                    const contactsList = document.getElementById("contacts-list");
+                    if (contactsList) {
+                        const aiBotHTML = `<div onclick="switchChat('AI_BOT')" class="contact-item ${currentPartner === 'AI_BOT' ? 'contact-active' : ''}">
+                            <img src="https://i.ibb.co" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
+                            <b style="flex:1">Pinnogram AI (Bot)</b><div id="badge-AI_BOT" class="unread-badge" style="display:none"></div>
+                        </div>`;
+                        const usersHTML = users.map(u => {
+                            const name = u.split(" (")[0].trim();
+                            if (!name || name === myName) return "";
+                            return `<div onclick="switchChat('${name}')" class="contact-item ${currentPartner === name ? 'contact-active' : ''}">
+                                <span>👤</span><b style="flex:1">${name}</b><div id="badge-${name}" class="unread-badge" style="display:none"></div>
+                            </div>`;
+                        }).join("");
+                        contactsList.innerHTML = aiBotHTML + usersHTML;
+                        if (typeof updateUnreadUI === "function") updateUnreadUI();
+                    }
+                    document.getElementById("online-list").textContent = `В сети: ${users.map(u => u.split(" (")[0]).join(", ")}`;
+                }
+                return;
             }
-        }
-        return;
-    }
 
-    // --- 3. ОТРИСОВКА СООБЩЕНИЙ ---
-    const div = document.createElement('div');
-    if (raw.includes("SYSTEM:")) {
-        div.style = "align-self: center; font-size: 11px; opacity: 0.5; margin: 10px 0; text-align: center; width: 100%;";
-        div.textContent = raw.split("SYSTEM: ")[1];
-    } else {
-        const parts = raw.split("|");
-        const idPart = parts[0] || "ID:0";
-        const msgId = idPart.replace("ID:", "");
-        
-        let replyId = null;
-        let content = parts[1] || "";
-        if (content.startsWith("REPLY:")) {
-            const rParts = content.split("|", 2);
-            replyId = rParts[0].replace("REPLY:", "");
-            content = rParts[1];
-        }
+            if (raw.startsWith("RTC_SIGNAL:")) {
+                if (typeof handleSignalingData === "function") handleSignalingData(JSON.parse(raw.replace("RTC_SIGNAL:", "")));
+                return;
+            }
 
-        const avatarFromSrv = parts[2] || "";
-        const isRead = parts[3] || "0";
-        const isPrivate = content.includes("PRIVATE:");
-        const displayContent = content.replace(/^PRIVATE:.*?:/, "");
-        const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
-        const time = timeMatch ? timeMatch[1] : "--:--";
-        const userAndText = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
-        const splitIdx = userAndText.indexOf(": ");
-        const sender = userAndText.substring(0, splitIdx);
-        const text = userAndText.substring(splitIdx + 2).trim();
+            if (raw.startsWith("TYPING:")) {
+                const typingUser = raw.split(":")[1];
+                const ind = document.getElementById("typing-indicator");
+                if (ind) {
+                    ind.textContent = `${typingUser} печатает...`;
+                    clearTimeout(typingTimeout);
+                    typingTimeout = setTimeout(() => ind.textContent = "", 2000);
+                }
+                return;
+            }
 
-        // Проверка счетчика для фоновых чатов
-        if (isPrivate && sender !== myName && sender !== currentPartner) {
-            unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
-            saveUnread();
-            updateUnreadUI();
-            const audio = document.getElementById("notifSound");
-            if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
-            return;
-        }
+            // 2. УДАЛЕНИЕ И ПРАВКА
+            if (raw.startsWith("DELETE_CONFIRM:")) {
+                const delId = raw.replace("DELETE_CONFIRM:", "");
+                const el = document.getElementById(`msg-${delId}`);
+                if (el) el.remove();
+                return;
+            }
 
-        // Фильтр текущего чата
-        if (currentPartner) {
-            const c = content || "";
-            if (!c.includes(`PRIVATE:${currentPartner}:`) && !c.includes(`PRIVATE:${myName}:`)) return;
-        } else if (isPrivate) return;
+            if (raw.startsWith("EDIT_CONFIRM:")) {
+                const partsEdit = raw.replace("EDIT_CONFIRM:", "").split("|", 2);
+                const mId = partsEdit[0], newTxt = partsEdit[1];
+                const msgEl = document.getElementById(`msg-${mId}`);
+                if (msgEl) {
+                    const textSpan = msgEl.querySelector('.msg-text');
+                    if (textSpan) textSpan.textContent = newTxt;
+                    if (!msgEl.querySelector('.edited-mark')) {
+                        const mark = document.createElement('span');
+                        mark.className = 'edited-mark';
+                        mark.style = "font-size:10px; opacity:0.5; margin-right:4px;";
+                        mark.innerHTML = " (изм.) ";
+                        const timeSpan = msgEl.querySelector('.msg-time');
+                        if (timeSpan) timeSpan.before(mark);
+                    }
+                }
+                return;
+            }
 
-        // Настройка контейнера сообщения
-        div.id = `msg-${msgId}`;
-        div.className = 'msg-row';
-        div.style.flexDirection = (sender === myName) ? 'row-reverse' : 'row';
-
-        // Аватарка
-        const avImg = document.createElement('img');
-        let finalAv = avatarFromSrv;
-        if (!finalAv || finalAv.length < 15) finalAv = "https://i.ibb.co";
-        avImg.src = finalAv.startsWith('http') ? finalAv : "https://" + finalAv;
-        avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
-        avImg.onerror = function() { this.src = "https://i.ibb.co"; };
-        div.appendChild(avImg);
-
-        const msgBubble = document.createElement('div');
-        msgBubble.className = (sender === myName) ? 'msg msg-right' : 'msg msg-left';
-
-        // Контекстное меню (ПК и Тач)
-        div.oncontextmenu = (e) => openMenu(e, msgId, text, sender);
-        let pressTimer;
-        div.ontouchstart = (e) => {
-            pressTimer = setTimeout(() => {
-                const touch = e.touches[0];
-                openMenu({ preventDefault: () => e.preventDefault(), clientX: touch.clientX, clientY: touch.clientY }, msgId, text, sender);
-            }, 500);
-        };
-        div.ontouchend = () => clearTimeout(pressTimer);
-
-        // Цитата ответа
-        if (replyId && replyId !== "null") {
-            const quote = document.createElement('div');
-            quote.className = 'reply-quote';
-            quote.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:10px;">Ответ на #${replyId}</span>`;
-            quote.onclick = (e) => {
-                e.stopPropagation();
-                const target = document.getElementById(`msg-${replyId}`);
-                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            };
-            msgBubble.appendChild(quote);
-        }
-
-        if (sender !== myName) {
-            const nSpan = document.createElement('span');
-            nSpan.className = "msg-sender";
-            nSpan.textContent = sender;
-            msgBubble.appendChild(nSpan);
-        }
-
-        // Проверка контента
-        if (text.startsWith("POLL_ID:")) {
-            const pId = text.replace("POLL_ID:", "");
-            const pBox = document.createElement('div');
-            pBox.id = `poll-card-${pId}`;
-            msgBubble.appendChild(pBox);
-            loadPollData(pId);
-        } else if (text.startsWith("VOICE:")) {
-            const [audioUrl, waveStr] = text.replace("VOICE:", "").split("^");
-            const audioId = `audio-${msgId}`;
-            const waves = waveStr ? waveStr.split(",").map(Number) : [20,40,30,50];
-            const waveHTML = waves.map(h => `<div class="wave-bar" style="height:${Math.max(15, h)}%"></div>`).join("");
-            const vCont = document.createElement('div');
-            vCont.innerHTML = `<div class="voice-msg">
-                <div class="play-btn" onclick="toggleVoice('${audioId}', this)">▶</div>
-                <div class="voice-progress-wrap">
-                    <div class="waveform-real" onclick="seekVoice('${audioId}', event, this)">
-                        <div class="waveform-overlay" id="progress-${audioId}"></div>${waveHTML}
-                    </div>
-                    <div class="voice-meta"><span>${time}</span></div>
-                </div>
-                <audio id="${audioId}" src="${audioUrl}" ontimeupdate="updateVoiceProgress('${audioId}')"></audio>
-            </div>`;
-            msgBubble.appendChild(vCont);
-        } else {
-            const lowerT = text.toLowerCase();
-            const isImg = [".jpg", ".png", ".gif", ".webp"].some(ext => lowerT.includes(ext));
-            const isVid = [".mp4", ".webm", ".mov"].some(ext => lowerT.includes(ext));
-            if (isVid) {
-                const v = document.createElement('video');
-                v.src = text; v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
-                v.style = "max-width:100%; border-radius:12px;";
-                msgBubble.appendChild(v);
-            } else if (isImg) {
-                const img = document.createElement('img');
-                img.src = text; img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer;";
-                img.onclick = () => { document.getElementById('modal-img').src = img.src; document.getElementById('modal').style.display = 'flex'; };
-                msgBubble.appendChild(img);
+            // 3. ОТРИСОВКА СООБЩЕНИЙ
+            const div = document.createElement('div');
+            if (raw.includes("SYSTEM:")) {
+                div.style = "align-self: center; font-size: 11px; opacity: 0.5; margin: 10px 0; text-align: center; width: 100%;";
+                div.textContent = raw.split("SYSTEM: ")[1];
             } else {
-                const s = document.createElement('span');
-                s.className = "msg-text";
-                s.textContent = text;
-                msgBubble.appendChild(s);
+                const parts = raw.split("|");
+                const idPart = parts[0] || "ID:0", msgId = idPart.replace("ID:", "");
+                let replyId = null, content = parts[1] || "";
+                
+                if (content.startsWith("REPLY:")) {
+                    const rParts = content.split("|", 2);
+                    replyId = rParts[0].replace("REPLY:", "");
+                    content = rParts[1];
+                }
+
+                const avatarFromSrv = parts[2] || "", isRead = parts[3] || "0";
+                const isPrivate = content.includes("PRIVATE:");
+                const displayContent = content.replace(/^PRIVATE:.*?:/, "");
+                const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
+                const time = timeMatch ? timeMatch[1] : "--:--";
+                const userAndText = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
+                const splitIdx = userAndText.indexOf(": ");
+                const sender = userAndText.substring(0, splitIdx), text = userAndText.substring(splitIdx + 2).trim();
+
+                // Проверка счетчика для фоновых чатов
+                if (isPrivate && sender !== myName && sender !== currentPartner) {
+                    unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
+                    if (typeof saveUnread === "function") { saveUnread(); updateUnreadUI(); }
+                    const audio = document.getElementById("notifSound");
+                    if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
+                    return; 
+                }
+
+                // Фильтр текущего чата
+                if (currentPartner) {
+                    const c = content || "";
+                    if (!c.includes(`PRIVATE:${currentPartner}:`) && !c.includes(`PRIVATE:${myName}:`)) return;
+                } else if (isPrivate) {
+                    return;
+                }
+
+                div.id = `msg-${msgId}`;
+                div.className = 'msg-row';
+                div.style.flexDirection = (sender === myName) ? 'row-reverse' : 'row';
+
+                // Аватарка
+                const avImg = document.createElement('img');
+                avImg.src = avatarFromSrv && avatarFromSrv.length > 15 ? avatarFromSrv : "https://i.ibb.co";
+                avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
+                avImg.onerror = function() { this.src = "https://i.ibb.co"; };
+                div.appendChild(avImg);
+
+                const msgBubble = document.createElement('div');
+                msgBubble.className = (sender === myName) ? 'msg msg-right' : 'msg msg-left';
+
+                // Меню
+                div.oncontextmenu = (e) => { if(typeof openMenu === "function") openMenu(e, msgId, text, sender); };
+                let pressTimer;
+                div.ontouchstart = (e) => {
+                    pressTimer = setTimeout(() => {
+                        const touch = e.touches[0];
+                        if(typeof openMenu === "function") openMenu({ preventDefault: () => e.preventDefault(), clientX: touch.clientX, clientY: touch.clientY }, msgId, text, sender);
+                    }, 500);
+                };
+                div.ontouchend = () => clearTimeout(pressTimer);
+
+                // Цитата ответа
+                if (replyId && replyId !== "null") {
+                    const quote = document.createElement('div');
+                    quote.className = 'reply-quote';
+                    quote.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:10px;">Ответ на #${replyId}</span>`;
+                    quote.onclick = (e) => {
+                        e.stopPropagation();
+                        const target = document.getElementById(`msg-${replyId}`);
+                        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    };
+                    msgBubble.appendChild(quote);
+                }
+
+                if (sender !== myName) {
+                    const nSpan = document.createElement('span');
+                    nSpan.className = "msg-sender"; nSpan.textContent = sender;
+                    msgBubble.appendChild(nSpan);
+                }
+
+                // Контент (Опрос/Голос/Видео/Текст)
+                if (text.startsWith("POLL_ID:")) {
+                    const pId = text.replace("POLL_ID:", ""), pBox = document.createElement('div');
+                    pBox.id = `poll-card-${pId}`; msgBubble.appendChild(pBox);
+                    if (typeof loadPollData === "function") loadPollData(pId);
+                } else if (text.startsWith("VOICE:")) {
+                    const [audioUrl, waveStr] = text.replace("VOICE:", "").split("^");
+                    const audioId = `audio-${msgId}`, waves = waveStr ? waveStr.split(",").map(Number) : [20,40,30,50];
+                    const waveHTML = waves.map(h => `<div class="wave-bar" style="height:${Math.max(15, h)}%"></div>`).join("");
+                    const vCont = document.createElement('div');
+                    vCont.innerHTML = `<div class="voice-msg"><div class="play-btn" onclick="toggleVoice('${audioId}', this)">▶</div><div class="voice-progress-wrap"><div class="waveform-real" onclick="seekVoice('${audioId}', event, this)"><div class="waveform-overlay" id="progress-${audioId}"></div>${waveHTML}</div><div class="voice-meta"><span>${time}</span></div></div><audio id="${audioId}" src="${audioUrl}" ontimeupdate="updateVoiceProgress('${audioId}')"></audio></div>`;
+                    msgBubble.appendChild(vCont);
+                } else {
+                    const lowerT = text.toLowerCase();
+                    const isImg = [".jpg", ".png", ".gif", ".webp", ".jpeg"].some(ext => lowerT.includes(ext));
+                    const isVid = [".mp4", ".webm", ".mov"].some(ext => lowerT.includes(ext));
+                    if (isVid) {
+                        const v = document.createElement('video'); v.src = text; v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
+                        v.style = "max-width:100%; border-radius:12px;"; msgBubble.appendChild(v);
+                    } else if (isImg) {
+                        const img = document.createElement('img'); img.src = text; img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer;";
+                        img.onclick = () => { document.getElementById('modal-img').src = img.src; document.getElementById('modal').style.display = 'flex'; };
+                        msgBubble.appendChild(img);
+                    } else {
+                        const s = document.createElement('span'); s.className = "msg-text"; s.textContent = text; msgBubble.appendChild(s);
+                    }
+                }
+
+                // Мета-инфо
+                const meta = document.createElement('div');
+                meta.style = "display:flex; justify-content:flex-end; gap:4px; margin-top:4px; align-items:center;";
+                const ts = document.createElement('span'); ts.className = "msg-time"; ts.textContent = time; meta.appendChild(ts);
+
+                if (sender === myName && currentPartner) {
+                    const st = document.createElement('span');
+                    st.className = isRead === "1" ? "msg-status read" : "msg-status";
+                    st.style = "font-size:12px; color:var(--accent);";
+                    st.textContent = isRead === "1" ? "✔✔" : "✔";
+                    meta.appendChild(st);
+                }
+                msgBubble.appendChild(meta);
+                div.appendChild(msgBubble);
+            } // Конец else (отрисовка сообщений)
+
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+
+            const isPrivate = raw.includes("PRIVATE:"); // Безопасная проверка ЛС
+            if (isPrivate && sender !== myName && sender === currentPartner && isRead === "0") {
+                fetch(`${API_URL}/read_messages`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ username: myName, partner: currentPartner }) }).catch(e => {});
             }
-        }
+        }; // Конец ws.onmessage
 
-        // Мета-инфо
-        const meta = document.createElement('div');
-        meta.style = "display:flex; justify-content:flex-end; gap:4px; margin-top:4px;";
-        const ts = document.createElement('span');
-        ts.className = "msg-time"; ts.textContent = time;
-        meta.appendChild(ts);
-
-        if (sender === myName && currentPartner) {
-            const st = document.createElement('span');
-            st.className = isRead === "1" ? "msg-status read" : "msg-status";
-            st.textContent = isRead === "1" ? "✔✔" : "✔";
-            meta.appendChild(st);
-        }
-        msgBubble.appendChild(meta);
-        div.appendChild(msgBubble);
-    }
-    
-    chat.appendChild(div);
-    chat.scrollTop = chat.scrollHeight;
-
-    // Авто-прочтение
-    if (raw.includes("PRIVATE:") && !raw.includes(`[${myName}]`) && currentPartner) {
-        fetch(`${API_URL}/read_messages`, {
-            method: "POST",
-            headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({ username: myName, partner: currentPartner })
+        // Обработчик закрытия меню (важно!)
+        document.addEventListener('mousedown', (e) => {
+            const menu = document.getElementById('msg-menu');
+            if (menu && !e.target.closest('.context-menu')) menu.style.display = 'none';
         });
-    }
-};
+
+    } // Конец функции startChat
 
 
-} // Конец startChat
 
 
 
@@ -1656,6 +1630,7 @@ document.addEventListener('mousedown', (e) => {
 
 </body>
 </html>
+
 
 
 
