@@ -728,11 +728,28 @@
 
             if (raw.startsWith("EDIT_CONFIRM:")) {
                 const partsEdit = raw.replace("EDIT_CONFIRM:", "").split("|", 2);
-                const mId = partsEdit[0], newTxt = partsEdit[1];
+                const mId = partsEdit[0];
+                const newTxt = partsEdit[1];
                 const msgEl = document.getElementById(`msg-${mId}`);
                 if (msgEl) {
+                    // 1. Обновляем текст в пузыре
                     const textSpan = msgEl.querySelector('.msg-text');
                     if (textSpan) textSpan.textContent = newTxt;
+            
+                    // 2. КРИТИЧНО: Обновляем обработчики меню, чтобы там был НОВЫЙ текст
+                    // Достаем отправителя из текущего элемента (он там уже есть)
+                    const currentSender = msgEl.style.flexDirection === 'row-reverse' ? myName : "Other"; 
+                    
+                    msgEl.oncontextmenu = (e) => openMenu(e, mId, newTxt, currentSender);
+                    // Для тача тоже обновляем
+                    msgEl.ontouchstart = (e) => {
+                        pressTimer = setTimeout(() => {
+                            const touch = e.touches[0];
+                            openMenu({ preventDefault: () => e.preventDefault(), clientX: touch.clientX, clientY: touch.clientY }, mId, newTxt, currentSender);
+                        }, 500);
+                    };
+            
+                    // Добавляем метку (изм.)
                     if (!msgEl.querySelector('.edited-mark')) {
                         const mark = document.createElement('span');
                         mark.className = 'edited-mark';
@@ -873,9 +890,13 @@
                 }
 
                 // Мета-инфо
+                // МЕТА-ДАННЫЕ (Время и галочки)
                 const meta = document.createElement('div');
                 meta.style = "display:flex; justify-content:flex-end; gap:4px; margin-top:4px; align-items:center;";
-                const ts = document.createElement('span'); ts.className = "msg-time"; ts.textContent = time; meta.appendChild(ts);
+                const ts = document.createElement('span'); 
+                ts.className = "msg-time"; 
+                ts.textContent = time; 
+                meta.appendChild(ts);
 
                 if (sender === myName && currentPartner) {
                     const st = document.createElement('span');
@@ -886,16 +907,24 @@
                 }
                 msgBubble.appendChild(meta);
                 div.appendChild(msgBubble);
-            } // Конец else (отрисовка сообщений)
 
-            chat.appendChild(div);
+                // Добавляем готовую строку в чат именно ЗДЕСЬ (внутри else)
+                chat.appendChild(div);
+            } // <--- ЗАКРЫВАЕТ else (отрисовка сообщений)
+
+            // Прокрутка вниз
             chat.scrollTop = chat.scrollHeight;
 
-            const isPrivate = raw.includes("PRIVATE:"); // Безопасная проверка ЛС
-            if (isPrivate && sender !== myName && sender === currentPartner && isRead === "0") {
-                fetch(`${API_URL}/read_messages`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ username: myName, partner: currentPartner }) }).catch(e => {});
+            // БЕЗОПАСНАЯ ПРОВЕРКА ПРОЧТЕНИЯ (без использования sender извне)
+            if (raw.includes("PRIVATE:") && !raw.includes(`[${myName}]`) && currentPartner) {
+                fetch(`${API_URL}/read_messages`, { 
+                    method: "POST", 
+                    headers: {"Content-Type":"application/json"}, 
+                    body: JSON.stringify({ username: myName, partner: currentPartner }) 
+                }).catch(e => {});
             }
         }; // Конец ws.onmessage
+
 
         // Обработчик закрытия меню (важно!)
         document.addEventListener('mousedown', (e) => {
@@ -1586,8 +1615,14 @@ function openMenu(e, id, text, sender) {
 function prepareReply() {
     replyToId = selectedMsgId;
     editMsgId = null;
-    showPreview("ОТВЕТ", selectedMsgText);
+    
+    // Ищем актуальный текст прямо в пузыре на экране
+    const msgEl = document.getElementById(`msg-${selectedMsgId}`);
+    const actualText = msgEl ? msgEl.querySelector('.msg-text').textContent : selectedMsgText;
+    
+    showPreview("ОТВЕТ", actualText);
 }
+
 
 function prepareEdit() {
     editMsgId = selectedMsgId;
@@ -1643,6 +1678,7 @@ document.addEventListener('mousedown', (e) => {
 
 </body>
 </html>
+
 
 
 
