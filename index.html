@@ -811,67 +811,90 @@
                 return;
             }
 
-            // 3. ОТРИСОВКА СООБЩЕНИЙ
+                   // 3. ОТРИСОВКА СООБЩЕНИЙ
             const div = document.createElement('div');
+            
+            // СНАЧАЛА ПРОВЕРЯЕМ НА СИСТЕМНОЕ (без палок |)
+                        // 3. ОТРИСОВКА СИСТЕМНЫХ СООБЩЕНИЙ
             if (raw.includes("SYSTEM:")) {
-                div.style = "align-self: center; font-size: 11px; opacity: 0.5; margin: 10px 0; text-align: center; width: 100%;";
-                div.textContent = raw.split("SYSTEM: ")[1];
-            } else {
-                const parts = raw.split("|");
-                const idPart = parts[0] || "ID:0";
-                const msgId = idPart.replace("ID:", "");
+                const sysDiv = document.createElement('div');
+                sysDiv.className = 'msg-row';
+                sysDiv.style = "display: flex; align-items: center; justify-content: center; margin: 12px 0; width: 100%; gap: 8px;";
+
+                // 1. ИКОНКА СИСТЕМЫ (Настрой ссылку здесь)
+                const sysIcon = document.createElement('img');
+                sysIcon.src = "https://cdn-icons-png.flaticon.com/512/3950/3950815.png"; 
+                sysIcon.style = "width: 18px; height: 18px; border-radius: 50%; opacity: 0.6; filter: grayscale(1);";
+                sysIcon.onerror = function() { this.style.display='none'; }; // Скрыть, если картинка не грузится
+
+                // 2. ТЕКСТ СООБЩЕНИЯ
+                const sysText = document.createElement('span');
+                sysText.style = "font-size: 11px; opacity: 0.6; color: var(--accent); font-weight: 500; letter-spacing: 0.3px;";
+                sysText.textContent = raw.split("SYSTEM: ")[1];
+
+                sysDiv.appendChild(sysIcon);
+                sysDiv.appendChild(sysText);
                 
-                if (!parts[1]) return; 
+                chat.appendChild(sysDiv); 
+                chat.scrollTop = chat.scrollHeight;
+                return; // Выходим из ws.onmessage
+            }
 
-                // 1. Извлекаем префикс ответа (REPLY:ID)
-                let replyId = null;
-                let rawContent = parts[1] || "";
-                if (rawContent.startsWith("REPLY:")) {
-                    const rParts = rawContent.split("|", 2);
-                    replyId = rParts[0].replace("REPLY:", "");
-                    rawContent = rParts[1] || ""; // Оставляем остаток после REPLY
-                }
+            
+            // ТЕПЕРЬ ПАРСИМ ОБЫЧНОЕ СООБЩЕНИЕ
+            const parts = raw.split("|");
+            if (parts.length < 2) return; 
 
-                const avatarFromSrv = parts[2] || "";
-                const isRead = parts[3] || "0";
-                
-                // 2. Убираем PRIVATE префикс для парсинга
-                const isPrivate = rawContent.includes("PRIVATE:");
-                const displayContent = rawContent.replace(/^PRIVATE:.*?:/, "");
+            const idPart = parts[0] || "ID:0";
+            const msgId = idPart.replace("ID:", "");
+            
+            // 1. РАЗБОР REPLY И КОНТЕНТА
+            // 1. РАЗБОР REPLY И КОНТЕНТА
+            let replyId = null;
+            let currentContent = parts[1] || ""; 
+            
+            if (currentContent.startsWith("REPLY:")) {
+                // Разбиваем строку: первая часть - REPLY:ID, остальное - само сообщение
+                const rParts = currentContent.split("|");
+                replyId = rParts[0].replace("REPLY:", "");
+                // Собираем текст сообщения обратно (на случай, если в тексте были палки |)
+                currentContent = rParts.slice(1).join("|"); 
+            }
 
-                // 3. Достаем время
-                const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
-                const time = timeMatch ? timeMatch[1] : "--:--";
-                
-                // 4. ГЛАВНЫЙ ФИКС: Убираем время из строки, чтобы осталось только "Имя: Текст"
-                const cleanLine = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
-                
-                // Ищем ПЕРВОЕ двоеточие
-                const splitIdx = cleanLine.indexOf(": ");
-                
-                // Если двоеточие не найдено (системное сообщение), пишем "System"
-                // Если найдено — берем всё ДО него как имя, всё ПОСЛЕ — как текст
-                const sender = splitIdx !== -1 ? cleanLine.substring(0, splitIdx) : "System";
-                const text = splitIdx !== -1 ? cleanLine.substring(splitIdx + 2).trim() : cleanLine;
+            const avatarFromSrv = parts[2] || "";
+            const isRead = parts[3] || "0";
+            
+            // 2. Убираем PRIVATE префикс для парсинга
+            const isPrivate = currentContent.includes("PRIVATE:");
+            const displayContent = currentContent.replace(/^PRIVATE:.*?:/, "");
 
+            // 3. Достаем время
+            const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
+            const time = timeMatch ? timeMatch[1] : "--:--";
+            
+            // 4. ГЛАВНЫЙ ФИКС: Убираем время из строки
+            const cleanLine = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
+            const splitIdx = cleanLine.indexOf(": ");
+            
+            const sender = splitIdx !== -1 ? cleanLine.substring(0, splitIdx) : "System";
+            const text = splitIdx !== -1 ? cleanLine.substring(splitIdx + 2).trim() : cleanLine;
 
-                // Проверка счетчика для фоновых чатов
-                if (isPrivate && sender !== myName && sender !== currentPartner) {
-                    unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
-                    if (typeof saveUnread === "function") { saveUnread(); updateUnreadUI(); }
-                    const audio = document.getElementById("notifSound");
-                    if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
-                    return; 
-                }
+            // Проверка счетчика для фоновых чатов (используем currentContent)
+            if (isPrivate && sender !== myName && sender !== currentPartner) {
+                unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
+                if (typeof saveUnread === "function") { saveUnread(); updateUnreadUI(); }
+                const audio = document.getElementById("notifSound");
+                if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
+                return; 
+            }
+            
+            // Фильтр текущего чата (ВАЖНО: используем currentContent)
+            if (currentPartner) {
+                if (!currentContent.includes(`PRIVATE:${currentPartner}:`) && !currentContent.includes(`PRIVATE:${myName}:`)) return;
+            } else if (isPrivate) {
+                return;
+            }
 
-                // Фильтр текущего чата
-                if (currentPartner) {
-                    const c = rawContent || ""; // ИСПОЛЬЗУЕМ rawContent
-                    if (!c.includes(`PRIVATE:${currentPartner}:`) && !c.includes(`PRIVATE:${myName}:`)) return;
-
-                } else if (isPrivate) {
-                    return;
-                }
 
                 div.id = `msg-${msgId}`;
                 div.className = 'msg-row';
@@ -1340,11 +1363,12 @@ function sendMessage() {
             // При редактировании шлем спец-команду (время обычно не меняем)
             ws.send(`${prefix}__EDIT__:${editMsgId}|${text}`);
         } 
-        // 3. ЛОГИКА ОТВЕТА
+        // 3. ЛОГИКА ОТВЕТА (ИСПРАВЛЕНО: REPLY вместо REPLY_TO и добавлена палка |)
         else if (replyToId) {
-            // Шлем префикс ответа серверу вместе с текстом
-            ws.send(`${prefix}${timePrefix}REPLY_TO:${replyToId}|${text}`);
+            // Теперь префикс совпадает с тем, что ждет парсер в ws.onmessage
+            ws.send(`${prefix}${timePrefix}REPLY:${replyToId}|${text}`);
         } 
+
         // 4. ОБЫЧНОЕ СООБЩЕНИЕ
         else {
             ws.send(`${prefix}${timePrefix}${text}`);
@@ -1781,6 +1805,7 @@ document.addEventListener('mousedown', (e) => {
 
 </body>
 </html>
+
 
 
 
