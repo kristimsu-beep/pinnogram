@@ -817,7 +817,6 @@
 
 
                    // 3. ОТРИСОВКА СООБЩЕНИЙ
-            const div = document.createElement('div');
             
             // СНАЧАЛА ПРОВЕРЯЕМ НА СИСТЕМНОЕ (без палок |)
                         // 3. ОТРИСОВКА СИСТЕМНЫХ СООБЩЕНИЙ
@@ -1030,14 +1029,15 @@
             // Прокрутка вниз
             chat.scrollTop = chat.scrollHeight;
 
-            // БЕЗОПАСНАЯ ПРОВЕРКА ПРОЧТЕНИЯ (без использования sender извне)
-            if (raw.includes("PRIVATE:") && !raw.includes(`[${myName}]`) && currentPartner) {
+            // БЕЗОПАСНАЯ ПРОВЕРКА ПРОЧТЕНИЯ (исправлено)
+            if (raw.includes("PRIVATE:") && !raw.includes(`[${activeUser}]`) && currentPartner) {
                 fetch(`${API_URL}/read_messages`, { 
                     method: "POST", 
                     headers: {"Content-Type":"application/json"}, 
-                    body: JSON.stringify({ username: myName, partner: currentPartner }) 
+                    body: JSON.stringify({ username: activeUser, partner: currentPartner }) 
                 }).catch(e => {});
             }
+
         }; // Конец ws.onmessage
 
 
@@ -1833,6 +1833,7 @@ document.addEventListener('mousedown', (e) => {
 
 </body>
 </html>
+
 
 
 
