@@ -924,39 +924,35 @@
                     vCont.innerHTML = `<div class="voice-msg"><div class="play-btn" onclick="toggleVoice('${audioId}', this)">▶</div><div class="voice-progress-wrap"><div class="waveform-real" onclick="seekVoice('${audioId}', event, this)"><div class="waveform-overlay" id="progress-${audioId}"></div>${waveHTML}</div><div class="voice-meta"><span>${time}</span></div></div><audio id="${audioId}" src="${audioUrl}" ontimeupdate="updateVoiceProgress('${audioId}')"></audio></div>`;
                     msgBubble.appendChild(vCont);
                 } else {
-                    // 1. ОЧИСТКА ТЕКСТА: Если в текст попал технический REPLY, убираем его
+                    // 1. ОЧИСТКА ТЕКСТА
                     let cleanDisplay = text;
                     if (cleanDisplay.includes("REPLY:")) {
                         const tParts = cleanDisplay.split("|");
-                        cleanDisplay = tParts[tParts.length - 1]; // Берем только само сообщение
+                        cleanDisplay = tParts[tParts.length - 1];
                     }
 
                     const lowerT = cleanDisplay.toLowerCase();
-                    // Проверка: это ссылка И содержит расширение?
-                    const isLink = cleanDisplay.startsWith("http");
+                    // ЖЕСТКАЯ ПРОВЕРКА: Если нет http, это точно НЕ медиа
+                    const isLink = cleanDisplay.trim().startsWith("http");
                     const isImg = isLink && [".jpg", ".png", ".gif", ".webp", ".jpeg"].some(ext => lowerT.includes(ext));
                     const isVid = isLink && [".mp4", ".webm", ".mov"].some(ext => lowerT.includes(ext));
 
-                    if (isVid) {
-                        const v = document.createElement('video');
-                        v.src = cleanDisplay; 
-                        v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
-                        v.style = "max-width:100%; border-radius:12px;"; 
-                        msgBubble.appendChild(v);
-                    } else if (isImg) {
+                    if (isImg) {
                         const img = document.createElement('img');
-                        img.src = cleanDisplay; 
+                        img.src = cleanDisplay;
                         img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer;";
-                        img.onclick = () => { 
-                            document.getElementById('modal-img').src = img.src; 
-                            document.getElementById('modal').style.display = 'flex'; 
-                        };
+                        img.onclick = () => { document.getElementById('modal-img').src = img.src; document.getElementById('modal').style.display = 'flex'; };
                         msgBubble.appendChild(img);
+                    } else if (isVid) {
+                        const v = document.createElement('video');
+                        v.src = cleanDisplay; v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
+                        v.style = "max-width:100%; border-radius:12px;";
+                        msgBubble.appendChild(v);
                     } else {
-                        // ОБЫЧНЫЙ ТЕКСТ (без ошибок 404)
-                        const s = document.createElement('span'); 
-                        s.className = "msg-text"; 
-                        s.textContent = cleanDisplay; 
+                        // ДЛЯ ВСЕГО ОСТАЛЬНОГО (включая ответы с точками) - ТОЛЬКО ТЕКСТ
+                        const s = document.createElement('span');
+                        s.className = "msg-text";
+                        s.textContent = cleanDisplay;
                         msgBubble.appendChild(s);
                     }
                 }
@@ -1662,6 +1658,7 @@ window.addEventListener('load', () => {
     }
 });
 // Открытие меню (ПК и Смартфон)
+// 1. ОТКРЫТИЕ МЕНЮ
 function openMenu(e, id, text, sender) {
     if (e.preventDefault) e.preventDefault();
     selectedMsgId = id;
@@ -1670,7 +1667,6 @@ function openMenu(e, id, text, sender) {
     const menu = document.getElementById('msg-menu');
     menu.style.display = 'block';
     
-    // Позиция под пальцем/курсором
     let x = e.clientX || (e.touches ? e.touches[0].clientX : 100);
     let y = e.clientY || (e.touches ? e.touches[0].clientY : 100);
     
@@ -1680,22 +1676,56 @@ function openMenu(e, id, text, sender) {
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
 
-    // Кнопка "Изменить" только для своих
+    // Изменить - только для своих
     document.getElementById('edit-menu-btn').style.display = (sender === myName) ? 'flex' : 'none';
+
+    // Настраиваем кнопку удаления
+    const delBtn = document.getElementById('delete-menu-btn');
+    if (sender === myName) {
+        delBtn.textContent = "🗑 Удалить у всех";
+        delBtn.style.color = "#ff4d4d";
+    } else {
+        delBtn.textContent = "👁 Скрыть у себя";
+        delBtn.style.color = "#aaa";
+    }
 }
 
-// Режимы подготовки
+// 2. УДАЛЕНИЕ (ЕДИНАЯ ФУНКЦИЯ)
+function confirmDelete() {
+    const msgEl = document.getElementById(`msg-${selectedMsgId}`);
+    const isMyMsg = msgEl && msgEl.style.flexDirection === 'row-reverse';
+
+    if (isMyMsg) {
+        if (!currentPartner) {
+            alert("Нельзя удалить сообщения пользователей в общем чате!");
+            document.getElementById('msg-menu').style.display = 'none';
+            return;
+        }
+        if(confirm("Удалить сообщение у всех участников?")) {
+            ws.send(`__DELETE__:${selectedMsgId}`);
+        }
+    } else {
+        // Просто скрываем локально
+        msgEl.style.transition = "0.3s";
+        msgEl.style.opacity = "0";
+        setTimeout(() => msgEl.remove(), 300);
+    }
+    document.getElementById('msg-menu').style.display = 'none';
+}
+
+// 3. ОСТАЛЬНЫЕ ФУНКЦИИ (Копирование, Ответ, Изменение)
+function copyMsgText() {
+    navigator.clipboard.writeText(selectedMsgText);
+    document.getElementById('msg-menu').style.display = 'none';
+}
+
 function prepareReply() {
     replyToId = selectedMsgId;
     editMsgId = null;
-    
-    // Ищем актуальный текст прямо в пузыре на экране
     const msgEl = document.getElementById(`msg-${selectedMsgId}`);
     const actualText = msgEl ? msgEl.querySelector('.msg-text').textContent : selectedMsgText;
-    
     showPreview("ОТВЕТ", actualText);
 }
-
 
 function prepareEdit() {
     editMsgId = selectedMsgId;
@@ -1719,17 +1749,6 @@ function cancelAction() {
     document.getElementById('messageText').value = "";
 }
 
-function confirmDelete() {
-    if(confirm("Удалить сообщение?")) ws.send(`__DELETE__:${selectedMsgId}`);
-    document.getElementById('msg-menu').style.display = 'none';
-}
-
-function copyMsgText() {
-    navigator.clipboard.writeText(selectedMsgText);
-    document.getElementById('msg-menu').style.display = 'none';
-}
-
-// Закрытие меню при клике мимо
 document.addEventListener('mousedown', (e) => {
     if (!e.target.closest('.context-menu')) {
         const menu = document.getElementById('msg-menu');
@@ -1746,11 +1765,12 @@ document.addEventListener('mousedown', (e) => {
     <div class="menu-item" onclick="prepareReply()">↩️ Ответ</div>
     <div class="menu-item" id="edit-menu-btn" onclick="prepareEdit()">✏️ Изменить</div>
     <div class="menu-item" onclick="copyMsgText()">📋 Копировать</div>
-    <div class="menu-item" onclick="confirmDelete()" style="color:#ff4d4d; border-top:1px solid #333; margin-top:5px; padding-top:10px;">🗑 Удалить</div>
+    <div id="delete-menu-btn" class="menu-item" onclick="confirmDelete()" style="border-top:1px solid #333; margin-top:5px; padding-top:10px;">🗑 Удалить</div>
 </div>
 
 </body>
 </html>
+
 
 
 
