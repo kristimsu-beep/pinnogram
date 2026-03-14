@@ -708,21 +708,32 @@
             if (raw.includes("ONLINE_LIST:")) {
                 const parts = raw.split("ONLINE_LIST:");
                 if (parts.length > 1) {
-                    // Мы берем вторую часть после разделителя
-                    const users = parts[1].split(","); 
+                    const usersRaw = parts[1].split(",");
                     
-                    // ... далее твой код отрисовки ...
+                    // 1. Обновляем админку (Флаги + IP)
+                    const adminList = document.getElementById("admin-users-list");
+                    if (adminList) {
+                        adminList.innerHTML = usersRaw.map(u => {
+                            const data = u.split("|");
+                            if (data.length < 3) return "";
+                            const [name, ip, code] = data;
+                            const flagUrl = `https://flagcdn.com/w20/${code || 'un'}.png`;
+                            return `<div style="color:#00ff00; display:flex; align-items:center; gap:8px; margin-bottom:4px; font-size:11px;">
+                                        <img src="${flagUrl}" style="width:16px; height:11px; border:1px solid #004400;" onerror="this.src='https://flagcdn.com/w20/${code || 'un'}.png'">
+                                        <span>node: ${name} <small style="opacity:0.5;">(${ip})</small></span>
+                                    </div>`;
+                        }).join("");
+                    }
 
-                    
-                    // --- ОБНОВЛЯЕМ КОНТАКТЫ ---
+                    // 2. Обновляем контакты (берем только имя до первой палки)
                     const contactsList = document.getElementById("contacts-list");
                     if (contactsList) {
                         const aiBotHTML = `<div onclick="switchChat('AI_BOT')" class="contact-item ${currentPartner === 'AI_BOT' ? 'contact-active' : ''}">
-                            <img src="https://i.ibb.co" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
+                            <img src="https://i.ibb.co/4pSbxsh/user-avatar.png" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
                             <b style="flex:1">Pinnogram AI (Bot)</b><div id="badge-AI_BOT" class="unread-badge" style="display:none"></div>
                         </div>`;
-                        const usersHTML = users.map(u => {
-                            const name = u.split(" (")[0].trim();
+                        const usersHTML = usersRaw.map(u => {
+                            const name = u.split("|")[0].trim();
                             if (!name || name === myName) return "";
                             return `<div onclick="switchChat('${name}')" class="contact-item ${currentPartner === name ? 'contact-active' : ''}">
                                 <span>👤</span><b style="flex:1">${name}</b><div id="badge-${name}" class="unread-badge" style="display:none"></div>
@@ -731,18 +742,13 @@
                         contactsList.innerHTML = aiBotHTML + usersHTML;
                         if (typeof updateUnreadUI === "function") updateUnreadUI();
                     }
-
-                    // --- ОБНОВЛЯЕМ АДМИН-ПАНЕЛЬ (УЗЛЫ) ---
-                    const adminList = document.getElementById("admin-users-list");
-                    if (adminList) {
-                        // Теперь вместо "Загрузка..." здесь появятся активные ноды
-                        adminList.innerHTML = users.map(u => `<div style="color:#00ff00; font-size:11px;">● node_active: ${u}</div>`).join("");
-                    }
-
-                    document.getElementById("online-list").textContent = `В сети: ${users.map(u => u.split(" (")[0]).join(", ")}`;
+                    
+                    const namesOnly = usersRaw.map(u => u.split("|")[0]);
+                    document.getElementById("online-list").textContent = `В сети: ${namesOnly.join(", ")}`;
                 }
                 return;
             }
+
 
 
             if (raw.startsWith("RTC_SIGNAL:")) {
@@ -1696,16 +1702,21 @@ function confirmDelete() {
     const isMyMsg = msgEl && msgEl.style.flexDirection === 'row-reverse';
 
     if (isMyMsg) {
-        if (!currentPartner) {
+        // Проверяем, это Общий чат или ЛС
+        const isGeneral = !currentPartner || currentPartner === "null" || currentPartner === "general";
+        
+        if (isGeneral) {
             alert("Нельзя удалить сообщения пользователей в общем чате!");
             document.getElementById('msg-menu').style.display = 'none';
             return;
         }
+
+        // Если это ЛС - удаляем везде
         if(confirm("Удалить сообщение у всех участников?")) {
             ws.send(`__DELETE__:${selectedMsgId}`);
         }
     } else {
-        // Просто скрываем локально
+        // Чужое сообщение просто скрываем у себя
         msgEl.style.transition = "0.3s";
         msgEl.style.opacity = "0";
         setTimeout(() => msgEl.remove(), 300);
@@ -1770,6 +1781,7 @@ document.addEventListener('mousedown', (e) => {
 
 </body>
 </html>
+
 
 
 
