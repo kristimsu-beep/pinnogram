@@ -404,87 +404,6 @@
     
     @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
-    /* Контекстное меню сообщения */
-    .context-menu {
-        display: none;
-        position: fixed;
-        z-index: 10000;
-        background: #1c1c1c; /* Глубокий темный */
-        border: 1px solid #333;
-        border-radius: 12px;
-        padding: 5px;
-        width: 170px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        animation: menuPop 0.2s ease-out;
-    }
-    
-    @keyframes menuPop {
-        from { opacity: 0; transform: scale(0.9); }
-        to { opacity: 1; transform: scale(1); }
-    }
-    
-    .menu-item {
-        padding: 10px 12px;
-        cursor: pointer;
-        color: white;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        font-size: 14px;
-        border-radius: 8px;
-        transition: background 0.2s;
-    }
-    
-    .menu-item:hover { background: rgba(255, 255, 255, 0.1); }
-    
-    /* Цитата ответа внутри бабла */
-    .reply-quote {
-        background: rgba(0, 0, 0, 0.2);
-        border-left: 3px solid var(--accent);
-        padding: 4px 8px;
-        margin-bottom: 6px;
-        font-size: 12px;
-        border-radius: 4px;
-        cursor: pointer;
-        max-height: 40px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    /* Пузыри сообщений */
-    .msg-bubble {
-        max-width: 80%;
-        padding: 8px 12px;
-        border-radius: 15px;
-        position: relative;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-    }
-    
-    /* Справа (Мои) */
-    .msg-bubble.out {
-        background: #2b5278; /* Синий */
-        color: white;
-        border-bottom-right-radius: 2px;
-    }
-    
-    /* Слева (Чужие) */
-    .msg-bubble.in {
-        background: #182533; /* Темный */
-        color: white;
-        border-bottom-left-radius: 2px;
-    }
-    
-    /* Цитата ответа */
-    .reply-quote {
-        background: rgba(0,0,0,0.2);
-        border-left: 2px solid #2196f3;
-        padding: 4px 8px;
-        margin-bottom: 8px;
-        border-radius: 4px;
-        font-size: 11px;
-        cursor: pointer;
-    }
-
-
 
 
 
@@ -601,16 +520,6 @@
                 <button class="apply-bg-btn" onclick="applyCustomGradient()">Применить градиент</button>
             </div>
         </div>
-        <div id="action-preview" style="display:none; background:var(--panel); padding:10px; border-left:3px solid var(--accent); color:white; font-size:12px;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div style="display:flex; flex-direction:column; gap:2px;">
-                    <span id="action-type" style="color:var(--accent); font-weight:bold; font-size:10px; text-transform:uppercase;">Ответ</span>
-                    <span id="preview-text" style="opacity:0.7; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px;">Текст...</span>
-                </div>
-                <div onclick="cancelAction()" style="cursor:pointer; font-weight:bold; padding:5px; opacity:0.5;">✕</div>
-            </div>
-        </div>
-
 
         <!-- 4. Панель эмодзи -->
         <div class="emoji-bar">
@@ -642,19 +551,8 @@
         <button onclick="localStorage.clear(); location.reload();" 
         style="margin: 10px auto 20px; background: none; color: #777; font-size: 11px; text-decoration: underline; border: none; cursor: pointer; display: block;">Выйти из аккаунта</button>
     </div>
-        <div id="msg-menu" class="context-menu">
-        <div class="menu-item" onclick="prepareReply()">↩️ Ответ</div>
-        <div class="menu-item" id="edit-menu-btn" onclick="prepareEdit()">✏️ Изменить</div>
-        <div class="menu-item" onclick="copyMsgText()">📋 Копировать</div>
-        <div class="menu-item" onclick="confirmDelete()" style="color:#ff4d4d; border-top:1px solid #333; margin-top:5px; padding-top:10px;">🗑 Удалить</div>
-    </div>
-
 
 <script>
-    let selectedMsgId = null;
-    let selectedMsgText = "";
-    let replyToId = null;
-    let editMsgId = null;
     const API_URL = window.location.origin;
     const socketProto = window.location.protocol === "https:" ? "wss" : "ws";
     const VAPID_PUBLIC_KEY = "BLfoNtD9uQWZ2sX_dUiQ698ze7J-JO8lnl8n03AG7Dt1fh1Io831wuAKgqHRcmLNXKMh99BzVusQWvx37jJNZis";
@@ -767,38 +665,12 @@
             }
 
             // 3. ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ
-          // Внутри ws.onmessage добавим обработку сигнала правки от сервера
-            // 3. ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ
             if (raw.startsWith("DELETE_CONFIRM:")) {
-                const delId = raw.replace("DELETE_CONFIRM:", "");
+                const delId = raw.replace("DELETE_CONFIRM:", ""); // Убираем текст, оставляем только цифры
                 const el = document.getElementById(`msg-${delId}`);
                 if (el) el.remove();
                 return;
             }
-
-            // 3.1 ПОДТВЕРЖДЕНИЕ ПРАВКИ
-            if (raw.startsWith("EDIT_CONFIRM:")) {
-                const parts = raw.replace("EDIT_CONFIRM:", "").split("|", 2);
-                const mId = parts[0];
-                const newTxt = parts[1];
-                const msgEl = document.getElementById(`msg-${mId}`);
-                if (msgEl) {
-                    const textSpan = msgEl.querySelector('.msg-text');
-                    if (textSpan) textSpan.textContent = newTxt;
-                    
-                    if (!msgEl.querySelector('.edited-mark')) {
-                        const mark = document.createElement('span');
-                        mark.className = 'edited-mark';
-                        mark.innerHTML = ' (изм.) ';
-                        mark.style = "font-size:10px; opacity:0.5; margin-right:4px;";
-                        const timeSpan = msgEl.querySelector('.msg-time');
-                        if (timeSpan) timeSpan.before(mark);
-                    }
-                }
-                return;
-            }
-
-
 
             // 4. ИНДИКАТОР ПЕЧАТИ
             if (raw.startsWith("TYPING:")) {
@@ -810,142 +682,137 @@
             }
 
             // 5. ОТРИСОВКА СООБЩЕНИЙ (С ГАЛОЧКАМИ И ГОЛОСОМ)
-                        // 5. ОТРИСОВКА СООБЩЕНИЙ (ПРАВКА, ОТВЕТЫ, УДАЛЕНИЕ)
+            // 5. ОТРИСОВКА СООБЩЕНИЙ (С ГАЛОЧКАМИ И ГОЛОСОМ)
             const div = document.createElement('div');
-            
             if (raw.includes("SYSTEM:")) {
                 div.style = "align-self: center; font-size: 11px; opacity: 0.5; margin: 10px 0; text-align: center; width: 100%;";
                 div.textContent = raw.split("SYSTEM: ")[1];
             } 
             else {
                 const parts = raw.split("|");
-                // 1. Всегда первый элемент — это ID
-                const msgId = (parts[0] || "ID:0").replace("ID:", "");
-                
-                // 2. УМНЫЙ РАЗБОР: Проверяем, есть ли префикс ответа (REPLY:ID)
-                let replyId = null;
-                let content = "";
-                let avatarUrlFromSrv = "";
-                let isRead = "0";
+                const idPart = parts[0] || "ID:0"; 
+                const content = parts[1] || "";
+                const avatarUrlFromSrv = parts[2] || "";
+                const isRead = parts[3] || "0"; 
 
-                if (parts[1] && parts[1].startsWith("REPLY:")) {
-                    // Если есть ответ: индексы сдвигаются на +1
-                    replyId = parts[1].replace("REPLY:", "");
-                    content = parts[2] || "";
-                    avatarUrlFromSrv = parts[3] || "";
-                    isRead = parts[4] || "0";
-                } else {
-                    // Если ответа нет: обычный порядок
-                    content = parts[1] || "";
-                    avatarUrlFromSrv = parts[2] || "";
-                    isRead = parts[3] || "0";
-                }
-
-                // --- ПАРСИНГ ТЕКСТА И ВРЕМЕНИ ---
                 const isPrivate = content.includes("PRIVATE:");
                 const displayContent = content.replace(/^PRIVATE:.*?:/, "");
+                const msgId = idPart.replace("ID:", "");
                 const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
                 const time = timeMatch ? timeMatch[1] : "--:--";
                 const userAndText = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
                 const splitIdx = userAndText.indexOf(": ");
                 const sender = userAndText.substring(0, splitIdx);
                 const text = userAndText.substring(splitIdx + 2).trim();
-
-                // 3. ЛОГИКА СЧЕТЧИКА ДЛЯ ФОНОВЫХ ЧАТОВ
+                // --- ЛОГИКА СЧЕТЧИКА (БЕЙДЖЕЙ) ---
                 if (isPrivate && sender !== myName && sender !== currentPartner) {
                     unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
-                    saveUnread();
-                    updateUnreadUI();
+                    saveUnread(); // Сохраняем в память
+                    updateUnreadUI(); // Рисуем кружок
+                    
+                    // Играем звук уведомления
                     const audio = document.getElementById("notifSound");
                     if(audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
-                    return; // Не рисуем сообщение, если мы в другом чате
+                    
+                    return; // <--- ОБЯЗАТЕЛЬНО! Останавливаем отрисовку сообщения здесь
                 }
 
-                // Фильтр текущего открытого чата
+
+                // Фильтр отображения текущего чата
                 if (currentPartner) {
-                    const c = content || ""; 
-                    if (!c.includes(`PRIVATE:${currentPartner}:`) && !c.includes(`PRIVATE:${myName}:`)) return;
-                } else if (isPrivate) {
-                    return;
-                }
+                    if (!content.includes(`PRIVATE:${currentPartner}:`) && !content.includes(`PRIVATE:${myName}:`)) return;
+                } else if (isPrivate) return;
 
-                // Очистка надписи "Загрузка истории..."
-                if (chat.innerHTML.includes("Загрузка")) chat.innerHTML = "";
-
-                // --- СОЗДАНИЕ ЭЛЕМЕНТОВ ---
-                const div = document.createElement('div');
                 div.className = 'msg-row';
                 div.id = `msg-${msgId}`;
                 div.style.flexDirection = (sender === myName) ? 'row-reverse' : 'row';
 
-                // Аватарка
+                // Аватарка (твой пуленепробиваемый код)
                 const avImg = document.createElement('img');
                 let finalAv = avatarUrlFromSrv;
-                if (!finalAv || finalAv.length < 15) finalAv = "https://i.ibb.co";
+                if (!finalAv || finalAv.length < 15) finalAv = "https://i.ibb.co/4pSbxsh/user-avatar.png";
                 else if (!finalAv.startsWith('http')) finalAv = "https://" + finalAv;
                 avImg.src = finalAv;
                 avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
-                avImg.onerror = function() { this.src = "https://i.ibb.co"; };
+                avImg.onerror = function() { this.src = "https://i.ibb.co/4pSbxsh/user-avatar.png"; };
                 div.appendChild(avImg);
 
-                // Создаем БАБЛ (пузырь)
                 const msgBubble = document.createElement('div');
-                msgBubble.className = (sender === myName) ? 'msg-bubble out' : 'msg-bubble in';
-
-                // 4. РИСУЕМ ЦИТАТУ ОТВЕТА (если есть)
-                if (replyId && replyId !== "null" && replyId !== "None") {
-                    const quote = document.createElement('div');
-                    quote.className = 'reply-quote';
-                    quote.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:10px;">Ответ на #${replyId}</span>`;
-                    quote.onclick = () => {
-                        const target = document.getElementById(`msg-${replyId}`);
-                        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    };
-                    msgBubble.appendChild(quote);
-                }
-
-                // Имя отправителя (если не мы)
+                msgBubble.className = (sender === myName) ? 'msg msg-right' : 'msg msg-left';
+                
                 if (sender !== myName) {
                     const nSpan = document.createElement('span');
                     nSpan.className = "msg-sender";
                     nSpan.textContent = sender;
                     msgBubble.appendChild(nSpan);
+                    
+                    // ЗВУК ДЛЯ ОТКРЫТОГО ЧАТА
+                    const audio = document.getElementById("notifSound");
+                    if(audio) { audio.currentTime = 0; audio.play().catch(()=>{}); }
                 }
-
-                // --- ПРОВЕРКА КОНТЕНТА (Опрос / Голос / Медиа / Текст) ---
+                            // --- ПРОВЕРКА КОНТЕНТА (ОПРОС / ГОЛОС / ВИДЕО / ФОТО / ТЕКСТ) ---
+                
+                // 1. ПРОВЕРКА НА ОПРОС
                 if (text.startsWith("POLL_ID:")) {
-                    const pId = text.replace("POLL_ID:", "");
-                    const pCont = document.createElement('div'); pCont.id = `poll-card-${pId}`;
-                    msgBubble.appendChild(pCont); loadPollData(pId);
+                    const pollId = text.replace("POLL_ID:", "");
+                    const pollContainer = document.createElement('div');
+                    pollContainer.id = `poll-card-${pollId}`;
+                    msgBubble.appendChild(pollContainer);
+                    loadPollData(pollId); // Функция отрисует карточку с процентами
                 } 
+                // 2. ПРОВЕРКА НА ГОЛОСОВОЕ
                 else if (text.startsWith("VOICE:")) {
-                    const [vUrl, vWaves] = text.replace("VOICE:", "").split("^");
+                    const [audioUrl, waveStr] = text.replace("VOICE:", "").split("^");
+                    const waves = waveStr ? waveStr.split(",").map(Number) : [20,40,20,50,30];
                     const audioId = `audio-${msgId}`;
-                    const vCont = document.createElement('div');
-                    vCont.innerHTML = `<div class="voice-msg"><div class="play-btn" onclick="toggleVoice('${audioId}', this)">▶</div><div id="time-${audioId}">0:00</div><audio id="${audioId}" src="${vUrl}" ontimeupdate="updateVoiceProgress('${audioId}')"></audio></div>`;
-                    msgBubble.appendChild(vCont);
+                    const waveHTML = waves.map(h => `<div class="wave-bar" style="height:${Math.max(15, h)}%"></div>`).join("");
+
+                    msgBubble.innerHTML += `
+                        <div class="voice-msg">
+                            <div class="play-btn" onclick="toggleVoice('${audioId}', this)">▶</div>
+                            <div class="voice-progress-wrap">
+                                <div class="waveform-real" onclick="seekVoice('${audioId}', event, this)">
+                                    <div class="waveform-overlay" id="progress-${audioId}"></div>
+                                    ${waveHTML}
+                                </div>
+                                <div class="voice-meta">
+                                    <span id="time-${audioId}">0:00</span>
+                                    <span>${time}</span>
+                                </div>
+                            </div>
+                            <audio id="${audioId}" src="${audioUrl}" ontimeupdate="updateVoiceProgress('${audioId}')" onended="this.parentElement.parentElement.querySelector('.play-btn').textContent='▶'"></audio>
+                        </div>`;
                 }
+                // 3. ПРОВЕРКА НА ВИДЕО / ФОТО / ТЕКСТ
                 else {
                     const lowerT = text.toLowerCase();
                     const isImg = [".jpg", ".png", ".gif", ".webp"].some(ext => lowerT.includes(ext));
                     const isVid = [".mp4", ".webm", ".mov"].some(ext => lowerT.includes(ext));
 
                     if (isVid) {
-                        const v = document.createElement('video'); v.src = text; v.autoplay=true; v.loop=true; v.muted=true; v.controls = true; v.style = "max-width:100%; border-radius:12px;";
+                        const v = document.createElement('video');
+                        v.src = text; 
+                        v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
+                        v.style = "max-width:100%; border-radius:12px;";
                         msgBubble.appendChild(v);
                     } else if (isImg) {
-                        const img = document.createElement('img'); img.src = text; img.style = "max-width:100%; border-radius:10px; cursor:pointer;";
+                        const img = document.createElement('img');
+                        img.src = text;
+                        img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer;";
                         img.onclick = () => { document.getElementById('modal-img').src = img.src; document.getElementById('modal').style.display = 'flex'; };
                         msgBubble.appendChild(img);
                     } else {
-                        const s = document.createElement('span'); s.className = "msg-text"; s.textContent = text;
+                        const s = document.createElement('span'); 
+                        s.className = "msg-text"; 
+                        s.textContent = text; 
                         msgBubble.appendChild(s);
                     }
                 }
 
-                // --- ВРЕМЯ, ГАЛОЧКИ И ОТМЕТКА О ПРОЧТЕНИИ ---
+
+                // ВРЕМЯ, ГАЛОЧКИ И СЧЕТЧИК (Твой код теперь стоит верно)
                 const tsWrap = document.createElement('div');
-                tsWrap.style = "display:flex; align-items:center; justify-content:flex-end; gap:4px; margin-top:4px;";
+                tsWrap.style = "display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:4px;";
                 const ts = document.createElement('span'); ts.className="msg-time"; ts.textContent=time; tsWrap.appendChild(ts);
 
                 if (sender === myName && currentPartner) {
@@ -953,6 +820,16 @@
                     status.className = isRead === "1" ? "msg-status read" : "msg-status";
                     status.textContent = isRead === "1" ? "✔✔" : "✔";
                     tsWrap.appendChild(status);
+                }
+
+                if (isPrivate && sender !== myName) {
+                    if (sender !== currentPartner) {
+                        unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
+                        saveUnread();
+                        updateUnreadUI();
+                        document.getElementById("notifSound").play().catch(()=>{});
+                        return; 
+                    }
                 }
 
                 if (isPrivate && sender === currentPartner && isRead === "0") {
@@ -963,36 +840,21 @@
                     });
                 }
 
-                // Контекстное меню
-                div.oncontextmenu = (e) => openMenu(e, msgId, text, sender);
-
-                // Долгое нажатие для смартфонов
-                let pressTimer;
-                div.ontouchstart = (e) => {
-                    pressTimer = setTimeout(() => {
-                        const touch = e.touches[0];
-                        openMenu({ 
-                            preventDefault: () => e.preventDefault(),
-                            clientX: touch.clientX,
-                            clientY: touch.clientY 
-                        }, msgId, text, sender);
-                    }, 500);
-                };
-                div.ontouchend = () => clearTimeout(pressTimer);
-
                 msgBubble.appendChild(tsWrap);
                 div.appendChild(msgBubble);
-                chat.appendChild(div);
-                chat.scrollTop = chat.scrollHeight;
-            } 
-        }; // Конец ws.onmessage
+                
+                div.oncontextmenu = (e) => {
+                    e.preventDefault();
+                    if (sender === myName && confirm("Удалить?")) ws.send(`__DELETE__:${msgId}`);
+                };
+            }
+            chat.appendChild(div);
+            setTimeout(() => { chat.scrollTop = chat.scrollHeight; }, 100);
+        };
 
-        document.addEventListener('mousedown', (e) => {
-            const menu = document.getElementById('msg-menu');
-            if (menu && !e.target.closest('.context-menu')) { menu.style.display = 'none'; }
-        });
-} // Конец startChat
-// Конец функции startChat
+
+} // Конец функции startChat
+
 
 
 let iceQueue = []; 
@@ -1306,37 +1168,18 @@ async function changeAvatar() {
     fileInput.click();
 }
 
-function sendMessage() {
-    const i = document.getElementById("messageText");
-    const text = i.value.trim();
-
-    if (text && ws) {
+function sendMessage() { 
+    const i = document.getElementById("messageText"); 
+    if(i.value.trim() && ws) { 
         const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         
-        // Базовые префиксы (Кому и Время)
-        let prefix = currentPartner ? `TO_USER:${currentPartner}|` : "";
-        let timePrefix = `TIME:${now}|`;
-
-        // 1. ЛОГИКА РЕДАКТИРОВАНИЯ
-        if (editMsgId) {
-            // При редактировании время обычно не меняем, шлем спец-команду
-            ws.send(`${prefix}__EDIT__:${editMsgId}|${text}`);
-        } 
-        // 2. ЛОГИКА ОТВЕТА
-        else if (replyToId) {
-            // Шлем префикс ответа серверу
-            ws.send(`${prefix}${timePrefix}REPLY_TO:${replyToId}|${text}`);
-        } 
-        // 3. ОБЫЧНОЕ СООБЩЕНИЕ
-        else {
-            ws.send(`${prefix}${timePrefix}${text}`);
-        }
-
-        i.value = '';
-        cancelAction(); // Сбрасываем режим правки/ответа (скрываем полоску над полем)
-    }
+        // Если выбран партнер, добавляем секретный префикс для сервера
+        const prefix = currentPartner ? `TO_USER:${currentPartner}|` : "";
+        
+        ws.send(`${prefix}TIME:${now}|${i.value}`); 
+        i.value = ''; 
+    } 
 }
-
 
 
 function handleTyping() { if(!isTypingNow && ws?.readyState===1){ isTypingNow=true; ws.send("__TYPING__"); setTimeout(()=>isTypingNow=false,3000); } }
@@ -1645,74 +1488,6 @@ window.addEventListener('load', () => {
         }
     }
 });
-// --- ЛОГИКА МЕНЮ, ПРАВКИ И ОТВЕТОВ ---
-
-function openMenu(e, id, text, sender) {
-    e.preventDefault();
-    selectedMsgId = id;
-    selectedMsgText = text;
-
-    const menu = document.getElementById('msg-menu');
-    menu.style.display = 'block';
-    
-    // Позиционируем меню (с проверкой границ экрана)
-    let x = e.clientX || (e.touches ? e.touches[0].clientX : 100);
-    let y = e.clientY || (e.touches ? e.touches[0].clientY : 100);
-    
-    if (x + 180 > window.innerWidth) x -= 180;
-    if (y + 200 > window.innerHeight) y -= 200;
-
-    menu.style.left = x + 'px';
-    menu.style.top = y + 'px';
-
-    // "Изменить" только для своих сообщений
-    document.getElementById('edit-menu-btn').style.display = (sender === myName) ? 'flex' : 'none';
-}
-
-function prepareReply() {
-    replyToId = selectedMsgId;
-    editMsgId = null;
-    showPreview("ОТВЕТ", selectedMsgText);
-}
-
-function prepareEdit() {
-    editMsgId = selectedMsgId;
-    replyToId = null;
-    document.getElementById('messageText').value = selectedMsgText;
-    showPreview("ИЗМЕНЕНИЕ", selectedMsgText);
-}
-
-function showPreview(type, text) {
-    document.getElementById('action-type').textContent = type;
-    document.getElementById('preview-text').textContent = text;
-    document.getElementById('action-preview').style.display = 'block';
-    document.getElementById('msg-menu').style.display = 'none';
-    document.getElementById('messageText').focus();
-}
-
-function cancelAction() {
-    editMsgId = null;
-    replyToId = null;
-    document.getElementById('action-preview').style.display = 'none';
-    document.getElementById('messageText').value = "";
-}
-
-function confirmDelete() {
-    if(confirm("Удалить сообщение?")) ws.send(`__DELETE__:${selectedMsgId}`);
-    document.getElementById('msg-menu').style.display = 'none';
-}
-
-function copyMsgText() {
-    navigator.clipboard.writeText(selectedMsgText);
-    document.getElementById('msg-menu').style.display = 'none';
-}
-
-// Закрытие при клике мимо
-document.addEventListener('mousedown', (e) => {
-    if (!e.target.closest('.context-menu')) {
-        document.getElementById('msg-menu').style.display = 'none';
-    }
-});
 
 
 
@@ -1720,10 +1495,6 @@ document.addEventListener('mousedown', (e) => {
 </script>
 </body>
 </html>
-
-
-
-
 
 
 
