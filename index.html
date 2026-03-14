@@ -752,23 +752,36 @@
                 div.textContent = raw.split("SYSTEM: ")[1];
             } else {
                 const parts = raw.split("|");
-                const idPart = parts[0] || "ID:0", msgId = idPart.replace("ID:", "");
-                let replyId = null, content = parts[1] || "";
+                const idPart = parts[0] || "ID:0";
+                const msgId = idPart.replace("ID:", "");
+                
+                // ЗАЩИТА: Если в сообщении нет контента (например, это системный сигнал), выходим
+                if (!parts[1]) return; 
+        
+                let replyId = null;
+                let content = parts[1] || ""; // Теперь content точно не undefined
                 
                 if (content.startsWith("REPLY:")) {
                     const rParts = content.split("|", 2);
                     replyId = rParts[0].replace("REPLY:", "");
-                    content = rParts[1];
+                    content = rParts[1] || "";
                 }
-
-                const avatarFromSrv = parts[2] || "", isRead = parts[3] || "0";
+        
+                const avatarFromSrv = parts[2] || "";
+                const isRead = parts[3] || "0";
+                
                 const isPrivate = content.includes("PRIVATE:");
                 const displayContent = content.replace(/^PRIVATE:.*?:/, "");
                 const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
                 const time = timeMatch ? timeMatch[1] : "--:--";
+                
                 const userAndText = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
                 const splitIdx = userAndText.indexOf(": ");
-                const sender = userAndText.substring(0, splitIdx), text = userAndText.substring(splitIdx + 2).trim();
+                
+                // ЗАЩИТА для переменной sender
+                const sender = splitIdx !== -1 ? userAndText.substring(0, splitIdx) : "System";
+                const text = splitIdx !== -1 ? userAndText.substring(splitIdx + 2).trim() : userAndText;
+
 
                 // Проверка счетчика для фоновых чатов
                 if (isPrivate && sender !== myName && sender !== currentPartner) {
@@ -793,7 +806,7 @@
 
                 // Аватарка
                 const avImg = document.createElement('img');
-                avImg.src = avatarFromSrv && avatarFromSrv.length > 15 ? avatarFromSrv : "https://i.ibb.co";
+                avImg.src = avatarFromSrv && avatarFromSrv.length > 15 ? avatarFromSrv : "https://i.ibb.co/4pSbxsh/user-avatar.png";
                 avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
                 avImg.onerror = function() { this.src = "https://i.ibb.co"; };
                 div.appendChild(avImg);
@@ -1630,6 +1643,7 @@ document.addEventListener('mousedown', (e) => {
 
 </body>
 </html>
+
 
 
 
