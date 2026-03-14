@@ -201,6 +201,23 @@ async def update_avatar(data: dict):
     return {"status": "ok"}
 
 
+# 1. Эти объекты должны быть ВНЕ класса (в начале файла после импортов)
+country_cache = {}
+
+async def get_country_code(ip):
+    if ip in country_cache: return country_cache[ip]
+    if ip in ["127.0.0.1", "localhost", "unknown", ""]: return "un"
+    try:
+        async with httpx.AsyncClient() as client:
+            # Используем бесплатное API для определения страны по IP
+            res = await client.get(f"https://ipapi.co/{ip}/json/", timeout=2.0)
+            if res.status_code == 200:
+                code = res.json().get("country_code", "un").lower()
+                country_cache[ip] = code
+                return code
+    except: pass
+    return "un"
+
 class ConnectionManager:
     def __init__(self):
         self.rooms = {}
@@ -215,29 +232,31 @@ class ConnectionManager:
     def disconnect(self, room_id: str, username: str):
         if room_id in self.rooms and username in self.rooms[room_id]:
             del self.rooms[room_id][username]
-        import asyncio
+        # Создаем задачу на обновление списка онлайн
         asyncio.create_task(self.broadcast_online(room_id))
 
     async def broadcast_online(self, room_id: str):
         if room_id in self.rooms:
-            users_with_ips = []
+            users_info = []
             for name, ws in self.rooms[room_id].items():
                 ip = ws.client.host if ws.client else "unknown"
-                users_with_ips.append(f"{name} ({ip})")
+                # Вызываем функцию получения флага
+                code = await get_country_code(ip) 
+                users_info.append(f"{name}|{ip}|{code}")
             
-            msg = f"ID:0|SYSTEM:ONLINE_LIST:{','.join(users_with_ips)}"
+            # ВАЖНО: используем запятую для объединения списка
+            msg = f"ID:0|SYSTEM:ONLINE_LIST:{','.join(users_info)}"
+            
             for ws in self.rooms[room_id].values():
                 if ws.client_state == WebSocketState.CONNECTED:
                     try: await ws.send_text(msg)
                     except: continue
 
-    # ИСПРАВЛЕНО: Ровный отступ и безопасное получение ID
-    async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None, reply_to_id: int = None): # <-- Добавили reply_to_id
+    async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None, reply_to_id: int = None):
         now = client_time if client_time else datetime.now().strftime("%H:%M")        
         
         if username and text:        
             async with aiosqlite.connect(DB_PATH) as db:        
-                # ОБНОВЛЕННЫЙ INSERT (Добавили reply_to_id)
                 cursor = await db.execute(        
                     "INSERT INTO messages (username, text, timestamp, room_id, avatar, to_user, is_read, reply_to_id) VALUES (?, ?, ?, ?, ?, ?, 0, ?)",         
                     (username, text, now, room_id, avatar, to_user, reply_to_id)        
@@ -246,11 +265,9 @@ class ConnectionManager:
                 await db.commit()        
     
                 prefix = f"PRIVATE:{to_user}:" if to_user else ""
-                # Добавляем инфо об ответе в текст сообщения для фронтенда
                 reply_info = f"REPLY:{reply_to_id}|" if reply_to_id else ""
                 final_msg = f"ID:{msg_id}|{reply_info}{prefix}[{now}] {username}: {text}|{avatar}|0"
       
-                    
                 if to_user:        
                     is_online = False        
                     room_users = self.rooms.get(room_id, {})
@@ -258,18 +275,14 @@ class ConnectionManager:
                     for name in [username, to_user]:        
                         if name in room_users:        
                             if name == to_user: is_online = True        
-                            try: 
-                                await room_users[name].send_text(final_msg)        
-                            except: 
-                                continue        
+                            try: await room_users[name].send_text(final_msg)        
+                            except: continue        
                         
-                    # 2. Исправленный PUSH (не блокирует сервер)
                     if not is_online:        
                         async with db.execute("SELECT subscription_json FROM push_subscriptions WHERE username = ?", (to_user,)) as c:        
                             sub_row = await c.fetchone()        
                             if sub_row:        
                                 try:
-                                    # Запускаем в отдельном потоке, чтобы чат не завис на 1 секунду
                                     await asyncio.to_thread(
                                         webpush,
                                         subscription_info=json.loads(sub_row[0]),        
@@ -277,24 +290,21 @@ class ConnectionManager:
                                         vapid_private_key=VAPID_PRIVATE_KEY,        
                                         vapid_claims=VAPID_CLAIMS        
                                     )        
-                                except Exception as e: 
-                                    print(f"Push Error: {e}")        
+                                except: pass        
                 else:        
-                    # Обычный бродкаст
                     for ws in self.rooms.get(room_id, {}).values():        
                         if ws.client_state == WebSocketState.CONNECTED:        
                             try: await ws.send_text(final_msg)        
                             except: continue        
         else:        
-            # Системные сообщения        
             final_msg = f"ID:0|SYSTEM: {message}"        
             for ws in self.rooms.get(room_id, {}).values():        
                 if ws.client_state == WebSocketState.CONNECTED:        
                     try: await ws.send_text(final_msg)        
                     except: continue
-    
+
 manager = ConnectionManager()
-    
+
     
 
 # Вставь свой ключ тут
@@ -583,6 +593,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
