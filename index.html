@@ -502,11 +502,22 @@
 <link rel="icon" href="data:,">
 
 <!-- СЕКРЕТНОЕ ОКНО АДМИНА -->
-<div id="admin-panel">
-    <h3 style="margin:0 0 10px 0; color:#00ff00; border-bottom:1px solid #00ff00; padding-bottom:5px;">📡 NETWORK NODES</h3>
-    <div id="admin-users-list" style="font-size:13px; line-height:1.6;">Загрузка данных...</div>
-    <div style="font-size:10px; opacity:0.6; margin-top:15px;">Нажми Ctrl+B для закрытия</div>
+<div id="admin-panel" style="display:none; position:fixed; top:20px; right:20px; width:300px; background:rgba(0,20,0,0.9); border:2px solid #00ff00; border-radius:10px; padding:15px; color:#00ff00; font-family:monospace; z-index:9999; box-shadow:0 0 20px #00ff00;">
+    <h3 style="margin:0 0 10px 0; color:#00ff00; border-bottom:1px solid #00ff00; padding-bottom:5px; font-size:14px;">📡 NETWORK NODES</h3>
+    
+    <!-- СПИСОК ЮЗЕРОВ (УЗЛЫ) -->
+    <div id="admin-users-list" style="font-size:12px; line-height:1.4; margin-bottom:15px; max-height:100px; overflow-y:auto;"></div>
+    
+    <h4 style="margin:10px 0 5px 0; font-size:11px; opacity:0.7;">📜 DATA STREAM:</h4>
+    
+    <!-- ЖИВОЙ ЛОГ СООБЩЕНИЙ -->
+    <div id="admin-log-stream" style="font-size:10px; line-height:1.2; height:150px; overflow-y:auto; background:rgba(0,0,0,0.5); padding:5px; border-radius:5px; border:1px solid #005500;">
+        Система инициализирована...
+    </div>
+
+    <div style="font-size:9px; opacity:0.4; margin-top:10px; text-align:right;">Ctrl+B: Toggle Panel</div>
 </div>
+
 
 <div id="video-call-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:10000;">
     <!-- Ссылка на видео должна быть с четким ID -->
@@ -668,6 +679,22 @@
 
         ws.onmessage = async (event) => {
             const raw = event.data;
+            
+            // --- ЛОГИКА ДЛЯ АДМИН-ПАНЕЛИ (DATA STREAM) ---
+            const logContainer = document.getElementById("admin-log-stream");
+            if (logContainer) {
+                const entry = document.createElement("div");
+                entry.style = "border-bottom:1px solid #003300; padding:2px 0;";
+                // Показываем тип входящего пакета (ID, POLL, VOICE и т.д.)
+                const type = raw.split(":")[0]; 
+                entry.textContent = `[${new Date().toLocaleTimeString()}] > incoming: ${type}...`;
+                logContainer.prepend(entry); // Новые логи всегда сверху
+                if (logContainer.children.length > 20) logContainer.lastChild.remove(); // Очистка старых
+            }
+        
+            // Твой обычный код дальше (ONLINE_LIST, RTC_SIGNAL и т.д.)
+            // ...
+
             const chat = document.getElementById('chat');
 
             // 1. СИСТЕМНЫЕ СИГНАЛЫ
@@ -677,10 +704,17 @@
                 return;
             }
 
+           
             if (raw.includes("ONLINE_LIST:")) {
                 const parts = raw.split("ONLINE_LIST:");
                 if (parts.length > 1) {
-                    const users = parts[1].split(",");
+                    // Мы берем вторую часть после разделителя
+                    const users = parts[1].split(","); 
+                    
+                    // ... далее твой код отрисовки ...
+
+                    
+                    // --- ОБНОВЛЯЕМ КОНТАКТЫ ---
                     const contactsList = document.getElementById("contacts-list");
                     if (contactsList) {
                         const aiBotHTML = `<div onclick="switchChat('AI_BOT')" class="contact-item ${currentPartner === 'AI_BOT' ? 'contact-active' : ''}">
@@ -697,10 +731,19 @@
                         contactsList.innerHTML = aiBotHTML + usersHTML;
                         if (typeof updateUnreadUI === "function") updateUnreadUI();
                     }
+
+                    // --- ОБНОВЛЯЕМ АДМИН-ПАНЕЛЬ (УЗЛЫ) ---
+                    const adminList = document.getElementById("admin-users-list");
+                    if (adminList) {
+                        // Теперь вместо "Загрузка..." здесь появятся активные ноды
+                        adminList.innerHTML = users.map(u => `<div style="color:#00ff00; font-size:11px;">● node_active: ${u}</div>`).join("");
+                    }
+
                     document.getElementById("online-list").textContent = `В сети: ${users.map(u => u.split(" (")[0]).join(", ")}`;
                 }
                 return;
             }
+
 
             if (raw.startsWith("RTC_SIGNAL:")) {
                 if (typeof handleSignalingData === "function") handleSignalingData(JSON.parse(raw.replace("RTC_SIGNAL:", "")));
@@ -772,32 +815,38 @@
                 const idPart = parts[0] || "ID:0";
                 const msgId = idPart.replace("ID:", "");
                 
-                // ЗАЩИТА: Если в сообщении нет контента (например, это системный сигнал), выходим
                 if (!parts[1]) return; 
-        
+
+                // 1. Извлекаем префикс ответа (REPLY:ID)
                 let replyId = null;
-                let content = parts[1] || ""; // Теперь content точно не undefined
-                
-                if (content.startsWith("REPLY:")) {
-                    const rParts = content.split("|", 2);
+                let rawContent = parts[1] || "";
+                if (rawContent.startsWith("REPLY:")) {
+                    const rParts = rawContent.split("|", 2);
                     replyId = rParts[0].replace("REPLY:", "");
-                    content = rParts[1] || "";
+                    rawContent = rParts[1] || ""; // Оставляем остаток после REPLY
                 }
-        
+
                 const avatarFromSrv = parts[2] || "";
                 const isRead = parts[3] || "0";
                 
-                const isPrivate = content.includes("PRIVATE:");
-                const displayContent = content.replace(/^PRIVATE:.*?:/, "");
+                // 2. Убираем PRIVATE префикс для парсинга
+                const isPrivate = rawContent.includes("PRIVATE:");
+                const displayContent = rawContent.replace(/^PRIVATE:.*?:/, "");
+
+                // 3. Достаем время
                 const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
                 const time = timeMatch ? timeMatch[1] : "--:--";
                 
-                const userAndText = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
-                const splitIdx = userAndText.indexOf(": ");
+                // 4. ГЛАВНЫЙ ФИКС: Убираем время из строки, чтобы осталось только "Имя: Текст"
+                const cleanLine = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
                 
-                // ЗАЩИТА для переменной sender
-                const sender = splitIdx !== -1 ? userAndText.substring(0, splitIdx) : "System";
-                const text = splitIdx !== -1 ? userAndText.substring(splitIdx + 2).trim() : userAndText;
+                // Ищем ПЕРВОЕ двоеточие
+                const splitIdx = cleanLine.indexOf(": ");
+                
+                // Если двоеточие не найдено (системное сообщение), пишем "System"
+                // Если найдено — берем всё ДО него как имя, всё ПОСЛЕ — как текст
+                const sender = splitIdx !== -1 ? cleanLine.substring(0, splitIdx) : "System";
+                const text = splitIdx !== -1 ? cleanLine.substring(splitIdx + 2).trim() : cleanLine;
 
 
                 // Проверка счетчика для фоновых чатов
@@ -811,8 +860,9 @@
 
                 // Фильтр текущего чата
                 if (currentPartner) {
-                    const c = content || "";
+                    const c = rawContent || ""; // ИСПОЛЬЗУЕМ rawContent
                     if (!c.includes(`PRIVATE:${currentPartner}:`) && !c.includes(`PRIVATE:${myName}:`)) return;
+
                 } else if (isPrivate) {
                     return;
                 }
@@ -874,20 +924,43 @@
                     vCont.innerHTML = `<div class="voice-msg"><div class="play-btn" onclick="toggleVoice('${audioId}', this)">▶</div><div class="voice-progress-wrap"><div class="waveform-real" onclick="seekVoice('${audioId}', event, this)"><div class="waveform-overlay" id="progress-${audioId}"></div>${waveHTML}</div><div class="voice-meta"><span>${time}</span></div></div><audio id="${audioId}" src="${audioUrl}" ontimeupdate="updateVoiceProgress('${audioId}')"></audio></div>`;
                     msgBubble.appendChild(vCont);
                 } else {
-                    const lowerT = text.toLowerCase();
-                    const isImg = [".jpg", ".png", ".gif", ".webp", ".jpeg"].some(ext => lowerT.includes(ext));
-                    const isVid = [".mp4", ".webm", ".mov"].some(ext => lowerT.includes(ext));
+                    // 1. ОЧИСТКА ТЕКСТА: Если в текст попал технический REPLY, убираем его
+                    let cleanDisplay = text;
+                    if (cleanDisplay.includes("REPLY:")) {
+                        const tParts = cleanDisplay.split("|");
+                        cleanDisplay = tParts[tParts.length - 1]; // Берем только само сообщение
+                    }
+
+                    const lowerT = cleanDisplay.toLowerCase();
+                    // Проверка: это ссылка И содержит расширение?
+                    const isLink = cleanDisplay.startsWith("http");
+                    const isImg = isLink && [".jpg", ".png", ".gif", ".webp", ".jpeg"].some(ext => lowerT.includes(ext));
+                    const isVid = isLink && [".mp4", ".webm", ".mov"].some(ext => lowerT.includes(ext));
+
                     if (isVid) {
-                        const v = document.createElement('video'); v.src = text; v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
-                        v.style = "max-width:100%; border-radius:12px;"; msgBubble.appendChild(v);
+                        const v = document.createElement('video');
+                        v.src = cleanDisplay; 
+                        v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
+                        v.style = "max-width:100%; border-radius:12px;"; 
+                        msgBubble.appendChild(v);
                     } else if (isImg) {
-                        const img = document.createElement('img'); img.src = text; img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer;";
-                        img.onclick = () => { document.getElementById('modal-img').src = img.src; document.getElementById('modal').style.display = 'flex'; };
+                        const img = document.createElement('img');
+                        img.src = cleanDisplay; 
+                        img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer;";
+                        img.onclick = () => { 
+                            document.getElementById('modal-img').src = img.src; 
+                            document.getElementById('modal').style.display = 'flex'; 
+                        };
                         msgBubble.appendChild(img);
                     } else {
-                        const s = document.createElement('span'); s.className = "msg-text"; s.textContent = text; msgBubble.appendChild(s);
+                        // ОБЫЧНЫЙ ТЕКСТ (без ошибок 404)
+                        const s = document.createElement('span'); 
+                        s.className = "msg-text"; 
+                        s.textContent = cleanDisplay; 
+                        msgBubble.appendChild(s);
                     }
                 }
+
 
                 // Мета-инфо
                 // МЕТА-ДАННЫЕ (Время и галочки)
@@ -1678,6 +1751,7 @@ document.addEventListener('mousedown', (e) => {
 
 </body>
 </html>
+
 
 
 
