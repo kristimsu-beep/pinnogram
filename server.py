@@ -202,21 +202,36 @@ async def update_avatar(data: dict):
 
 
 # 1. Эти объекты должны быть ВНЕ класса (в начале файла после импортов)
-country_cache = {}
-
 async def get_country_code(ip):
+    # 1. Проверка кэша (чтобы не тратить лимиты API)
     if ip in country_cache: return country_cache[ip]
-    if ip in ["127.0.0.1", "localhost", "unknown", ""]: return "un"
+    
+    # 2. Игнорируем локальные и пустые IP
+    if not ip or ip in ["127.0.0.1", "localhost", "unknown", "::1", "testclient"]: 
+        return "un"
+    
     try:
         async with httpx.AsyncClient() as client:
-            # Используем бесплатное API для определения страны по IP
+            # Делаем запрос к API
             res = await client.get(f"https://ipapi.co/{ip}/json/", timeout=2.0)
             if res.status_code == 200:
-                code = res.json().get("country_code", "un").lower()
+                data = res.json()
+                # Если IP не найден в базе API, оно может вернуть поле error
+                if data.get("error"): return "un"
+                
+                code = data.get("country_code", "un").lower()
+
+                # --- КРИТИЧЕСКИЙ ФИКС ДЛЯ РОССИИ ---
+                # Если провайдер отдает старый код SU (Soviet Union), меняем на RU
+                if code == "su": code = "ru"
+                
                 country_cache[ip] = code
                 return code
-    except: pass
+    except Exception as e:
+        print(f"GeoIP Error: {e}") # Для отладки в логах Render
+    
     return "un"
+
 
 class ConnectionManager:
     def __init__(self):
@@ -593,6 +608,7 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 10000))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
