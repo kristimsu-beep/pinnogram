@@ -589,41 +589,38 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
         manager.disconnect(room_id, username)
         await manager.broadcast(room_id, message=f"{username} покинул чат")
 
-# Функция "Будильник" для Render
+# Исправленная функция будильника
 async def keep_alive_bot(manager):
+    print("Бот-будильник запущен: интервал 5 минут")
     while True:
         try:
-            # Ждем 5 минут (300 секунд)
-            await asyncio.sleep(300)
+            await asyncio.sleep(300) # Ждем 5 минут
             
-            # Получаем московское время
             tz_moscow = pytz.timezone('Europe/Moscow')
             now = datetime.now(tz_moscow).strftime("%H:%M")
             
-            # Формируем техническое сообщение
-            # Мы шлем его в комнату "general", но с пометкой PRIVATE для бота
-            # Это имитирует активность, которую Render засчитает за работу
-            ping_msg = f"ID:0|PRIVATE:Pinnogram AI (Bot):[SYSTEM] Ping-keepalive at {now}"
+            # Сообщение-невидимка
+            ping_msg = f"[SYSTEM] Ping-keepalive at {now}"
             
-            # Отправляем сообщение во все активные комнаты
-            for room_id in manager.rooms:
-                await manager.broadcast(ping_msg, room_id)
+            # ВАЖНО: Правильный порядок аргументов (room_id первый)
+            rooms_to_ping = list(manager.rooms.keys())
+            for r_id in rooms_to_ping:
+                # Шлем как системное сообщение в ЛС боту
+                await manager.broadcast(r_id, message=f"PRIVATE:Pinnogram AI (Bot):{ping_msg}")
                 
             print(f"Бот-будильник: пинг отправлен в {now}")
             
         except Exception as e:
             print(f"Ошибка бота-будильника: {e}")
 
-# Чтобы запустить бота, в самом конце файла замени блок запуска на этот:
+# Правильный блок запуска
 if __name__ == "__main__":
-    import uvicorn
     loop = asyncio.get_event_loop()
-    
-    # Запускаем фоновую задачу "будильника"
-    # Передаем туда наш менеджер подключений
+    # Регистрируем задачу в цикле событий
     loop.create_task(keep_alive_bot(manager))
-    
+    # Запускаем сервер
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
 
