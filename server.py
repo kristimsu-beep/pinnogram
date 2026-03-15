@@ -589,29 +589,121 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
         manager.disconnect(room_id, username)
         await manager.broadcast(room_id, message=f"{username} покинул чат")
 
-# Исправленная функция будильника
+                     # 5. ЛОГИКА ИИ БОТА (GROQ - LLAMA 3)
+                        # 5. ЛОГИКА ИИ БОТА (GROQ - LLAMA 3)
+                if target_user == "AI_BOT":
+                    await websocket.send_text("TYPING:AI_BOT")
+                    
+                    groq_key = os.environ.get("GROQ_KEY")
+                    
+                    if not groq_key:
+                        await manager.broadcast(room_id, username="AI_BOT", text="Ошибка: Ключ API не настроен в Render.", to_user=username)
+                        continue
+
+                    AI_URL = "https://api.groq.com/openai/v1/chat/completions"
+                    
+                    try:
+                        async with httpx.AsyncClient() as client:
+                            resp = await client.post(
+                                AI_URL,
+                                headers={
+                                    "Authorization": f"Bearer {groq_key}",
+                                    "Content-Type": "application/json"
+                                },
+                                json={
+                                    "model": "llama-3.3-70b-versatile",
+                                    "messages": [
+                                        {"role": "system", "content": f"Ты — официальный ИИ-ассистент мессенджера Pinnogram. Твоего собеседника зовут {username}. Будь вежливым и помогай ему."},
+                                        {"role": "user", "content": clean_text}
+                                    ]
+                                },
+                                timeout=30.0
+                            ) # <--- Скобка должна закрывать post
+                            
+                            ai_data = resp.json()
+
+                            
+                            if "choices" in ai_data and len(ai_data["choices"]) > 0:
+                                ai_text = ai_data['choices'][0]['message']['content']
+                                
+                                await manager.broadcast(
+                                    room_id, 
+                                    username="AI_BOT", 
+                                    text=ai_text, 
+                                    avatar="https://i.ibb.co/4pSbxsh/user-avatar.png", 
+                                    to_user=username 
+                                )
+                            else:
+                                err = ai_data.get("error", {}).get("message", "Ошибка ИИ")
+                                await manager.broadcast(room_id, username="AI_BOT", text=f"Groq Error: {err}", to_user=username)
+
+                    except Exception as e:
+                        # Теперь бот сам скажет, что именно сломалось!
+                        error_details = str(e)
+                        print(f"AI Global Error: {error_details}")
+                        await manager.broadcast(room_id, username="AI_BOT", text=f"⚠️ Системная ошибка: {error_details}", to_user=username)
+
+
+                # 6. Проверка PUSH (если это не бот, а обычный юзер оффлайн)
+                elif target_user and target_user != "AI_BOT":
+                    is_online = False
+                    if room_id in manager.rooms and target_user in manager.rooms[room_id]:
+                        is_online = True
+
+                    if not is_online:
+                        async with aiosqlite.connect(DB_PATH) as db:
+                            async with db.execute("SELECT subscription_json FROM push_subscriptions WHERE username = ?", (target_user,)) as c:
+                                s_row = await c.fetchone()
+                                if s_row:
+                                    try:
+                                        await asyncio.to_thread(
+                                            webpush,
+                                            subscription_info=json.loads(s_row[0]),
+                                            data=json.dumps({"title": f"ЛС от {username}", "body": clean_text[:50]}),
+                                            vapid_private_key=VAPID_PRIVATE_KEY,
+                                            vapid_claims=VAPID_CLAIMS
+                                        )
+                                    except: pass
+
+    except WebSocketDisconnect:
+        manager.disconnect(room_id, username)
+        await manager.broadcast(room_id, message=f"{username} покинул чат")
+
+# Функция-будильник (Ping) для Render
 async def keep_alive_bot(manager):
-    print("Бот-будильник запущен: интервал 5 минут")
+    # Небольшая пауза (5 сек), чтобы сервер успел полностью инициализироваться
+    await asyncio.sleep(5)
+    print("🚀 Бот-будильник: ЗАПУСК СИСТЕМЫ ПИНГА...")
+    
     while True:
         try:
-            await asyncio.sleep(300) # Ждем 5 минут
-            
+            # 1. Получаем московское время
             tz_moscow = pytz.timezone('Europe/Moscow')
             now = datetime.now(tz_moscow).strftime("%H:%M")
             
-            # Сообщение-невидимка
-            ping_msg = f"[SYSTEM] Ping-keepalive at {now}"
+            # 2. Формируем технический пакет (скрыт для всех, кроме AI_BOT)
+            ping_msg = f"ID:0|PRIVATE:Pinnogram AI (Bot):[SYSTEM] Render Keep-alive Ping {now}|https://i.ibb.co|0"
             
-            # ВАЖНО: Правильный порядок аргументов (room_id первый)
+            # 3. Рассылаем активность во все открытые комнаты
             rooms_to_ping = list(manager.rooms.keys())
             for r_id in rooms_to_ping:
-                # Шлем как системное сообщение в ЛС боту
-                await manager.broadcast(r_id, message=f"PRIVATE:Pinnogram AI (Bot):{ping_msg}")
-                
-            print(f"Бот-будильник: пинг отправлен в {now}")
+                # Шлем напрямую через сокеты для минимальной нагрузки
+                for ws in manager.rooms.get(r_id, {}).values():
+                    if ws.client_state == WebSocketState.CONNECTED:
+                        try:
+                            await ws.send_text(ping_msg)
+                        except:
+                            continue
+            
+            print(f"✅ Бот-будильник: Пинг активности отправлен в {now}")
+            
+            # 4. СПИМ 5 МИНУТ ПОСЛЕ ОТПРАВКИ
+            await asyncio.sleep(300) 
             
         except Exception as e:
-            print(f"Ошибка бота-будильника: {e}")
+            print(f"⚠️ Ошибка бота-будильника: {e}")
+            await asyncio.sleep(10) # Короткая пауза перед повтором при ошибке
+
 
 # Правильный блок запуска
 if __name__ == "__main__":
@@ -621,27 +713,13 @@ if __name__ == "__main__":
     # Запускаем сервер
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# Правильный блок запуска
+if __name__ == "__main__":
+    loop = asyncio.get_event_loop()
+    # Регистрируем задачу в цикле событий
+    loop.create_task(keep_alive_bot(manager))
+    # Запускаем сервер
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 
 
