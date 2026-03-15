@@ -715,7 +715,7 @@
                     const contactsList = document.getElementById("contacts-list");
                     if (contactsList) {
                         const aiBotHTML = `<div onclick="switchChat('AI_BOT')" class="contact-item ${currentPartner === 'AI_BOT' ? 'contact-active' : ''}">
-                            <img src="https://i.ibb.co" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
+                            <img src="https://i.ibb.co/4pSbxsh/user-avatar.png" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">
                             <b style="flex:1">Pinnogram AI (Bot)</b><div id="badge-AI_BOT" class="unread-badge" style="display:none"></div>
                         </div>`;
                         
@@ -743,9 +743,9 @@
                             const data = u.split("|");
                             if (data.length < 3) return "";
                             const [name, ip, code] = data;
-                            const flagUrl = `https://flagcdn.com{code || 'un'}.png`;
+                            const flagUrl = `https://flagcdn.com/w20/${code || 'un'}.png`;
                             return `<div style="color:#00ff00; display:flex; align-items:center; gap:8px; margin-bottom:4px; font-size:11px;">
-                                        <img src="${flagUrl}" style="width:16px; height:11px; border:1px solid #004400;" onerror="this.src='https://flagcdn.com'">
+                                        <img src="${flagUrl}" style="width:16px; height:11px; border:1px solid #004400;" onerror="this.src='https://flagcdn.com/w20/${code || 'un'}.png'">
                                         <span>node: ${name} <small style="opacity:0.5;">(${ip})</small></span>
                                     </div>`;
                         }).join("");
