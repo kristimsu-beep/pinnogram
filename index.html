@@ -1322,32 +1322,36 @@ function sendMessage() {
     const i = document.getElementById("messageText");
     const text = i.value.trim();
 
-    if (text && ws) {
+    // Проверка состояния сокета (чтобы не было ошибки CLOSED)
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        alert("Нет соединения с сервером. Попробуйте обновить страницу.");
+        return;
+    }
+
+    if (text) {
         const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         
-        // 1. Базовые префиксы (Кому и Время)
         let prefix = currentPartner ? `TO_USER:${currentPartner}|` : "";
         let timePrefix = `TIME:${now}|`;
 
-        // 2. ЛОГИКА РЕДАКТИРОВАНИЯ
         if (editMsgId) {
-            // При редактировании шлем спец-команду (время обычно не меняем)
+            // Редактирование
             ws.send(`${prefix}__EDIT__:${editMsgId}|${text}`);
         } 
-        // 3. ЛОГИКА ОТВЕТА
         else if (replyToId) {
-            // Шлем префикс ответа серверу вместе с текстом
-            ws.send(`${prefix}${timePrefix}REPLY_TO:${replyToId}|${text}`);
+            // ОТВЕТ (ИСПРАВЛЕНО: REPLY вместо REPLY_TO и добавлена палка |)
+            ws.send(`${prefix}${timePrefix}REPLY:${replyToId}|${text}`);
         } 
-        // 4. ОБЫЧНОЕ СООБЩЕНИЕ
         else {
+            // Обычное сообщение
             ws.send(`${prefix}${timePrefix}${text}`);
         }
 
         i.value = '';
-        cancelAction(); // Сбрасываем режим правки/ответа (скрываем полоску над полем)
+        cancelAction(); 
     }
 }
+
 
 
 
