@@ -705,10 +705,10 @@
             }
 
            
-                        if (raw.includes("ONLINE_LIST:")) {
+            if (raw.includes("ONLINE_LIST:")) {
                 const parts = raw.split("ONLINE_LIST:");
                 if (parts.length > 1) {
-                    // Разделяем строку на отдельных пользователей
+                    // Берем саму строку со списком (после разделителя)
                     const usersRaw = parts[1].split(","); 
                     
                     // --- 1. ОБНОВЛЯЕМ КОНТАКТЫ (ДИАЛОГИ) ---
@@ -720,11 +720,12 @@
                         </div>`;
                         
                         const usersHTML = usersRaw.map(u => {
-                            // ИСПРАВЛЕНО: берем имя до первой палки "|"
+                            // 1. Берем только имя до первой палки
                             const name = u.split("|")[0].trim();
                             
-                            // Сравниваем с собой (чистим пробелы для точности)
-                            if (!name || name === myName.trim()) return "";
+                            // 2. Безопасная проверка: не я ли это?
+                            const me = (myName || "").trim();
+                            if (!name || name === me) return "";
                             
                             return `<div onclick="switchChat('${name}')" class="contact-item ${currentPartner === name ? 'contact-active' : ''}">
                                 <span>👤</span><b style="flex:1">${name}</b><div id="badge-${name}" class="unread-badge" style="display:none"></div>
@@ -736,32 +737,27 @@
                     }
 
                     // --- 2. ОБНОВЛЯЕМ АДМИН-ПАНЕЛЬ (УЗЛЫ С ФЛАГАМИ) ---
-                    // --- 2. ОБНОВЛЯЕМ АДМИН-ПАНЕЛЬ (УЗЛЫ С ФЛАГАМИ) ---
                     const adminList = document.getElementById("admin-users-list");
                     if (adminList) {
                         adminList.innerHTML = usersRaw.map(u => {
                             const data = u.split("|");
                             if (data.length < 3) return "";
                             const [name, ip, code] = data;
-                            
-                            // 1. ПРАВИЛЬНАЯ ССЫЛКА С ПУТЕМ /w20/ И ПЕРЕМЕННОЙ ${code}
-                            const flagUrl = `https://flagcdn.com/w20/${code || 'un'}.png`;
-                            
+                            const flagUrl = `https://flagcdn.com{code || 'un'}.png`;
                             return `<div style="color:#00ff00; display:flex; align-items:center; gap:8px; margin-bottom:4px; font-size:11px;">
-                                        <img src="${flagUrl}" 
-                                             style="width:16px; height:11px; border:1px solid #004400;" 
-                                             onerror="this.src='https://flagcdn.com/w20/${code || 'un'}.png'">
+                                        <img src="${flagUrl}" style="width:16px; height:11px; border:1px solid #004400;" onerror="this.src='https://flagcdn.com'">
                                         <span>node: ${name} <small style="opacity:0.5;">(${ip})</small></span>
                                     </div>`;
                         }).join("");
                     }
 
-                    // --- 3. СТРОКА "В СЕТИ" ---
-                    const namesOnly = usersRaw.map(u => u.split("|")[0].trim());
-                    document.getElementById("online-list").textContent = `В сети: ${namesOnly.join(", ")}`;
+                    // Обновляем строку "В сети"
+                    const onlineNames = usersRaw.map(u => u.split("|")[0].trim());
+                    document.getElementById("online-list").textContent = `В сети: ${onlineNames.join(", ")}`;
                 }
-                return;
-            }
+                return; // Выходим из ws.onmessage для этого пакета
+            } // <--- ВОТ ЭТА СКОБКА ТЕПЕРЬ НА МЕСТЕ!
+
 
 
             if (raw.startsWith("RTC_SIGNAL:")) {
