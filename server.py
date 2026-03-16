@@ -249,16 +249,16 @@ class ConnectionManager:
         # Создаем задачу на обновление списка онлайн
         asyncio.create_task(self.broadcast_online(room_id))
 
-       async def broadcast_online(self, room_id: str):
+    async def broadcast_online(self, room_id: str):
         if room_id in self.rooms:
             users_info = []
             for name, ws in self.rooms[room_id].items():
                 ip = ws.client.host if ws.client else "unknown"
                 
-                # 1. Вызываем НОВУЮ функцию (она вернет объект с городом и ISP)
+                # 1. Вызываем функцию получения расширенной инфо
                 info = await get_user_info(ip) 
                 
-                # 2. Упаковываем все 5 параметров через палку |
+                # 2. Упаковываем 5 параметров: Имя|IP|Страна|Город|Провайдер
                 users_info.append(f"{name}|{ip}|{info['country']}|{info['city']}|{info['org']}")
             
             # 3. Собираем финальное сообщение
@@ -266,9 +266,10 @@ class ConnectionManager:
             
             for ws in self.rooms[room_id].values():
                 if ws.client_state == WebSocketState.CONNECTED:
-                    try: await ws.send_text(msg)
-                    except: continue
-
+                    try: 
+                        await ws.send_text(msg)
+                    except: 
+                        continue
 
     async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None, reply_to_id: int = None):
         now = client_time if client_time else datetime.now().strftime("%H:%M")        
@@ -287,16 +288,15 @@ class ConnectionManager:
                 final_msg = f"ID:{msg_id}|{reply_info}{prefix}[{now}] {username}: {text}|{avatar}|0"
       
                 if to_user:        
-                    is_online = False        
                     room_users = self.rooms.get(room_id, {})
-                    
                     for name in [username, to_user]:        
                         if name in room_users:        
-                            if name == to_user: is_online = True        
-                            try: await room_users[name].send_text(final_msg)        
-                            except: continue        
+                            try: 
+                                await room_users[name].send_text(final_msg)        
+                            except: 
+                                continue        
                         
-                    if not is_online:        
+                    if to_user not in room_users:        
                         async with db.execute("SELECT subscription_json FROM push_subscriptions WHERE username = ?", (to_user,)) as c:        
                             sub_row = await c.fetchone()        
                             if sub_row:        
@@ -312,18 +312,21 @@ class ConnectionManager:
                 else:        
                     for ws in self.rooms.get(room_id, {}).values():        
                         if ws.client_state == WebSocketState.CONNECTED:        
-                            try: await ws.send_text(final_msg)        
-                            except: continue        
+                            try: 
+                                await ws.send_text(final_msg)        
+                            except: 
+                                continue        
         else:        
             final_msg = f"ID:0|SYSTEM: {message}"        
             for ws in self.rooms.get(room_id, {}).values():        
                 if ws.client_state == WebSocketState.CONNECTED:        
-                    try: await ws.send_text(final_msg)        
-                    except: continue
+                    try: 
+                        await ws.send_text(final_msg)        
+                    except: 
+                        continue
 
 manager = ConnectionManager()
 
-    
 
 # Вставь свой ключ тут
 IMGBB_API_KEY = "140359baf01acef6aa27e35c55b32f99"
