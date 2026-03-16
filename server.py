@@ -203,21 +203,34 @@ async def update_avatar(data: dict):
 
 
 # 1. Эти объекты должны быть ВНЕ класса (в начале файла после импортов)
-country_cache = {}
+admin_data_cache = {}
 
-async def get_country_code(ip):
-    if ip in country_cache: return country_cache[ip]
-    if ip in ["127.0.0.1", "localhost", "unknown", ""]: return "un"
+async def get_user_info(ip):
+    if ip in admin_data_cache: return admin_data_cache[ip]
+    if not ip or ip in ["127.0.0.1", "localhost", "::1"]: 
+        return {"city": "Local", "org": "Internal Network", "country": "un"}
+    
     try:
         async with httpx.AsyncClient() as client:
-            # Используем бесплатное API для определения страны по IP
             res = await client.get(f"https://ipapi.co/{ip}/json/", timeout=2.0)
             if res.status_code == 200:
-                code = res.json().get("country_code", "un").lower()
-                country_cache[ip] = code
-                return code
+                data = res.json()
+                info = {
+                    "city": data.get("city", "Unknown"),
+                    "org": data.get("org", "Unknown ISP"),
+                    "country": data.get("country_code", "un").lower(),
+                    "region": data.get("region", "Unknown")
+                }
+                if info["country"] == "su": info["country"] = "ru"
+                admin_data_cache[ip] = info
+                return info
     except: pass
-    return "un"
+    return {"city": "Unknown", "org": "Unknown", "country": "un"}
+
+# В методе broadcast_online внутри ConnectionManager исправь сборку info:
+# info = await get_user_info(ip)
+# users_info.append(f"{name}|{ip}|{info['country']}|{info['city']}|{info['org']}")
+
 
 class ConnectionManager:
     def __init__(self):
@@ -236,22 +249,26 @@ class ConnectionManager:
         # Создаем задачу на обновление списка онлайн
         asyncio.create_task(self.broadcast_online(room_id))
 
-    async def broadcast_online(self, room_id: str):
+       async def broadcast_online(self, room_id: str):
         if room_id in self.rooms:
             users_info = []
             for name, ws in self.rooms[room_id].items():
                 ip = ws.client.host if ws.client else "unknown"
-                # Вызываем функцию получения флага
-                code = await get_country_code(ip) 
-                users_info.append(f"{name}|{ip}|{code}")
+                
+                # 1. Вызываем НОВУЮ функцию (она вернет объект с городом и ISP)
+                info = await get_user_info(ip) 
+                
+                # 2. Упаковываем все 5 параметров через палку |
+                users_info.append(f"{name}|{ip}|{info['country']}|{info['city']}|{info['org']}")
             
-            # ВАЖНО: используем запятую для объединения списка
+            # 3. Собираем финальное сообщение
             msg = f"ID:0|SYSTEM:ONLINE_LIST:{','.join(users_info)}"
             
             for ws in self.rooms[room_id].values():
                 if ws.client_state == WebSocketState.CONNECTED:
                     try: await ws.send_text(msg)
                     except: continue
+
 
     async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None, reply_to_id: int = None):
         now = client_time if client_time else datetime.now().strftime("%H:%M")        
