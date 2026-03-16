@@ -783,27 +783,29 @@
 
                     // --- 2. ОБНОВЛЯЕМ АДМИН-ПАНЕЛЬ (УЗЛЫ С ФЛАГАМИ) ---
                     // --- ВНУТРИ ws.onmessage в блоке ONLINE_LIST ---
+                    // --- 2. ОБНОВЛЯЕМ АДМИН-ПАНЕЛЬ (УЗЛЫ С ФЛАГАМИ И IP) ---
                     const adminList = document.getElementById("admin-users-list");
                     if (adminList) {
                         adminList.innerHTML = usersRaw.map(u => {
-                            // Распаковываем данные: имя|ip|страна|город|провайдер
+                            // РАСПАКОВЫВАЕМ 7 ПАРАМЕТРОВ: имя|ip|страна|город|провайдер|таймзона|сеть
                             const data = u.split("|");
-                            if (data.length < 5) return ""; // Пропускаем, если данных мало
+                            if (data.length < 7) return ""; 
                             
-                            const [name, ip, code, city, org] = data;
+                            const [name, ip, code, city, org, tz, asn] = data;
                             const flagUrl = `https://flagcdn.com/w20/${code || 'un'}.png`;
                             
-                            // ВАЖНО: Добавляем onclick="showAdminDetail(...)"
+                            // Выводим имя + IP серым цветом в скобках
                             return `
-                            <div onclick="showAdminDetail('${name}','${ip}','${city}','${org}')" 
+                            <div onclick="showAdminDetail('${name}','${ip}','${city}','${org}','${tz}','${asn}')" 
                                  style="color:#00ff00; display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:4px; padding:2px; border-radius:4px;"
                                  onmouseover="this.style.background='rgba(0,255,0,0.1)'" 
                                  onmouseout="this.style.background='transparent'">
                                 <img src="${flagUrl}" style="width:16px; height:11px; border:1px solid #004400;">
-                                <span style="text-decoration:underline; font-weight:bold;">node: ${name}</span>
+                                <span style="text-decoration:underline;">node: ${name} <small style="opacity:0.5; text-decoration:none;">(${ip})</small></span>
                             </div>`;
                         }).join("");
                     }
+
 
 
                     // Обновляем строку "В сети"
@@ -1830,11 +1832,11 @@ document.addEventListener('mousedown', (e) => {
     }
 });
 // Глобальная функция для открытия досье пользователя
-function showAdminDetail(name, ip, city, org) {
+// ОБНОВЛЕННАЯ ФУНКЦИЯ ДОСЬЕ (на 6 параметров)
+function showAdminDetail(name, ip, city, org, tz, asn) {
     const box = document.getElementById('admin-user-info');
     const content = document.getElementById('info-content');
     
-    // Заполняем данными
     content.innerHTML = `
         <div class="info-content-row">
             <span class="info-label">IDENTIFIER (UID)</span>
@@ -1849,8 +1851,16 @@ function showAdminDetail(name, ip, city, org) {
             <span style="color:#00ff00;">${city || 'Private Node'}</span>
         </div>
         <div class="info-content-row">
+            <span class="info-label">TIMEZONE (LOCAL)</span>
+            <span style="color:#00ff00;">${tz || 'UTC'}</span>
+        </div>
+        <div class="info-content-row">
             <span class="info-label">ISP_PROVIDER_ORG</span>
             <span style="color:#00ff00;">${org || 'Unknown Network'}</span>
+        </div>
+        <div class="info-content-row">
+            <span class="info-label">ASN_NETWORK_CODE</span>
+            <span style="color:#00ff00;">${asn || 'N/A'}</span>
         </div>
         
         <div style="margin-top:20px; display:flex; gap:10px;">
@@ -1859,9 +1869,9 @@ function showAdminDetail(name, ip, city, org) {
         </div>
     `;
     
-    // Показываем окно
     box.style.display = 'block';
 }
+
 
 // Вспомогательная функция копирования
 function copyToClipboard(text) {
