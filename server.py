@@ -530,28 +530,23 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 
                 # 5. ЛОГИКА ИИ-БОТА"
                 # ТВОЙ КЛЮЧ И ПРАВИЛЬНАЯ ССЫЛКА
-                # --- ЛОГИКА ИИ БОТА (GROQ - LLAMA 3) ---
-                     # 5. ЛОГИКА ИИ БОТА (GROQ - LLAMA 3)
-                        # 5. ЛОГИКА ИИ БОТА (GROQ - LLAMA 3)
                 if target_user == "AI_BOT":
                     await websocket.send_text("TYPING:AI_BOT")
                     
                     groq_key = os.environ.get("GROQ_KEY")
                     if not groq_key:
-                        await manager.broadcast(room_id, username="AI_BOT", text="Ошибка: Ключ API не настроен в Render.", to_user=username)
+                        await manager.broadcast(room_id, username="AI_BOT", text="Ошибка: Ключ API не настроен.", to_user=username)
                         continue
 
                     # --- ЛОГИКА ПАМЯТИ ---
-                    # Если юзер пишет впервые, создаем ему системную инструкцию
                     if username not in ai_history:
                         ai_history[username] = [
-                            {"role": "system", "content": f"Ты — официальный ИИ-ассистент мессенджера Pinnogram. Твоего собеседника зовут {username}. Ты помнишь контекст беседы и помогаешь ему."}
+                            {"role": "system", "content": f"Ты — официальный ИИ-ассистент мессенджера Pinnogram. Твоего собеседника зовут {username}. Ты помнишь контекст беседы."}
                         ]
                     
-                    # Добавляем текущий вопрос в историю
                     ai_history[username].append({"role": "user", "content": clean_text})
                     
-                    # Ограничиваем память (храним последние 10 реплик + системную), чтобы не перегружать API
+                    # Ограничиваем память, сохраняя системную инструкцию
                     if len(ai_history[username]) > 11:
                         ai_history[username] = [ai_history[username][0]] + ai_history[username][-10:]
 
@@ -567,17 +562,15 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                 },
                                 json={
                                     "model": "llama-3.3-70b-versatile",
-                                    "messages": ai_history[username], # ШЛЕМ ВСЮ ИСТОРИЮ
-                                    "timeout": 30.0
-                                }
+                                    "messages": ai_history[username]
+                                },
+                                timeout=30.0 
                             )
                             
                             ai_data = resp.json()
                             
                             if "choices" in ai_data and len(ai_data["choices"]) > 0:
                                 ai_text = ai_data['choices'][0]['message']['content']
-                                
-                                # ЗАПОМИНАЕМ ОТВЕТ БОТА в историю
                                 ai_history[username].append({"role": "assistant", "content": ai_text})
                                 
                                 await manager.broadcast(
@@ -588,12 +581,13 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                     to_user=username 
                                 )
                             else:
-                                err = ai_data.get("error", {}).get("message", "Ошибка ИИ")
+                                err = ai_data.get("error", {}).get("message", "Ошибка API")
                                 await manager.broadcast(room_id, username="AI_BOT", text=f"Groq Error: {err}", to_user=username)
 
                     except Exception as e:
                         print(f"AI Global Error: {str(e)}")
-                        await manager.broadcast(room_id, username="AI_BOT", text=f"⚠️ ИИ временно недоступен. Ошибка: {str(e)[:50]}", to_user=username)
+                        await manager.broadcast(room_id, username="AI_BOT", text=f"⚠️ ИИ недоступен: {str(e)[:50]}", to_user=username)
+
 
 
 
