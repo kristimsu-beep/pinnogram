@@ -207,11 +207,13 @@ admin_data_cache = {}
 
 async def get_user_info(ip):
     if ip in admin_data_cache: return admin_data_cache[ip]
-    if not ip or ip in ["127.0.0.1", "localhost", "::1"]: 
-        return {"city": "Local", "org": "Internal Network", "country": "un"}
+    # Фильтр для локальных и тестовых адресов
+    if not ip or ip in ["127.0.0.1", "localhost", "::1", "testclient"]: 
+        return {"city": "Local", "org": "Internal", "country": "un", "tz": "UTC", "asn": "LAN"}
     
     try:
         async with httpx.AsyncClient() as client:
+            # ИСПРАВЛЕНО: Добавлен / после .co
             res = await client.get(f"https://ipapi.co/{ip}/json/", timeout=2.0)
             if res.status_code == 200:
                 data = res.json()
@@ -219,13 +221,15 @@ async def get_user_info(ip):
                     "city": data.get("city", "Unknown"),
                     "org": data.get("org", "Unknown ISP"),
                     "country": data.get("country_code", "un").lower(),
-                    "region": data.get("region", "Unknown")
+                    "tz": data.get("timezone", "UTC/Unknown"),
+                    "asn": data.get("asn", "Unknown") 
                 }
                 if info["country"] == "su": info["country"] = "ru"
                 admin_data_cache[ip] = info
                 return info
-    except: pass
-    return {"city": "Unknown", "org": "Unknown", "country": "un"}
+    except Exception as e: 
+        print(f"Geo Error: {e}")
+    return {"city": "Unknown", "org": "Unknown", "country": "un", "tz": "UTC", "asn": "Unknown"}
 
 # В методе broadcast_online внутри ConnectionManager исправь сборку info:
 # info = await get_user_info(ip)
@@ -254,14 +258,10 @@ class ConnectionManager:
             users_info = []
             for name, ws in self.rooms[room_id].items():
                 ip = ws.client.host if ws.client else "unknown"
-                
-                # 1. Вызываем функцию получения расширенной инфо
                 info = await get_user_info(ip) 
-                
-                # 2. Упаковываем 5 параметров: Имя|IP|Страна|Город|Провайдер
-                users_info.append(f"{name}|{ip}|{info['country']}|{info['city']}|{info['org']}")
+                # Упаковываем все 7 параметров для админки
+                users_info.append(f"{name}|{ip}|{info['country']}|{info['city']}|{info['org']}|{info['tz']}|{info['asn']}")
             
-            # 3. Собираем финальное сообщение
             msg = f"ID:0|SYSTEM:ONLINE_LIST:{','.join(users_info)}"
             
             for ws in self.rooms[room_id].values():
