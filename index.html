@@ -889,41 +889,41 @@
                 
                 if (!parts[1]) return; 
 
-                // 1. Извлекаем префикс ответа (REPLY:ID)
-                // --- 1. Извлекаем префикс ответа (REPLY:ID) ---
-                // --- 1. ИЗВЛЕКАЕМ ID ОТВЕТА (REPLY:ID) ---
+                // 1. ИЗВЛЕКАЕМ ID ОТВЕТА (REPLY:ID)
                 let replyId = null;
                 let rawContent = parts[1] || "";
                 
-                const matchReply = rawContent.match(/REPLY:(\d+)/);
+                // Ищем REPLY:цифры и ПАЛКУ после них. Вырезаем только это.
+                const matchReply = rawContent.match(/REPLY:(\d+)\|/); 
                 if (matchReply) {
                     replyId = matchReply[1];
-                    // Удаляем REPLY:ID и ОБЯЗАТЕЛЬНО вертикальную черту после него
-                    rawContent = rawContent.replace(/REPLY:\d+\|?/, "");
+                    // Удаляем REPLY:1| из начала строки, чтобы не портить текст
+                    rawContent = rawContent.replace(/^REPLY:\d+\|/, ""); 
                 }
 
                 const avatarFromSrv = parts[2] || "";
                 const isRead = parts[3] || "0";
                 
-                // --- 2. ЧИСТИМ ПРИВАТ И ВРЕМЯ ---
+                // 2. ЧИСТИМ ПРИВАТ И ВРЕМЯ
                 const isPrivate = rawContent.includes("PRIVATE:");
-                // Убираем PRIVATE:username: и время [HH:MM] одним махом
+                // Убираем PRIVATE:username:
                 let cleanLine = rawContent.replace(/PRIVATE:.*?:/, "").trim();
                 
                 const timeMatch = cleanLine.match(/\[(\d{2}:\d{2})\]/);
                 const time = timeMatch ? timeMatch[1] : "--:--";
                 
-                // Убираем [HH:MM] из строки, чтобы осталось только "Имя: Текст"
+                // Убираем [HH:MM] строго из начала
                 cleanLine = cleanLine.replace(/^\[\d{2}:\d{2}\]\s*/, "");
 
-                // --- 3. РАЗДЕЛЯЕМ ИМЯ И ТЕКСТ (ФИКС "System") ---
+                // 3. РАЗДЕЛЯЕМ ИМЯ И ТЕКСТ (ФИКС "System")
                 let sender = "System";
                 let text = cleanLine;
 
-                // Ищем ПЕРВОЕ двоеточие. Оно отделяет имя от сообщения.
+                // Ищем ПЕРВОЕ двоеточие. 
                 const splitIdx = cleanLine.indexOf(":"); 
                 if (splitIdx !== -1) {
                     sender = cleanLine.substring(0, splitIdx).trim();
+                    // Берем ВСЁ, что после первого двоеточия — это и есть твой ответ
                     text = cleanLine.substring(splitIdx + 1).trim();
                 }
 
@@ -972,21 +972,24 @@
                 div.ontouchend = () => clearTimeout(pressTimer);
 
                 // Цитата ответа
+                                // Цитата ответа (Улучшенная)
                 if (replyId && replyId !== "null") {
                     const quote = document.createElement('div');
                     quote.className = 'reply-quote';
                     
-                    // Пытаемся найти текст сообщения, на которое отвечаем
                     const targetMsg = document.getElementById(`msg-${replyId}`);
                     let quotedText = "Сообщение...";
                     if (targetMsg) {
                         const textNode = targetMsg.querySelector('.msg-text');
-                        if (textNode) quotedText = textNode.textContent.substring(0, 30) + "...";
+                        // Берем текст целиком (без троеточия)
+                        if (textNode) quotedText = textNode.textContent;
                     }
                 
+                    // Убрали надпись "Ответ на №1", оставили только текст оригинала
                     quote.innerHTML = `
-                        <div style="color:var(--accent); font-weight:bold; font-size:10px;">Ответ на #${replyId}</div>
-                        <div style="font-size:11px; opacity:0.6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${quotedText}</div>
+                        <div style="font-size:11px; opacity:0.6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            ${quotedText}
+                        </div>
                     `;
                     
                     quote.onclick = (e) => {
@@ -996,6 +999,7 @@
                     };
                     msgBubble.appendChild(quote);
                 }
+
 
 
                 if (sender !== myName) {
