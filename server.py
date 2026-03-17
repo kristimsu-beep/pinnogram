@@ -548,7 +548,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         print(f"DEBUG: Финальный промпт для нейросети: {prompt}")
 
                         HF_TOKEN = os.environ.get("HF_TOKEN") 
-                        API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+                        API_URL = "https://router.huggingface.co/hf-inference/models/stabilityai/stable-diffusion-xl-base-1.0"
                         
                         try:
                             async with httpx.AsyncClient() as client:
