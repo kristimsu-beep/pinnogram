@@ -458,14 +458,21 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         await conn.send_text(f"DELETE_CONFIRM:{msg_id}")
                 continue
             elif clean_text.startswith("__EDIT__:"):
-                msg_id, new_text = clean_text.replace("__EDIT__:", "").split("|", 1)
-                async with aiosqlite.connect(DB_PATH) as db:
-                    await db.execute("UPDATE messages SET text = ? WHERE id = ?", (new_text, msg_id))
-                    await db.commit()
-                # Рассылаем сигнал обновления
-                for conn in manager.rooms[room_id].values():
-                    await conn.send_text(f"EDIT_CONFIRM:{msg_id}|{new_text}")
+                try:
+                    payload = clean_text.replace("__EDIT__:", "")
+                    if "|" not in payload: continue # Пропускаем битый запрос
+                    msg_id, new_text = payload.split("|", 1)
+                    
+                    async with aiosqlite.connect(DB_PATH) as db:
+                        await db.execute("UPDATE messages SET text = ? WHERE id = ?", (new_text, msg_id))
+                        await db.commit()
+                        
+                    for conn in manager.rooms[room_id].values():
+                        await conn.send_text(f"EDIT_CONFIRM:{msg_id}|{new_text}")
+                except Exception as e:
+                    print(f"Edit Error: {e}")
                 continue
+
 
 
             # 4. ПЕЧАТАЕТ...
@@ -563,14 +570,21 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                 
                                 if response.status_code == 200:
                                     base64_image = base64.b64encode(response.content).decode('utf-8')
-                                    image_data_url = f"data:image/jpeg;base64,{base64_image}"
                                     
-                                    print("DEBUG: Картинка успешно получена и конвертирована. Отправляю...")
+                                    # 1. Создаем готовую HTML-строку
+                                    img_html = f'<img src="data:image/png;base64,{base64_image}" style="max-width:100%; border-radius:10px; margin-top:10px;">'
                                     
+                                    print("DEBUG: Картинка успешно получена. Отправляю HTML-тег...")
+                                    
+                                    # 2. ВАЖНО: передаем именно img_html в параметр text
                                     await manager.broadcast(
-                                        room_id, username="AI_BOT", text=image_data_url, 
-                                        avatar="https://i.ibb.co/4pSbxsh/user-avatar.png", to_user=username
+                                        room_id, 
+                                        username="AI_BOT", 
+                                        text=img_html,  # <-- ИСПРАВЛЕНО ТУТ
+                                        avatar="https://i.ibb.co/4pSbxsh/user-avatar.png", 
+                                        to_user=username
                                     )
+
                                 else:
                                     # Теперь бот скажет точный код ошибки в чат
                                     error_msg = f"❌ Ошибка API: {response.status_code}"
@@ -586,7 +600,6 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         continue 
 
 
-                    # --- 2. ЛОГИКА ТЕКСТОВОЙ ПАМЯТИ (GROQ) ---
                     # (Весь остальной код с Groq идет ниже...)
 
 
