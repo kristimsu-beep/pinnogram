@@ -1025,17 +1025,17 @@
                     vCont.innerHTML = `<div class="voice-msg"><div class="play-btn" onclick="toggleVoice('${audioId}', this)">▶</div><div class="voice-progress-wrap"><div class="waveform-real" onclick="seekVoice('${audioId}', event, this)"><div class="waveform-overlay" id="progress-${audioId}"></div>${waveHTML}</div><div class="voice-meta"><span>${time}</span></div></div><audio id="${audioId}" src="${audioUrl}" ontimeupdate="updateVoiceProgress('${audioId}')"></audio></div>`;
                     msgBubble.appendChild(vCont);
                 } else {
-                    // 1. ОЧИСТКА ТЕКСТА
-                    let cleanDisplay = text;
+                    // --- 6. КОНТЕНТ (ИИ, Картинки, Видео, Текст) ---
+                    let cleanDisplay = text || ""; // Защита: если text вдруг undefined
 
                     const lowerT = cleanDisplay.toLowerCase();
                     const isLink = cleanDisplay.trim().startsWith("http");
                     
-                    // УМНЫЙ ФИЛЬТР КАРТИНОК (Обычные + ИИ + ImgBB)
+                    // УМНЫЙ ФИЛЬТР КАРТИНОК
                     const isImg = isLink && (
                         [".jpg", ".png", ".gif", ".webp", ".jpeg"].some(ext => lowerT.includes(ext)) || 
-                        lowerT.includes("pollinations.ai") ||
-                        lowerT.includes("ibb.co") // <-- ДОБАВЛЕНО: Распознаем ссылки ImgBB
+                        lowerT.includes("pollinations.ai") || 
+                        lowerT.includes("ibb.co")
                     );
 
                     const isVid = isLink && [".mp4", ".webm", ".mov"].some(ext => lowerT.includes(ext));
@@ -1043,18 +1043,16 @@
                     if (isImg) {
                         const img = document.createElement('img');
                         img.src = cleanDisplay;
+                        img.className = "chat-img";
                         img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer; border:1px solid rgba(255,255,255,0.1);";
                         
-                        // Авто-скролл при загрузке картинки
                         img.onload = () => { chat.scrollTop = chat.scrollHeight; };
-                        
                         img.onclick = () => { 
                             document.getElementById('modal-img').src = img.src; 
                             document.getElementById('modal').style.display = 'flex'; 
                         };
                         msgBubble.appendChild(img);
 
-                        // Подпись для ИИ-артов
                         if (cleanDisplay.includes("pollinations.ai")) {
                             const aiLabel = document.createElement('div');
                             aiLabel.style = "font-size:9px; opacity:0.5; margin-top:2px; font-family:monospace;";
@@ -1067,13 +1065,15 @@
                         v.style = "max-width:100%; border-radius:12px; margin-top:5px;";
                         msgBubble.appendChild(v);
                     } else {
-                        // ОБЫЧНЫЙ ТЕКСТ
+                        // --- ОБЫЧНЫЙ ТЕКСТ (С проверкой на пустоту) ---
                         const s = document.createElement('span');
                         s.className = "msg-text";
-                        s.textContent = cleanDisplay;
+                        // Если текст пустой после всех очисток, выведем хотя бы пробел или спец-символ для дебага
+                        s.textContent = cleanDisplay.trim() || "..."; 
                         msgBubble.appendChild(s);
                     }
                 }
+
 
 
 
