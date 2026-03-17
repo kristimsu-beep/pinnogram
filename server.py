@@ -533,18 +533,20 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                 # ТВОЙ КЛЮЧ И ПРАВИЛЬНАЯ ССЫЛКА
                 if target_user == "AI_BOT":
                     await websocket.send_text("TYPING:AI_BOT")
+                    print(f"DEBUG: Получено сообщение для AI_BOT. Текст: '{clean_text}'") # <-- Проверка 1
                     
                     # --- 1. ОБНОВЛЕННАЯ ЛОГИКА ГЕНЕРАЦИИ (HUGGING FACE) ---
                     trigger_words = ["нарисуй", "draw", "изобрази", "картинка", "image"]
                     
                     if any(word in clean_text.lower() for word in trigger_words):
+                        print("DEBUG: Триггер сработал. Начинаю генерацию...") # <-- Проверка 2
                         prompt = clean_text.lower()
                         for w in trigger_words: prompt = prompt.replace(w, "")
                         prompt = prompt.replace("ai_bot", "").strip()
                         
                         if not prompt: prompt = "beautiful landscape"
+                        print(f"DEBUG: Финальный промпт для нейросети: {prompt}")
 
-                        # ТВОЙ ТОКЕН И URL МОДЕЛИ
                         HF_TOKEN = os.environ.get("HF_TOKEN") 
                         API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
                         
@@ -557,22 +559,32 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                     timeout=60.0 
                                 )
                                 
+                                print(f"DEBUG: Ответ от Hugging Face. Статус: {response.status_code}") # <-- Проверка 3
+                                
                                 if response.status_code == 200:
-                                    # Конвертируем картинку в Base64
                                     base64_image = base64.b64encode(response.content).decode('utf-8')
                                     image_data_url = f"data:image/jpeg;base64,{base64_image}"
+                                    
+                                    print("DEBUG: Картинка успешно получена и конвертирована. Отправляю...")
                                     
                                     await manager.broadcast(
                                         room_id, username="AI_BOT", text=image_data_url, 
                                         avatar="https://i.ibb.co/4pSbxsh/user-avatar.png", to_user=username
                                     )
                                 else:
-                                    error_msg = "Нейросеть просыпается, повтори через 30 сек." if response.status_code == 503 else "❌ Ошибка генерации."
+                                    # Теперь бот скажет точный код ошибки в чат
+                                    error_msg = f"❌ Ошибка API: {response.status_code}"
+                                    if response.status_code == 503:
+                                        error_msg = "⌛ Нейросеть просыпается, повтори через 30 сек."
+                                    
+                                    print(f"DEBUG: Ошибка генерации. Код: {response.status_code}, Тест: {response.text[:100]}")
                                     await manager.broadcast(room_id, username="AI_BOT", text=error_msg, to_user=username)
                         except Exception as e:
+                            print(f"DEBUG: Исключение при запросе: {str(e)}")
                             await manager.broadcast(room_id, username="AI_BOT", text=f"⚠️ Ошибка API: {str(e)[:30]}", to_user=username)
                         
-                        continue # ВАЖНО: прерываем, чтобы не идти в Groq
+                        continue 
+
 
                     # --- 2. ЛОГИКА ТЕКСТОВОЙ ПАМЯТИ (GROQ) ---
                     # (Весь остальной код с Groq идет ниже...)
