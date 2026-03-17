@@ -545,7 +545,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         if not prompt: prompt = "beautiful landscape"
 
                         # ТВОЙ ТОКЕН И URL МОДЕЛИ
-                        HF_TOKEN = "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" 
+                        HF_TOKEN = os.environ.get("HF_TOKEN") 
                         API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
                         
                         try:
