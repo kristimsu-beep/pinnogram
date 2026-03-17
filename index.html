@@ -890,24 +890,32 @@
                 if (!parts[1]) return; 
 
                 // 1. Извлекаем префикс ответа (REPLY:ID)
+                // --- 1. Извлекаем префикс ответа (REPLY:ID) ---
                 let replyId = null;
                 let rawContent = parts[1] || "";
-                if (rawContent.startsWith("REPLY:")) {
-                    const rParts = rawContent.split("|", 2);
-                    replyId = rParts[0].replace("REPLY:", "");
-                    rawContent = rParts[1] || ""; // Оставляем остаток после REPLY
+                
+                // Проверяем наличие REPLY через поиск строки, так как палок внутри parts[1] нет
+                if (rawContent.includes("REPLY:")) {
+                    const matchReply = rawContent.match(/REPLY:(\d+)/);
+                    if (matchReply) {
+                        replyId = matchReply[1];
+                        // Удаляем REPLY:ID| из текста
+                        rawContent = rawContent.replace(/REPLY:\d+\|?/, "");
+                    }
                 }
 
                 const avatarFromSrv = parts[2] || "";
                 const isRead = parts[3] || "0";
                 
-                // 2. Убираем PRIVATE префикс для парсинга
+                // --- 2. Убираем PRIVATE префикс ---
                 const isPrivate = rawContent.includes("PRIVATE:");
-                const displayContent = rawContent.replace(/^PRIVATE:.*?:/, "");
+                // Чистим PRIVATE:имя: из отображаемого текста
+                const displayContent = rawContent.replace(/PRIVATE:.*?:/, "");
 
-                // 3. Достаем время
+                // --- 3. Достаем время и всё остальное как раньше ---
                 const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
                 const time = timeMatch ? timeMatch[1] : "--:--";
+
                 
                 // 4. ГЛАВНЫЙ ФИКС: Убираем время из строки, чтобы осталось только "Имя: Текст"
                 const cleanLine = displayContent.replace(/^\[\d{2}:\d{2}\]\s*/, "");
@@ -998,10 +1006,6 @@
                 } else {
                     // 1. ОЧИСТКА ТЕКСТА
                     let cleanDisplay = text;
-                    if (cleanDisplay.includes("REPLY:")) {
-                        const tParts = cleanDisplay.split("|");
-                        cleanDisplay = tParts[tParts.length - 1];
-                    }
 
                     const lowerT = cleanDisplay.toLowerCase();
                     const isLink = cleanDisplay.trim().startsWith("http");
