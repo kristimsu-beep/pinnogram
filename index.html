@@ -884,48 +884,49 @@
                 div.textContent = raw.split("SYSTEM: ")[1];
             } else {
                 const parts = raw.split("|");
-                const idPart = parts[0] || "ID:0";
-                const msgId = idPart.replace("ID:", "");
+                // parts[0] - это ID:123
+                const msgId = (parts[0] || "ID:0").replace("ID:", "");
                 
                 if (!parts[1]) return; 
 
-                // 1. ИЗВЛЕКАЕМ ID ОТВЕТА (REPLY:ID)
+                // --- 1. ИЗВЛЕКАЕМ ID ОТВЕТА (REPLY:ID) ---
                 let replyId = null;
                 let rawContent = parts[1] || "";
                 
-                // Ищем REPLY:цифры и ПАЛКУ после них. Вырезаем только это.
-                const matchReply = rawContent.match(/REPLY:(\d+)\|/); 
+                // Ищем REPLY:цифры. Это может быть в начале или середине.
+                const matchReply = rawContent.match(/REPLY:(\d+)/);
                 if (matchReply) {
                     replyId = matchReply[1];
-                    // Удаляем REPLY:1| из начала строки, чтобы не портить текст
-                    rawContent = rawContent.replace(/^REPLY:\d+\|/, ""); 
+                    // УДАЛЯЕМ ВСЁ: и REPLY:1 и вертикальную черту после него
+                    // Используем более жадную регулярку, чтобы очистить текст
+                    rawContent = rawContent.replace(/REPLY:\d+\|?/, "").trim();
                 }
 
                 const avatarFromSrv = parts[2] || "";
                 const isRead = parts[3] || "0";
                 
-                // 2. ЧИСТИМ ПРИВАТ И ВРЕМЯ
-                const isPrivate = rawContent.includes("PRIVATE:");
-                // Убираем PRIVATE:username:
+                // --- 2. ЧИСТИМ ПРИВАТ И ВРЕМЯ ---
+                // Сначала убираем PRIVATE:username:
                 let cleanLine = rawContent.replace(/PRIVATE:.*?:/, "").trim();
                 
+                // Ищем время [HH:MM]
                 const timeMatch = cleanLine.match(/\[(\d{2}:\d{2})\]/);
                 const time = timeMatch ? timeMatch[1] : "--:--";
                 
-                // Убираем [HH:MM] строго из начала
-                cleanLine = cleanLine.replace(/^\[\d{2}:\d{2}\]\s*/, "");
+                // Убираем время из строки
+                cleanLine = cleanLine.replace(/\[\d{2}:\d{2}\]\s*/, "").trim();
 
-                // 3. РАЗДЕЛЯЕМ ИМЯ И ТЕКСТ (ФИКС "System")
+                // --- 3. РАЗДЕЛЯЕМ ИМЯ И ТЕКСТ (ФИКС "REPLY:1" в бабле) ---
                 let sender = "System";
                 let text = cleanLine;
 
-                // Ищем ПЕРВОЕ двоеточие. 
+                // Ищем ПЕРВОЕ двоеточие, которое отделяет имя от текста
                 const splitIdx = cleanLine.indexOf(":"); 
                 if (splitIdx !== -1) {
                     sender = cleanLine.substring(0, splitIdx).trim();
-                    // Берем ВСЁ, что после первого двоеточия — это и есть твой ответ
                     text = cleanLine.substring(splitIdx + 1).trim();
                 }
+
 
 
                 // Проверка счетчика для фоновых чатов
