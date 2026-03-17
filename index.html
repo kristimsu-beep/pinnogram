@@ -894,25 +894,24 @@
                 let replyId = null;
                 let rawContent = parts[1] || "";
                 
-                // Проверяем наличие REPLY через поиск строки, так как палок внутри parts[1] нет
-                if (rawContent.includes("REPLY:")) {
-                    const matchReply = rawContent.match(/REPLY:(\d+)/);
-                    if (matchReply) {
-                        replyId = matchReply[1];
-                        // Удаляем REPLY:ID| из текста
-                        rawContent = rawContent.replace(/REPLY:\d+\|?/, "");
-                    }
+                // Ищем REPLY:цифры
+                const matchReply = rawContent.match(/REPLY:(\d+)/);
+                if (matchReply) {
+                    replyId = matchReply[1];
+                    // Удаляем техническую метку REPLY:1| из строки, где бы она ни была
+                    rawContent = rawContent.replace(/REPLY:\d+\|?/, "");
                 }
 
                 const avatarFromSrv = parts[2] || "";
                 const isRead = parts[3] || "0";
                 
                 // --- 2. Убираем PRIVATE префикс ---
+                // Важно: Сначала сохраняем флаг, потом чистим строку
                 const isPrivate = rawContent.includes("PRIVATE:");
-                // Чистим PRIVATE:имя: из отображаемого текста
-                const displayContent = rawContent.replace(/PRIVATE:.*?:/, "");
+                // Удаляем PRIVATE:имя:
+                const displayContent = rawContent.replace(/PRIVATE:.*?:/, "").trim();
 
-                // --- 3. Достаем время и всё остальное как раньше ---
+                // --- 3. Достаем время ---
                 const timeMatch = displayContent.match(/\[(\d{2}:\d{2})\]/);
                 const time = timeMatch ? timeMatch[1] : "--:--";
 
@@ -976,7 +975,20 @@
                 if (replyId && replyId !== "null") {
                     const quote = document.createElement('div');
                     quote.className = 'reply-quote';
-                    quote.innerHTML = `<span style="color:var(--accent); font-weight:bold; font-size:10px;">Ответ на #${replyId}</span>`;
+                    
+                    // Пытаемся найти текст сообщения, на которое отвечаем
+                    const targetMsg = document.getElementById(`msg-${replyId}`);
+                    let quotedText = "Сообщение...";
+                    if (targetMsg) {
+                        const textNode = targetMsg.querySelector('.msg-text');
+                        if (textNode) quotedText = textNode.textContent.substring(0, 30) + "...";
+                    }
+                
+                    quote.innerHTML = `
+                        <div style="color:var(--accent); font-weight:bold; font-size:10px;">Ответ на #${replyId}</div>
+                        <div style="font-size:11px; opacity:0.6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${quotedText}</div>
+                    `;
+                    
                     quote.onclick = (e) => {
                         e.stopPropagation();
                         const target = document.getElementById(`msg-${replyId}`);
@@ -984,6 +996,7 @@
                     };
                     msgBubble.appendChild(quote);
                 }
+
 
                 if (sender !== myName) {
                     const nSpan = document.createElement('span');
