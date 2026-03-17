@@ -569,33 +569,39 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                 print(f"DEBUG: Ответ от Hugging Face. Статус: {response.status_code}") # <-- Проверка 3
                                 
                                 if response.status_code == 200:
-                                    base64_image = base64.b64encode(response.content).decode('utf-8')
+                                    img_content = response.content
+                                    IMGBB_API_KEY = "140359baf01acef6aa27e35c55b32f99" 
                                     
-                                    # 1. Создаем готовую HTML-строку
-                                    img_html = f'<img src="data:image/png;base64,{base64_image}" style="max-width:100%; border-radius:10px; margin-top:10px;">'
-                                    
-                                    print("DEBUG: Картинка успешно получена. Отправляю HTML-тег...")
-                                    
-                                    # 2. ВАЖНО: передаем именно img_html в параметр text
-                                    await manager.broadcast(
-                                        room_id, 
-                                        username="AI_BOT", 
-                                        text=img_html,  # <-- ИСПРАВЛЕНО ТУТ
-                                        avatar="https://i.ibb.co/4pSbxsh/user-avatar.png", 
-                                        to_user=username
-                                    )
+                                    try:
+                                        async with httpx.AsyncClient() as client:
+                                            # ИСПРАВЛЕНО: добавлен путь /1/upload
+                                            res = await client.post(
+                                                "https://api.imgbb.com/1/upload", 
+                                                params={"key": IMGBB_API_KEY},
+                                                files={"image": ("ai_gen.png", img_content)},
+                                                timeout=30.0
+                                            )
+                                            
+                                            if res.status_code == 200:
+                                                final_url = res.json()["data"]["url"]
+                                                print(f"DEBUG: Картинка в облаке: {final_url}")
+                                                
+                                                await manager.broadcast(
+                                                    room_id, 
+                                                    username="AI_BOT", 
+                                                    text=final_url, 
+                                                    avatar="https://i.ibb.co/4pSbxsh/user-avatar.png", 
+                                                    to_user=username
+                                                )
+                                            else:
+                                                # Если ImgBB ругнется, выведем причину в консоль
+                                                print(f"DEBUG: ImgBB Error: {res.text}")
+                                                await manager.broadcast(room_id, username="AI_BOT", text="❌ Ошибка ImgBB", to_user=username)
+                                    except Exception as e:
+                                        print(f"DEBUG: Ошибка загрузки: {e}")
+                                        await manager.broadcast(room_id, username="AI_BOT", text="⚠️ Ошибка сети", to_user=username)
 
-                                else:
-                                    # Теперь бот скажет точный код ошибки в чат
-                                    error_msg = f"❌ Ошибка API: {response.status_code}"
-                                    if response.status_code == 503:
-                                        error_msg = "⌛ Нейросеть просыпается, повтори через 30 сек."
-                                    
-                                    print(f"DEBUG: Ошибка генерации. Код: {response.status_code}, Тест: {response.text[:100]}")
-                                    await manager.broadcast(room_id, username="AI_BOT", text=error_msg, to_user=username)
-                        except Exception as e:
-                            print(f"DEBUG: Исключение при запросе: {str(e)}")
-                            await manager.broadcast(room_id, username="AI_BOT", text=f"⚠️ Ошибка API: {str(e)[:30]}", to_user=username)
+
                         
                         continue 
 
