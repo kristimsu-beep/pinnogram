@@ -905,8 +905,12 @@
                 const avatarFromSrv = parts[2] || "";
                 const isRead = parts[3] || "0";
                 
-                // --- 2. ЧИСТИМ ПРИВАТ И ВРЕМЯ ---
                 // Сначала убираем PRIVATE:username:
+                // --- 2. ЧИСТИМ ПРИВАТ И ВРЕМЯ ---
+                // КРИТИЧНО: Сначала создаем переменную isPrivate, чтобы код ниже не падал!
+                const isPrivate = rawContent.includes("PRIVATE:"); 
+                
+                // Теперь чистим PRIVATE:username:
                 let cleanLine = rawContent.replace(/PRIVATE:.*?:/, "").trim();
                 
                 // Ищем время [HH:MM]
@@ -916,7 +920,7 @@
                 // Убираем время из строки
                 cleanLine = cleanLine.replace(/\[\d{2}:\d{2}\]\s*/, "").trim();
 
-                // --- 3. РАЗДЕЛЯЕМ ИМЯ И ТЕКСТ (ФИКС "REPLY:1" в бабле) ---
+                // --- 3. РАЗДЕЛЯЕМ ИМЯ И ТЕКСТ ---
                 let sender = "System";
                 let text = cleanLine;
 
@@ -927,9 +931,7 @@
                     text = cleanLine.substring(splitIdx + 1).trim();
                 }
 
-
-
-                // Проверка счетчика для фоновых чатов
+                // Проверка счетчика для фоновых чатов (ТЕПЕРЬ РАБОТАЕТ)
                 if (isPrivate && sender !== myName && sender !== currentPartner) {
                     unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
                     if (typeof saveUnread === "function") { saveUnread(); updateUnreadUI(); }
@@ -937,6 +939,7 @@
                     if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
                     return; 
                 }
+
 
                 // Фильтр текущего чата
                 if (currentPartner) {
