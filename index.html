@@ -893,43 +893,42 @@
                 let replyId = null;
                 let rawContent = parts[1] || "";
                 
-                // Ищем REPLY:цифры. Это может быть в начале или середине.
-                const matchReply = rawContent.match(/REPLY:(\d+)/);
+                // Ищем REPLY:цифры строго в начале строки
+                const matchReply = rawContent.match(/^REPLY:(\d+)/);
                 if (matchReply) {
                     replyId = matchReply[1];
-                    // УДАЛЯЕМ ВСЁ: и REPLY:1 и вертикальную черту после него
-                    // Используем более жадную регулярку, чтобы очистить текст
-                    rawContent = rawContent.replace(/REPLY:\d+\|?/, "").trim();
+                    // УДАЛЯЕМ ТОЛЬКО "REPLY:1|" (символ ^ гарантирует, что мы не трогаем текст дальше)
+                    rawContent = rawContent.replace(/^REPLY:\d+\|/, ""); 
                 }
 
                 const avatarFromSrv = parts[2] || "";
                 const isRead = parts[3] || "0";
                 
-                // Сначала убираем PRIVATE:username:
                 // --- 2. ЧИСТИМ ПРИВАТ И ВРЕМЯ ---
-                // КРИТИЧНО: Сначала создаем переменную isPrivate, чтобы код ниже не падал!
                 const isPrivate = rawContent.includes("PRIVATE:"); 
                 
-                // Теперь чистим PRIVATE:username:
+                // Убираем PRIVATE:username:
                 let cleanLine = rawContent.replace(/PRIVATE:.*?:/, "").trim();
                 
-                // Ищем время [HH:MM]
+                // Достаем время [HH:MM]
                 const timeMatch = cleanLine.match(/\[(\d{2}:\d{2})\]/);
                 const time = timeMatch ? timeMatch[1] : "--:--";
                 
-                // Убираем время из строки
-                cleanLine = cleanLine.replace(/\[\d{2}:\d{2}\]\s*/, "").trim();
+                // Убираем время из начала, оставляя только "Имя: Текст"
+                cleanLine = cleanLine.replace(/^\[\d{2}:\d{2}\]\s*/, "");
 
                 // --- 3. РАЗДЕЛЯЕМ ИМЯ И ТЕКСТ ---
                 let sender = "System";
                 let text = cleanLine;
 
-                // Ищем ПЕРВОЕ двоеточие, которое отделяет имя от текста
+                // Ищем ПЕРВОЕ двоеточие, которое отделяет имя от сообщения
                 const splitIdx = cleanLine.indexOf(":"); 
                 if (splitIdx !== -1) {
                     sender = cleanLine.substring(0, splitIdx).trim();
+                    // Теперь переменная text получит твой чистый ответ ("вау")
                     text = cleanLine.substring(splitIdx + 1).trim();
                 }
+
 
                 // Проверка счетчика для фоновых чатов (ТЕПЕРЬ РАБОТАЕТ)
                 if (isPrivate && sender !== myName && sender !== currentPartner) {
