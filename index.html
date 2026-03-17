@@ -883,87 +883,134 @@
                 div.style = "align-self: center; font-size: 11px; opacity: 0.5; margin: 10px 0; text-align: center; width: 100%;";
                 div.textContent = raw.split("SYSTEM: ")[1];
             } else {
-                // --- 1. УМНЫЙ РАЗБОР ПАКЕТА (ФИКС ЛИШНИХ ПАЛОК) ---
                 const parts = raw.split("|");
+                // parts[0] - это ID:123
                 const msgId = (parts[0] || "ID:0").replace("ID:", "");
                 
-                // Берем всё, что между ID и Аватаркой, и склеиваем обратно
-                // Это вернет твой текст, даже если внутри есть лишние символы |
-                const isRead = parts[parts.length - 1] || "0";
-                const avatarFromSrv = parts[parts.length - 2] || "";
-                let rawContent = parts.slice(1, parts.length - 2).join("|");
+                if (!parts[1]) return; 
 
-                if (!rawContent) return; 
-
-                // --- 2. ИЗВЛЕКАЕМ ID ОТВЕТА (REPLY:ID) ---
+                // --- 1. ИЗВЛЕКАЕМ ID ОТВЕТА (REPLY:ID) ---
                 let replyId = null;
+                let rawContent = parts[1] || "";
+                
+                // Ищем REPLY:цифры. Это может быть в начале или середине.
                 const matchReply = rawContent.match(/REPLY:(\d+)/);
                 if (matchReply) {
                     replyId = matchReply[1];
-                    // Удаляем техническую метку REPLY:1| из контента
-                    rawContent = rawContent.replace(/REPLY:\d+\|?/, "");
+                    // УДАЛЯЕМ ВСЁ: и REPLY:1 и вертикальную черту после него
+                    // Используем более жадную регулярку, чтобы очистить текст
+                    rawContent = rawContent.replace(/REPLY:\d+\|?/, "").trim();
                 }
 
-                // --- 3. ЧИСТИМ ПРИВАТ И ВРЕМЯ ---
+                const avatarFromSrv = parts[2] || "";
+                const isRead = parts[3] || "0";
+                
+                // Сначала убираем PRIVATE:username:
+                // --- 2. ЧИСТИМ ПРИВАТ И ВРЕМЯ ---
+                // КРИТИЧНО: Сначала создаем переменную isPrivate, чтобы код ниже не падал!
                 const isPrivate = rawContent.includes("PRIVATE:"); 
+                
+                // Теперь чистим PRIVATE:username:
                 let cleanLine = rawContent.replace(/PRIVATE:.*?:/, "").trim();
                 
+                // Ищем время [HH:MM]
                 const timeMatch = cleanLine.match(/\[(\d{2}:\d{2})\]/);
                 const time = timeMatch ? timeMatch[1] : "--:--";
+                
+                // Убираем время из строки
                 cleanLine = cleanLine.replace(/\[\d{2}:\d{2}\]\s*/, "").trim();
 
-                // --- 4. РАЗДЕЛЯЕМ ИМЯ И ТЕКСТ ---
-                let sender = "System", text = cleanLine;
+                // --- 3. РАЗДЕЛЯЕМ ИМЯ И ТЕКСТ ---
+                let sender = "System";
+                let text = cleanLine;
+
+                // Ищем ПЕРВОЕ двоеточие, которое отделяет имя от текста
                 const splitIdx = cleanLine.indexOf(":"); 
                 if (splitIdx !== -1) {
                     sender = cleanLine.substring(0, splitIdx).trim();
                     text = cleanLine.substring(splitIdx + 1).trim();
                 }
 
-                // --- 5. ФИЛЬТРАЦИЯ ---
+                // Проверка счетчика для фоновых чатов (ТЕПЕРЬ РАБОТАЕТ)
                 if (isPrivate && sender !== myName && sender !== currentPartner) {
                     unreadCounts[sender] = (unreadCounts[sender] || 0) + 1;
                     if (typeof saveUnread === "function") { saveUnread(); updateUnreadUI(); }
+                    const audio = document.getElementById("notifSound");
+                    if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
                     return; 
                 }
-                if (currentPartner) {
-                    if (isPrivate && !rawContent.includes(`PRIVATE:${currentPartner}:`) && !rawContent.includes(`PRIVATE:${myName}:`)) return;
-                } else if (isPrivate) return;
 
-                // --- 6. ОТРИСОВКА ---
+
+                // Фильтр текущего чата
+                if (currentPartner) {
+                    const c = rawContent || ""; // ИСПОЛЬЗУЕМ rawContent
+                    if (!c.includes(`PRIVATE:${currentPartner}:`) && !c.includes(`PRIVATE:${myName}:`)) return;
+
+                } else if (isPrivate) {
+                    return;
+                }
+
                 div.id = `msg-${msgId}`;
                 div.className = 'msg-row';
                 div.style.flexDirection = (sender === myName) ? 'row-reverse' : 'row';
 
+                // Аватарка
                 const avImg = document.createElement('img');
-                avImg.src = avatarFromSrv.length > 15 ? avatarFromSrv : "https://i.ibb.co/4pSbxsh/user-avatar.png";
-                avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0;";
+                avImg.src = avatarFromSrv && avatarFromSrv.length > 15 ? avatarFromSrv : "https://i.ibb.co/4pSbxsh/user-avatar.png";
+                avImg.style = "width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);";
                 avImg.onerror = function() { this.src = "https://i.ibb.co/4pSbxsh/user-avatar.png"; };
                 div.appendChild(avImg);
 
                 const msgBubble = document.createElement('div');
                 msgBubble.className = (sender === myName) ? 'msg msg-right' : 'msg msg-left';
 
-                // Цитата ответа (Улучшенная)
+                // Меню
+                div.oncontextmenu = (e) => { if(typeof openMenu === "function") openMenu(e, msgId, text, sender); };
+                let pressTimer;
+                div.ontouchstart = (e) => {
+                    pressTimer = setTimeout(() => {
+                        const touch = e.touches[0];
+                        if(typeof openMenu === "function") openMenu({ preventDefault: () => e.preventDefault(), clientX: touch.clientX, clientY: touch.clientY }, msgId, text, sender);
+                    }, 500);
+                };
+                div.ontouchend = () => clearTimeout(pressTimer);
+
+                // Цитата ответа
+                                // Цитата ответа (Улучшенная)
                 if (replyId && replyId !== "null") {
                     const quote = document.createElement('div');
                     quote.className = 'reply-quote';
+                    
                     const targetMsg = document.getElementById(`msg-${replyId}`);
                     let quotedText = "Сообщение...";
                     if (targetMsg) {
-                        const tNode = targetMsg.querySelector('.msg-text');
-                        if (tNode) quotedText = tNode.textContent;
+                        const textNode = targetMsg.querySelector('.msg-text');
+                        // Берем текст целиком (без троеточия)
+                        if (textNode) quotedText = textNode.textContent;
                     }
-                    quote.innerHTML = `<div style="font-size:11px; opacity:0.6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${quotedText}</div>`;
-                    quote.onclick = () => document.getElementById(`msg-${replyId}`)?.scrollIntoView({behavior:'smooth', block:'center'});
+                
+                    // Убрали надпись "Ответ на №1", оставили только текст оригинала
+                    quote.innerHTML = `
+                        <div style="font-size:11px; opacity:0.6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                            ${quotedText}
+                        </div>
+                    `;
+                    
+                    quote.onclick = (e) => {
+                        e.stopPropagation();
+                        const target = document.getElementById(`msg-${replyId}`);
+                        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    };
                     msgBubble.appendChild(quote);
                 }
 
-                if (sender !== myName) {
-                    const nS = document.createElement('span'); nS.className="msg-sender"; nS.textContent=sender;
-                    msgBubble.appendChild(nS);
-                }
 
+
+                if (sender !== myName) {
+                    const nSpan = document.createElement('span');
+                    nSpan.className = "msg-sender"; nSpan.textContent = sender;
+                    msgBubble.appendChild(nSpan);
+                }
 
                 // Контент (Опрос/Голос/Видео/Текст)
                 if (text.startsWith("POLL_ID:")) {
@@ -1895,4 +1942,3 @@ function copyToClipboard(text) {
 
 </body>
 </html>
-
