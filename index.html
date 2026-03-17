@@ -1006,11 +1006,13 @@
                     const lowerT = cleanDisplay.toLowerCase();
                     const isLink = cleanDisplay.trim().startsWith("http");
                     
-                    // УМНЫЙ ФИЛЬТР КАРТИНОК (Обычные + ИИ)
+                    // УМНЫЙ ФИЛЬТР КАРТИНОК (Обычные + ИИ + ImgBB)
                     const isImg = isLink && (
                         [".jpg", ".png", ".gif", ".webp", ".jpeg"].some(ext => lowerT.includes(ext)) || 
-                        lowerT.includes("pollinations.ai")
+                        lowerT.includes("pollinations.ai") ||
+                        lowerT.includes("ibb.co") // <-- ДОБАВЛЕНО: Распознаем ссылки ImgBB
                     );
+
                     const isVid = isLink && [".mp4", ".webm", ".mov"].some(ext => lowerT.includes(ext));
 
                     if (isImg) {
