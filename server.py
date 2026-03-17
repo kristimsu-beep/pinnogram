@@ -566,16 +566,15 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                     timeout=60.0 
                                 )
                                 
-                                print(f"DEBUG: Ответ от Hugging Face. Статус: {response.status_code}") # <-- Проверка 3
+                                print(f"DEBUG: Ответ от Hugging Face. Статус: {response.status_code}")
                                 
                                 if response.status_code == 200:
                                     img_content = response.content
                                     IMGBB_API_KEY = "140359baf01acef6aa27e35c55b32f99" 
                                     
                                     try:
-                                        async with httpx.AsyncClient() as client:
-                                            # ИСПРАВЛЕНО: добавлен путь /1/upload
-                                            res = await client.post(
+                                        async with httpx.AsyncClient() as client_bb:
+                                            res = await client_bb.post(
                                                 "https://api.imgbb.com/1/upload", 
                                                 params={"key": IMGBB_API_KEY},
                                                 files={"image": ("ai_gen.png", img_content)},
@@ -587,23 +586,27 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                                 print(f"DEBUG: Картинка в облаке: {final_url}")
                                                 
                                                 await manager.broadcast(
-                                                    room_id, 
-                                                    username="AI_BOT", 
-                                                    text=final_url, 
-                                                    avatar="https://i.ibb.co/4pSbxsh/user-avatar.png", 
-                                                    to_user=username
+                                                    room_id, username="AI_BOT", text=final_url, 
+                                                    avatar="https://i.ibb.co/4pSbxsh/user-avatar.png", to_user=username
                                                 )
                                             else:
-                                                # Если ImgBB ругнется, выведем причину в консоль
                                                 print(f"DEBUG: ImgBB Error: {res.text}")
                                                 await manager.broadcast(room_id, username="AI_BOT", text="❌ Ошибка ImgBB", to_user=username)
-                                    except Exception as e:
-                                        print(f"DEBUG: Ошибка загрузки: {e}")
+                                    except Exception as e_bb:
+                                        print(f"DEBUG: Ошибка загрузки: {e_bb}")
                                         await manager.broadcast(room_id, username="AI_BOT", text="⚠️ Ошибка сети", to_user=username)
+                                else:
+                                    # Обработка ошибки 503 или 401 от Hugging Face
+                                    err_txt = "⌛ Нейросеть спит, подожди 30 сек." if response.status_code == 503 else f"❌ Ошибка API: {response.status_code}"
+                                    await manager.broadcast(room_id, username="AI_BOT", text=err_txt, to_user=username)
 
-
+                        except Exception as e:
+                            # ВОТ ЭТОГО БЛОКА У ТЕБЯ НЕ ХВАТАЛО
+                            print(f"DEBUG: Критическая ошибка HF: {e}")
+                            await manager.broadcast(room_id, username="AI_BOT", text=f"⚠️ Ошибка системы: {str(e)[:30]}", to_user=username)
                         
-                        continue 
+                        continue
+
 
 
                     # (Весь остальной код с Groq идет ниже...)
