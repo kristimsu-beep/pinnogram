@@ -11,6 +11,7 @@ import httpx
 from pywebpush import webpush, WebPushException
 import json
 import pytz
+import base64
 
 app = FastAPI()
 # Храним последние 10 сообщений для каждого пользователя
@@ -533,30 +534,49 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                 if target_user == "AI_BOT":
                     await websocket.send_text("TYPING:AI_BOT")
                     
-                    # --- 1. ЛОГИКА ГЕНЕРАЦИИ КАРТИНОК ---
+                    # --- 1. ОБНОВЛЕННАЯ ЛОГИКА ГЕНЕРАЦИИ (HUGGING FACE) ---
                     trigger_words = ["нарисуй", "draw", "изобрази", "картинка", "image"]
+                    
                     if any(word in clean_text.lower() for word in trigger_words):
-                        # Очищаем запрос от лишних слов, оставляем только описание (промпт)
                         prompt = clean_text.lower()
                         for w in trigger_words: prompt = prompt.replace(w, "")
                         prompt = prompt.replace("ai_bot", "").strip()
                         
                         if not prompt: prompt = "beautiful landscape"
+
+                        # ТВОЙ ТОКЕН И URL МОДЕЛИ
+                        HF_TOKEN = "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" 
+                        API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell"
                         
-                        # Кодируем для URL (заменяем пробелы на %20) и добавляем случайный seed для уникальности
-                        safe_prompt = prompt.replace(" ", "%20")
-                        random_seed = uuid.uuid4().int % 10000
-                        image_url = f"https://image.pollinations.ai/prompt/{safe_prompt}?width=1024&height=1024&seed={random_seed}&nologo=true"
+                        try:
+                            async with httpx.AsyncClient() as client:
+                                response = await client.post(
+                                    API_URL,
+                                    headers={"Authorization": f"Bearer {HF_TOKEN}"},
+                                    json={"inputs": prompt},
+                                    timeout=60.0 
+                                )
+                                
+                                if response.status_code == 200:
+                                    # Конвертируем картинку в Base64
+                                    base64_image = base64.b64encode(response.content).decode('utf-8')
+                                    image_data_url = f"data:image/jpeg;base64,{base64_image}"
+                                    
+                                    await manager.broadcast(
+                                        room_id, username="AI_BOT", text=image_data_url, 
+                                        avatar="https://i.ibb.co/4pSbxsh/user-avatar.png", to_user=username
+                                    )
+                                else:
+                                    error_msg = "Нейросеть просыпается, повтори через 30 сек." if response.status_code == 503 else "❌ Ошибка генерации."
+                                    await manager.broadcast(room_id, username="AI_BOT", text=error_msg, to_user=username)
+                        except Exception as e:
+                            await manager.broadcast(room_id, username="AI_BOT", text=f"⚠️ Ошибка API: {str(e)[:30]}", to_user=username)
                         
-                        # Шлем ссылку. Твой фронтенд уже умеет превращать ссылки на картинки в изображения!
-                        await manager.broadcast(
-                            room_id, 
-                            username="AI_BOT", 
-                            text=image_url, 
-                            avatar="https://i.ibb.co/4pSbxsh/user-avatar.png", 
-                            to_user=username
-                        )
-                        continue # Выходим, чтобы не тратить запрос к Groq
+                        continue # ВАЖНО: прерываем, чтобы не идти в Groq
+
+                    # --- 2. ЛОГИКА ТЕКСТОВОЙ ПАМЯТИ (GROQ) ---
+                    # (Весь остальной код с Groq идет ниже...)
+
 
                     # --- 2. ЛОГИКА ТЕКСТОВОЙ ПАМЯТИ (GROQ) ---
                     groq_key = os.environ.get("GROQ_KEY")
