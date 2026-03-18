@@ -105,6 +105,17 @@ async def startup():
                 PRIMARY KEY(owner, contact_name)
             )
         """)
+        
+        # В функцию startup() в server.py
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS reactions (
+                msg_id INTEGER,
+                username TEXT,
+                emoji TEXT,
+                PRIMARY KEY(msg_id, username)
+            )
+        """)
+
 
 
         # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
@@ -437,6 +448,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                 except: pass
 
             # --- ТЕПЕРЬ ПРОВЕРЯЕМ КОМАНДЫ ПО ЧИСТОМУ ТЕКСТУ (clean_text) ---
+            
 
             
             # 1. ЗАПРОС ИСТОРИИ (ИСПРАВЛЕНО)
@@ -534,6 +546,34 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         await conn.send_text(f"POLL_UPDATE:{p_id}")
                 except: pass
                 continue
+                
+            elif clean_text.startswith("ADD_REACTION:"):
+                try:
+                    # Формат: msg_id|emoji
+                    parts = clean_text.replace("ADD_REACTION:", "").split("|")
+                    m_id = int(parts[0])
+                    emoji = parts[1]
+                    
+                    async with aiosqlite.connect(DB_PATH) as db:
+                        # Записываем реакцию (PRIMARY KEY msg_id+username заменит старую, если была)
+                        await db.execute("INSERT OR REPLACE INTO reactions VALUES (?, ?, ?)", 
+                                        (m_id, username, emoji))
+                        await db.commit()
+                        
+                        # Считаем статистику для этого сообщения: сколько каких эмодзи
+                        async with db.execute("SELECT emoji, COUNT(*) FROM reactions WHERE msg_id = ? GROUP BY emoji", (m_id,)) as cur:
+                            rows = await cur.fetchall()
+                            # Склеиваем результат: 👍:2,🔥:1
+                            reaction_data = ",".join([f"{r[0]}:{r[1]}" for r in rows])
+                    
+                    # Рассылаем всем сигнал об обновлении реакций у конкретного сообщения
+                    for conn in manager.rooms.get(room_id, {}).values():
+                        if conn.client_state == WebSocketState.CONNECTED:
+                            await conn.send_text(f"REACTION_UPDATE:{m_id}|{reaction_data}")
+                except Exception as e:
+                    print(f"Reaction Error: {e}")
+                continue
+
 
             # 7. ОБЫЧНОЕ СООБЩЕНИЕ И ИИ
             else:
