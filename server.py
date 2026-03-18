@@ -452,27 +452,41 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 
             
             # 1. ЗАПРОС ИСТОРИИ (ИСПРАВЛЕНО)
+            # 1. ЗАПРОС ИСТОРИИ (С ПОДДЕРЖКОЙ ОТВЕТОВ И РЕАКЦИЙ)
             if clean_text.startswith("GET_HISTORY:"):
                 target = clean_text.replace("GET_HISTORY:", "")
                 async with aiosqlite.connect(DB_PATH) as db:
+                    # Определяем, какую историю тянуть (общую или личку)
                     if target in ["null", "general", "None", "undefined"]:
-                        # ДОБАВИЛИ ЗАПЯТУЮ И reply_to_id
                         sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read, reply_to_id FROM messages WHERE room_id = ? AND to_user IS NULL ORDER BY id ASC LIMIT 100"
                         params = (room_id,)
                     else:
-                        # ДОБАВИЛИ ЗАПЯТУЮ И reply_to_id
                         sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read, reply_to_id FROM messages WHERE room_id = ? AND ((username = ? AND to_user = ?) OR (username = ? AND to_user = ?)) ORDER BY id ASC LIMIT 100"
                         params = (room_id, username, target, target, username)
                     
                     async with db.execute(sql, params) as cursor:
                         history = await cursor.fetchall()
-                        # ДОБАВИЛИ r_id В РАСПАКОВКУ
+                        
                         for m_id, u, txt, tm, av, to_u, is_r, r_id in history:
+                            # --- ШАГ А: ПОДТЯГИВАЕМ РЕАКЦИИ ДЛЯ ЭТОГО СООБЩЕНИЯ ---
+                            react_pfx = ""
+                            async with db.execute("SELECT emoji, COUNT(*) FROM reactions WHERE msg_id = ? GROUP BY emoji", (m_id,)) as r_cur:
+                                r_rows = await r_cur.fetchall()
+                                if r_rows:
+                                    # Склеиваем в формат: 👍:2,🔥:1
+                                    r_data = ",".join([f"{row[0]}:{row[1]}" for row in r_rows])
+                                    react_pfx = f"REACTION:{r_data}|"
+
+                            # --- ШАГ Б: ФОРМИРУЕМ ТЕХНИЧЕСКИЕ ПРЕФИКСЫ ---
                             pfx = f"PRIVATE:{to_u}:" if to_u else ""
-                            # Добавляем префикс ответа, если он есть, чтобы фронтенд нарисовал цитату
                             reply_pfx = f"REPLY:{r_id}|" if r_id else ""
-                            await websocket.send_text(f"ID:{m_id}|{reply_pfx}{pfx}[{tm}] {u}: {txt}|{av or ''}|{is_r}")
+                            
+                            # --- ШАГ В: ОТПРАВКА ПОЛНОГО ПАКЕТА ---
+                            # Формат: ID | РЕАКЦИИ | ОТВЕТ | ПРИВАТ | [ВРЕМЯ] ИМЯ: ТЕКСТ | АВАТАР | ПРОЧИТАНО
+                            full_packet = f"ID:{m_id}|{react_pfx}{reply_pfx}{pfx}[{tm}] {u}: {txt}|{av or ''}|{is_r}"
+                            await websocket.send_text(full_packet)
                 continue
+
 
                 
 
