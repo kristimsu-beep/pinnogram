@@ -98,6 +98,14 @@ async def startup():
                 PRIMARY KEY(poll_id, username)
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS contacts (
+                owner TEXT, 
+                contact_name TEXT,
+                PRIMARY KEY(owner, contact_name)
+            )
+        """)
+
 
         # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
         columns = [
@@ -168,6 +176,23 @@ async def get_poll(poll_id: int, username: str):
             "owner": poll[2]
         }
 
+@app.post("/add_contact")
+async def add_contact(data: dict):
+    me = data.get("me")
+    who = data.get("who")
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Добавляем обоим (чтобы контакт появился у обоих сразу)
+        await db.execute("INSERT OR IGNORE INTO contacts VALUES (?, ?)", (me, who))
+        await db.execute("INSERT OR IGNORE INTO contacts VALUES (?, ?)", (who, me))
+        await db.commit()
+    return {"status": "ok"}
+
+@app.get("/get_contacts/{username}")
+async def get_contacts(username: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT contact_name FROM contacts WHERE owner = ?", (username,)) as cur:
+            rows = await cur.fetchall()
+            return [r[0] for r in rows]
 
 # 1. Роут для регистрации и входа
 # 1. Роут для регистрации и входа
