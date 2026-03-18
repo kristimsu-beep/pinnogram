@@ -730,6 +730,17 @@
 
         ws.onmessage = async (event) => {
             const raw = event.data;
+
+            // --- ГЛОБАЛЬНЫЙ ФИЛЬТР ТЕХНИЧЕСКОГО МУСОРА ---
+            // Если в строке есть эти слова, но это НЕ сообщение (нет палок |), просто игнорируем.
+            const globalTrash = ["GET_ONLINE", "ONLINE_LIST", "UPDATE", "POLL_ID", "POLL_UPDATE"];
+            if (globalTrash.some(word => raw.includes(word)) && !raw.includes("|")) {
+                // Если это список онлайн, даем ему пройти дальше к своему обработчику
+                if (!raw.includes("ONLINE_LIST:")) return; 
+            }
+            
+            // ... дальше твой код админ-панели и прочее
+
             
             // --- ЛОГИКА ДЛЯ АДМИН-ПАНЕЛИ (DATA STREAM) ---
             const logContainer = document.getElementById("admin-log-stream");
