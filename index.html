@@ -777,7 +777,7 @@
                                 if (!name || name === myName || name === "System") return "";
                                 
                                 // Бот всегда "в сети", остальные — по факту из списка onlineNames
-                                const isOnline = onlineNames.includes(name) || name === "AI_BOT";
+                                const isOnline = onlineNames.includes(name) || name.toUpperCase() === "AI_BOT";
                                 const statusColor = isOnline ? "#00ff00" : "#555"; 
                                 
                                 // Ссылка на аватар (для бота и для людей)
@@ -884,32 +884,30 @@
             }
 
             // 3. ОТРИСОВКА СООБЩЕНИЙ
-            const div = document.createElement('div');
             if (raw.includes("SYSTEM:")) {
                 const sysText = raw.split("SYSTEM: ")[1] || "";
                 
-                // --- ГЛАВНЫЙ ФИКС: УБИРАЕМ МУСОР ---
-                // Если в системном сообщении есть эти слова — просто выходим и не создаем div
-                if (sysText.includes("GET_ONLINE") || sysText.includes("ONLINE_LIST") || sysText.includes("UPDATE")) return;
+                // --- ЖЕСТКИЙ ФИЛЬТР МУСОРА ---
+                const trash = ["GET_ONLINE", "ONLINE_LIST", "UPDATE", "POLL_ID", "ID:"];
+                if (trash.some(word => raw.includes(word))) return;
 
-                div.style = "align-self: center; font-size: 11px; opacity: 0.5; margin: 10px 0; text-align: center; width: 100%;";
-                div.textContent = sysText;
+                const divMsg = document.createElement('div');
+                divMsg.style = "align-self: center; font-size: 11px; opacity: 0.5; margin: 10px 0; text-align: center; width: 100%;";
+                divMsg.textContent = sysText;
                 
-                // Не забудь добавить его в чат, если это полезное сообщение (например, "Юзер зашел")
-                const chat = document.getElementById('chat');
-                if(chat) {
-                    chat.appendChild(div);
+                if (chat) {
+                    chat.appendChild(divMsg);
                     chat.scrollTop = chat.scrollHeight;
                 }
+                return; // Прерываем, чтобы не уйти в блок else
             } else {
                 // --- 1. УМНЫЙ РАЗБОР ПАКЕТА (РЕШАЕМ ПРОБЛЕМУ ТРОЕТОЧИЯ) ---
+                const div = document.createElement('div');
                 const parts = raw.split("|");
                 const msgId = (parts[0] || "ID:0").replace("ID:", "");
                 
-                if (parts.length < 3) return; // Защита от битых пакетов
+                if (parts.length < 3) return; 
 
-                // Берем всё, что между ID (начало) и Аватаркой (конец), и склеиваем обратно.
-                // Теперь палки внутри сообщения больше не ломают логику!
                 const isRead = parts[parts.length - 1] || "0";
                 const avatarFromSrv = parts[parts.length - 2] || "";
                 let rawContent = parts.slice(1, parts.length - 2).join("|");
@@ -919,7 +917,6 @@
                 const matchReply = rawContent.match(/REPLY:(\d+)/);
                 if (matchReply) {
                     replyId = matchReply[1];
-                    // Удаляем техническую метку аккуратно
                     rawContent = rawContent.replace(/REPLY:\d+\|?/, "").trim();
                 }
 
@@ -938,6 +935,7 @@
                     sender = cleanLine.substring(0, splitIdx).trim();
                     text = cleanLine.substring(splitIdx + 1).trim();
                 }
+
                 
                 // ТЕПЕРЬ ПЕРЕМЕННАЯ text ТОЧНО СОДЕРЖИТ ТВОЕ "вау"
 
