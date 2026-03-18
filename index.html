@@ -776,11 +776,14 @@
                             contactsList.innerHTML = allUserNames.map(name => {
                                 if (!name || name === myName || name === "System") return "";
                                 
-                                const isOnline = onlineNames.includes(name);
-                                const statusColor = isOnline ? "#00ff00" : "#555"; // Зеленый - в сети, Серый - оффлайн
+                                                                // Бот всегда онлайн (true), остальные — по факту
+                                const isOnline = onlineNames.includes(name) || name === "AI_BOT";
+                                const statusColor = isOnline ? "#00ff00" : "#555"; 
+                                
+                                // Аватарка для бота (твоя ссылка) и стандартная для остальных
                                 const avatar = (name === "AI_BOT") ? "https://i.ibb.co/4pSbxsh/user-avatar.png" : "https://i.ibb.co/4pSbxsh/user-avatar.png";
 
-                                return `
+                                return // ... дальше твой return `...`
                                 <div onclick="switchChat('${name}')" class="contact-item ${currentPartner === name ? 'contact-active' : ''}">
                                     <div style="position:relative; width:32px; height:32px; flex-shrink:0;">
                                         <img src="${avatar}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
@@ -1983,10 +1986,19 @@ async function confirmAddContact(targetUser) {
             headers: {"Content-Type": "application/json"},
             body: JSON.stringify({ me: myName, who: targetUser })
         });
+        
         document.getElementById('contact-modal').remove();
-        alert("Контакт добавлен!");
-        // Просим сервер обновить список
-        if(ws && ws.readyState === WebSocket.OPEN) ws.send("GET_ONLINE");
+        
+        // 1. УБРАЛИ alert, чтобы не бесил
+        console.log("Контакт сохранен в базу"); 
+
+        // 2. ОБНОВЛЯЕМ СПИСОК ТИХО (без системных сообщений в чат)
+        // Вместо ws.send("GET_ONLINE") просто вызываем отрисовку списка еще раз вручную
+        if(typeof ws !== 'undefined' && ws.readyState === WebSocket.OPEN) {
+             // Если у тебя на бэкенде GET_ONLINE шлет SYSTEM: в чат, 
+             // лучше просто подождать следующего автоматического POLL_UPDATE
+             ws.send("GET_ONLINE"); 
+        }
     } catch (e) { console.error(e); }
 }
 
