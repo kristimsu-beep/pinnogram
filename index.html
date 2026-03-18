@@ -1070,18 +1070,19 @@
                 const msgBubble = document.createElement('div');
                 msgBubble.className = (sender === myName) ? 'msg msg-right' : 'msg msg-left';
                 // --- ВОТ СЮДА ВСТАВЛЯЕМ ОТРИСОВКУ СОХРАНЕННЫХ РЕАКЦИЙ ---
-                const reactMatch = raw.match(/REACTION:(.*?)\|/);
-                if (reactMatch && reactMatch[1]) {
-                    const rData = reactMatch[1];
+                // --- ИСПРАВЛЕННЫЙ БЛОК ОТРИСОВКИ РЕАКЦИЙ ---
+                if (savedReactions) {
                     const rContainer = document.createElement('div');
                     rContainer.className = 'reactions-container';
-                    rContainer.innerHTML = rData.split(",").filter(r => r).map(r => {
+                    rContainer.innerHTML = savedReactions.split(",").filter(r => r).map(r => {
                         const [emoji, count] = r.split(":");
                         return `<div class="reaction-tag" onclick="sendReaction(${msgId}, '${emoji}')">${emoji} ${count}</div>`;
                     }).join("");
-                    // ВАЖНО: Добавляем ПОСЛЕ бабла сообщения
+                    
+                    // Ставим плашку СРАЗУ ПОСЛЕ пузыря сообщения
                     msgBubble.after(rContainer); 
                 }
+
 
                 // Меню
                 div.oncontextmenu = (e) => { if(typeof openMenu === "function") openMenu(e, msgId, text, sender); };
