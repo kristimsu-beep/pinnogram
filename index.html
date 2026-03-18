@@ -995,7 +995,14 @@
 
                 const isRead = parts[parts.length - 1] || "0";
                 const avatarFromSrv = parts[parts.length - 2] || "";
-                let rawContent = parts.slice(1, parts.length - 2).join("|");
+                let rawContent = parts.slice(1, parts.length - 2).join("|")
+                let savedReactions = "";
+                const reactMatch = rawContent.match(/REACTION:(.*?)\|/);
+                if (reactMatch) {
+                    savedReactions = reactMatch[1]; // Сохраняем данные для отрисовки позже
+                    // УДАЛЯЕМ префикс из текста, чтобы его не было в бабле!
+                    rawContent = rawContent.replace(/REACTION:.*?\|/, "");
+                };
 
                 // --- 2. ИЗВЛЕКАЕМ ID ОТВЕТА (REPLY:ID) ---
                 let replyId = null;
