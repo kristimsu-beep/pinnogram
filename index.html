@@ -1171,7 +1171,10 @@
 
                     if (isImg) {
                         const img = document.createElement('img');
-                        img.src = cleanDisplay;
+                        // 1. Устанавливаем CORS для работы анимации частиц
+                        img.crossOrigin = "anonymous"; 
+                        img.src = cleanDisplay; // Используем твою переменную с URL
+                        
                         img.className = "chat-img";
                         img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer; border:1px solid rgba(255,255,255,0.1);";
                         
@@ -1188,20 +1191,28 @@
                             aiLabel.textContent = "🎨 Сгенерировано Pinnogram AI";
                             msgBubble.appendChild(aiLabel);
                         }
-                    } else if (isVid) {
-                        const v = document.createElement('video');
-                        v.src = cleanDisplay; v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
-                        v.style = "max-width:100%; border-radius:12px; margin-top:5px;";
-                        msgBubble.appendChild(v);
+                    } else if (isVid) {                                 
+                        const vid = document.createElement('video');
+                        // 2. Устанавливаем CORS для видео
+                        vid.crossOrigin = "anonymous"; 
+                        vid.src = cleanDisplay; 
+                        
+                        // Настраиваем плеер
+                        vid.autoplay = true; 
+                        vid.loop = true; 
+                        vid.muted = true; 
+                        vid.playsInline = true; 
+                        vid.controls = true;
+                        vid.style = "max-width:100%; border-radius:12px; margin-top:5px;";
+                        
+                        msgBubble.appendChild(vid);
                     } else {
-                        // --- ОБЫЧНЫЙ ТЕКСТ (С проверкой на пустоту) ---
                         const s = document.createElement('span');
                         s.className = "msg-text";
-                        // Если текст пустой после всех очисток, выведем хотя бы пробел или спец-символ для дебага
                         s.textContent = cleanDisplay.trim() || "..."; 
                         msgBubble.appendChild(s);
                     }
-                }
+
 
 
 
@@ -2154,9 +2165,11 @@ async function confirmAddContact(targetUser) {
 
 
 function disintegrate(el) {
+    // 1. Делаем "слепок" элемента через html2canvas или нативный отрисовщик
     const rect = el.getBoundingClientRect();
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
+    
     canvas.width = rect.width;
     canvas.height = rect.height;
     canvas.style.position = "fixed";
@@ -2164,61 +2177,64 @@ function disintegrate(el) {
     canvas.style.top = rect.top + "px";
     canvas.style.zIndex = "100000";
     canvas.style.pointerEvents = "none";
-    document.body.appendChild(canvas);
 
-    // Рисуем сообщение на холст (имитация скриншота через стили)
-    ctx.fillStyle = getComputedStyle(el).backgroundColor;
-    ctx.roundRect(0, 0, rect.width, rect.height, 15);
-    ctx.fill();
-    ctx.fillStyle = "white";
-    ctx.font = "14px sans-serif";
-    ctx.fillText(el.textContent.substring(0, 20) + "...", 10, 20);
+    // Пытаемся отрисовать элемент (включая видео/фото) на канвас
+    // Если это видео, берем текущий кадр
+    try {
+        ctx.drawImage(el, 0, 0, rect.width, rect.height);
+    } catch (e) {
+        // Если внутри вложенные элементы (текст), берем их фон
+        ctx.fillStyle = getComputedStyle(el).backgroundColor;
+        ctx.fillRect(0, 0, rect.width, rect.height);
+    }
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const pixels = imageData.data;
-    
-    // Скрываем оригинал сразу
-    el.style.opacity = "0";
-
+    const data = imageData.data;
     const particles = [];
-    for (let i = 0; i < pixels.length; i += 32) { // Берем каждый 8-й пиксель для скорости
-        if (pixels[i + 3] > 0) {
-            const x = (i / 4) % canvas.width;
-            const y = Math.floor((i / 4) / canvas.width);
-            particles.push({
-                x, y,
-                vx: (Math.random() - 0.5) * 10,
-                vy: (Math.random() - 1.5) * 10,
-                size: Math.random() * 3
-            });
+
+    // Создаем частицы на основе реальных цветов пикселей
+    for (let y = 0; y < canvas.height; y += 4) { // Шаг 4 для производительности
+        for (let x = 0; x < canvas.width; x += 4) {
+            const i = (y * canvas.width + x) * 4;
+            const r = data[i];
+            const g = data[i+1];
+            const b = data[i+2];
+            const a = data[i+3];
+
+            if (a > 0) { // Если пиксель не прозрачный
+                particles.push({
+                    x: x, y: y,
+                    r: r, g: g, b: b,
+                    vx: (Math.random() - 0.5) * 12,
+                    vy: (Math.random() - 1.2) * 12,
+                    size: Math.random() * 3 + 1,
+                    life: 1.0
+                });
+            }
         }
     }
 
+    document.body.appendChild(canvas);
+    el.style.opacity = "0"; // Мгновенно скрываем оригинал
+
     function animate() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        let alive = false;
-        
-        // УЗНАЕМ РЕАЛЬНЫЙ ЦВЕТ СООБЩЕНИЯ (синий или серый)
-        const bubbleColor = getComputedStyle(el).backgroundColor;
-        // Превращаем "rgb(r, g, b)" в "rgba(r, g, b, alpha)" для затухания
-        const rgbaBase = bubbleColor.replace('rgb', 'rgba').replace(')', '');
+        let stillAlive = false;
 
         particles.forEach(p => {
-            p.x += p.vx;
-            p.y += p.vy;
-            p.vy += 0.05; // Легкая гравитация
-            
-            if (p.y < canvas.height && p.y > -100) {
-                // Плавное затухание прозрачности частиц
-                const opacity = Math.max(0, 1 - (p.y / (canvas.height + 50)));
-                ctx.fillStyle = `${rgbaBase}, ${opacity})`;
-                
+            if (p.life > 0) {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.15; // Гравитация вниз
+                p.life -= 0.02; // Время жизни
+
+                ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${p.life})`;
                 ctx.fillRect(p.x, p.y, p.size, p.size);
-                alive = true;
+                stillAlive = true;
             }
         });
-        
-        if (alive) {
+
+        if (stillAlive) {
             requestAnimationFrame(animate);
         } else {
             canvas.remove();
@@ -2226,6 +2242,7 @@ function disintegrate(el) {
     }
     animate();
 }
+
 
 
 </script>
