@@ -1171,7 +1171,10 @@
 
                     if (isImg) {
                         const img = document.createElement('img');
-                        img.src = cleanDisplay;
+                        // 1. Разрешаем чтение пикселей для цветной пыли
+                        img.crossOrigin = "anonymous"; 
+                        img.src = cleanDisplay; 
+                        
                         img.className = "chat-img";
                         img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer; border:1px solid rgba(255,255,255,0.1);";
                         
@@ -1190,17 +1193,24 @@
                         }
                     } else if (isVid) {
                         const v = document.createElement('video');
-                        v.src = cleanDisplay; v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.controls = true;
+                        // 2. ОБЯЗАТЕЛЬНО для цветной пыли из видео
+                        v.crossOrigin = "anonymous"; 
+                        v.src = cleanDisplay; 
+                        
+                        v.autoplay = true; 
+                        v.loop = true; 
+                        v.muted = true; 
+                        v.playsInline = true; 
+                        v.controls = true;
                         v.style = "max-width:100%; border-radius:12px; margin-top:5px;";
                         msgBubble.appendChild(v);
                     } else {
-                        // --- ОБЫЧНЫЙ ТЕКСТ (С проверкой на пустоту) ---
                         const s = document.createElement('span');
                         s.className = "msg-text";
-                        // Если текст пустой после всех очисток, выведем хотя бы пробел или спец-символ для дебага
                         s.textContent = cleanDisplay.trim() || "..."; 
                         msgBubble.appendChild(s);
                     }
+
                 }
 
 
@@ -2167,38 +2177,41 @@ function disintegrate(el) {
     canvas.style.pointerEvents = "none";
     document.body.appendChild(canvas);
 
-    // --- МАГИЯ: ДЕЛАЕМ РЕАЛЬНЫЙ СЛЕПОК КОНТЕНТА ---
+    // --- ФИШКА: РИСУЕМ ПЯТИУГОЛЬНУЮ МАСКУ НА КАНВАСЕ ---
+    ctx.beginPath();
+    ctx.moveTo(rect.width * 0.5, 0); // Верхняя точка
+    ctx.lineTo(rect.width, rect.height * 0.38); // Правая верхняя
+    ctx.lineTo(rect.width * 0.82, rect.height); // Правая нижняя
+    ctx.lineTo(rect.width * 0.18, rect.height); // Левая нижняя
+    ctx.lineTo(0, rect.height * 0.38); // Левая верхняя
+    ctx.closePath();
+    ctx.clip(); // Обрезаем всё, что вылезет за пределы пятиугольника
+
     try {
-        // Захватываем всё: картинку, видео (текущий кадр) и текст
         ctx.drawImage(el, 0, 0, rect.width, rect.height);
     } catch (e) {
-        // Если браузер блокирует (CORS), откатываемся к цвету фона
         ctx.fillStyle = getComputedStyle(el).backgroundColor;
-        ctx.fillRect(0, 0, rect.width, rect.height);
+        ctx.fill();
     }
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const pixels = imageData.data;
-    
-    el.style.opacity = "0"; // Скрываем оригинал сразу
+    el.style.opacity = "0"; 
 
     const particles = [];
-    // Перебираем пиксели и берем их РЕАЛЬНЫЙ цвет
-    for (let y = 0; y < canvas.height; y += 4) { 
-        for (let x = 0; x < canvas.width; x += 4) {
+    for (let y = 0; y < canvas.height; y += 2) { 
+        for (let x = 0; x < canvas.width; x += 2) {
             const i = (y * canvas.width + x) * 4;
-            const r = pixels[i];
-            const g = pixels[i+1];
-            const b = pixels[i+2];
-            const a = pixels[i+3];
+            const r = pixels[i], g = pixels[i+1], b = pixels[i+2], a = pixels[i+3];
 
-            if (a > 0) {
+            if (a > 50) { // Здесь полетят только частицы внутри пятиугольника
                 particles.push({
                     x, y, r, g, b,
                     vx: (Math.random() - 0.5) * 10,
                     vy: (Math.random() - 1.5) * 10,
-                    size: Math.random() * 3,
-                    life: 1.0
+                    size: Math.random() * 2.5 + 0.5,
+                    life: 1.0,
+                    drift: (Math.random() - 0.5) * 3
                 });
             }
         }
@@ -2207,25 +2220,23 @@ function disintegrate(el) {
     function animate() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         let alive = false;
-
         particles.forEach(p => {
             if (p.life > 0) {
-                p.x += p.vx;
+                p.x += p.vx + Math.sin(p.y / 10) * p.drift;
                 p.y += p.vy;
-                p.vy += 0.1; // Гравитация
-                p.life -= 0.02; // Плавное исчезновение
-
+                p.vy += 0.1; 
+                p.life -= 0.015;
                 ctx.fillStyle = `rgba(${p.r}, ${p.g}, ${p.b}, ${p.life})`;
                 ctx.fillRect(p.x, p.y, p.size, p.size);
                 alive = true;
             }
         });
-
         if (alive) requestAnimationFrame(animate);
         else canvas.remove();
     }
     animate();
 }
+
 
 
 </script>
