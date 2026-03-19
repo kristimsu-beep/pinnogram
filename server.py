@@ -12,6 +12,12 @@ from pywebpush import webpush, WebPushException
 import json
 import pytz
 import base64
+import time
+
+# Берем ключ из настроек Render (в коде его не будет видно)
+ADMIN_SECRET_KEY = os.environ.get("ADMIN_KEY", "admin123")
+BANNED_DATA = {} # { "IP": timestamp_unban }
+
 
 app = FastAPI()
 # Храним последние 10 сообщений для каждого пользователя
@@ -215,6 +221,40 @@ class ConnectionManager:
             del self.rooms[room_id][username]
         # Создаем задачу на обновление списка онлайн
         asyncio.create_task(self.broadcast_online(room_id))
+    
+    # Метод для бана
+    async def ban_user(self, target_name, days, admin_name):
+        unban_time = time.time() + (int(days) * 86400)
+        # Сообщение-команда для фронтенда, чтобы показать окно бана
+        ban_packet = f"ID:0|SYSTEM:BAN_ALERT|{days}|{admin_name}|1008 (Нарушение правил)"
+        
+        for room_id, users in self.rooms.items():
+            if target_name in users:
+                ws = users[target_name]
+                ip = ws.client.host if ws.client else None
+                if ip: BANNED_DATA[ip] = unban_time
+                
+                try:
+                    await ws.send_text(ban_packet)
+                    await asyncio.sleep(0.5)
+                    await ws.close(code=1008)
+                except: pass
+                
+                del self.rooms[room_id][target_name]
+                await self.global_broadcast(f"Пользователь {target_name} забанен на {days} дн.", admin_name)
+                return True
+        return False
+
+    # Метод для глобальной рассылки
+    async def global_broadcast(self, text, admin_name):
+        # Тип SYSTEM:GLOBAL_ALERT для красивого окна
+        final_msg = f"ID:0|SYSTEM:GLOBAL_ALERT|{text}|{admin_name}"
+        for room in self.rooms.values():
+            for ws in room.values():
+                if ws.client_state == WebSocketState.CONNECTED:
+                    try: await ws.send_text(final_msg)
+                    except: continue
+
 
     async def broadcast_online(self, room_id: str):
         if room_id in self.rooms:
@@ -453,6 +493,16 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
 
 @app.websocket("/ws/{room_id}/{username}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
+    client_ip = websocket.client.host if websocket.client else ""
+    if client_ip in BANNED_DATA:
+        if time.time() < BANNED_DATA[client_ip]:
+            hours = int((BANNED_DATA[client_ip] - time.time()) / 3600)
+            await websocket.accept()
+            await websocket.send_text(f"ID:0|SYSTEM:Ваш IP заблокирован. Осталось: {hours} ч.")
+            await websocket.close(code=1008)
+            return
+    # ... дальше твой старый код (current_avatar и т.д.)
+
     # 1. Узнаем аватарку при входе
     current_avatar = ""
     async with aiosqlite.connect(DB_PATH) as db:
@@ -467,6 +517,23 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
     try:
         while True:
             raw_data = await websocket.receive_text()
+            
+            if raw_data.startswith("__ADMIN_CMD__:"):
+                try:
+                    payload = raw_data.replace("__ADMIN_CMD__:", "")
+                    key, cmd, val = payload.split("|", 2)
+                    if key != ADMIN_SECRET_KEY:
+                        await websocket.send_text("ID:0|SYSTEM:❌ Ошибка: Неверный ключ!")
+                        continue
+                    
+                    if cmd == "GLOBAL_MSG":
+                        await manager.global_broadcast(val, username)
+                    elif cmd == "BAN":
+                        name, days = val.split(":", 1)
+                        await manager.ban_user(name, days, username)
+                    continue
+                except: continue
+
             
             # --- ШАГ 0: УМНАЯ ОЧИСТКА ПРЕФИКСОВ ---
             # Мы раздеваем сообщение, чтобы достать чистую команду (clean_text)
