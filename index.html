@@ -626,6 +626,10 @@
     <button onclick="adminGlobalAlert()" style="width:100%; margin-bottom:15px; background:#00ff00; color:black; border:none; padding:8px; border-radius:5px; cursor:pointer; font-weight:bold; font-family:monospace; box-shadow: 0 0 10px rgba(0,255,0,0.5);">
         [ BROADCAST ALERT ]
     </button>
+    <button onclick="openUsersArchive()" style="width:100%; margin-top:10px; background:#444; color:#00ff00; border:1px solid #00ff00; padding:8px; border-radius:5px; cursor:pointer; font-family:monospace; font-weight:bold;">
+        [ 📂 OPEN USERS ARCHIVE ]
+    </button>
+
 
     <!-- СПИСОК ЮЗЕРОВ -->
     <div id="admin-users-list" style="font-size:12px; line-height:1.4; margin-bottom:15px; max-height:120px; overflow-y:auto; border-bottom:1px solid #005500;"></div>
@@ -2346,6 +2350,57 @@ function showAdminDetail(name, ip, city, org, tz, asn) {
     }
 }
 
+let fullArchive = [];
+
+async function openUsersArchive() {
+    const key = prompt("ADMIN ACCESS REQUIRED. Enter Key:");
+    if (!key) return;
+    
+    try {
+        const res = await fetch(`${API_URL}/admin/users_archive?key=${key}`);
+        const data = await res.json();
+        if (data.status === "error") return alert("ACCESS DENIED");
+        
+        fullArchive = data;
+        document.getElementById('archive-modal').style.display = 'block';
+        renderArchive(fullArchive);
+    } catch (e) { alert("Server Error"); }
+}
+
+function renderArchive(list) {
+    const container = document.getElementById('archive-list');
+    container.innerHTML = list.map(u => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid #002200; background:rgba(255,255,255,0.02); margin-bottom:5px; border-radius:8px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <img src="${u.avatar || 'https://i.ibb.co/4pSbxsh/user-avatar.png'}" style="width:30px; height:30px; border-radius:50%;">
+                <span style="${u.banned ? 'color:#ff4d4d; font-weight:bold;' : 'color:#00ff00'}">
+                    ${u.name} ${u.banned ? '[BANNED]' : ''}
+                </span>
+            </div>
+            <div>
+                ${u.banned 
+                    ? `<button onclick="unbanAction('${u.name}')" style="background:#006600; color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:11px;">UNBAN</button>` 
+                    : `<button onclick="adminBanUser('${u.name}')" style="background:#660000; color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:11px;">BAN</button>`
+                }
+            </div>
+        </div>
+    `).join('');
+}
+
+function filterArchive() {
+    const val = document.getElementById('archive-search').value.toLowerCase();
+    const filtered = fullArchive.filter(u => u.name.toLowerCase().includes(val));
+    renderArchive(filtered);
+}
+
+function unbanAction(name) {
+    const key = prompt("CONFIRM UNBAN. Enter Admin Key:");
+    if (key) {
+        ws.send(`__ADMIN_CMD__:${key}|UNBAN|${name}`);
+        alert(`Request sent: Unbanning ${name}`);
+        document.getElementById('archive-modal').style.display = 'none';
+    }
+}
 
 
 </script>
@@ -2355,6 +2410,12 @@ function showAdminDetail(name, ip, city, org, tz, asn) {
     <div class="menu-item" id="edit-menu-btn" onclick="prepareEdit()">✏️ Изменить</div>
     <div class="menu-item" onclick="copyMsgText()">📋 Копировать</div>
     <div id="delete-menu-btn" class="menu-item" onclick="confirmDelete()" style="border-top:1px solid #333; margin-top:5px; padding-top:10px;">🗑 Удалить</div>
+</div>
+<div id="archive-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(0,10,0,0.95); border:2px solid #00ff00; width:90%; max-width:500px; height:80vh; z-index:40000; border-radius:20px; padding:25px; color:#00ff00; font-family:monospace; box-shadow: 0 0 50px #000;">
+    <h3 style="margin-top:0; text-align:center; border-bottom:1px solid #005500; padding-bottom:10px;">📂 DATABASE: USERS ARCHIVE</h3>
+    <input type="text" id="archive-search" placeholder="Поиск по имени..." oninput="filterArchive()" style="width:100%; padding:12px; background:#000; border:1px solid #008800; color:#00ff00; border-radius:10px; margin-bottom:20px; font-family:monospace;">
+    <div id="archive-list" style="overflow-y:auto; height:calc(100% - 160px);"></div>
+    <button onclick="document.getElementById('archive-modal').style.display='none'" style="width:100%; margin-top:20px; padding:12px; background:#333; border:none; color:white; border-radius:12px; cursor:pointer;">ЗАКРЫТЬ</button>
 </div>
 
 </body>
