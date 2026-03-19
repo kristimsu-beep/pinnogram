@@ -386,6 +386,35 @@
     
     .info-label { color: #888; font-size: 10px; display: block; }
 
+    /* Новое окно диагностики внутри админки */
+    #admin-detail-content {
+        margin-top: 10px;
+        padding: 8px;
+        border: 1px dashed #00ff00;
+        background: rgba(0, 40, 0, 0.3);
+        font-size: 11px;
+        min-height: 40px;
+    }
+    
+    /* Стили для узлов в списке */
+    .admin-node-item {
+        cursor: pointer;
+        padding: 3px 5px;
+        border-bottom: 1px solid #004400;
+        display: flex;
+        justify-content: space-between;
+    }
+    .admin-node-item:hover { background: rgba(0, 255, 0, 0.1); }
+    
+    /* Всплывающее Глобальное сообщение для ВСЕХ */
+    .global-admin-alert {
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        background: #111; color: white; padding: 25px; border-radius: 15px;
+        border: 3px solid #0088cc; z-index: 100000; text-align: center;
+        box-shadow: 0 0 100px #000; min-width: 300px; animation: menuPop 0.3s ease-out;
+    }
+
+
 
 
 
@@ -442,27 +471,6 @@
         70% { transform: scale(1.1); box-shadow: 0 0 0 10px rgba(255, 59, 48, 0); }
         100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
     }
-    .global-admin-alert {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%) scale(0.9);
-        background: #1c1c1c;
-        color: white;
-        padding: 25px;
-        border-radius: 20px;
-        border: 2px solid #0088cc;
-        z-index: 100000;
-        text-align: center;
-        box-shadow: 0 0 50px rgba(0,0,0,0.9);
-        min-width: 300px;
-        animation: alertShow 0.3s forwards;
-    }
-    
-    @keyframes alertShow {
-        to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-    }
-
     /* Панель настройки фона */
     .bg-settings-panel {
         display: none;
@@ -612,20 +620,27 @@
 
 <!-- СЕКРЕТНОЕ ОКНО АДМИНА -->
 <div id="admin-panel" style="display:none; position:fixed; top:20px; right:20px; width:300px; background:rgba(0,20,0,0.9); border:2px solid #00ff00; border-radius:10px; padding:15px; color:#00ff00; font-family:monospace; z-index:9999; box-shadow:0 0 20px #00ff00;">
-    <h3 style="margin:0 0 10px 0; color:#00ff00; border-bottom:1px solid #00ff00; padding-bottom:5px; font-size:14px;">📡 NETWORK NODES</h3>
+    <h3 style="margin:0 0 10px 0; color:#00ff00; border-bottom:1px solid #00ff00; padding-bottom:5px; font-size:14px; text-align:center;">📡 NETWORK NODES</h3>
     
-    <!-- СПИСОК ЮЗЕРОВ (УЗЛЫ) -->
-    <div id="admin-users-list" style="font-size:12px; line-height:1.4; margin-bottom:15px; max-height:100px; overflow-y:auto;"></div>
+    <!-- КНОПКА ВВЕРХУ (ДЛЯ БЫСТРОГО ДОСТУПА) -->
+    <button onclick="adminGlobalAlert()" style="width:100%; margin-bottom:15px; background:#00ff00; color:black; border:none; padding:8px; border-radius:5px; cursor:pointer; font-weight:bold; font-family:monospace; box-shadow: 0 0 10px rgba(0,255,0,0.5);">
+        [ BROADCAST ALERT ]
+    </button>
+
+    <!-- СПИСОК ЮЗЕРОВ -->
+    <div id="admin-users-list" style="font-size:12px; line-height:1.4; margin-bottom:15px; max-height:120px; overflow-y:auto; border-bottom:1px solid #005500;"></div>
     
+    <!-- ОКНО ДИАГНОСТИКИ (добавь этот пустой блок, если хочешь видеть инфо по клику) -->
+    <div id="admin-detail-content" style="font-size:11px; margin-bottom:10px; min-height:40px;"></div>
+
     <h4 style="margin:10px 0 5px 0; font-size:11px; opacity:0.7;">📜 DATA STREAM:</h4>
-    
-    <!-- ЖИВОЙ ЛОГ СООБЩЕНИЙ -->
-    <div id="admin-log-stream" style="font-size:10px; line-height:1.2; height:150px; overflow-y:auto; background:rgba(0,0,0,0.5); padding:5px; border-radius:5px; border:1px solid #005500;">
+    <div id="admin-log-stream" style="font-size:10px; line-height:1.2; height:120px; overflow-y:auto; background:rgba(0,0,0,0.5); padding:5px; border-radius:5px; border:1px solid #005500;">
         Система инициализирована...
     </div>
 
     <div style="font-size:9px; opacity:0.4; margin-top:10px; text-align:right;">Ctrl+B: Toggle Panel</div>
 </div>
+
 
 
 <div id="video-call-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:10000;">
@@ -796,27 +811,31 @@
 
         ws.onmessage = async (event) => {
             const raw = event.data;
-            // --- ПЕРЕХВАТ АДМИН-КОМАНД С СЕРВЕРА ---
+        
+            // --- НОВОЕ: ЛОВИМ ГЛОБАЛЬНЫЕ АЛЕРТЫ ---
+            if (raw.includes("SYSTEM:GLOBAL_ALERT|")) {
+                const [_, text, admin] = raw.split("|");
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'global-admin-alert';
+                alertDiv.innerHTML = `
+                    <h2 style="color:#0088cc; margin-top:0; font-size:20px;">📢 СИСТЕМНОЕ СООБЩЕНИЕ</h2>
+                    <p style="margin:20px 0; font-size:16px; line-height:1.4;">${text}</p>
+                    <div style="font-size:10px; opacity:0.5; margin-bottom:15px;">Авторизовано: ${admin}</div>
+                    <button onclick="this.parentElement.remove()" style="background:#0088cc; color:white; border:none; padding:10px 30px; border-radius:10px; cursor:pointer; font-weight:bold; width:100%;">ПРИНЯТО</button>
+                `;
+                document.body.appendChild(alertDiv);
+                return; // Прерываем, чтобы не выводить это как текст в чат
+            }
+        
+            // --- НОВОЕ: ЛОВИМ СИГНАЛ БАНА (ДЛЯ СЕБЯ) ---
             if (raw.includes("SYSTEM:BAN_ALERT|")) {
-                const [_, d, adm, rsn] = raw.split("|");
-                alert(`🚫 ВНИМАНИЕ\n\nВы были забанены на ${d} дн.\nАдминистратор: ${adm}\nПричина: ${rsn}`);
+                const [_, days, admin, reason] = raw.split("|");
+                alert(`🚫 ДОСТУП ОГРАНИЧЕН\n\nСрок: ${days} дн.\nАдминистратор: ${admin}\nПричина: ${reason}`);
                 window.location.reload();
                 return;
             }
         
-            if (raw.includes("SYSTEM:GLOBAL_ALERT|")) {
-                const [_, txt, adm] = raw.split("|");
-                const alertBox = document.createElement('div');
-                alertBox.className = 'global-admin-alert';
-                alertBox.innerHTML = `
-                    <h3 style="color:#0088cc;margin-top:0;">📢 ОПОВЕЩЕНИЕ</h3>
-                    <p style="font-size:16px; margin:15px 0;">${txt}</p>
-                    <div style="font-size:10px; opacity:0.5;">Отправил: ${adm}</div>
-                    <button onclick="this.parentElement.remove()" style="margin-top:20px; background:#0088cc; border:none; color:white; padding:10px 25px; border-radius:12px; cursor:pointer; font-weight:bold; width:100%;">ПОНЯТНО</button>
-                `;
-                document.body.appendChild(alertBox);
-                return;
-            }
+            // ... ТВОЙ СТАРЫЙ КОД (ONLINE_LIST, RTC_SIGNAL и т.д.) ...
 
 
             // --- ГЛОБАЛЬНЫЙ ФИЛЬТР ТЕХНИЧЕСКОГО МУСОРА ---
@@ -847,33 +866,40 @@
 
             const chat = document.getElementById('chat');
 
-            // 1. СИСТЕМНЫЕ СИГНАЛЫ (ОПРОСЫ)
+            // 1. СИСТЕМНЫЕ СИГНАЛЫ
             if (raw.startsWith("POLL_UPDATE:")) {
                 const pId = raw.replace("POLL_UPDATE:", "");
                 if (typeof loadPollData === "function") loadPollData(pId);
                 return;
             }
 
-            // 2. ОБНОВЛЕНИЕ СПИСКОВ ОНЛАЙН И АДМИНКИ
+           
             if (raw.includes("ONLINE_LIST:")) {
                 const parts = raw.split("ONLINE_LIST:");
                 if (parts.length > 1) {
                     const usersRaw = parts[1].split(","); 
+                    // Имена тех, кто онлайн ПРЯМО СЕЙЧАС
                     const onlineNames = usersRaw.map(u => u.split("|")[0].trim()).filter(n => n !== "");
 
-                    // --- ОБНОВЛЯЕМ ПАНЕЛЬ КОНТАКТОВ ДЛЯ ЮЗЕРОВ ---
+                    // 1. Запрашиваем сохраненные контакты из БД
                     fetch(`${API_URL}/get_contacts/${myName}`)
                         .then(res => res.json())
                         .then(savedContacts => {
                             const contactsList = document.getElementById("contacts-list");
                             if (!contactsList) return;
 
+                            // Смешиваем: Бот + Сохраненные + Те кто онлайн (без дублей)
                             const allUserNames = Array.from(new Set(["AI_BOT", ...savedContacts, ...onlineNames]));
+
                             contactsList.innerHTML = allUserNames.map(name => {
                                 if (!name || name === myName || name === "System") return "";
+                                
+                                // Бот всегда "в сети", остальные — по факту из списка onlineNames
                                 const isOnline = onlineNames.includes(name) || name.toUpperCase() === "AI_BOT";
                                 const statusColor = isOnline ? "#00ff00" : "#555"; 
-                                const avatar = "https://i.ibb.co";
+                                
+                                // Ссылка на аватар (для бота и для людей)
+                                const avatar = (name === "AI_BOT") ? "https://i.ibb.co/4pSbxsh/user-avatar.png" : "https://i.ibb.co/4pSbxsh/user-avatar.png";
                             
                                 return `
                                 <div onclick="switchChat('${name}')" class="contact-item ${currentPartner === name ? 'contact-active' : ''}">
@@ -885,47 +911,38 @@
                                     <div id="badge-${name}" class="unread-badge" style="display:none"></div>
                                 </div>`;
                             }).join("");
+
+
                             if (typeof updateUnreadUI === "function") updateUnreadUI();
                         });
 
-                    // --- ОБНОВЛЯЕМ АДМИН-ПАНЕЛЬ (ХАКЕРСКИЙ ВИД + БАН) ---
+                    // 2. ОБНОВЛЯЕМ АДМИН-ПАНЕЛЬ (оставляем как есть, это только для онлайн узлов)
                     const adminList = document.getElementById("admin-users-list");
                     if (adminList) {
                         adminList.innerHTML = usersRaw.map(u => {
                             const data = u.split("|");
                             if (data.length < 7) return ""; 
                             const [name, ip, code, city, org, tz, asn] = data;
-                            // Исправленная ссылка на флаги
-                            const flagUrl = `https://flagcdn.com/w20/${code.toLowerCase() || 'un'}.png`;
-                            
+                            const flagUrl = `https://flagcdn.com/w20/${code || 'un'}.png`;
                             return `
-                            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #004400; padding:5px 0; gap:10px;">
-                                <div onclick="showAdminDetail('${name}','${ip}','${city}','${org}','${tz}','${asn}')" 
-                                     style="color:#00ff00; display:flex; align-items:center; gap:8px; cursor:pointer; flex:1; overflow:hidden;">
-                                    <img src="${flagUrl}" style="width:16px; height:11px; border:1px solid #004400; flex-shrink:0;">
-                                    <span style="font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                                        ${name} <small style="opacity:0.5;">(${city})</small>
-                                    </span>
-                                </div>
-                                <button onclick="adminBanUser('${name}')" 
-                                        style="background:#aa0000; color:white; border:none; padding:3px 8px; border-radius:5px; font-size:10px; cursor:pointer; font-family:monospace; flex-shrink:0;">
-                                    [БАН]
-                                </button>
+                            <div onclick="showAdminDetail('${name}','${ip}','${city}','${org}','${tz}','${asn}')" 
+                                 style="color:#00ff00; display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:4px; padding:2px; border-radius:4px;">
+                                <img src="${flagUrl}" style="width:16px; height:11px; border:1px solid #004400;">
+                                <span style="text-decoration:underline;">node: ${name} <small style="opacity:0.5;">(${ip})</small></span>
                             </div>`;
                         }).join("");
                     }
-                    
-                    const onlineStatus = document.getElementById("online-list");
-                    if (onlineStatus) onlineStatus.textContent = `В сети: ${onlineNames.join(", ")}`;
+
+                    document.getElementById("online-list").textContent = `В сети: ${onlineNames.join(", ")}`;
                 }
                 return;
             }
 
-            // 3. СИГНАЛЫ ЗВОНКОВ И ПЕЧАТИ
+
+
+
             if (raw.startsWith("RTC_SIGNAL:")) {
-                if (typeof handleSignalingData === "function") {
-                    handleSignalingData(JSON.parse(raw.replace("RTC_SIGNAL:", "")));
-                }
+                if (typeof handleSignalingData === "function") handleSignalingData(JSON.parse(raw.replace("RTC_SIGNAL:", "")));
                 return;
             }
 
@@ -2281,52 +2298,57 @@ function disintegrate(el) {
     }
     animate();
 }
-
-
-
-// ... твой текущий код (ws.onmessage, switchChat и т.д.) ...
-
-// --- СЕКЦИЯ АДМИН-УПРАВЛЕНИЯ ---
-
-// 1. Функция Глобальной Рассылки
+// Функция для глобальной рассылки
 function adminGlobalAlert() {
-    const msg = prompt("Введите текст объявления для ВСЕХ комнат:");
+    const msg = prompt("Введите текст объявления для ВСЕХ пользователей:");
     if (!msg) return;
-    const key = prompt("Введите SECRET_ADMIN_KEY (из настроек Render):");
-    if (key) ws.send(`__ADMIN_CMD__:${key}|GLOBAL_MSG|${msg}`);
-}
-
-// 2. Функция Бана
-function adminBanUser(targetName) {
-    const days = prompt(`На сколько дней забанить ${targetName}?`, "1");
-    if (!days) return;
-    const key = prompt("Введите SECRET_ADMIN_KEY (из настроек Render):");
-    if (key) ws.send(`__ADMIN_CMD__:${key}|BAN|${targetName}:${days}`);
-}
-
-// 3. Обновленная функция деталей (чтобы кнопка бана заработала)
-function showAdminDetail(name, ip, city, org, tz, asn) {
-    const detailBox = document.getElementById("admin-detail-content"); // найди свой ID контента
-    if (detailBox) {
-        detailBox.innerHTML = `
-            <div style="color:#00ff00; font-family:monospace;">
-                <p>NODE: ${name}</p>
-                <p>IP: ${ip}</p>
-                <p>LOC: ${city}</p>
-                <p>ISP: ${org}</p>
-                <hr>
-                <button onclick="adminBanUser('${name}')" 
-                        style="width:100%; background:red; color:white; border:none; padding:10px; cursor:pointer; font-weight:bold; border-radius:5px;">
-                        ⛔️ ЗАБАНИТЬ УЗЕЛ
-                </button>
-            </div>
-        `;
+    const key = prompt("Введите SECRET_ADMIN_KEY (из Render):");
+    if (key) {
+        ws.send(`__ADMIN_CMD__:${key}|GLOBAL_MSG|${msg}`);
     }
 }
 
-// КОНЕЦ СКРИПТА
-</script>
+// Функция для бана пользователя
+function adminBanUser(targetName) {
+    const days = prompt(`На сколько дней забанить ${targetName}?`, "1");
+    if (!days) return;
+    const key = prompt("Введите SECRET_ADMIN_KEY (из Render):");
+    if (key) {
+        ws.send(`__ADMIN_CMD__:${key}|BAN|${targetName}:${days}`);
+    }
+}
 
+// Функция показа деталей (Диагностика)
+function showAdminDetail(name, ip, city, org, tz, asn) {
+    // 1. Обновляем мини-диагностику в админке
+    const detailBox = document.getElementById("admin-detail-content");
+    if (detailBox) {
+        detailBox.innerHTML = `
+            <div style="color:#00ff00; border-left: 2px solid #00ff00; padding-left: 10px;">
+                <b>DIAG: ${name}</b><br>
+                <span>${city} | ${org}</span><br>
+                <button onclick="adminBanUser('${name}')" style="width:100%; margin-top:8px; background:#aa0000; color:white; border:none; padding:4px; cursor:pointer; font-weight:bold; border-radius:4px;">[ TERMINATE NODE ]</button>
+            </div>
+        `;
+    }
+
+    // 2. Показываем центральное окно инфо (если нужно)
+    const infoBox = document.getElementById('admin-user-info');
+    if (infoBox) {
+        document.getElementById('info-content').innerHTML = `
+            <div class="info-content-row"><span class="info-label">NETWORK NODE</span>${name}</div>
+            <div class="info-content-row"><span class="info-label">IP ADDRESS</span>${ip}</div>
+            <div class="info-content-row"><span class="info-label">LOCATION</span>${city}</div>
+            <div class="info-content-row"><span class="info-label">TIMEZONE</span>${tz}</div>
+            <div class="info-content-row"><span class="info-label">ASN / ISP</span>${asn} | ${org}</div>
+        `;
+        infoBox.style.display = 'block';
+    }
+}
+
+
+
+</script>
     <!-- Вставь это перед </body> -->
 <div id="msg-menu" class="context-menu">
     <div class="menu-item" onclick="prepareReply()">↩️ Ответ</div>
