@@ -291,35 +291,42 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 async def keep_alive_bot(manager):
-    # Увеличим паузу до 15 сек, чтобы всё точно прогрузилось
-    await asyncio.sleep(15)
-    print("🚀 Бот-будильник: СИСТЕМА ПИНГА АКТИВИРОВАНА")
+    await asyncio.sleep(20) # Даем серверу время окончательно "проснуться"
+    
+    # Пытаемся достать URL твоего сервера из настроек Render
+    # Если ты не задал переменную RENDER_EXTERNAL_URL, укажи свой адрес вручную
+    RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://pinnogram-server.onrender.com")
+    
+    print(f"🚀 Бот-будильник: ЗАПУСК ПИНГА КАЖДЫЕ 5 МИНУТ ({RENDER_URL})")
     
     while True:
         try:
-            tz_moscow = pytz.timezone('Europe/Moscow')
-            now = datetime.now(tz_moscow).strftime("%H:%M")
+            now = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
             
-            # ВАЖНО: берем список комнат БЕЗОПАСНО
+            # --- 1. ВНЕШНИЙ ПИНГ (Имитируем реальный заход на сайт) ---
+            async with httpx.AsyncClient() as client:
+                # Запрашиваем главную страницу (/) или sw.js
+                response = await client.get(RENDER_URL, timeout=15.0)
+                if response.status_code == 200:
+                    print(f"📡 Внешний пинг: OK (Render увидел запрос в {now})")
+            
+            # --- 2. ВНУТРЕННИЙ ПИНГ В ЧАТ (Для логов и сокетов) ---
             active_rooms = list(manager.rooms.keys())
-            
-            if not active_rooms:
-                print(f"💤 Бот-будильник: Активных комнат нет, сплю ({now})")
-            else:
+            if active_rooms:
                 for r_id in active_rooms:
-                    # Шлем системный пинг через твой менеджер
-                    # Используем ID:0, чтобы фронтенд не считал это за новое сообщение
                     await manager.broadcast(room_id=r_id, message=f"Pinnogram Heartbeat {now}")
-                
-                print(f"✅ Бот-будильник: Пинг отправлен в {now} (Комнат: {len(active_rooms)})")
-            
-            # Спим ровно 5 минут (300 сек)
+                print(f"✅ Внутренний пинг: Отправлен в {len(active_rooms)} комнат")
+            else:
+                print(f"💤 Внутренний пинг: В чате пусто, жду юзеров ({now})")
+
+            # --- 3. СПИМ РОВНО 5 МИНУТ ---
             await asyncio.sleep(300) 
             
         except Exception as e:
-            # Если что-то пошло не так, бот НЕ УМИРАЕТ, а просто пишет ошибку и пробует снова
-            print(f"⚠️ Критическая ошибка бота: {e}")
-            await asyncio.sleep(30) # Пауза перед перезапуском при ошибке
+            print(f"⚠️ Ошибка бота-будильника: {e}")
+            await asyncio.sleep(30) # Короткая пауза при сбое сети
+
+
 
             
 @app.on_event("startup")
