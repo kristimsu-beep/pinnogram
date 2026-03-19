@@ -291,38 +291,36 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 async def keep_alive_bot(manager):
-    # Небольшая пауза (5 сек), чтобы сервер успел полностью инициализироваться
-    await asyncio.sleep(5)
-    print("🚀 Бот-будильник: ЗАПУСК СИСТЕМЫ ПИНГА...")
+    # Увеличим паузу до 15 сек, чтобы всё точно прогрузилось
+    await asyncio.sleep(15)
+    print("🚀 Бот-будильник: СИСТЕМА ПИНГА АКТИВИРОВАНА")
     
     while True:
         try:
-            # 1. Получаем московское время
             tz_moscow = pytz.timezone('Europe/Moscow')
             now = datetime.now(tz_moscow).strftime("%H:%M")
             
-            # 2. Формируем технический пакет (скрыт для всех, кроме AI_BOT)
-            ping_msg = f"ID:0|PRIVATE:Pinnogram AI (Bot):[SYSTEM] Render Keep-alive Ping {now}|https://i.ibb.co|0"
+            # ВАЖНО: берем список комнат БЕЗОПАСНО
+            active_rooms = list(manager.rooms.keys())
             
-            # 3. Рассылаем активность во все открытые комнаты
-            rooms_to_ping = list(manager.rooms.keys())
-            for r_id in rooms_to_ping:
-                # Шлем напрямую через сокеты для минимальной нагрузки
-                for ws in manager.rooms.get(r_id, {}).values():
-                    if ws.client_state == WebSocketState.CONNECTED:
-                        try:
-                            await ws.send_text(ping_msg)
-                        except:
-                            continue
+            if not active_rooms:
+                print(f"💤 Бот-будильник: Активных комнат нет, сплю ({now})")
+            else:
+                for r_id in active_rooms:
+                    # Шлем системный пинг через твой менеджер
+                    # Используем ID:0, чтобы фронтенд не считал это за новое сообщение
+                    await manager.broadcast(room_id=r_id, message=f"Pinnogram Heartbeat {now}")
+                
+                print(f"✅ Бот-будильник: Пинг отправлен в {now} (Комнат: {len(active_rooms)})")
             
-            print(f"✅ Бот-будильник: Пинг активности отправлен в {now}")
-            
-            # 4. СПИМ 5 МИНУТ ПОСЛЕ ОТПРАВКИ
+            # Спим ровно 5 минут (300 сек)
             await asyncio.sleep(300) 
             
         except Exception as e:
-            print(f"⚠️ Ошибка бота-будильника: {e}")
-            await asyncio.sleep(10) # Короткая пауза перед повтором при ошибке
+            # Если что-то пошло не так, бот НЕ УМИРАЕТ, а просто пишет ошибку и пробует снова
+            print(f"⚠️ Критическая ошибка бота: {e}")
+            await asyncio.sleep(30) # Пауза перед перезапуском при ошибке
+
             
 @app.on_event("startup")
 async def startup():
