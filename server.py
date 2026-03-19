@@ -134,6 +134,19 @@ async def get_contacts(username: str):
         async with db.execute("SELECT contact_name FROM contacts WHERE owner = ?", (username,)) as cur:
             rows = await cur.fetchall()
             return [r[0] for r in rows]
+            
+@app.get("/admin/users_archive")
+async def get_users_archive(key: str):
+    if key != ADMIN_SECRET_KEY: return {"status": "error"}
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Тянем всех юзеров и проверяем, есть ли они в таблице банов
+        sql = """
+            SELECT u.username, u.avatar, b.unban_time, b.ip 
+            FROM users u LEFT JOIN bans b ON u.username = b.username
+        """
+        async with db.execute(sql) as cur:
+            rows = await cur.fetchall()
+            return [{"name": r[0], "avatar": r[1], "banned": r[2] is not None, "ip": r[3]} for r in rows]
 
 # 1. Роут для регистрации и входа
 # 1. Роут для регистрации и входа
@@ -225,25 +238,31 @@ class ConnectionManager:
     # Метод для бана
     async def ban_user(self, target_name, days, admin_name):
         unban_time = time.time() + (int(days) * 86400)
-        # Сообщение-команда для фронтенда, чтобы показать окно бана
-        ban_packet = f"ID:0|SYSTEM:BAN_ALERT|{days}|{admin_name}|1008 (Нарушение правил)"
         
-        for room_id, users in self.rooms.items():
-            if target_name in users:
-                ws = users[target_name]
-                ip = ws.client.host if ws.client else None
-                if ip: BANNED_DATA[ip] = unban_time
-                
-                try:
-                    await ws.send_text(ban_packet)
-                    await asyncio.sleep(0.5)
-                    await ws.close(code=1008)
-                except: pass
-                
-                del self.rooms[room_id][target_name]
-                await self.global_broadcast(f"Пользователь {target_name} забанен на {days} дн.", admin_name)
-                return True
+        async with aiosqlite.connect(DB_PATH) as db:
+            for room_id, users in self.rooms.items():
+                if target_name in users:
+                    ws = users[target_name]
+                    ip = ws.client.host if ws.client else "unknown"
+                    # Сохраняем бан в БД навсегда
+                    await db.execute("INSERT OR REPLACE INTO bans VALUES (?, ?, ?, ?, ?)", 
+                                    (ip, target_name, unban_time, admin_name, "1008"))
+                    await db.commit()
+                    
+                    try:
+                        await ws.send_text(f"ID:0|SYSTEM:BAN_ALERT|{days}|{admin_name}|1008")
+                        await ws.close(code=1008)
+                    except: pass
+                    del self.rooms[room_id][target_name]
+                    return True
         return False
+
+    async def unban_user(self, ip_or_name):
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("DELETE FROM bans WHERE ip = ? OR username = ?", (ip_or_name, ip_or_name))
+            await db.commit()
+        return True
+
 
     # Метод для глобальной рассылки
     async def global_broadcast(self, text, admin_name):
@@ -428,9 +447,18 @@ async def startup():
                 PRIMARY KEY(msg_id, username)
             )
         """)
+        
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS bans (
+                ip TEXT PRIMARY KEY,
+                username TEXT,
+                unban_time REAL,
+                admin_name TEXT,
+                reason TEXT
+            )
+        """)
 
-
-
+        
         # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
         columns = [
             ("messages", "avatar", "TEXT DEFAULT ''"),
@@ -531,8 +559,14 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     elif cmd == "BAN":
                         name, days = val.split(":", 1)
                         await manager.ban_user(name, days, username)
+                    elif cmd == "UNBAN": # НОВАЯ ВЕТКА ДЛЯ РАЗБАНА
+                        await manager.unban_user(val)
+                        await websocket.send_text(f"ID:0|SYSTEM:✅ Пользователь {val} разбанен.")
                     continue
-                except: continue
+                except Exception as e:
+                    print(f"Admin CMD Error: {e}")
+                    continue
+
 
             
             # --- ШАГ 0: УМНАЯ ОЧИСТКА ПРЕФИКСОВ ---
