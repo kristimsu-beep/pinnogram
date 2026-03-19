@@ -55,84 +55,8 @@ async def get_sw():
 @app.get("/favicon.ico")
 async def get_favicon():
     return FileResponse("favicon.ico") if os.path.exists("favicon.ico") else None
-
-@app.on_event("startup")
-async def startup():
-    async with aiosqlite.connect(DB_PATH) as db:
-        # 1. Создаем основные таблицы (с учетом новых полей)
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT, 
-                text TEXT, 
-                timestamp TEXT, 
-                room_id TEXT DEFAULT 'general',
-                to_user TEXT DEFAULT NULL, 
-                avatar TEXT DEFAULT '',
-                is_read INTEGER DEFAULT 0,
-                reply_to_id INTEGER DEFAULT NULL -- ПОЛЕ ДЛЯ ОТВЕТОВ
-            )
-        """)
-        
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                username TEXT PRIMARY KEY, password TEXT, avatar TEXT DEFAULT ''
-            )
-        """)
-        
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS push_subscriptions (
-                username TEXT PRIMARY KEY, subscription_json TEXT
-            )
-        """)
-
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS polls (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, question TEXT, options TEXT, owner TEXT
-            )
-        """)
-
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS poll_votes (
-                poll_id INTEGER, username TEXT, option_index INTEGER,
-                PRIMARY KEY(poll_id, username)
-            )
-        """)
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS contacts (
-                owner TEXT, 
-                contact_name TEXT,
-                PRIMARY KEY(owner, contact_name)
-            )
-        """)
-        
-        # В функцию startup() в server.py
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS reactions (
-                msg_id INTEGER,
-                username TEXT,
-                emoji TEXT,
-                PRIMARY KEY(msg_id, username)
-            )
-        """)
-
-
-
-        # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
-        columns = [
-            ("messages", "avatar", "TEXT DEFAULT ''"),
-            ("messages", "to_user", "TEXT DEFAULT NULL"),
-            ("messages", "is_read", "INTEGER DEFAULT 0"),
-            ("messages", "reply_to_id", "INTEGER DEFAULT NULL")# Колонки для галочек
-        ]
-        
-        for table, col, definition in columns:
-            try:
-                await db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
-            except:
-                pass # Если колонка уже есть, SQLite просто проигнорирует команду
-        
-        await db.commit()
+    
+# Функция-будильник (Ping) для Render
 
 @app.post("/subscribe")
 async def subscribe(data: dict):
@@ -365,6 +289,120 @@ class ConnectionManager:
                         continue
 
 manager = ConnectionManager()
+
+async def keep_alive_bot(manager):
+    # Небольшая пауза (5 сек), чтобы сервер успел полностью инициализироваться
+    await asyncio.sleep(5)
+    print("🚀 Бот-будильник: ЗАПУСК СИСТЕМЫ ПИНГА...")
+    
+    while True:
+        try:
+            # 1. Получаем московское время
+            tz_moscow = pytz.timezone('Europe/Moscow')
+            now = datetime.now(tz_moscow).strftime("%H:%M")
+            
+            # 2. Формируем технический пакет (скрыт для всех, кроме AI_BOT)
+            ping_msg = f"ID:0|PRIVATE:Pinnogram AI (Bot):[SYSTEM] Render Keep-alive Ping {now}|https://i.ibb.co|0"
+            
+            # 3. Рассылаем активность во все открытые комнаты
+            rooms_to_ping = list(manager.rooms.keys())
+            for r_id in rooms_to_ping:
+                # Шлем напрямую через сокеты для минимальной нагрузки
+                for ws in manager.rooms.get(r_id, {}).values():
+                    if ws.client_state == WebSocketState.CONNECTED:
+                        try:
+                            await ws.send_text(ping_msg)
+                        except:
+                            continue
+            
+            print(f"✅ Бот-будильник: Пинг активности отправлен в {now}")
+            
+            # 4. СПИМ 5 МИНУТ ПОСЛЕ ОТПРАВКИ
+            await asyncio.sleep(300) 
+            
+        except Exception as e:
+            print(f"⚠️ Ошибка бота-будильника: {e}")
+            await asyncio.sleep(10) # Короткая пауза перед повтором при ошибке
+            
+@app.on_event("startup")
+async def startup():
+    async with aiosqlite.connect(DB_PATH) as db:
+        # 1. Создаем основные таблицы (с учетом новых полей)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT, 
+                text TEXT, 
+                timestamp TEXT, 
+                room_id TEXT DEFAULT 'general',
+                to_user TEXT DEFAULT NULL, 
+                avatar TEXT DEFAULT '',
+                is_read INTEGER DEFAULT 0,
+                reply_to_id INTEGER DEFAULT NULL -- ПОЛЕ ДЛЯ ОТВЕТОВ
+            )
+        """)
+        
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY, password TEXT, avatar TEXT DEFAULT ''
+            )
+        """)
+        
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                username TEXT PRIMARY KEY, subscription_json TEXT
+            )
+        """)
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS polls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, question TEXT, options TEXT, owner TEXT
+            )
+        """)
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS poll_votes (
+                poll_id INTEGER, username TEXT, option_index INTEGER,
+                PRIMARY KEY(poll_id, username)
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS contacts (
+                owner TEXT, 
+                contact_name TEXT,
+                PRIMARY KEY(owner, contact_name)
+            )
+        """)
+        
+        # В функцию startup() в server.py
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS reactions (
+                msg_id INTEGER,
+                username TEXT,
+                emoji TEXT,
+                PRIMARY KEY(msg_id, username)
+            )
+        """)
+
+
+
+        # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
+        columns = [
+            ("messages", "avatar", "TEXT DEFAULT ''"),
+            ("messages", "to_user", "TEXT DEFAULT NULL"),
+            ("messages", "is_read", "INTEGER DEFAULT 0"),
+            ("messages", "reply_to_id", "INTEGER DEFAULT NULL")# Колонки для галочек
+        ]
+        
+        for table, col, definition in columns:
+            try:
+                await db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
+            except:
+                pass # Если колонка уже есть, SQLite просто проигнорирует команду
+        
+        await db.commit()
+        asyncio.create_task(keep_alive_bot(manager))
+        print("🚀 Pinnogram Engine: База готова, бот-будильник запущен!")
 
 
 # Вставь свой ключ тут
@@ -767,50 +805,23 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
     except WebSocketDisconnect:
         manager.disconnect(room_id, username)
         await manager.broadcast(room_id, message=f"{username} покинул чат")
+    except Exception as e:
+        print(f"Глобальная ошибка сокета: {e}")
+        manager.disconnect(room_id, username)
 
-# Функция-будильник (Ping) для Render
-async def keep_alive_bot(manager):
-    # Небольшая пауза (5 сек), чтобы сервер успел полностью инициализироваться
-    await asyncio.sleep(5)
-    print("🚀 Бот-будильник: ЗАПУСК СИСТЕМЫ ПИНГА...")
-    
-    while True:
-        try:
-            # 1. Получаем московское время
-            tz_moscow = pytz.timezone('Europe/Moscow')
-            now = datetime.now(tz_moscow).strftime("%H:%M")
-            
-            # 2. Формируем технический пакет (скрыт для всех, кроме AI_BOT)
-            ping_msg = f"ID:0|PRIVATE:Pinnogram AI (Bot):[SYSTEM] Render Keep-alive Ping {now}|https://i.ibb.co|0"
-            
-            # 3. Рассылаем активность во все открытые комнаты
-            rooms_to_ping = list(manager.rooms.keys())
-            for r_id in rooms_to_ping:
-                # Шлем напрямую через сокеты для минимальной нагрузки
-                for ws in manager.rooms.get(r_id, {}).values():
-                    if ws.client_state == WebSocketState.CONNECTED:
-                        try:
-                            await ws.send_text(ping_msg)
-                        except:
-                            continue
-            
-            print(f"✅ Бот-будильник: Пинг активности отправлен в {now}")
-            
-            # 4. СПИМ 5 МИНУТ ПОСЛЕ ОТПРАВКИ
-            await asyncio.sleep(300) 
-            
-        except Exception as e:
-            print(f"⚠️ Ошибка бота-будильника: {e}")
-            await asyncio.sleep(10) # Короткая пауза перед повтором при ошибке
+# --- ПРАВИЛЬНЫЙ ЗАПУСК СЕРВЕРА И БОТА ---
+# Убедись, что keep_alive_bot(manager) определен выше в файле!
 
-
-# Правильный блок запуска
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    # Регистрируем задачу в цикле событий
-    loop.create_task(keep_alive_bot(manager))
-    # Запускаем сервер
-    uvicorn.run(app, host="0.0.0.0", port=10000)
+    # Render передает PORT автоматически, берем его или ставим 10000 по умолчанию
+    port = int(os.environ.get("PORT", 10000))
+    
+    # ВАЖНО: Мы перенесли запуск бота в @app.on_event("startup")
+    # Проверь, чтобы в твоей функции startup() в конце стояла строка:
+    # asyncio.create_task(keep_alive_bot(manager))
+    
+    uvicorn.run(app, host="0.0.0.0", port=port)
+
 
 
 
