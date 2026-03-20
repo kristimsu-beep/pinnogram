@@ -137,18 +137,29 @@ async def get_contacts(username: str):
             
 @app.get("/admin/users_archive")
 async def get_users_archive(key: str):
-    if key != ADMIN_SECRET_KEY: return {"status": "error"}
+    if key != ADMIN_SECRET_KEY: 
+        return {"status": "error", "message": "Wrong Key"}
+    
     async with aiosqlite.connect(DB_PATH) as db:
-        # Тянем всех юзеров и проверяем, есть ли они в таблице банов
+        # Тянем ВСЕХ из таблицы users и сопоставляем с таблицей bans
         sql = """
             SELECT u.username, u.avatar, b.unban_time, b.ip 
-            FROM users u LEFT JOIN bans b ON u.username = b.username
+            FROM users u 
+            LEFT JOIN bans b ON u.username = b.username
         """
         async with db.execute(sql) as cur:
             rows = await cur.fetchall()
-            return [{"name": r[0], "avatar": r[1], "banned": r[2] is not None, "ip": r[3]} for r in rows]
+            # Формируем список: если unban_time есть и оно больше текущего — юзер забанен
+            return [
+                {
+                    "name": r[0], 
+                    "avatar": r[1], 
+                    "banned": r[2] is not None and r[2] > time.time(), 
+                    "ip": r[3]
+                } for r in rows
+            ]
 
-# 1. Роут для регистрации и входа
+
 # 1. Роут для регистрации и входа
 @app.post("/auth")
 async def auth(data: dict):
@@ -522,14 +533,29 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
 @app.websocket("/ws/{room_id}/{username}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
     client_ip = websocket.client.host if websocket.client else ""
-    if client_ip in BANNED_DATA:
-        if time.time() < BANNED_DATA[client_ip]:
-            hours = int((BANNED_DATA[client_ip] - time.time()) / 3600)
-            await websocket.accept()
-            await websocket.send_text(f"ID:0|SYSTEM:Ваш IP заблокирован. Осталось: {hours} ч.")
-            await websocket.close(code=1008)
-            return
-    # ... дальше твой старый код (current_avatar и т.д.)
+    
+    # --- ЖЕСТКАЯ ПРОВЕРКА БАНА ПО БАЗЕ ДАННЫХ ---
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT unban_time FROM bans WHERE ip = ? OR username = ?", 
+            (client_ip, username)
+        ) as cur:
+            ban_row = await cur.fetchone()
+            if ban_row:
+                unban_time = ban_row[0]
+                if time.time() < unban_time:
+                    remaining_hours = int((unban_time - time.time()) / 3600)
+                    await websocket.accept()
+                    await websocket.send_text(f"ID:0|SYSTEM:🚫 ДОСТУП ЗАБЛОКИРОВАН. Осталось: {remaining_hours} ч.")
+                    await websocket.close(code=1008)
+                    return
+                else:
+                    # Срок бана истек — удаляем из базы автоматически
+                    await db.execute("DELETE FROM bans WHERE username = ?", (username,))
+                    await db.commit()
+
+    # ... дальше идет твой обычный код входа ...
+
 
     # 1. Узнаем аватарку при входе
     current_avatar = ""
