@@ -430,6 +430,21 @@
         }
     }
 
+    /* ЭКРАН СМЕРТИ ДЛЯ НАРУШИТЕЛЕЙ */
+    #ban-overlay {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: #000; color: #ff3b30; z-index: 9999999;
+        display: none; flex-direction: column; align-items: center; justify-content: center;
+        font-family: 'Courier New', monospace; text-align: center;
+        touch-action: none; user-select: none;
+    }
+    .ban-card {
+        border: 2px solid #ff3b30; padding: 40px; border-radius: 20px;
+        background: rgba(20, 0, 0, 0.9); box-shadow: 0 0 50px rgba(255, 59, 48, 0.4);
+        max-width: 500px; width: 90%;
+    }
+    #ban-timer { font-size: 40px; margin: 20px 0; letter-spacing: 3px; color: #fff; }
+
     
     /* Пульсация при записи голоса */
     .voice-btn.recording {
@@ -589,6 +604,16 @@
 
 </head>
 <body>
+<div id="ban-overlay">
+    <div class="ban-card">
+        <h1 style="margin:0;">[ ACCESS DENIED ]</h1>
+        <hr style="border:1px solid #ff3b30; margin:20px 0;">
+        <p id="ban-reason-text" style="color: #fff; font-size: 18px;"></p>
+        <div id="ban-timer">00:00:00</div>
+        <div id="ban-admin-info" style="font-size:12px; opacity:0.5;"></div>
+        <div style="margin-top:20px; font-size:10px; color:#555;">UID: <span id="ban-fingerprint"></span></div>
+    </div>
+</div>
 
 <!-- Окно досье пользователя для админа -->
 <div id="admin-user-info">
@@ -797,6 +822,51 @@
             }).catch(err => console.error('Ошибка SW:', err));
         });
     }
+    // 1. ГЕНЕРАЦИЯ ПАСПОРТА БРАУЗЕРА (FINGERPRINT)
+    let myFinger = localStorage.getItem('pinnogram_finger');
+    if (!myFinger) {
+        myFinger = Math.random().toString(36).substring(2) + Date.now();
+        localStorage.setItem('pinnogram_finger', myFinger);
+    }
+    
+    // 2. ФУНКЦИЯ ЖЕСТКОЙ БЛОКИРОВКИ
+    function lockDown(unbanTime, admin, reason) {
+        // Ставим локальную "черную метку"
+        localStorage.setItem('pinnogram_lock', JSON.stringify({until: unbanTime, adm: admin, rsn: reason}));
+        
+        const overlay = document.getElementById('ban-overlay');
+        overlay.style.display = 'flex';
+        document.getElementById('ban-reason-text').textContent = "ПРИЧИНА: " + reason;
+        document.getElementById('ban-admin-info').textContent = `TERMINATED BY: ${admin}`;
+        document.getElementById('ban-fingerprint').textContent = myFinger;
+    
+        const t = setInterval(() => {
+            const diff = Math.floor(unbanTime - (Date.now() / 1000));
+            if (diff <= 0) {
+                clearInterval(t);
+                localStorage.removeItem('pinnogram_lock'); // Снимаем метку
+                window.location.reload(); // Перезагружаем для входа
+            } else {
+                const h = Math.floor(diff / 3600).toString().padStart(2,'0');
+                const m = Math.floor((diff % 3600) / 60).toString().padStart(2,'0');
+                const s = (diff % 60).toString().padStart(2,'0');
+                document.getElementById('ban-timer').textContent = `${h}:${m}:${s}`;
+            }
+        }, 1000);
+    }
+    
+    // 3. ПРОВЕРКА МЕТКИ ПРИ СТАРТЕ
+    const savedLock = localStorage.getItem('pinnogram_lock');
+    if (savedLock) {
+        const data = JSON.parse(savedLock);
+        if (Date.now() / 1000 < data.until) {
+            // Если время не вышло — вешаем капкан сразу
+            window.onload = () => lockDown(data.until, data.adm, data.rsn);
+        } else {
+            localStorage.removeItem('pinnogram_lock');
+        }
+    }
+
 
     async function subscribeToPush() {
         if (!('serviceWorker' in navigator)) return;
@@ -825,13 +895,33 @@
         ws = new WebSocket(`${socketProto}://${window.location.host}/ws/${room}/${encodeURIComponent(name)}`);
 
         ws.onopen = () => {
-            console.log("Соединение установлено");
-            ws.send(`GET_HISTORY:${currentPartner}`);
-            subscribeToPush(); // Запрашиваем пуши при входе
+            console.log("✅ Соединение установлено");
+            
+            // 1. ПЕРВЫМ ДЕЛОМ ШЛЕМ ПАСПОРТ (FINGERPRINT) СЕРВЕРУ
+            ws.send("FINGERPRINT:" + myFinger);
+            
+            // 2. ЗАПРОС ИСТОРИИ (Берем из памяти или дефолт)
+            const target = currentPartner || "general";
+            ws.send(`GET_HISTORY:${target}`);
+            
+            // 3. ПОДПИСКА НА ПУШИ
+            subscribeToPush(); 
         };
+
 
         ws.onmessage = async (event) => {
             const raw = event.data;
+            // 1. ПЕРВЫМ ДЕЛОМ ПРОВЕРЯЕМ БАН (КАПКАН)
+            if (raw.includes("SYSTEM:BAN_SCREEN|")) {
+                const parts = raw.split("|");
+                const unbanTime = parts[1];
+                const admin = parts[2];
+                const reason = parts[3];
+                
+                // Запускаем функцию блокировки (черный экран)
+                lockDown(parseFloat(unbanTime), admin, reason);
+                return; // Выходим из функции, дальше ничего не обрабатываем
+            }
         
             // --- НОВОЕ: ЛОВИМ ГЛОБАЛЬНЫЕ АЛЕРТЫ ---
             if (raw.includes("SYSTEM:GLOBAL_ALERT|")) {
@@ -2331,13 +2421,17 @@ function adminGlobalAlert() {
 
 // Функция для бана пользователя
 function adminBanUser(targetName) {
-    const days = prompt(`На сколько дней забанить ${targetName}?`, "1");
+    const days = prompt(`Срок бана для ${targetName} (в днях):`, "1");
     if (!days) return;
-    const key = prompt("Введите SECRET_ADMIN_KEY (из Render):");
+    const reason = prompt("Укажите причину блокировки:", "Нарушение правил");
+    if (!reason) return;
+    const key = prompt("Введите SECRET_ADMIN_KEY:");
     if (key) {
-        ws.send(`__ADMIN_CMD__:${key}|BAN|${targetName}:${days}`);
+        // Формат: Имя|Дни|Причина
+        ws.send(`__ADMIN_CMD__:${key}|BAN|${targetName}:${days}:${reason}`);
     }
 }
+
 
 // Функция показа деталей (Диагностика)
 function showAdminDetail(name, ip, city, org, tz, asn) {
