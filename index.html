@@ -715,6 +715,14 @@
 
         <!-- 2. Окно чата -->
         <div id="chat"></div>
+        
+        <div id="reply-preview" style="display:none; background:rgba(255,255,255,0.1); padding:10px; border-left:3px solid var(--accent); position:relative;"></div>
+
+        <div id="action-preview" style="display:none; background:rgba(255,255,255,0.1); padding:10px; border-left:3px solid var(--accent); position:relative;">
+            <div id="action-type" style="font-size:11px; opacity:0.6;"></div>
+            <div id="preview-text" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+            <button onclick="cancelAction()" style="position:absolute; right:10px; top:10px; background:none; border:none; color:white; cursor:pointer; font-size:16px;">✕</button>
+        </div>
 
         <!-- 3. Панель настройки фона (ВЫЕЗЖАЕТ НАД КНОПКАМИ) -->
         <div id="bg-panel" class="bg-settings-panel">
@@ -733,7 +741,8 @@
                 <input type="file" id="hidden-bg-upload" style="display:none" accept="image/*" onchange="uploadCustomBg(this)">
         
                 <!-- Твои пресеты -->
-                <img src="https://i.ibb.co/4pSbxsh/user-avatar.png"<h2 class="bg-thumb" onclick="setChatBg('url(https://i.ibb.co/4pSbxsh/user-avatar.png)')">
+                
+                <img src="https://i.ibb.co/4pSbxsh/user-avatar.png" class="bg-thumb" onclick="setChatBg('url(https://i.ibb.co/4pSbxsh/user-avatar.png)')">
                 <div class="bg-thumb" style="background:#fff;" onclick="setChatBg('#fff')"></div>
                 <div class="bg-thumb" style="background:#000;" onclick="setChatBg('#000')"></div>
                 <div class="bg-thumb" style="background:var(--bg);" onclick="setChatBg('var(--bg)')"></div>
@@ -2216,12 +2225,36 @@ function copyMsgText() {
 }
 
 function prepareReply() {
-    replyToId = selectedMsgId;
-    editMsgId = null;
     const msgEl = document.getElementById(`msg-${selectedMsgId}`);
-    const actualText = msgEl ? msgEl.querySelector('.msg-text').textContent : selectedMsgText;
-    showPreview("ОТВЕТ", actualText);
+    if (msgEl) {
+        const textNode = msgEl.querySelector('.msg-text');
+        // ПРОВЕРКА: Если текста нет (это медиа), пишем "Медиафайл", иначе берем текст
+        const previewText = textNode ? textNode.textContent : "Медиафайл";
+        
+        replyToId = selectedMsgId;
+        
+        // Показываем плашку ответа над полем ввода
+        const replyPreview = document.getElementById('reply-preview');
+        if (replyPreview) {
+            replyPreview.innerHTML = `
+                <div style="font-size:11px; opacity:0.6;">Ответ на:</div>
+                <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px;">
+                    ${previewText}
+                </div>
+                <button onclick="cancelReply()" style="position:absolute; right:5px; top:5px; background:none; border:none; color:white; cursor:pointer;">✕</button>
+            `;
+            replyPreview.style.display = 'block';
+        }
+    }
+    // Скрываем контекстное меню
+    document.getElementById('msg-menu').style.display = 'none';
 }
+
+function cancelReply() {
+    replyToId = null;
+    document.getElementById('reply-preview').style.display = 'none';
+}
+
 
 function prepareEdit() {
     editMsgId = selectedMsgId;
