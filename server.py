@@ -141,22 +141,28 @@ async def get_users_archive(key: str):
         return {"status": "error", "message": "Wrong Key"}
     
     async with aiosqlite.connect(DB_PATH) as db:
-        # Тянем ВСЕХ (u) и проверяем, есть ли они в таблице банов (b)
+        # УМНЫЙ ЗАПРОС: UNION объединяет тех, кто в таблице юзеров 
+        # и тех, кто просто есть в истории сообщений (уникальные имена)
         sql = """
-            SELECT u.username, u.avatar, b.unban_time 
-            FROM users u 
-            LEFT JOIN bans b ON u.username = b.username
+            SELECT DISTINCT name, avatar, b.unban_time, b.reason
+            FROM (
+                SELECT username as name, avatar FROM users
+                UNION
+                SELECT username as name, avatar FROM messages
+            ) u
+            LEFT JOIN bans b ON u.name = b.username
+            WHERE name IS NOT None AND name != ''
         """
         async with db.execute(sql) as cur:
             rows = await cur.fetchall()
             return [
                 {
                     "name": r[0], 
-                    "avatar": r[1], 
-                    "banned": r[2] is not None and r[2] > time.time()
+                    "avatar": r[1] or "https://i.ibb.co/4pSbxsh/user-avatar.png", 
+                    "banned": r[2] is not None and r[2] > time.time(),
+                    "reason": r[3] or "" 
                 } for r in rows
             ]
-
 
 
 # 1. Роут для регистрации и входа
