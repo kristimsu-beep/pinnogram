@@ -140,29 +140,33 @@ async def get_users_archive(key: str):
     if key != ADMIN_SECRET_KEY: 
         return {"status": "error", "message": "Wrong Key"}
     
-    async with aiosqlite.connect(DB_PATH) as db:
-        # УМНЫЙ ЗАПРОС: UNION объединяет тех, кто в таблице юзеров 
-        # и тех, кто просто есть в истории сообщений (уникальные имена)
-        sql = """
-            SELECT DISTINCT name, avatar, b.unban_time, b.reason
-            FROM (
-                SELECT username as name, avatar FROM users
-                UNION
-                SELECT username as name, avatar FROM messages
-            ) u
-            LEFT JOIN bans b ON u.name = b.username
-            WHERE name IS NOT None AND name != ''
-        """
-        async with db.execute(sql) as cur:
-            rows = await cur.fetchall()
-            return [
-                {
-                    "name": r[0], 
-                    "avatar": r[1] or "https://i.ibb.co/4pSbxsh/user-avatar.png", 
-                    "banned": r[2] is not None and r[2] > time.time(),
-                    "reason": r[3] or "" 
-                } for r in rows
-            ]
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            # Используем COALESCE, чтобы вместо NULL всегда была пустая строка
+            sql = """
+                SELECT DISTINCT name, avatar, b.unban_time, b.reason
+                FROM (
+                    SELECT username as name, avatar FROM users
+                    UNION
+                    SELECT username as name, COALESCE(avatar, '') as avatar FROM messages
+                ) u
+                LEFT JOIN bans b ON u.name = b.username
+                WHERE name IS NOT NULL AND name != ''
+            """
+            async with db.execute(sql) as cur:
+                rows = await cur.fetchall()
+                return [
+                    {
+                        "name": r[0], 
+                        "avatar": r[1] if (r[1] and len(r[1]) > 10) else "https://i.ibb.co/4pSbxsh/user-avatar.png", 
+                        "banned": r[2] is not None and r[2] > time.time(),
+                        "reason": r[3] or "" 
+                    } for r in rows
+                ]
+    except Exception as e:
+        print(f"🛑 ARCHIVE DATABASE ERROR: {e}")
+        return {"status": "error", "message": str(e)}
+
 
 
 # 1. Роут для регистрации и входа
