@@ -552,28 +552,43 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
         browser_finger = auth_msg.replace("FINGERPRINT:", "") if "FINGERPRINT:" in auth_msg else "unknown"
 
         # 3. ЖЕСТКАЯ ПРОВЕРКА ПО ВСЕМ ФРОНТАМ (Имя, IP или Браузер)
+@app.websocket("/ws/{room_id}/{username}")
+async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
+    client_ip = websocket.client.host if websocket.client else "unknown"
+    
+    await websocket.accept()
+
+    try:
+        # Ждем паспорт браузера
+        auth_msg = await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
+        browser_finger = auth_msg.replace("FINGERPRINT:", "") if "FINGERPRINT:" in auth_msg else "unknown"
+
         async with aiosqlite.connect(DB_PATH) as db:
-            sql = "SELECT unban_time, admin_name, reason FROM bans WHERE username = ? OR ip = ? OR fingerprint = ?"
-            async with db.execute(sql, (username, client_ip, browser_finger)) as cur:
+            # --- ИСПРАВЛЕНО: УБРАЛИ IP ИЗ ПРОВЕРКИ ---
+            sql = "SELECT unban_time, admin_name, reason FROM bans WHERE username = ? OR fingerprint = ?"
+            async with db.execute(sql, (username, browser_finger)) as cur:
                 ban_row = await cur.fetchone()
                 
                 if ban_row:
                     unban_time, admin, reason = ban_row
                     if time.time() < unban_time:
-                        # Шлем пакет BAN_SCREEN и выкидываем
                         await websocket.send_text(f"ID:0|SYSTEM:BAN_SCREEN|{unban_time}|{admin}|{reason}")
                         await asyncio.sleep(0.5)
                         await websocket.close(code=1008)
                         return
                     else:
-                        # Срок истек — удаляем бан везде
-                        await db.execute("DELETE FROM bans WHERE username = ? OR ip = ? OR fingerprint = ?", 
-                                        (username, client_ip, browser_finger))
+                        # Чистим базу только по нику и железу
+                        await db.execute("DELETE FROM bans WHERE username = ? OR fingerprint = ?", 
+                                        (username, browser_finger))
                         await db.commit()
     except Exception as e:
         print(f"Auth Error: {e}")
         await websocket.close()
         return
+ 
+    
+    # ... дальше твой код с аватаркой ...
+
 
     # ... дальше идет твой код (current_avatar и т.д.) ...
 
