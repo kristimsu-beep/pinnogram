@@ -247,30 +247,48 @@ class ConnectionManager:
         asyncio.create_task(self.broadcast_online(room_id))
     
     # Метод для бана
-    async def ban_user(self, target_name, days, admin_name):
+    # 1. ОБНОВЛЕННЫЙ МЕТОД БАНА
+    async def ban_user(self, target_name, days, admin_name, reason="Нарушение правил"):
+        # Рассчитываем время разбана в секундах (Unix Timestamp)
         unban_time = time.time() + (int(days) * 86400)
         
         async with aiosqlite.connect(DB_PATH) as db:
+            # Ищем пользователя во всех комнатах, чтобы выкинуть его мгновенно
+            found = False
             for room_id, users in self.rooms.items():
                 if target_name in users:
                     ws = users[target_name]
                     ip = ws.client.host if ws.client else "unknown"
-                    # Сохраняем бан в БД навсегда
-                    await db.execute("INSERT OR REPLACE INTO bans VALUES (?, ?, ?, ?, ?)", 
-                                    (ip, target_name, unban_time, admin_name, "1008"))
+                    
+                    # Сохраняем бан в базу (теперь по username как PRIMARY KEY)
+                    await db.execute("INSERT OR REPLACE INTO bans (username, ip, unban_time, admin_name, reason) VALUES (?, ?, ?, ?, ?)", 
+                                    (target_name, ip, unban_time, admin_name, reason))
                     await db.commit()
                     
                     try:
-                        await ws.send_text(f"ID:0|SYSTEM:BAN_ALERT|{days}|{admin_name}|1008")
+                        # Шлем спец-пакет для красивого экрана на фронтенде
+                        # Формат: BAN_SCREEN | время_разбана | кто_забанил | причина
+                        await ws.send_text(f"ID:0|SYSTEM:BAN_SCREEN|{unban_time}|{admin_name}|{reason}")
+                        # Короткая пауза, чтобы фронтенд успел поймать пакет, и закрываем
+                        await asyncio.sleep(0.5)
                         await ws.close(code=1008)
                     except: pass
+                    
                     del self.rooms[room_id][target_name]
-                    return True
-        return False
+                    found = True
+            
+            # Если юзера нет в сети, всё равно пишем бан в базу (на будущее)
+            if not found:
+                await db.execute("INSERT OR REPLACE INTO bans (username, ip, unban_time, admin_name, reason) VALUES (?, ?, ?, ?, ?)", 
+                                (target_name, "offline", unban_time, admin_name, reason))
+                await db.commit()
+                
+            return True
 
-    async def unban_user(self, ip_or_name):
+    # 2. МЕТОД РАЗБАНА (остается почти таким же, но чистит по имени)
+    async def unban_user(self, username):
         async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute("DELETE FROM bans WHERE ip = ? OR username = ?", (ip_or_name, ip_or_name))
+            await db.execute("DELETE FROM bans WHERE username = ?", (username,))
             await db.commit()
         return True
 
@@ -461,13 +479,14 @@ async def startup():
         
         await db.execute("""
             CREATE TABLE IF NOT EXISTS bans (
-                ip TEXT PRIMARY KEY,
-                username TEXT,
+                username TEXT PRIMARY KEY,
+                ip TEXT,
                 unban_time REAL,
                 admin_name TEXT,
                 reason TEXT
             )
         """)
+
 
         
         # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
@@ -534,24 +553,27 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
 async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
     client_ip = websocket.client.host if websocket.client else ""
     
-    # --- ЖЕСТКАЯ ПРОВЕРКА БАНА ПО БАЗЕ ДАННЫХ ---
+    # --- ЖЕСТКАЯ ПРОВЕРКА БАНА ПО БАЗЕ ДАННЫХ (С ТАЙМЕРОМ) ---
     async with aiosqlite.connect(DB_PATH) as db:
+        # Тянем время, админа и причину
         async with db.execute(
-            "SELECT unban_time FROM bans WHERE ip = ? OR username = ?", 
-            (client_ip, username)
+            "SELECT unban_time, admin_name, reason FROM bans WHERE username = ? OR ip = ?", 
+            (username, client_ip)
         ) as cur:
             ban_row = await cur.fetchone()
             if ban_row:
-                unban_time = ban_row[0]
+                unban_time, admin, reason = ban_row
                 if time.time() < unban_time:
-                    remaining_hours = int((unban_time - time.time()) / 3600)
                     await websocket.accept()
-                    await websocket.send_text(f"ID:0|SYSTEM:🚫 ДОСТУП ЗАБЛОКИРОВАН. Осталось: {remaining_hours} ч.")
+                    # Шлем пакет BAN_SCREEN: время|админ|причина
+                    await websocket.send_text(f"ID:0|SYSTEM:BAN_SCREEN|{unban_time}|{admin}|{reason}")
+                    # Даем долю секунды на получение и рубим связь
+                    await asyncio.sleep(0.5) 
                     await websocket.close(code=1008)
                     return
                 else:
-                    # Срок бана истек — удаляем из базы автоматически
-                    await db.execute("DELETE FROM bans WHERE username = ?", (username,))
+                    # Срок истек — чистим базу
+                    await db.execute("DELETE FROM bans WHERE username = ? OR ip = ?", (username, client_ip))
                     await db.commit()
 
     # ... дальше идет твой обычный код входа ...
@@ -583,8 +605,10 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     if cmd == "GLOBAL_MSG":
                         await manager.global_broadcast(val, username)
                     elif cmd == "BAN":
-                        name, days = val.split(":", 1)
-                        await manager.ban_user(name, days, username)
+                        # Разделяем на 3 части: Имя, Дни, Причина
+                        name, days, reason = val.split(":", 2)
+                        await manager.ban_user(name, days, username, reason)
+
                     elif cmd == "UNBAN": # НОВАЯ ВЕТКА ДЛЯ РАЗБАНА
                         await manager.unban_user(val)
                         await websocket.send_text(f"ID:0|SYSTEM:✅ Пользователь {val} разбанен.")
