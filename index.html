@@ -2516,15 +2516,23 @@ async function openUsersArchive() {
     if (!key) return;
     
     try {
+        console.log("📡 Запрос к базе по адресу:", `${API_URL}/admin/users_archive?key=${key}`);
         const res = await fetch(`${API_URL}/admin/users_archive?key=${key}`);
         const data = await res.json();
-        if (data.status === "error") return alert("ACCESS DENIED");
+        
+        console.log("📦 Полученные данные:", data); // Проверяем, что прилетело
+
+        if (data.status === "error") return alert("ACCESS DENIED: Неверный ключ");
         
         fullArchive = data;
         document.getElementById('archive-modal').style.display = 'block';
         renderArchive(fullArchive);
-    } catch (e) { alert("Server Error"); }
+    } catch (e) { 
+        console.error("❌ Ошибка запроса:", e);
+        alert("Server Error: Проверьте консоль (F12)"); 
+    }
 }
+
 
 function renderArchive(list) {
     const container = document.getElementById('archive-list');
