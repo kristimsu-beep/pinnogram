@@ -839,30 +839,35 @@
     }
     
     // 2. ФУНКЦИЯ ЖЕСТКОЙ БЛОКИРОВКИ
-    function lockDown(unbanTime, admin, reason) {
-        // Ставим локальную "черную метку"
-        localStorage.setItem('pinnogram_lock', JSON.stringify({until: unbanTime, adm: admin, rsn: reason}));
-        
-        const overlay = document.getElementById('ban-overlay');
-        overlay.style.display = 'flex';
-        document.getElementById('ban-reason-text').textContent = "ПРИЧИНА: " + reason;
-        document.getElementById('ban-admin-info').textContent = `TERMINATED BY: ${admin}`;
-        document.getElementById('ban-fingerprint').textContent = myFinger;
+function lockDown(unbanTime, admin, reason) {
+    // Превращаем в число, если пришла строка
+    const targetTime = Number(unbanTime); 
     
-        const t = setInterval(() => {
-            const diff = Math.floor(unbanTime - (Date.now() / 1000));
-            if (diff <= 0) {
-                clearInterval(t);
-                localStorage.removeItem('pinnogram_lock'); // Снимаем метку
-                window.location.reload(); // Перезагружаем для входа
-            } else {
-                const h = Math.floor(diff / 3600).toString().padStart(2,'0');
-                const m = Math.floor((diff % 3600) / 60).toString().padStart(2,'0');
-                const s = (diff % 60).toString().padStart(2,'0');
-                document.getElementById('ban-timer').textContent = `${h}:${m}:${s}`;
-            }
-        }, 1000);
-    }
+    localStorage.setItem('pinnogram_lock', JSON.stringify({until: targetTime, adm: admin, rsn: reason}));
+    
+    const overlay = document.getElementById('ban-overlay');
+    overlay.style.display = 'flex';
+    document.getElementById('ban-reason-text').textContent = "ПРИЧИНА: " + reason;
+    document.getElementById('ban-admin-info').textContent = `TERMINATED BY: ${admin}`;
+
+    const t = setInterval(() => {
+        const now = Math.floor(Date.now() / 1000);
+        const diff = targetTime - now; // Считаем разницу в секундах
+        
+        if (diff <= 0) {
+            clearInterval(t);
+            localStorage.removeItem('pinnogram_lock');
+            window.location.reload();
+        } else {
+            // Форматируем время 00:00:00
+            const h = Math.floor(diff / 3600).toString().padStart(2,'0');
+            const m = Math.floor((diff % 3600) / 60).toString().padStart(2,'0');
+            const s = Math.floor(diff % 60).toString().padStart(2,'0');
+            document.getElementById('ban-timer').textContent = `${h}:${m}:${s}`;
+        }
+    }, 1000);
+}
+
     
     // 3. ПРОВЕРКА МЕТКИ ПРИ СТАРТЕ
     const savedLock = localStorage.getItem('pinnogram_lock');
@@ -923,14 +928,17 @@
             // 1. ПЕРВЫМ ДЕЛОМ ПРОВЕРЯЕМ БАН (КАПКАН)
             if (raw.includes("SYSTEM:BAN_SCREEN|")) {
                 const parts = raw.split("|");
-                const unbanTime = parts[1];
-                const admin = parts[2];
-                const reason = parts[3];
+                // ИСПРАВЛЕННЫЕ ИНДЕКСЫ:
+                const unbanTime = parts[2]; // Время (было 1)
+                const admin = parts[3];     // Админ (было 2)
+                const reason = parts[4];    // Причина (было 3)
                 
-                // Запускаем функцию блокировки (черный экран)
-                lockDown(parseFloat(unbanTime), admin, reason);
-                return; // Выходим из функции, дальше ничего не обрабатываем
+                if (unbanTime) {
+                    lockDown(parseFloat(unbanTime), admin, reason);
+                }
+                return; 
             }
+
         
             // --- НОВОЕ: ЛОВИМ ГЛОБАЛЬНЫЕ АЛЕРТЫ ---
             if (raw.includes("SYSTEM:GLOBAL_ALERT|")) {
@@ -1762,35 +1770,42 @@ function sendMessage() {
     const i = document.getElementById("messageText");
     const text = i.value.trim();
 
-    // Проверка состояния сокета (чтобы не было ошибки CLOSED)
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-        alert("Нет соединения с сервером. Попробуйте обновить страницу.");
+        alert("Нет соединения с сервером.");
         return;
     }
 
     if (text) {
         const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-        
         let prefix = currentPartner ? `TO_USER:${currentPartner}|` : "";
         let timePrefix = `TIME:${now}|`;
 
         if (editMsgId) {
-            // Редактирование
             ws.send(`${prefix}__EDIT__:${editMsgId}|${text}`);
         } 
         else if (replyToId) {
-            // ОТВЕТ (ИСПРАВЛЕНО: REPLY вместо REPLY_TO и добавлена палка |)
             ws.send(`${prefix}${timePrefix}REPLY:${replyToId}|${text}`);
         } 
         else {
-            // Обычное сообщение
             ws.send(`${prefix}${timePrefix}${text}`);
         }
 
+        // --- ВОТ ЭТО НУЖНО ДОБАВИТЬ В КОНЕЦ ---
         i.value = '';
-        cancelAction(); 
+        
+        // 1. Очищаем переменные
+        editMsgId = null;
+        replyToId = null; 
+
+        // 2. Прячем оба превью сразу
+        if(document.getElementById('action-preview')) document.getElementById('action-preview').style.display = 'none';
+        if(document.getElementById('reply-preview')) document.getElementById('reply-preview').style.display = 'none';
+        
+        // Фокусируем обратно на ввод
+        i.focus();
     }
 }
+
 
 
 
