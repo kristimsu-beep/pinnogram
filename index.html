@@ -889,11 +889,22 @@
 
     
     function adminBanUser(name) {
-        currentBanTarget = name;
-        document.getElementById('ban-target-label').textContent = name;
-        document.getElementById('ban-constructor').style.display = 'block';
-        updateBanLabels();
+        currentBanTarget = name; // Запоминаем ник
+        
+        const label = document.getElementById('ban-target-label');
+        const constructor = document.getElementById('ban-constructor');
+        
+        if (label && constructor) {
+            label.textContent = name;
+            constructor.style.display = 'block'; // ПОКАЗЫВАЕМ ОКНО С ПОЛЗУНКАМИ
+            updateBanLabels(); // Обновляем цифры 0д 0ч 5м
+        } else {
+            // Если вдруг окно не нашлось в HTML, сработает запасной вариант
+            const days = prompt(`Срок бана для ${name} (в днях):`, "1");
+            if (days) confirmOldBan(name, days); 
+        }
     }
+
     
     function confirmSmartBan() {
         const d = parseInt(document.getElementById('range-d').value);
