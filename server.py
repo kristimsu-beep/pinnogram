@@ -234,7 +234,7 @@ class ConnectionManager:
         self.rooms = {}
 
     async def connect(self, websocket: WebSocket, room_id: str, username: str):
-        await websocket.accept()
+        # Соединение уже принято в websocket_endpoint для проверки Fingerprint
         if room_id not in self.rooms:
             self.rooms[room_id] = {}
         self.rooms[room_id][username] = websocket
@@ -243,33 +243,28 @@ class ConnectionManager:
     def disconnect(self, room_id: str, username: str):
         if room_id in self.rooms and username in self.rooms[room_id]:
             del self.rooms[room_id][username]
-        # Создаем задачу на обновление списка онлайн
         asyncio.create_task(self.broadcast_online(room_id))
     
-    # Метод для бана
-    # 1. ОБНОВЛЕННЫЙ МЕТОД БАНА
     async def ban_user(self, target_name, days, admin_name, reason="Нарушение правил"):
-        # Рассчитываем время разбана в секундах (Unix Timestamp)
         unban_time = time.time() + (int(days) * 86400)
         
         async with aiosqlite.connect(DB_PATH) as db:
-            # Ищем пользователя во всех комнатах, чтобы выкинуть его мгновенно
             found = False
             for room_id, users in self.rooms.items():
                 if target_name in users:
                     ws = users[target_name]
                     ip = ws.client.host if ws.client else "unknown"
-                    
-                    # Сохраняем бан в базу (теперь по username как PRIMARY KEY)
-                    await db.execute("INSERT OR REPLACE INTO bans (username, ip, unban_time, admin_name, reason) VALUES (?, ?, ?, ?, ?)", 
-                                    (target_name, ip, unban_time, admin_name, reason))
+                    # Достаем отпечаток, который мы сохранили в сокет при входе
+                    finger = getattr(ws, 'browser_fingerprint', 'none')
+
+                    # Пишем ПОЛНЫЙ бан (6 полей)
+                    await db.execute("INSERT OR REPLACE INTO bans VALUES (?, ?, ?, ?, ?, ?)", 
+                                    (target_name, ip, finger, unban_time, admin_name, reason))
                     await db.commit()
-                    
+
                     try:
-                        # Шлем спец-пакет для красивого экрана на фронтенде
-                        # Формат: BAN_SCREEN | время_разбана | кто_забанил | причина
+                        # Активируем "капкан" на клиенте
                         await ws.send_text(f"ID:0|SYSTEM:BAN_SCREEN|{unban_time}|{admin_name}|{reason}")
-                        # Короткая пауза, чтобы фронтенд успел поймать пакет, и закрываем
                         await asyncio.sleep(0.5)
                         await ws.close(code=1008)
                     except: pass
@@ -277,25 +272,22 @@ class ConnectionManager:
                     del self.rooms[room_id][target_name]
                     found = True
             
-            # Если юзера нет в сети, всё равно пишем бан в базу (на будущее)
+            # Если юзера нет в сети, баним "вдогонку" по имени
             if not found:
-                await db.execute("INSERT OR REPLACE INTO bans (username, ip, unban_time, admin_name, reason) VALUES (?, ?, ?, ?, ?)", 
-                                (target_name, "offline", unban_time, admin_name, reason))
+                await db.execute("INSERT OR REPLACE INTO bans VALUES (?, ?, ?, ?, ?, ?)", 
+                                (target_name, "offline", "none", unban_time, admin_name, reason))
                 await db.commit()
                 
             return True
 
-    # 2. МЕТОД РАЗБАНА (остается почти таким же, но чистит по имени)
-    async def unban_user(self, username):
+    async def unban_user(self, target):
         async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute("DELETE FROM bans WHERE username = ?", (username,))
+            # Чистим всё: по имени или по IP (это удалит и привязанный fingerprint)
+            await db.execute("DELETE FROM bans WHERE username = ? OR ip = ?", (target, target))
             await db.commit()
         return True
 
-
-    # Метод для глобальной рассылки
     async def global_broadcast(self, text, admin_name):
-        # Тип SYSTEM:GLOBAL_ALERT для красивого окна
         final_msg = f"ID:0|SYSTEM:GLOBAL_ALERT|{text}|{admin_name}"
         for room in self.rooms.values():
             for ws in room.values():
@@ -303,24 +295,19 @@ class ConnectionManager:
                     try: await ws.send_text(final_msg)
                     except: continue
 
-
     async def broadcast_online(self, room_id: str):
         if room_id in self.rooms:
             users_info = []
             for name, ws in self.rooms[room_id].items():
                 ip = ws.client.host if ws.client else "unknown"
                 info = await get_user_info(ip) 
-                # Упаковываем все 7 параметров для админки
                 users_info.append(f"{name}|{ip}|{info['country']}|{info['city']}|{info['org']}|{info['tz']}|{info['asn']}")
             
             msg = f"ID:0|SYSTEM:ONLINE_LIST:{','.join(users_info)}"
-            
             for ws in self.rooms[room_id].values():
                 if ws.client_state == WebSocketState.CONNECTED:
-                    try: 
-                        await ws.send_text(msg)
-                    except: 
-                        continue
+                    try: await ws.send_text(msg)
+                    except: continue
 
     async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None, reply_to_id: int = None):
         now = client_time if client_time else datetime.now().strftime("%H:%M")        
@@ -481,11 +468,13 @@ async def startup():
             CREATE TABLE IF NOT EXISTS bans (
                 username TEXT PRIMARY KEY,
                 ip TEXT,
+                fingerprint TEXT,  -- НОВОЕ ПОЛЕ
                 unban_time REAL,
                 admin_name TEXT,
                 reason TEXT
             )
         """)
+
 
 
         
@@ -551,33 +540,44 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
 
 @app.websocket("/ws/{room_id}/{username}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
-    client_ip = websocket.client.host if websocket.client else ""
+    client_ip = websocket.client.host if websocket.client else "unknown"
     
-    # --- ЖЕСТКАЯ ПРОВЕРКА БАНА ПО БАЗЕ ДАННЫХ (С ТАЙМЕРОМ) ---
-    async with aiosqlite.connect(DB_PATH) as db:
-        # Тянем время, админа и причину
-        async with db.execute(
-            "SELECT unban_time, admin_name, reason FROM bans WHERE username = ? OR ip = ?", 
-            (username, client_ip)
-        ) as cur:
-            ban_row = await cur.fetchone()
-            if ban_row:
-                unban_time, admin, reason = ban_row
-                if time.time() < unban_time:
-                    await websocket.accept()
-                    # Шлем пакет BAN_SCREEN: время|админ|причина
-                    await websocket.send_text(f"ID:0|SYSTEM:BAN_SCREEN|{unban_time}|{admin}|{reason}")
-                    # Даем долю секунды на получение и рубим связь
-                    await asyncio.sleep(0.5) 
-                    await websocket.close(code=1008)
-                    return
-                else:
-                    # Срок истек — чистим базу
-                    await db.execute("DELETE FROM bans WHERE username = ? OR ip = ?", (username, client_ip))
-                    await db.commit()
+    # 1. Принимаем соединение ПЕРЕД проверкой, чтобы отправить данные
+    await websocket.accept()
 
-    # ... дальше идет твой обычный код входа ...
+    try:
+        # 2. Ждем от клиента пакет FINGERPRINT (отправляется браузером сразу)
+        # Если клиент не прислал его за 2 секунды — рубим связь
+        auth_msg = await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
+        browser_finger = auth_msg.replace("FINGERPRINT:", "") if "FINGERPRINT:" in auth_msg else "unknown"
 
+        # 3. ЖЕСТКАЯ ПРОВЕРКА ПО ВСЕМ ФРОНТАМ (Имя, IP или Браузер)
+        async with aiosqlite.connect(DB_PATH) as db:
+            sql = "SELECT unban_time, admin_name, reason FROM bans WHERE username = ? OR ip = ? OR fingerprint = ?"
+            async with db.execute(sql, (username, client_ip, browser_finger)) as cur:
+                ban_row = await cur.fetchone()
+                
+                if ban_row:
+                    unban_time, admin, reason = ban_row
+                    if time.time() < unban_time:
+                        # Шлем пакет BAN_SCREEN и выкидываем
+                        await websocket.send_text(f"ID:0|SYSTEM:BAN_SCREEN|{unban_time}|{admin}|{reason}")
+                        await asyncio.sleep(0.5)
+                        await websocket.close(code=1008)
+                        return
+                    else:
+                        # Срок истек — удаляем бан везде
+                        await db.execute("DELETE FROM bans WHERE username = ? OR ip = ? OR fingerprint = ?", 
+                                        (username, client_ip, browser_finger))
+                        await db.commit()
+    except Exception as e:
+        print(f"Auth Error: {e}")
+        await websocket.close()
+        return
+
+    # ... дальше идет твой код (current_avatar и т.д.) ...
+
+    websocket.browser_fingerprint = browser_finger  # СОХРАНЯЕМ ОТПЕЧАТОК В СОКЕТЕ
 
     # 1. Узнаем аватарку при входе
     current_avatar = ""
