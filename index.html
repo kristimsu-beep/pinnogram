@@ -889,21 +889,34 @@
 
     
     function adminBanUser(name) {
-        currentBanTarget = name; // Запоминаем ник
+        // 1. Запоминаем ник жертвы
+        currentBanTarget = name; 
         
+        // 2. Находим наше черное окно и заголовок
         const label = document.getElementById('ban-target-label');
-        const constructor = document.getElementById('ban-constructor');
+        const modal = document.getElementById('ban-constructor');
         
-        if (label && constructor) {
+        if (modal && label) {
+            // 3. Пишем имя в заголовок окна
             label.textContent = name;
-            constructor.style.display = 'block'; // ПОКАЗЫВАЕМ ОКНО С ПОЛЗУНКАМИ
-            updateBanLabels(); // Обновляем цифры 0д 0ч 5м
+            
+            // 4. Сбрасываем ползунки на дефолт (5 минут)
+            document.getElementById('range-d').value = 0;
+            document.getElementById('range-h').value = 0;
+            document.getElementById('range-m').value = 5;
+            
+            // 5. Показываем окно и обновляем цифры (0д 0ч 5м)
+            modal.style.display = 'block';
+            updateBanLabels(); 
+            
+            console.log("🔨 Протокол изоляции запущен для:", name);
         } else {
-            // Если вдруг окно не нашлось в HTML, сработает запасной вариант
-            const days = prompt(`Срок бана для ${name} (в днях):`, "1");
-            if (days) confirmOldBan(name, days); 
+            // Если окна нет, выведем ошибку в консоль, чтобы понять почему
+            console.error("❌ ОШИБКА: Элемент #ban-constructor не найден в HTML!");
+            alert("Ошибка интерфейса: Окно бана не найдено.");
         }
     }
+
 
     
     function confirmSmartBan() {
