@@ -430,7 +430,6 @@
         }
     }
 
-    /* ЭКРАН СМЕРТИ ДЛЯ НАРУШИТЕЛЕЙ */
     #ban-overlay {
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
         background: #000; color: #ff3b30; z-index: 9999999;
@@ -444,6 +443,8 @@
         max-width: 500px; width: 90%;
     }
     #ban-timer { font-size: 40px; margin: 20px 0; letter-spacing: 3px; color: #fff; }
+    .ban-range { width: 100%; height: 6px; accent-color: #ff3b30; cursor: pointer; }
+    .ban-label { display: flex; justify-content: space-between; font-size: 12px; margin-top: 10px; }
 
     
     /* Пульсация при записи голоса */
@@ -614,7 +615,21 @@
         <div style="margin-top:20px; font-size:10px; color:#555;">UID: <span id="ban-fingerprint"></span></div>
     </div>
 </div>
-
+<!-- 2. БАН-КОНСТРУКТОР (ПОЛЗУНКИ) -->
+<div id="ban-constructor" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#1a1a1a; border:2px solid #ff3b30; padding:25px; border-radius:20px; z-index:200000; width:300px; color:white;">
+    <h3 style="margin:0; color:#ff3b30; text-align:center;">🔨 BAN: <span id="ban-target-label"></span></h3>
+    <div class="ban-label"><span>Минуты:</span> <b id="val-m">5</b></div>
+    <input type="range" id="range-m" min="0" max="59" value="5" class="ban-range" oninput="updateBanLabels()">
+    <div class="ban-label"><span>Часы:</span> <b id="val-h">0</b></div>
+    <input type="range" id="range-h" min="0" max="23" value="0" class="ban-range" oninput="updateBanLabels()">
+    <div class="ban-label"><span>Дни:</span> <b id="val-d">0</b></div>
+    <input type="range" id="range-d" min="0" max="30" value="0" class="ban-range" oninput="updateBanLabels()">
+    <input type="text" id="ban-reason-input" placeholder="Причина..." style="width:100%; margin:20px 0 10px; padding:10px; background:#000; border:1px solid #333; color:white; border-radius:8px;">
+    <div style="display:flex; gap:10px;">
+        <button onclick="confirmSmartBan()" style="flex:1; background:#ff3b30; color:white; border:none; padding:12px; border-radius:10px; cursor:pointer; font-weight:bold;">EXECUTE</button>
+        <button onclick="document.getElementById('ban-constructor').style.display='none'" style="flex:1; background:#333; border:none; color:white; border-radius:10px; cursor:pointer;">CANCEL</button>
+    </div>
+</div>
 <!-- Окно досье пользователя для админа -->
 <div id="admin-user-info">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
@@ -831,55 +846,66 @@
             }).catch(err => console.error('Ошибка SW:', err));
         });
     }
-    // 1. ГЕНЕРАЦИЯ ПАСПОРТА БРАУЗЕРА (FINGERPRINT)
-    let myFinger = localStorage.getItem('pinnogram_finger');
-    if (!myFinger) {
-        myFinger = Math.random().toString(36).substring(2) + Date.now();
-        localStorage.setItem('pinnogram_finger', myFinger);
+    
+    // ГЕНЕРАЦИЯ ОТПЕЧАТКА (FINGERPRINT)
+    let myFinger = localStorage.getItem('pinnogram_finger') || (Math.random().toString(36).substring(2) + Date.now());
+    localStorage.setItem('pinnogram_finger', myFinger);
+    
+    // ФУНКЦИЯ ЖЕСТКОЙ БЛОКИРОВКИ (КАПКАН)
+    function lockDown(unbanTime, admin, reason) {
+        localStorage.setItem('pinnogram_lock', JSON.stringify({until: unbanTime, adm: admin, rsn: reason}));
+        document.getElementById('ban-overlay').style.display = 'flex';
+        document.getElementById('ban-reason-text').textContent = reason;
+        document.getElementById('ban-admin-info').textContent = `BY: ${admin}`;
+        document.getElementById('ban-fingerprint').textContent = myFinger;
+    
+        const t = setInterval(() => {
+            const diff = Math.floor(unbanTime - (Date.now() / 1000));
+            if (diff <= 0) { clearInterval(t); localStorage.removeItem('pinnogram_lock'); window.location.reload(); }
+            else {
+                const h = Math.floor(diff / 3600).toString().padStart(2,'0');
+                const m = Math.floor((diff % 3600) / 60).toString().padStart(2,'0');
+                const s = (diff % 60).toString().padStart(2,'0');
+                document.getElementById('ban-timer').textContent = `${h}:${m}:${s}`;
+            }
+        }, 1000);
     }
     
-    // 2. ФУНКЦИЯ ЖЕСТКОЙ БЛОКИРОВКИ
-function lockDown(unbanTime, admin, reason) {
-    // Превращаем в число, если пришла строка
-    const targetTime = Number(unbanTime); 
-    
-    localStorage.setItem('pinnogram_lock', JSON.stringify({until: targetTime, adm: admin, rsn: reason}));
-    
-    const overlay = document.getElementById('ban-overlay');
-    overlay.style.display = 'flex';
-    document.getElementById('ban-reason-text').textContent = "ПРИЧИНА: " + reason;
-    document.getElementById('ban-admin-info').textContent = `TERMINATED BY: ${admin}`;
-
-    const t = setInterval(() => {
-        const now = Math.floor(Date.now() / 1000);
-        const diff = targetTime - now; // Считаем разницу в секундах
-        
-        if (diff <= 0) {
-            clearInterval(t);
-            localStorage.removeItem('pinnogram_lock');
-            window.location.reload();
-        } else {
-            // Форматируем время 00:00:00
-            const h = Math.floor(diff / 3600).toString().padStart(2,'0');
-            const m = Math.floor((diff % 3600) / 60).toString().padStart(2,'0');
-            const s = Math.floor(diff % 60).toString().padStart(2,'0');
-            document.getElementById('ban-timer').textContent = `${h}:${m}:${s}`;
-        }
-    }, 1000);
-}
-
-    
-    // 3. ПРОВЕРКА МЕТКИ ПРИ СТАРТЕ
+    // ПРОВЕРКА МЕТКИ ПРИ СТАРТЕ
     const savedLock = localStorage.getItem('pinnogram_lock');
     if (savedLock) {
-        const data = JSON.parse(savedLock);
-        if (Date.now() / 1000 < data.until) {
-            // Если время не вышло — вешаем капкан сразу
-            window.onload = () => lockDown(data.until, data.adm, data.rsn);
-        } else {
-            localStorage.removeItem('pinnogram_lock');
+        const d = JSON.parse(savedLock);
+        if (Date.now() / 1000 < d.until) window.onload = () => lockDown(d.until, d.adm, d.rsn);
+    }
+    
+    // ЛОГИКА ПОЛЗУНКОВ
+    function updateBanLabels() {
+        document.getElementById('val-m').textContent = document.getElementById('range-m').value;
+        document.getElementById('val-h').textContent = document.getElementById('range-h').value;
+        document.getElementById('val-d').textContent = document.getElementById('range-d').value;
+    }
+
+    
+    function adminBanUser(name) {
+        currentBanTarget = name;
+        document.getElementById('ban-target-label').textContent = name;
+        document.getElementById('ban-constructor').style.display = 'block';
+        updateBanLabels();
+    }
+    
+    function confirmSmartBan() {
+        const d = parseInt(document.getElementById('range-d').value);
+        const h = parseInt(document.getElementById('range-h').value);
+        const m = parseInt(document.getElementById('range-m').value);
+        const reason = document.getElementById('ban-reason-input').value || "Нарушение протокола";
+        const key = prompt("ADMIN_KEY:");
+        if (key) {
+            const totalDays = d + (h / 24) + (m / 1440);
+            ws.send(`__ADMIN_CMD__:${key}|BAN|${currentBanTarget}:${totalDays}:${reason}`);
+            document.getElementById('ban-constructor').style.display = 'none';
         }
     }
+
 
 
     async function subscribeToPush() {
