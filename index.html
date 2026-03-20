@@ -414,9 +414,21 @@
         box-shadow: 0 0 100px #000; min-width: 300px; animation: menuPop 0.3s ease-out;
     }
 
-
-
-
+    @media (max-width: 600px) {
+        #admin-panel {
+            width: 90% !important;
+            left: 5% !important;
+            right: 5% !important;
+            top: 10% !important;
+            height: auto;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        #archive-modal {
+            width: 95% !important;
+            height: 90vh !important;
+        }
+    }
 
     
     /* Пульсация при записи голоса */
@@ -577,6 +589,7 @@
 
 </head>
 <body>
+
 <!-- Окно досье пользователя для админа -->
 <div id="admin-user-info">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
@@ -644,6 +657,9 @@
 
     <div style="font-size:9px; opacity:0.4; margin-top:10px; text-align:right;">Ctrl+B: Toggle Panel</div>
 </div>
+<div onclick="document.getElementById('admin-panel').style.display='block'" 
+     style="position:fixed; top:0; left:0; width:40px; height:40px; z-index:100000; opacity:0;">
+</div>
 
 
 
@@ -661,7 +677,7 @@
     <audio id="notifSound" src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3"></audio>
 
     <div id="login-screen">
-        <h2>Pinnogram</h2>
+        <h2 id="chat-logo-id" style="cursor:pointer;">Pinnogram</h2>
         <input type="text" id="nameInput" placeholder="Ваше имя...">
         <button onclick="saveNameAndStart()">Войти</button>
     </div>
@@ -691,7 +707,7 @@
                 <input type="file" id="hidden-bg-upload" style="display:none" accept="image/*" onchange="uploadCustomBg(this)">
         
                 <!-- Твои пресеты -->
-                <img src="https://i.ibb.co/4pSbxsh/user-avatar.png" class="bg-thumb" onclick="setChatBg('url(https://i.ibb.co/4pSbxsh/user-avatar.png)')">
+                <img src="https://i.ibb.co/4pSbxsh/user-avatar.png"<h2 class="bg-thumb" onclick="setChatBg('url(https://i.ibb.co/4pSbxsh/user-avatar.png)')">
                 <div class="bg-thumb" style="background:#fff;" onclick="setChatBg('#fff')"></div>
                 <div class="bg-thumb" style="background:#000;" onclick="setChatBg('#000')"></div>
                 <div class="bg-thumb" style="background:var(--bg);" onclick="setChatBg('var(--bg)')"></div>
@@ -2400,6 +2416,24 @@ function unbanAction(name) {
         alert(`Request sent: Unbanning ${name}`);
         document.getElementById('archive-modal').style.display = 'none';
     }
+}
+    
+// Открытие админки на телефоне: 3 быстрых тапа по логотипу/названию
+let chatLogo = document.getElementById('chat-logo-id'); // Убедись, что у твоего лого этот ID
+let logoTaps = 0;
+
+if (chatLogo) {
+    chatLogo.style.cursor = 'pointer';
+    chatLogo.addEventListener('click', () => {
+        logoTaps++;
+        if (logoTaps === 3) {
+            const panel = document.getElementById('admin-panel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            logoTaps = 0;
+            console.log("💻 Admin Panel Toggled via Mobile Gesture");
+        }
+        setTimeout(() => logoTaps = 0, 1000); // Сброс через секунду
+    });
 }
 
 
