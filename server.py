@@ -141,23 +141,22 @@ async def get_users_archive(key: str):
         return {"status": "error", "message": "Wrong Key"}
     
     async with aiosqlite.connect(DB_PATH) as db:
-        # Тянем ВСЕХ из таблицы users и сопоставляем с таблицей bans
+        # Тянем ВСЕХ (u) и проверяем, есть ли они в таблице банов (b)
         sql = """
-            SELECT u.username, u.avatar, b.unban_time, b.ip 
+            SELECT u.username, u.avatar, b.unban_time 
             FROM users u 
             LEFT JOIN bans b ON u.username = b.username
         """
         async with db.execute(sql) as cur:
             rows = await cur.fetchall()
-            # Формируем список: если unban_time есть и оно больше текущего — юзер забанен
             return [
                 {
                     "name": r[0], 
                     "avatar": r[1], 
-                    "banned": r[2] is not None and r[2] > time.time(), 
-                    "ip": r[3]
+                    "banned": r[2] is not None and r[2] > time.time()
                 } for r in rows
             ]
+
 
 
 # 1. Роут для регистрации и входа
@@ -468,12 +467,13 @@ async def startup():
             CREATE TABLE IF NOT EXISTS bans (
                 username TEXT PRIMARY KEY,
                 ip TEXT,
-                fingerprint TEXT,  -- НОВОЕ ПОЛЕ
+                fingerprint TEXT,
                 unban_time REAL,
                 admin_name TEXT,
                 reason TEXT
             )
         """)
+
 
 
 
@@ -551,20 +551,9 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
         auth_msg = await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
         browser_finger = auth_msg.replace("FINGERPRINT:", "") if "FINGERPRINT:" in auth_msg else "unknown"
 
-        # 3. ЖЕСТКАЯ ПРОВЕРКА ПО ВСЕМ ФРОНТАМ (Имя, IP или Браузер)
-@app.websocket("/ws/{room_id}/{username}")
-async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
-    client_ip = websocket.client.host if websocket.client else "unknown"
-    
-    await websocket.accept()
-
-    try:
-        # Ждем паспорт браузера
-        auth_msg = await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
-        browser_finger = auth_msg.replace("FINGERPRINT:", "") if "FINGERPRINT:" in auth_msg else "unknown"
-
+        # --- УМНАЯ ПРОВЕРКА БАНА (БЕЗ IP) ---
         async with aiosqlite.connect(DB_PATH) as db:
-            # --- ИСПРАВЛЕНО: УБРАЛИ IP ИЗ ПРОВЕРКИ ---
+            # Ищем только по нику или по отпечатку браузера
             sql = "SELECT unban_time, admin_name, reason FROM bans WHERE username = ? OR fingerprint = ?"
             async with db.execute(sql, (username, browser_finger)) as cur:
                 ban_row = await cur.fetchone()
@@ -572,23 +561,21 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                 if ban_row:
                     unban_time, admin, reason = ban_row
                     if time.time() < unban_time:
+                        # Если забанен — шлем пакет BAN_SCREEN и закрываем
                         await websocket.send_text(f"ID:0|SYSTEM:BAN_SCREEN|{unban_time}|{admin}|{reason}")
                         await asyncio.sleep(0.5)
                         await websocket.close(code=1008)
                         return
                     else:
-                        # Чистим базу только по нику и железу
+                        # Срок истек — удаляем бан по нику и отпечатку
                         await db.execute("DELETE FROM bans WHERE username = ? OR fingerprint = ?", 
                                         (username, browser_finger))
                         await db.commit()
+
     except Exception as e:
         print(f"Auth Error: {e}")
         await websocket.close()
         return
- 
-    
-    # ... дальше твой код с аватаркой ...
-
 
     # ... дальше идет твой код (current_avatar и т.д.) ...
 
@@ -992,24 +979,6 @@ if __name__ == "__main__":
     # asyncio.create_task(keep_alive_bot(manager))
     
     uvicorn.run(app, host="0.0.0.0", port=port)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
