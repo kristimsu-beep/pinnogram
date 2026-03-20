@@ -826,6 +826,8 @@
     let replyToId = null;       // Кому отвечаем
     let editMsgId = null;       // Что правим
 
+    let currentBanTarget = "";
+
     const API_URL = window.location.origin;
     const socketProto = window.location.protocol === "https:" ? "wss" : "ws";
     const VAPID_PUBLIC_KEY = "BLfoNtD9uQWZ2sX_dUiQ698ze7J-JO8lnl8n03AG7Dt1fh1Io831wuAKgqHRcmLNXKMh99BzVusQWvx37jJNZis";
