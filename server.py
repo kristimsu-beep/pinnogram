@@ -616,7 +616,17 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute("SELECT avatar FROM users WHERE username = ?", (username,)) as cursor:
             row = await cursor.fetchone()
-            if row: current_avatar = row[0]
+            if row: 
+                current_avatar = row[0]
+            else:
+                # --- НОВОЕ: ЕСЛИ ЮЗЕРА НЕТ В БАЗЕ, ЗАПИСЫВАЕМ ЕГО В АРХИВ ---
+                # Используем INSERT OR IGNORE, чтобы не было ошибок, если он уже есть
+                await db.execute("""
+                    INSERT OR IGNORE INTO users (username, password, avatar) 
+                    VALUES (?, ?, ?)
+                """, (username, "nopass", ""))
+                await db.commit()
+                print(f"📂 Узел {username} впервые занесен в архив")
 
     await manager.connect(websocket, room_id, username)
     # Системное сообщение о входе (шлем всем)
@@ -673,11 +683,9 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                     clean_text = parts[1]
                 except: pass
 
-            # --- ТЕПЕРЬ ПРОВЕРЯЕМ КОМАНДЫ ПО ЧИСТОМУ ТЕКСТУ (clean_text) ---
             
 
             
-            # 1. ЗАПРОС ИСТОРИИ (ИСПРАВЛЕНО)
             # 1. ЗАПРОС ИСТОРИИ (С ПОДДЕРЖКОЙ ОТВЕТОВ И РЕАКЦИЙ)
             if clean_text.startswith("GET_HISTORY:"):
                 target = clean_text.replace("GET_HISTORY:", "")
