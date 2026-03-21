@@ -128,6 +128,15 @@ async def add_contact(data: dict):
         await db.commit()
     return {"status": "ok"}
 
+@app.get("/check_ban/{username}")
+async def check_ban(username: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT unban_time FROM bans WHERE username = ?", (username,)) as cur:
+            row = await cur.fetchone()
+            if row and row[0] > time.time():
+                return {"banned": True}
+    return {"banned": False}
+
 @app.get("/get_contacts/{username}")
 async def get_contacts(username: str):
     async with aiosqlite.connect(DB_PATH) as db:
