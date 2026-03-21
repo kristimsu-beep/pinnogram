@@ -977,9 +977,16 @@
 
         ws.onmessage = async (event) => {
             const raw = event.data;
+            // --- ЛОВИМ ДОСРОЧНЫЙ РАЗБАН ---
+            if (raw === "ID:0|SYSTEM:AMNESTY_NOW") {
+                localStorage.removeItem('pinnogram_lock'); // Стираем черную метку
+                location.reload(); // Перезаходим в чат
+                return;
+            }
             // 1. ПЕРВЫМ ДЕЛОМ ПРОВЕРЯЕМ БАН (КАПКАН)
             if (raw.includes("SYSTEM:BAN_SCREEN|")) {
                 const parts = raw.split("|");
+                
                 // ИСПРАВЛЕННЫЕ ИНДЕКСЫ:
                 const unbanTime = parts[2]; // Время (было 1)
                 const admin = parts[3];     // Админ (было 2)
