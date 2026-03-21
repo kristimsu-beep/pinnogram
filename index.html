@@ -408,41 +408,58 @@
     
     /* Всплывающее Глобальное сообщение для ВСЕХ */
     /* КРУТОЕ СТРОИТЕЛЬНОЕ ОКНО */
+    /* ОБНОВЛЕННЫЙ ПУЛЬСИРУЮЩИЙ АЛЕРТ (БЕЗ ФОНА) */
     .global-admin-alert {
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-        background: rgba(0, 0, 0, 0.85); z-index: 1000000;
+        position: fixed; 
+        top: 50%; left: 50%; 
+        transform: translate(-50%, -50%);
+        z-index: 1000000;
         display: flex; align-items: center; justify-content: center;
-        backdrop-filter: blur(10px);
+        /* Чтобы можно было кликать по чату ВОКРУГ сообщения */
+        pointer-events: none; 
     }
     
     .hazard-border {
-        position: relative; background: #fcd116; /* Желтый строительный */
-        padding: 20px; border-radius: 5px; box-shadow: 0 0 100px rgba(0,0,0,0.8);
-        width: 90%; max-width: 700px; overflow: hidden;
-        /* Анимированные полоски по бокам */
-        border: 15px solid;
-        border-image: repeating-linear-gradient(-45deg, #fcd116, #fcd116 20px, #000 20px, #000 40px) 20;
+        pointer-events: auto; /* Само окно кликабельно */
+        position: relative; background: #fcd116; 
+        padding: 10px; border-radius: 5px; 
+        box-shadow: 0 0 30px rgba(0,0,0,0.5);
+        width: 340px; /* КОМПАКТНЫЙ РАЗМЕР */
+        overflow: hidden;
+        border: 10px solid;
+        border-image: repeating-linear-gradient(-45deg, #fcd116, #fcd116 10px, #000 10px, #000 20px) 10;
+        
+        /* ЭФФЕКТ ПУЛЬСАЦИИ */
+        animation: hazard-pulse 2s infinite ease-in-out;
+    }
+    
+    @keyframes hazard-pulse {
+        0% { transform: scale(1); box-shadow: 0 0 20px rgba(252, 209, 22, 0.4); }
+        50% { transform: scale(1.05); box-shadow: 0 0 40px rgba(252, 209, 22, 0.8); }
+        100% { transform: scale(1); box-shadow: 0 0 20px rgba(252, 209, 22, 0.4); }
     }
     
     .alert-body {
-        background: #000; color: #fcd116; padding: 40px; 
-        text-align: center; border: 2px solid #fcd116;
+        background: #000; color: #fcd116; padding: 25px; 
+        text-align: center; border: 1px solid #fcd116;
     }
     
     .big-text {
-        font-size: 32px; font-weight: 900; line-height: 1.2;
+        font-size: 20px; /* УМЕНЬШЕННЫЙ ШРИФТ */
+        font-weight: 900; line-height: 1.2;
         text-transform: uppercase; margin: 0; font-family: 'Arial Black', sans-serif;
     }
     
-    .alert-footer { margin-top: 30px; font-size: 12px; opacity: 0.6; font-family: monospace; }
+    .alert-footer { margin-top: 15px; font-size: 10px; opacity: 0.6; font-family: monospace; }
     
     .accept-btn {
-        margin-top: 30px; width: 100%; padding: 15px; 
+        margin-top: 20px; width: 100%; padding: 12px; 
         background: #fcd116; color: #000; border: none;
-        font-weight: 900; font-size: 18px; cursor: pointer;
+        font-weight: 900; font-size: 14px; cursor: pointer;
         transition: 0.3s;
     }
     .accept-btn:hover { background: #fff; transform: scale(1.02); }
+
 
 
     @media (max-width: 600px) {
