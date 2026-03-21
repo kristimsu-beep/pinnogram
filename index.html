@@ -1626,7 +1626,10 @@ let iceQueue = [];
 
 // 1. ЗАПУСК ЗВОНКА (Жми на трубку)
 async function startCall() {
+    alert("Кнопка нажата! Текущий партнер: " + currentPartner); 
     if (!currentPartner) return alert("Выберите собеседника для звонка!");
+    // ... остальной код
+
     
     // Сразу открываем красивое окно (режим "Исходящий")
     showCallUI(currentPartner, true);
@@ -1721,25 +1724,31 @@ async function handleSignalingData(data) {
 
 // 4. УПРАВЛЕНИЕ ИНТЕРФЕЙСОМ
 function showCallUI(name, isOutgoing, avatarUrl = null) {
+    console.log("🛠 Запуск интерфейса звонка...");
     const ui = document.getElementById('incoming-call-ui');
-    if (!ui) return;
+    if (!ui) return console.error("❌ ОШИБКА: Блок incoming-call-ui не найден в HTML!");
 
-    document.getElementById('call-sender-name').textContent = name;
-    document.getElementById('call-initial').textContent = name.charAt(0).toUpperCase();
-    
-    // Кнопка "Принять" видна только при входящем
-    document.getElementById('accept-btn-float').style.display = isOutgoing ? 'none' : 'flex';
-    
-    const img = document.getElementById('call-avatar');
-    if (avatarUrl) {
-        img.src = avatarUrl;
-        img.style.display = 'block';
-    } else {
-        img.style.display = 'none';
-    }
+    // 1. Безопасно ставим имя
+    const nameLabel = document.getElementById('call-sender-name');
+    if (nameLabel) nameLabel.textContent = name || "Аноним";
 
+    // 2. Безопасно ставим первую букву
+    const initialLabel = document.getElementById('call-initial');
+    if (initialLabel && name) initialLabel.textContent = name.charAt(0).toUpperCase();
+
+    // 3. Ставим статус (Вызов/Входящий)
+    const statusLabel = document.getElementById('call-status-text');
+    if (statusLabel) statusLabel.textContent = isOutgoing ? "Вызов..." : "Входящий видеозвонок";
+
+    // 4. Управляем кнопкой "Принять" (только если она есть в HTML)
+    const acceptBtn = document.getElementById('accept-btn-float');
+    if (acceptBtn) acceptBtn.style.display = isOutgoing ? 'none' : 'flex';
+
+    // 5. Показываем само окно
     ui.style.display = 'flex';
+    console.log("✅ Окно должно быть видно!");
 }
+
 
 async function acceptCall() {
     if (!currentCallData) return;
@@ -2119,8 +2128,11 @@ function updateUnreadUI() {
 // 3. Умное переключение чата с подгрузкой истории
 function switchChat(partner) {
     currentPartner = partner;
-    // Запоминаем выбор (чтобы не вылетало в общий чат при обновлении)
     localStorage.setItem("pinnogram_last_chat", partner); 
+    
+    // ДОБАВЬ ЭТО: Обновляем заголовок чата, чтобы ты видел, кому звонишь
+    const chatTitle = document.getElementById('chat-sender-name');
+    if (chatTitle) chatTitle.textContent = partner || "Общий чат";
     
     const chat = document.getElementById('chat');
     chat.innerHTML = "<div style='text-align:center; opacity:0.3; margin-top:20px;'>Загрузка истории...</div>"; 
