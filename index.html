@@ -2519,18 +2519,8 @@ function adminGlobalAlert() {
     }
 }
 
-// Функция для бана пользователя
-function adminBanUser(targetName) {
-    const days = prompt(`Срок бана для ${targetName} (в днях):`, "1");
-    if (!days) return;
-    const reason = prompt("Укажите причину блокировки:", "Нарушение правил");
-    if (!reason) return;
-    const key = prompt("Введите SECRET_ADMIN_KEY:");
-    if (key) {
-        // Формат: Имя|Дни|Причина
-        ws.send(`__ADMIN_CMD__:${key}|BAN|${targetName}:${days}:${reason}`);
-    }
-}
+
+
 
 
 // Функция показа деталей (Диагностика)
