@@ -744,6 +744,10 @@
     </div>
 
     <div style="font-size:9px; opacity:0.4; margin-top:10px; text-align:right;">Ctrl+B: Toggle Panel</div>
+</div>
+<div onclick="document.getElementById('admin-panel').style.display='block'" 
+     style="position:fixed; top:0; left:0; width:40px; height:40px; z-index:100000; opacity:0;">
+</div>
 
 
 
@@ -1584,146 +1588,178 @@
 
 
 
-let currentCallData = null; // Для хранения данных входящего вызова
 let iceQueue = []; 
-
-// 1. ЗАПУСК ЗВОНКА (Вызывай этой функцией)
-async function startCall() {
-    if (!currentPartner) return alert("Выберите собеседника для звонка!");
-    
-    // Показываем наше красивое окно сразу
-    showCallUI(currentPartner, true);
-    
-    // Отправляем сигнал "Я тебе звоню" (CALL_INIT)
-    const initSignal = { 
-        type: "CALL_INIT", 
-        from: myName, 
-        av: localStorage.getItem('pinnogram_avatar') 
-    };
-    ws.send(`TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`);
-    
-    // Запускаем движок связи
-    await initRTCPeer(true, currentPartner);
-}
-
-// 2. ИНИЦИАЛИЗАЦИЯ СВЯЗИ
-async function initRTCPeer(isCaller, targetUser) {
+// ГЛОБАЛЬНЫЙ ПИНОК GPU
+const forceRender = async () => {
+    const remoteVid = document.getElementById('remoteVideo');
+    if (!remoteVid || !remoteVid.srcObject) return;
     try {
+        console.log("Xiaomi/HyperOS: Активация видео и ЗВУКА...");
+        remoteVid.muted = false; // РАЗБЛОКИРУЕМ ЗВУК
+        remoteVid.volume = 1.0;
+        
+        await remoteVid.play();
+        
+        // Пинок GPU для отрисовки слоя
+        remoteVid.style.transform = "scale(1.002) translateZ(0)";
+        remoteVid.style.filter = "contrast(1.05)";
+    } catch (e) {
+        console.log("Система: Нужен прямой клик пользователя для звука.");
+    }
+};
+
+
+
+
+
+// 1. Инициализация медиа и создание соединения
+async function initRTCPeer(isCaller) {
+    try {
+        // 1. Доступ к камере
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         document.getElementById('localVideo').srcObject = localStream;
-        // Само видео-окно (где камера) открываем только после принятия
-        if (!isCaller) document.getElementById('video-call-overlay').style.display = 'block';
+        document.getElementById('video-call-overlay').style.display = 'block';
 
         const configuration = {
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }]
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { 
+                    urls: 'turn:openrelay.metered.ca:443', 
+                    username: 'openrelayproject', 
+                    credential: 'openrelayproject' 
+                }
+            ]
         };
 
         pc = new RTCPeerConnection(configuration);
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
+        // 2. Принудительно добавляем треки (самый надежный метод)
+        localStream.getTracks().forEach(track => {
+            pc.addTrack(track, localStream);
+        });
+
+        // 3. Настройка трансиверов и VP8 (для Xiaomi)
+        const videoTransceiver = pc.getTransceivers().find(t => t.receiver.track.kind === 'video') || 
+                                 pc.addTransceiver('video', { direction: 'sendrecv' });
+        
+        const codecs = RTCRtpSender.getCapabilities('video').codecs;
+        const vp8Codecs = codecs.filter(c => c.mimeType.toLowerCase() === 'video/vp8');
+        if (vp8Codecs.length > 0 && videoTransceiver.setCodecPreferences) {
+            videoTransceiver.setCodecPreferences(vp8Codecs);
+        }
+
+        // 4. ОБРАБОТКА ВХОДЯЩЕГО ВИДЕО (ОБЯЗАТЕЛЬНО!)
         pc.ontrack = (event) => {
+            console.log("ПОТОК ПОЛУЧЕН");
             const remoteVid = document.getElementById('remoteVideo');
-            remoteVid.srcObject = event.streams[0] || new MediaStream([event.track]);
-            
-            const trigger = () => { forceRender(); window.removeEventListener('click', trigger); };
+            if (event.streams && event.streams[0]) {
+                remoteVid.srcObject = event.streams[0];
+            } else {
+                remoteVid.srcObject = new MediaStream([event.track]);
+            }
+
+            // Разблокировка звука кликом по экрану
+            const trigger = () => {
+                forceRender();
+                window.removeEventListener('click', trigger);
+                window.removeEventListener('touchstart', trigger);
+            };
             window.addEventListener('click', trigger);
+            window.addEventListener('touchstart', trigger);
             setTimeout(forceRender, 1000);
         };
 
+        // 5. СЕТЕВЫЕ ПУТИ
         pc.onicecandidate = e => {
             if (e.candidate) {
-                const signal = JSON.stringify({ candidate: e.candidate, from: myName });
-                ws.send(`TO_USER:${targetUser}|RTC_SIGNAL:${signal}`);
+                ws.send("RTC_SIGNAL:" + JSON.stringify({ candidate: e.candidate, from: myName }));
             }
         };
 
+        // 6. СОЗДАНИЕ ПРЕДЛОЖЕНИЯ
         if (isCaller) {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            ws.send(`TO_USER:${targetUser}|RTC_SIGNAL:${JSON.stringify({ offer: offer, from: myName })}`);
+            ws.send("RTC_SIGNAL:" + JSON.stringify({ offer: offer, from: myName }));
         }
-    } catch (e) { console.error(e); endCall(); }
+
+    } catch (e) { 
+        console.error(e);
+        alert("Ошибка: " + e.message); 
+        endCall(); 
+    }
 }
 
-// 3. ОБРАБОТКА СИГНАЛОВ (Signaling)
+
+// 2. Обработка входящих сигналов (Signaling)
+// 2. Обработка входящих сигналов (Signaling)
 async function handleSignalingData(data) {
     if (data.from === myName) return;
 
-    // Входящий запрос (Показываем UI как в Telegram)
-    if (data.type === "CALL_INIT") {
-        currentCallData = data;
-        showCallUI(data.from, false, data.av);
-        if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]); // Вибро
-        return;
-    }
-
-    if (data.type === "CALL_REJECT") {
-        alert("Вызов отклонен");
-        endCall();
-        return;
-    }
-
+    // 1. Входящий звонок (Offer)
     if (data.offer) {
-        currentCallData = data; 
-    } else if (data.answer && pc) {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-    } else if (data.candidate && pc) {
-        try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch(e){}
-    }
-}
+        if (pc && pc.signalingState !== "closed" && pc.signalingState !== "stable") return;
 
-// 4. УПРАВЛЕНИЕ ИНТЕРФЕЙСОМ (Telegram Style)
-function showCallUI(name, isOutgoing, avatarUrl = null) {
-    const ui = document.getElementById('incoming-call-ui');
-    document.getElementById('call-sender-name').textContent = name;
-    document.getElementById('call-initial').textContent = name.charAt(0).toUpperCase();
+        setTimeout(async () => {
+            if (confirm(`Входящий звонок от ${data.from}. Принять?`)) {
+                console.log("Принимаем вызов от: " + data.from);
+                await initRTCPeer(false);
+                await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                ws.send("RTC_SIGNAL:" + JSON.stringify({ answer: answer, from: myName }));
+                
+                while (iceQueue.length > 0) {
+                    try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
+                }
+            }
+        }, 100);
+    } 
     
-    const img = document.getElementById('call-avatar');
-    if (avatarUrl) {
-        img.src = avatarUrl;
-        img.style.display = 'block';
-    } else {
-        img.style.display = 'none';
+    // 2. Ответ на твой звонок (Answer) — ЧИСТЫЙ БЛОК БЕЗ ТАЙМЕРОВ (ДЛЯ iOS)
+    else if (data.answer && pc) {
+        if (pc.signalingState === "have-local-offer") {
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                console.log("Связь установлена. Нажмите на экран для видео.");
+
+                while (iceQueue.length > 0) {
+                    try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){}
+                }
+                
+                // На iOS НЕЛЬЗЯ делать авто-play тут. 
+                // Пользователь сам нажмет на экран, сработает forceRender из ontrack.
+                
+            } catch(e) { console.error("Ошибка:", e); }
+        }
     }
-
-    // Кнопка "Принять" видна только при входящем
-    document.getElementById('accept-btn-float').style.display = isOutgoing ? 'none' : 'flex';
-    ui.style.display = 'flex';
-}
-
-async function acceptCall() {
-    if (!currentCallData) return;
-    if (navigator.vibrate) navigator.vibrate(0);
-    document.getElementById('incoming-call-ui').style.display = 'none';
-    document.getElementById('video-call-overlay').style.display = 'block';
     
-    await initRTCPeer(false, currentCallData.from);
-    if (currentCallData.offer) {
-        await pc.setRemoteDescription(new RTCSessionDescription(currentCallData.offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        ws.send(`TO_USER:${currentCallData.from}|RTC_SIGNAL:${JSON.stringify({ answer: answer, from: myName })}`);
+    // 3. Сетевые пути (Candidates)
+    else if (data.candidate) {
+        const cand = new RTCIceCandidate(data.candidate);
+        if (pc && pc.signalingState !== "closed" && pc.remoteDescription && pc.remoteDescription.type) {
+            try { 
+                await pc.addIceCandidate(cand); 
+            } catch(e) { console.warn("ICE Error:", e); }
+        } else {
+            iceQueue.push(cand);
+        }
     }
-}
+} // <--- ВОТ ЭТА СКОБКА БЫЛА ПРОПУЩЕНА
 
-function rejectCall() {
-    if (navigator.vibrate) navigator.vibrate(0);
-    document.getElementById('incoming-call-ui').style.display = 'none';
-    if (currentCallData) {
-        ws.send(`TO_USER:${currentCallData.from}|RTC_SIGNAL:${JSON.stringify({ type: "CALL_REJECT", from: myName })}`);
+// 3. Вспомогательные функции
+function endCall() { 
+    if(pc) {
+        try { pc.close(); } catch(e) {}
     }
-    endCall();
+    if(localStream) {
+        localStream.getTracks().forEach(t => t.stop()); 
+    }
+    document.getElementById('video-call-overlay').style.display = 'none'; 
+    pc = null; 
+    iceQueue = []; // Очищаем очередь для нового звонка
 }
-
-function endCall() {
-    if (pc) pc.close();
-    if (localStream) localStream.getTracks().forEach(t => t.stop());
-    document.getElementById('video-call-overlay').style.display = 'none';
-    document.getElementById('incoming-call-ui').style.display = 'none';
-    pc = null;
-    currentCallData = null;
-}
-
 let audioContext, analyser, dataArray;
 let voiceWaves = []; // Сюда пишем громкость
 
@@ -2689,51 +2725,6 @@ if (chatLogo) {
     <div id="archive-list" style="overflow-y:auto; height:calc(100% - 160px);"></div>
     <button onclick="document.getElementById('archive-modal').style.display='none'" style="width:100%; margin-top:20px; padding:12px; background:#333; border:none; color:white; border-radius:12px; cursor:pointer;">ЗАКРЫТЬ</button>
 </div>
-
-<div id="incoming-call-ui" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background: linear-gradient(180deg, #6a82fb 0%, #fc5c7d 100%); z-index:2000000; flex-direction:column; align-items:center; justify-content:space-between; padding: 60px 0; color:white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-    
-    <!-- ВЕРХНЯЯ ЧАСТЬ: ИНФО -->
-    <div style="text-align:center;">
-        <div style="width:140px; height:140px; border-radius:50%; background:#e67e22; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:60px; font-weight:bold; box-shadow: 0 0 0 10px rgba(255,255,255,0.1); position:relative;">
-            <span id="call-initial">D</span>
-            <img id="call-avatar" src="" style="display:none; width:100%; height:100%; border-radius:50%; object-fit:cover; position:absolute; top:0; left:0;">
-            <!-- ПУЛЬСИРУЮЩИЙ КРУГ -->
-            <div style="position:absolute; width:100%; height:100%; border-radius:50%; border:2px solid white; animation: call-ripple 2s infinite;"></div>
-        </div>
-        <h2 id="call-sender-name" style="margin:0; font-size:28px; font-weight:500;">Dima</h2>
-        <p style="opacity:0.8; margin-top:5px; font-size:16px;">Вызов...</p>
-    </div>
-
-    <!-- НИЖНЯЯ ЧАСТЬ: КНОПКИ -->
-    <div style="display:flex; justify-content:space-around; width:100%; max-width:400px; padding-bottom:40px;">
-        <div class="call-btn-wrap">
-            <button class="call-btn-small">🔊</button>
-            <span>Динамик</span>
-        </div>
-        <div class="call-btn-wrap">
-            <button class="call-btn-small">📹</button>
-            <span>Вкл. видео</span>
-        </div>
-        <div class="call-btn-wrap">
-            <button class="call-btn-small">🎤</button>
-            <span>Выкл. звук</span>
-        </div>
-        <div class="call-btn-wrap">
-            <button onclick="rejectCall()" style="background:#ff3b30; width:65px; height:65px; border-radius:50%; border:none; color:white; font-size:30px; cursor:pointer; transform: rotate(135deg); box-shadow: 0 4px 15px rgba(0,0,0,0.3);">📞</button>
-            <span>Завершить</span>
-        </div>
-    </div>
-
-    <!-- ОТДЕЛЬНАЯ КНОПКА ПРИНЯТЬ (Она появится только если это ВХОДЯЩИЙ) -->
-    <button id="accept-btn-float" onclick="acceptCall()" style="position:fixed; bottom:150px; background:#4cd964; width:80px; height:80px; border-radius:50%; border:none; color:white; font-size:40px; cursor:pointer; box-shadow: 0 4px 20px rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; animation: shake-call 0.5s infinite;">📞</button>
-</div>
-
-<style>
-.call-btn-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 11px; opacity: 0.9; }
-.call-btn-small { background: rgba(255,255,255,0.2); border: none; width: 50px; height: 50px; border-radius: 50%; color: white; font-size: 20px; cursor: pointer; }
-@keyframes call-ripple { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
-@keyframes shake-call { 0% { transform: rotate(0); } 25% { transform: rotate(10deg); } 50% { transform: rotate(0); } 75% { transform: rotate(-10deg); } 100% { transform: rotate(0); } }
-</style>
 
 </body>
 </html>
