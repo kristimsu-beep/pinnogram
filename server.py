@@ -255,7 +255,7 @@ class ConnectionManager:
         asyncio.create_task(self.broadcast_online(room_id))
     
     async def ban_user(self, target_name, days, admin_name, reason="Нарушение правил"):
-        unban_time = time.time() + (int(days) * 86400)
+        unban_time = time.time() + (float(days) * 86400)
         
         async with aiosqlite.connect(DB_PATH) as db:
             found = False
@@ -291,10 +291,21 @@ class ConnectionManager:
 
     async def unban_user(self, target):
         async with aiosqlite.connect(DB_PATH) as db:
-            # Чистим всё: по имени или по IP (это удалит и привязанный fingerprint)
+            # 1. Удаляем из базы
             await db.execute("DELETE FROM bans WHERE username = ? OR ip = ?", (target, target))
             await db.commit()
+            
+            # 2. Ищем "зависшие" сокеты этого юзера (те, кто видит экран бана)
+            # Мы пройдемся по всем комнатам и активным сокетам
+            for room in self.rooms.values():
+                if target in room:
+                    ws = room[target]
+                    try:
+                        # Шлем секретный пакет амнистии
+                        await ws.send_text("ID:0|SYSTEM:AMNESTY_NOW")
+                    except: pass
         return True
+
 
     async def global_broadcast(self, text, admin_name):
         final_msg = f"ID:0|SYSTEM:GLOBAL_ALERT|{text}|{admin_name}"
