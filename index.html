@@ -784,6 +784,7 @@
     </div>
 
     <div style="font-size:9px; opacity:0.4; margin-top:10px; text-align:right;">Ctrl+B: Toggle Panel</div>
+</div>
 
 
 
@@ -1241,21 +1242,11 @@
 
 
 
-            if (raw.includes("RTC_SIGNAL:")) {
-                try {
-                    // Достаем только ту часть, где лежит JSON (после двоеточия)
-                    const parts = raw.split("RTC_SIGNAL:");
-                    const signalData = JSON.parse(parts[1]);
-                    
-                    if (typeof handleSignalingData === "function") {
-                        handleSignalingData(signalData);
-                    }
-                } catch(e) {
-                    console.error("❌ Ошибка парсинга звонка:", e);
-                }
-                return; // Прерываем, чтобы технический код не вылез в чат
-            }
 
+            if (raw.startsWith("RTC_SIGNAL:")) {
+                if (typeof handleSignalingData === "function") handleSignalingData(JSON.parse(raw.replace("RTC_SIGNAL:", "")));
+                return;
+            }
 
             if (raw.startsWith("TYPING:")) {
                 const typingUser = raw.split(":")[1];
@@ -1952,27 +1943,7 @@ function stopVoice() {
 
 
 
-async function startCall() {
-    // 1. ПРОВЕРКА: Если мы не в ЛС (currentPartner пустой) — не звоним
-    if (!currentPartner || currentPartner === "general" || currentPartner === "null") {
-        return alert("Выберите собеседника в списке контактов для звонка!");
-    }
-    
-    // 2. ОТКРЫВАЕМ ОКНО (режим "Исходящий")
-    showCallUI(currentPartner, true);
-    
-    // 3. СИГНАЛ ПАРТНЕРУ (чтобы у него зазвонило)
-    const initSignal = { 
-        type: "CALL_INIT", 
-        from: myName, 
-        av: localStorage.getItem('pinnogram_avatar') 
-    };
-    ws.send(`TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`);
-    
-    // 4. ЗАПУСК СВЯЗИ
-    await initRTCPeer(true, currentPartner);
-}
-
+function startCall() { initRTCPeer(true); }
 
 // Функция входа с паролем и проверкой на сервере
 async function saveNameAndStart() {
