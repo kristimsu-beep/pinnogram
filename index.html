@@ -1664,23 +1664,21 @@ function minimizeCall() {
 }
 
 async function startCall() {
-    console.log("☎️ Инициализация звонка. Текущий партнер:", currentPartner);
+    console.log("☎️ Инициализация звонка. Партнер:", currentPartner);
 
     if (!currentPartner || currentPartner === "general" || currentPartner === "null") {
-        console.warn("⚠️ Попытка звонка без выбора партнера");
         return alert("Сначала выберите собеседника в списке контактов!");
     }
     
     // 1. ЗВУК (Гудкуем)
     if (typeof ringtone !== 'undefined') {
-        ringtone.play().catch(e => console.log("🔈 Звук заблокирован (нужен клик)"));
+        ringtone.play().catch(e => console.log("🔈 Звук заблокирован"));
     }
 
-    // 2. ОТКРЫВАЕМ ИНТЕРФЕЙС (Исходящий)
-    console.log("🛠 Открываем UI для:", currentPartner);
+    // 2. ОТКРЫВАЕМ ИНТЕРФЕЙС У СЕБЯ (Исходящий)
     showCallUI(currentPartner, true);
     
-    // 3. ФОРМИРУЕМ И ОТПРАВЛЯЕМ ПАКЕТ
+    // 3. ОТПРАВЛЯЕМ СИГНАЛ "ВКЛЮЧИ ЭКРАН" (Первым делом!)
     const initSignal = { 
         type: "CALL_INIT", 
         from: myName, 
@@ -1688,18 +1686,17 @@ async function startCall() {
     };
     
     const packet = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
-    console.log("📤 ОТПРАВЛЯЕМ СИГНАЛ В SOCKET:", packet);
+    console.log("📤 Шлем CALL_INIT на телефон...");
+    ws.send(packet);
     
-    try {
-        ws.send(packet);
-        console.log("✅ Пакет успешно передан в WebSocket");
-    } catch (e) {
-        console.error("❌ ОШИБКА ОТПРАВКИ:", e);
-    }
-    
-    // 4. ЗАПУСКАЕМ WebRTC
-    await initRTCPeer(true, currentPartner);
+    // 4. КРИТИЧЕСКАЯ ПАУЗА (500мс)
+    // Даем телефону время отрисовать градиент и включить вибро
+    setTimeout(async () => {
+        console.log("🚀 Запускаем движок WebRTC (Offer)...");
+        await initRTCPeer(true, currentPartner);
+    }, 500);
 }
+
 
 
 
