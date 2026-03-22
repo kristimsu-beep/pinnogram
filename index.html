@@ -687,18 +687,24 @@
     </div>
 </div>
 <!-- ВОТ ЭТО ДОЛЖНО БЫТЬ ОТДЕЛЬНО ОТ STYLE -->
-<div id="incoming-call-ui" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background: linear-gradient(180deg, #6a82fb 0%, #fc5c7d 100%); z-index:2000000; flex-direction:column; align-items:center; justify-content:space-between; padding: 60px 0; color:white; font-family: sans-serif;">
+<div id="incoming-call-ui" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background: linear-gradient(180deg, #6a82fb 0%, #fc5c7d 100%); z-index:2000000; flex-direction:column; align-items:center; justify-content:space-between; padding: 60px 0; color:white; font-family: sans-serif; transition: all 0.3s ease;">
+    
+    <!-- КНОПКА СВЕРНУТЬ (В самом верху родителя) -->
+    <button onclick="minimizeCall()" style="position:absolute; top:20px; right:20px; background:rgba(255,255,255,0.2); border:none; color:white; padding:10px; border-radius:10px; cursor:pointer; z-index:10;">↙️ Свернуть</button>
+
     <div style="text-align:center;">
-        <div id="call-avatar-circle" style="width:140px; height:140px; border-radius:50%; background:#e67e22; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:60px; font-weight:bold; box-shadow: 0 0 0 10px rgba(255,255,255,0.1); position:relative;">
+        <div id="call-avatar-circle" style="width:140px; height:140px; border-radius:50%; background:#e67e22; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:60px; font-weight:bold; box-shadow: 0 0 0 10px rgba(255,255,255,0.1); position:relative; transition: 0.3s;">
             <span id="call-initial">?</span>
             <img id="call-avatar" src="" style="display:none; width:100%; height:100%; border-radius:50%; object-fit:cover; position:absolute; top:0; left:0;">
             <div class="ripple"></div>
         </div>
         <h2 id="call-sender-name" style="margin:0; font-size:28px;">Пользователь</h2>
+        <!-- ТАЙМЕР (Сюда будем писать 00:00 после ответа) -->
         <p id="call-status-text" style="opacity:0.8; margin-top:5px;">Вызов...</p>
     </div>
 
-    <div style="display:flex; justify-content:space-around; width:100%; max-width:400px; padding-bottom:40px;">
+    <!-- НИЖНИЕ КНОПКИ (Добавили ID для управления из JS) -->
+    <div id="call-buttons-row" style="display:flex; justify-content:space-around; width:100%; max-width:400px; padding-bottom:40px;">
         <div class="c-btn-group"><button class="c-btn-s">🔊</button><span>Динамик</span></div>
         <div class="c-btn-group"><button class="c-btn-s">📹</button><span>Видео</span></div>
         <div class="c-btn-group"><button class="c-btn-s">🎤</button><span>Микро</span></div>
@@ -708,8 +714,9 @@
         </div>
     </div>
 
-    <button id="accept-btn-float" onclick="acceptCall()" style="position:fixed; bottom:160px; background:#4cd964; width:80px; height:80px; border-radius:50%; border:none; color:white; font-size:40px; cursor:pointer; box-shadow: 0 4px 20px rgba(0,0,0,0.4); display:none; align-items:center; justify-content:center; animation: shake-call 0.5s infinite;">📞</button>
+    <button id="accept-btn-float" onclick="acceptCall()" style="position:fixed; bottom:160px; background:#4cd964; width:80px; height:80px; border-radius:50%; border:none; color:white; font-size:40px; cursor:pointer; box-shadow: 0 4px 20px rgba(0,0,0,0.4); display:none; align-items:center; justify-content:center; animation: shake-call 0.5s infinite; z-index:11;">📞</button>
 </div>
+
 
 <!-- Окно досье пользователя для админа -->
 <div id="admin-user-info">
@@ -902,6 +909,9 @@
     </div>
 
 <script>
+    const ringtone = new Audio('https://cdn.pixabay.com/download/audio/2022/03/15/audio_7314555d7a.mp3');
+    ringtone.loop = true; // Чтобы гудки не прерывались
+    let audioContext, analyser, dataArray; // Для визуализации голоса
     let selectedMsgId = null;   // ID сообщения для меню
     let selectedMsgText = "";   // Текст сообщения для меню
     let replyToId = null;       // Кому отвечаем
@@ -1624,17 +1634,39 @@
 let currentCallData = null; // Для хранения данных входящего вызова
 let iceQueue = []; 
 
+function minimizeCall() {
+    const ui = document.getElementById('incoming-call-ui');
+    ui.style.height = '120px';
+    ui.style.justifyContent = 'center';
+    ui.style.padding = '10px 0';
+    // Прячем лишнее при сворачивании
+    document.getElementById('call-avatar-circle').style.transform = 'scale(0.5)';
+    ui.querySelector('div[style*="justify-content:space-around"]').style.display = 'none';
+    
+    // Клик по свернутому окну развернет его обратно
+    ui.onclick = () => {
+        ui.style.height = '100vh';
+        ui.style.padding = '60px 0';
+        ui.querySelector('div[style*="justify-content:space-around"]').style.display = 'flex';
+        document.getElementById('call-avatar-circle').style.transform = 'scale(1)';
+        ui.onclick = null;
+    };
+}
 // 1. ЗАПУСК ЗВОНКА (Жми на трубку)
 async function startCall() {
-    alert("Кнопка нажата! Текущий партнер: " + currentPartner); 
-    if (!currentPartner) return alert("Выберите собеседника для звонка!");
-    // ... остальной код
-
+    if (!currentPartner || currentPartner === "general") {
+        return alert("Выберите конкретного собеседника для звонка!");
+    }
     
-    // Сразу открываем красивое окно (режим "Исходящий")
+    // 1. ЗАПУСКАЕМ ГУДКИ (ringtone должен быть объявлен в начале скрипта)
+    if (typeof ringtone !== 'undefined') {
+        ringtone.play().catch(e => console.log("🔈 Звук заблокирован до клика"));
+    }
+
+    // 2. Сразу открываем красивое окно (режим "Исходящий")
     showCallUI(currentPartner, true);
     
-    // Шлем личный сигнал инициализации (чтобы у него вылез экран звонка)
+    // 3. Шлем сигнал инициализации
     const initSignal = { 
         type: "CALL_INIT", 
         from: myName, 
@@ -1642,14 +1674,18 @@ async function startCall() {
     };
     ws.send(`TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`);
     
-    // Запускаем WebRTC
+    // 4. Запускаем движок связи
     await initRTCPeer(true, currentPartner);
 }
+
 
 // 2. ИНИЦИАЛИЗАЦИЯ WebRTC (С поддержкой приватности)
 async function initRTCPeer(isCaller, targetUser) {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        
+        startVoiceVisualization(localStream); 
+        
         document.getElementById('localVideo').srcObject = localStream;
         
         // Само видео-окно с камерами открываем только когда связь пошла
@@ -1689,6 +1725,31 @@ async function initRTCPeer(isCaller, targetUser) {
         }
     } catch (e) { console.error(e); endCall(); }
 }
+
+function startVoiceVisualization(stream) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioContext.createAnalyser();
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+    analyser.fftSize = 32;
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    const updateWaves = () => {
+        if (!analyser) return;
+        analyser.getByteFrequencyData(dataArray);
+        const volume = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        
+        // Двигаем пульсацию аватарки в ритм голоса
+        const circle = document.getElementById('call-avatar-circle');
+        if (circle) {
+            circle.style.transform = `scale(${1 + volume/200})`;
+            circle.style.boxShadow = `0 0 ${volume}px var(--accent)`;
+        }
+        requestAnimationFrame(updateWaves);
+    };
+    updateWaves();
+}
+
 
 // 3. ОБРАБОТЧИК СИГНАЛОВ (Signaling)
 async function handleSignalingData(data) {
@@ -1751,9 +1812,16 @@ function showCallUI(name, isOutgoing, avatarUrl = null) {
 
 
 async function acceptCall() {
+    // 1. ОСТАНАВЛИВАЕМ ГУДКИ И ВИБРАЦИЮ
+    if (typeof ringtone !== 'undefined') {
+        ringtone.pause();
+        ringtone.currentTime = 0;
+    }
+    if (navigator.vibrate) navigator.vibrate(0);
+
     if (!currentCallData) return;
-    if (navigator.vibrate) navigator.vibrate(0); // Стоп вибро
     
+    // Прячем экран вызова и открываем окно видео
     document.getElementById('incoming-call-ui').style.display = 'none';
     document.getElementById('video-call-overlay').style.display = 'block';
     
@@ -1762,14 +1830,25 @@ async function acceptCall() {
         await pc.setRemoteDescription(new RTCSessionDescription(currentCallData.offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
+        
+        // Шлем ответ ПРИВАТНО
         ws.send(`TO_USER:${currentCallData.from}|RTC_SIGNAL:${JSON.stringify({ answer: answer, from: myName })}`);
         
-        while (iceQueue.length > 0) { try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){} }
+        while (iceQueue.length > 0) { 
+            try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){} 
+        }
     }
 }
 
+
 function rejectCall() {
+    // Останавливаем гудки и вибро
+    if (typeof ringtone !== 'undefined') {
+        ringtone.pause();
+        ringtone.currentTime = 0;
+    }
     if (navigator.vibrate) navigator.vibrate(0);
+
     document.getElementById('incoming-call-ui').style.display = 'none';
     if (currentCallData) {
         ws.send(`TO_USER:${currentCallData.from}|RTC_SIGNAL:${JSON.stringify({ type: "CALL_REJECT", from: myName })}`);
@@ -1777,14 +1856,22 @@ function rejectCall() {
     endCall();
 }
 
+
 function endCall() {
     if (pc) { try { pc.close(); } catch(e){} pc = null; }
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+    
+    // ДОБАВЬ ЭТО: Закрываем аудио-контекст визуализатора
+    if (audioContext && audioContext.state !== 'closed') {
+        audioContext.close();
+    }
+
     document.getElementById('video-call-overlay').style.display = 'none';
     document.getElementById('incoming-call-ui').style.display = 'none';
     currentCallData = null;
     iceQueue = [];
 }
+
 
 let audioContext, analyser, dataArray;
 let voiceWaves = []; // Сюда пишем громкость
