@@ -1087,25 +1087,29 @@
 
         ws.onmessage = async (event) => {
             const raw = event.data;
-            // --- ОБНОВЛЕННЫЙ БЛОК RTC_SIGNAL ---
+            // --- ОБНОВЛЕННЫЙ БЛОК RTC_SIGNAL (ИСПРАВЛЕНО ДЛЯ ОТКРЫТИЯ ОКНА) ---
             if (raw.includes("RTC_SIGNAL:")) {
-                console.log("🎯 ПАКЕТ ЗВОНКА ПОЛУЧЕН:", raw); // Увидишь это в консоли
+                console.log("🎯 ПАКЕТ ЗВОНКА ПОЛУЧЕН:", raw);
                 try {
                     const parts = raw.split("RTC_SIGNAL:");
-                    // Берем [1], так как JSON идет после двоеточия
                     const signalData = JSON.parse(parts[1]);
+
+                    // 🎯 ВОТ ЭТОГО КУСКА У ТЕБЯ НЕ ХВАТАЛО:
+                    // Если в сигнале есть 'offer', значит нам ЗВОНЯТ. Включаем окно!
+                    if (signalData.offer) {
+                        const overlay = document.getElementById('video-call-overlay');
+                        if (overlay) overlay.style.display = 'block';
+                    }
                     
                     if (typeof handleSignalingData === "function") {
-                        console.log("📞 Передаем данные в handleSignalingData:", signalData.type || "RTC_DATA");
                         handleSignalingData(signalData);
-                    } else {
-                        console.error("❌ Функция handleSignalingData не найдена!");
                     }
                 } catch(e) {
-                    console.error("❌ Ошибка парсинга звонка:", e, "Raw data:", raw);
+                    console.error("❌ Ошибка парсинга звонка:", e);
                 }
-                return; // ПРЕРЫВАЕМ, чтобы технический код не вывелся в чат
+                return;
             }
+
 
             // --- ЛОВИМ ДОСРОЧНЫЙ РАЗБАН ---
             if (raw === "ID:0|SYSTEM:AMNESTY_NOW") {
@@ -1666,8 +1670,7 @@ function minimizeCall() {
 async function startCall() {
     if (!currentPartner || currentPartner === "general") return alert("Выбери контакт!");
 
-    // 1. Показываем UI у себя
-    showCallUI(currentPartner, true);
+    showCallUI(currentPartner, true); // Сразу пишем "Вызов..."
     
     const initSignal = { 
         type: "CALL_INIT", 
@@ -1676,17 +1679,14 @@ async function startCall() {
     };
     const packet = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
 
-    // 2. СПАМ-РАССЫЛКА СИГНАЛА (3 раза, чтобы точно дошло)
-    console.log("📤 Шлем серию CALL_INIT...");
     ws.send(packet); 
-    setTimeout(() => ws.send(packet), 100);
-    setTimeout(() => ws.send(packet), 300);
+    setTimeout(() => ws.send(packet), 200); // 2 раза вполне хватит
 
-    // 3. ПАУЗА ПЕРЕД ВИДЕО (Увеличим до 2 секунд для надежности)
+    // Уменьшаем задержку до 500мс
     setTimeout(async () => {
         console.log("🚀 Запуск WebRTC...");
         await initRTCPeer(true, currentPartner);
-    }, 2000);
+    }, 500); 
 }
 
 
@@ -1694,16 +1694,23 @@ async function startCall() {
 // 2. ИНИЦИАЛИЗАЦИЯ WebRTC (С поддержкой приватности)
 async function initRTCPeer(isCaller, targetUser) {
     try {
+        // 1. Получаем доступ к камере и микрофону
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         
+        // Запускаем пульсацию аватарки (визуализатор)
         startVoiceVisualization(localStream); 
         
-        // Показываем превью своей камеры
+        // Показываем превью СВОЕЙ камеры
         const localVid = document.getElementById('localVideo');
         if (localVid) localVid.srcObject = localStream;
         
-        // 🎯 ИСПРАВЛЕНО: Окно звонка должно открываться у ОБЕИХ сторон сразу!
-        document.getElementById('video-call-overlay').style.display = 'block';
+        // 🎯 КРИТИЧНОЕ ИСПРАВЛЕНИЕ:
+        // Если я ПОЛУЧАТЕЛЬ (isCaller === false) и я уже нажал "Принять", 
+        // то открываем видео-оверлей. 
+        // Если я ЗВОНЯЩИЙ, видео-оверлей откроется сам, когда придет 'answer'.
+        if (!isCaller) {
+            document.getElementById('video-call-overlay').style.display = 'block';
+        }
 
         const configuration = {
             iceServers: [
@@ -1713,28 +1720,38 @@ async function initRTCPeer(isCaller, targetUser) {
         };
 
         pc = new RTCPeerConnection(configuration);
+        
+        // Добавляем наши треки в соединение
         localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
+        // Когда получаем видео от собеседника
         pc.ontrack = (event) => {
+            console.log("🎬 Получено видео от собеседника");
             const remoteVid = document.getElementById('remoteVideo');
             if (remoteVid) {
                 remoteVid.srcObject = event.streams[0] || new MediaStream([event.track]);
+                
+                // ГАРАНТИЯ ЗАПУСКА ВИДЕО
+                remoteVid.play().catch(e => console.log("Автозапуск заблокирован, нужен клик"));
+
+                if (isCaller) {
+                    document.getElementById('incoming-call-ui').style.display = 'none';
+                    document.getElementById('video-call-overlay').style.display = 'block';
+                }
             }
+
             
-            // Исправленный блок активации (без forceRender)
+            // Фикс активации звука
             const trigger = () => { 
-                console.log("Интерфейс активирован");
                 window.dispatchEvent(new Event('resize')); 
                 window.removeEventListener('click', trigger); 
             };
             window.addEventListener('click', trigger);
-            setTimeout(() => window.dispatchEvent(new Event('resize')), 1000);
-        }; // <-- ВОТ ЭТУ СКОБКУ ТЫ ЗАБЫЛ!
+        }; 
 
         pc.onicecandidate = e => {
             if (e.candidate) {
                 const signal = JSON.stringify({ candidate: e.candidate, from: myName });
-                // Используем ws.send, как в твоем коде
                 ws.send(`TO_USER:${targetUser}|RTC_SIGNAL:${signal}`);
             }
         };
@@ -1747,6 +1764,7 @@ async function initRTCPeer(isCaller, targetUser) {
     } catch (e) { 
         console.error("RTC Error:", e); 
         endCall(); 
+        alert("Ошибка доступа к камере: " + e.message);
     }
 }
 
@@ -1796,12 +1814,12 @@ async function handleSignalingData(data) {
     // 🎯 ГАРАНТИЯ ОТКРЫТИЯ: Если пришел любой сигнал звонка, а окно закрыто — ОТКРЫВАЕМ
     if (!isVisible && (data.type === "CALL_INIT" || data.offer)) {
         console.log("🚨 АВТО-ПРОБУЖДЕНИЕ: Обнаружен входящий поток!");
-        currentCallData = data;
+        currentCallData = data; // Сохраняем сразу
         showCallUI(data.from, false, data.av);
         if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
-        // Если это был сразу Offer — сохраняем его и выходим
-        if (data.offer) return; 
+        // НЕ ДЕЛАЙ return здесь, пусть код идет дальше к сохранению offer
     }
+
 
     // Стандартная логика
     if (data.type === "CALL_REJECT") {
