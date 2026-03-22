@@ -1664,39 +1664,24 @@ function minimizeCall() {
 }
 
 async function startCall() {
-    console.log("☎️ Инициализация звонка. Цель:", currentPartner);
-
-    if (!currentPartner || currentPartner === "general" || currentPartner === "null") {
-        return alert("Сначала выберите собеседника в списке контактов!");
-    }
+    if (!currentPartner || currentPartner === "general") return alert("Выбери контакт!");
     
-    // 1. ПРИНУДИТЕЛЬНО ВКЛЮЧАЕМ ЗВУК (Гудкуем)
-    if (typeof ringtone !== 'undefined') {
-        ringtone.currentTime = 0;
-        ringtone.play().catch(e => console.warn("🔈 Звук заблокирован браузером"));
-    }
-
-    // 2. ПОКАЗЫВАЕМ ЭКРАН У СЕБЯ
+    // 1. Показываем UI у себя сразу
     showCallUI(currentPartner, true);
     
-    // 3. ОТПРАВЛЯЕМ СИГНАЛ "ПРОБУЖДЕНИЯ" (CALL_INIT)
-    // Это самый важный пакет, он должен дойти до телефона первым
+    // 2. Шлем ПЕРВЫЙ пакет (только сигнал проснуться)
     const initSignal = { 
         type: "CALL_INIT", 
         from: myName, 
-        av: localStorage.getItem('pinnogram_avatar') || ""
+        av: localStorage.getItem('pinnogram_avatar') || "" 
     };
-    
-    const packet = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
-    console.log("📤 [1/2] ОТПРАВЛЯЕМ CALL_INIT...");
-    ws.send(packet);
-    
-    // 4. УВЕЛИЧЕННАЯ ПАУЗА (800мс)
-    // Даем телефону время отрисовать градиент, включить вибро и быть готовым к SDP Offer
+    ws.send(`TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`);
+
+    // 3. ПАУЗА 1000мс — это лечит черный экран на Android
     setTimeout(async () => {
-        console.log("📤 [2/2] ТЕПЕРЬ ЗАПУСКАЕМ WebRTC (OFFER)...");
+        console.log("🚀 Запуск WebRTC после паузы...");
         await initRTCPeer(true, currentPartner);
-    }, 800);
+    }, 1000);
 }
 
 
@@ -1862,33 +1847,32 @@ function showCallUI(name, isOutgoing, avatarUrl = null) {
 
 
 async function acceptCall() {
-    // 1. ОСТАНАВЛИВАЕМ ГУДКИ И ВИБРАЦИЮ
-    if (typeof ringtone !== 'undefined') {
-        ringtone.pause();
-        ringtone.currentTime = 0;
-    }
     if (navigator.vibrate) navigator.vibrate(0);
-
     if (!currentCallData) return;
-    
-    // Прячем экран вызова и открываем окно видео
+
     document.getElementById('incoming-call-ui').style.display = 'none';
     document.getElementById('video-call-overlay').style.display = 'block';
-    
+
+    // Запускаем камеру
     await initRTCPeer(false, currentCallData.from);
+
     if (currentCallData.offer) {
         await pc.setRemoteDescription(new RTCSessionDescription(currentCallData.offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        
-        // Шлем ответ ПРИВАТНО
         ws.send(`TO_USER:${currentCallData.from}|RTC_SIGNAL:${JSON.stringify({ answer: answer, from: myName })}`);
         
-        while (iceQueue.length > 0) { 
-            try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){} 
-        }
+        // ЧИНИМ ЧЕРНЫЙ ЭКРАН: Принудительно стартуем видео через 100мс
+        setTimeout(() => {
+            const remoteVid = document.getElementById('remoteVideo');
+            if (remoteVid) remoteVid.play().catch(() => {
+                console.log("Нужен клик для видео");
+                window.addEventListener('click', () => remoteVid.play(), {once: true});
+            });
+        }, 500);
     }
 }
+
 
 
 function rejectCall() {
@@ -1914,6 +1898,7 @@ function endCall() {
     // ДОБАВЬ ЭТО: Закрываем аудио-контекст визуализатора
     if (window.audioContextInstance && window.audioContextInstance.state !== 'closed') {
         window.audioContextInstance.close();
+        window.audioContextInstance = null;
     }
 
 
