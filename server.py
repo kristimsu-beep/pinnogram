@@ -732,17 +732,28 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 
 
                 
-
-            # 2. RTC СИГНАЛЫ (ИСПРАВЛЕНО: ТОЛЬКО АДРЕСНАЯ ПЕРЕСЫЛКА)
+            # 2. RTC СИГНАЛЫ (УЛЬТРА-СТАБИЛЬНЫЙ ВАРИАНТ)
             elif clean_text.startswith("RTC_SIGNAL:"):
-                # Мы не шлем циклом всем подряд, а вызываем умный broadcast
+                # Если вдруг target_user не определился выше (нет префикса TO_USER:)
+                # Попробуем найти его в самом тексте сигнала (если он там зашит)
+                if not target_user:
+                    try:
+                        # Если сигнал в формате JSON и там есть поле 'to'
+                        import json
+                        data = json.loads(clean_text.replace("RTC_SIGNAL:", ""))
+                        target_user = data.get("to") or data.get("target")
+                    except: pass
+
+                # Вызываем broadcast. Если target_user есть — уйдет ему. 
+                # Если нет — уйдет только отправителю (для теста), что тоже поможет.
                 await manager.broadcast(
                     room_id=room_id, 
                     username=username, 
                     text=clean_text, 
-                    to_user=target_user # Важно: передаем, кому звоним
+                    to_user=target_user 
                 )
                 continue
+
 
 
             # 3. УДАЛЕНИЕ
