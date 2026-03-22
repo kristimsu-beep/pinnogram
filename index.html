@@ -1664,36 +1664,31 @@ function minimizeCall() {
 }
 
 async function startCall() {
-    console.log("☎️ Начинаем супер-звонок для:", currentPartner);
+    if (!currentPartner || currentPartner === "general") return alert("Выбери контакт!");
 
-    if (!currentPartner || currentPartner === "general" || currentPartner === "null") {
-        return alert("Сначала выберите контакт!");
-    }
-    
     // 1. Показываем UI у себя
     showCallUI(currentPartner, true);
     
-    // 2. ФОРМИРУЕМ СИГНАЛ ПРОБУЖДЕНИЯ
     const initSignal = { 
         type: "CALL_INIT", 
         from: myName, 
         av: localStorage.getItem('pinnogram_avatar') || "" 
     };
-    
     const packet = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
-    
-    // 3. ОТПРАВЛЯЕМ И ВЫВОДИМ В КОНСОЛЬ
-    console.log("📤 ШЛЕМ CALL_INIT ПАРТНЕРУ...");
-    ws.send(packet);
 
-    // 4. ГИГАНТСКАЯ ПАУЗА (2 секунды) 
-    // Этого хватит любому телефону, чтобы отрисовать градиент.
-    // Пока эта пауза идет, WebRTC НЕ ЗАПУСКАЕТСЯ.
+    // 2. СПАМ-РАССЫЛКА СИГНАЛА (3 раза, чтобы точно дошло)
+    console.log("📤 Шлем серию CALL_INIT...");
+    ws.send(packet); 
+    setTimeout(() => ws.send(packet), 100);
+    setTimeout(() => ws.send(packet), 300);
+
+    // 3. ПАУЗА ПЕРЕД ВИДЕО (Увеличим до 2 секунд для надежности)
     setTimeout(async () => {
-        console.log("🚀 Пауза прошла. Теперь запускаем видео-движок!");
+        console.log("🚀 Запуск WebRTC...");
         await initRTCPeer(true, currentPartner);
     }, 2000);
 }
+
 
     
 // 2. ИНИЦИАЛИЗАЦИЯ WebRTC (С поддержкой приватности)
