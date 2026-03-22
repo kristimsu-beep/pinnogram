@@ -341,31 +341,23 @@ class ConnectionManager:
     async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None, reply_to_id: int = None):
         now = client_time if client_time else datetime.now().strftime("%H:%M")        
     
-        # 🎯 ПРИОРИТЕТ №1: МГНОВЕННЫЙ ПРОБРОС ЗВОНКА
+        # 🎯 1. ПРИВАТНЫЙ ПРОБРОС ЗВОНКА (RTC_SIGNAL)
+        # Этот блок должен быть ПЕРВЫМ и единственным для звонков
         if text and "RTC_SIGNAL:" in text:
-            if to_user:
-                room_users = self.rooms.get(room_id, {})
-                if to_user in room_users:
+            room_users = self.rooms.get(room_id, {})
+            # Отправляем ТОЛЬКО отправителю и получателю
+            targets = [username]
+            if to_user: targets.append(to_user)
+            
+            for name in targets:
+                if name in room_users:
                     try:
-                        await room_users[to_user].send_text(text)
-                        print(f"🚀 СИГНАЛ ЗВОНКА ПРОБИТ ДЛЯ {to_user}")
+                        await room_users[name].send_text(text)
                     except: pass
-            return # Выходим сразу, не трогаем БД и ники
+            return # ВАЖНО: выходим, чтобы не писать звонок в БД и не слать всем!
 
+        # 🎯 2. ОБЫЧНЫЕ СООБЩЕНИЯ (Запись в базу и рассылка)
         if username and text:
-            # --- НОВАЯ ЛОГИКА ДЛЯ ЗВОНКОВ ---
-            if "RTC_SIGNAL:" in text:
-                final_msg = text  # Шлем чистый JSON сигнал без оберток
-                if to_user:
-                    room_users = self.rooms.get(room_id, {})
-                    # Отправляем только получателю (и отправителю для подтверждения)
-                    for name in [username, to_user]:
-                        if name in room_users:
-                            try: await room_users[name].send_text(final_msg)
-                            except: continue
-                return # ПРЕРЫВАЕМ: звонки не должны попадать в БД!
-
-            # --- ОБЫЧНЫЕ СООБЩЕНИЯ (Твой старый код) ---
             async with aiosqlite.connect(DB_PATH) as db:        
                 cursor = await db.execute(        
                     "INSERT INTO messages (username, text, timestamp, room_id, avatar, to_user, is_read, reply_to_id) VALUES (?, ?, ?, ?, ?, ?, 0, ?)",         
@@ -378,13 +370,15 @@ class ConnectionManager:
                 reply_info = f"REPLY:{reply_to_id}|" if reply_to_id else ""
                 final_msg = f"ID:{msg_id}|{reply_info}{prefix}[{now}] {username}: {text}|{avatar}|0"
       
+                # Рассылка сообщения
                 if to_user:        
                     room_users = self.rooms.get(room_id, {})
                     for name in [username, to_user]:        
                         if name in room_users:        
                             try: await room_users[name].send_text(final_msg)        
                             except: continue        
-                        
+                    
+                    # Push-уведомление, если получатель оффлайн
                     if to_user not in room_users:        
                         async with db.execute("SELECT subscription_json FROM push_subscriptions WHERE username = ?", (to_user,)) as c:        
                             sub_row = await c.fetchone()        
@@ -399,10 +393,12 @@ class ConnectionManager:
                                     )        
                                 except: pass        
                 else:        
+                    # Общая рассылка в комнату
                     for ws in self.rooms.get(room_id, {}).values():        
                         if ws.client_state == WebSocketState.CONNECTED:        
                             try: await ws.send_text(final_msg)        
                             except: continue
+
 
 
 manager = ConnectionManager()
@@ -737,13 +733,17 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
 
                 
 
-            # 2. RTC СИГНАЛЫ
+            # 2. RTC СИГНАЛЫ (ИСПРАВЛЕНО: ТОЛЬКО АДРЕСНАЯ ПЕРЕСЫЛКА)
             elif clean_text.startswith("RTC_SIGNAL:"):
-                if room_id in manager.rooms:
-                    for name, conn in manager.rooms[room_id].items():
-                        if name != username and conn.client_state == WebSocketState.CONNECTED:
-                            await conn.send_text(clean_text)
+                # Мы не шлем циклом всем подряд, а вызываем умный broadcast
+                await manager.broadcast(
+                    room_id=room_id, 
+                    username=username, 
+                    text=clean_text, 
+                    to_user=target_user # Важно: передаем, кому звоним
+                )
                 continue
+
 
             # 3. УДАЛЕНИЕ
             elif clean_text.startswith("__DELETE__:"):
