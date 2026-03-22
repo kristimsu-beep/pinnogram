@@ -1664,25 +1664,36 @@ function minimizeCall() {
 }
 
 async function startCall() {
-    if (!currentPartner || currentPartner === "general") return alert("Выбери контакт!");
+    console.log("☎️ Инициализация звонка. Цель:", currentPartner);
+
+    if (!currentPartner || currentPartner === "general" || currentPartner === "null") {
+        return alert("Сначала выберите контакт в списке!");
+    }
     
-    // 1. Показываем UI у себя сразу
+    // 1. Показываем UI у себя (Исходящий режим)
     showCallUI(currentPartner, true);
     
-    // 2. Шлем ПЕРВЫЙ пакет (только сигнал проснуться)
+    // 2. ФОРМИРУЕМ И ОТПРАВЛЯЕМ СИГНАЛ "ПРОБУЖДЕНИЯ"
     const initSignal = { 
         type: "CALL_INIT", 
         from: myName, 
-        av: localStorage.getItem('pinnogram_avatar') || "" 
+        av: localStorage.getItem('pinnogram_avatar') || ""
     };
-    ws.send(`TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`);
-
-    // 3. ПАУЗА 1000мс — это лечит черный экран на Android
+    
+    const initPacket = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
+    
+    console.log("📤 [ШАГ 1] Отправляем команду CALL_INIT...");
+    ws.send(initPacket);
+    
+    // 3. ПАУЗА 1200мс (Чуть больше секунды)
+    // Это дает время телефону Xiaomi отрисовать градиент и запустить вибро
+    // БЕЗ этой паузы тяжелый OFFER забивает поток и окно не вылетает.
     setTimeout(async () => {
-        console.log("🚀 Запуск WebRTC после паузы...");
+        console.log("🚀 [ШАГ 2] UI должен быть открыт. Запускаем WebRTC (Offer)...");
         await initRTCPeer(true, currentPartner);
-    }, 1000);
+    }, 1200);
 }
+
 
 
 
@@ -1774,17 +1785,18 @@ function startVoiceVisualization(stream) {
 // 3. ОБРАБОТЧИК СИГНАЛОВ (Signaling)
 async function handleSignalingData(data) {
     if (data.from === myName) return;
-    console.log("📩 Получен сигнал типа:", data.type || (data.offer ? "OFFER" : "ICE"));
+    
+    // ЛОГ ДЛЯ ПРОВЕРКИ:
+    console.log("🎯 ТИП ПРИШЕДШЕГО ПАКЕТА:", data.type || (data.offer ? "OFFER" : "ICE"));
 
-    // 1. ПЕРВЫЙ КОНТАКТ (Включаем экран)
     if (data.type === "CALL_INIT") {
+        console.log("✅ СРАБОТАЛА КОМАНДА ОТКРЫТИЯ ЭКРАНА!");
         currentCallData = data;
         showCallUI(data.from, false, data.av);
-        
-        // Вибрация (Xiaomi Style)
         if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
         return;
     }
+
 
     // 2. ОТКЛОНЕНИЕ
     if (data.type === "CALL_REJECT") {
