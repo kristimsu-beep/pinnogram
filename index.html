@@ -1952,7 +1952,27 @@ function stopVoice() {
 
 
 
-function startCall() { initRTCPeer(true); }
+async function startCall() {
+    // 1. ПРОВЕРКА: Если мы не в ЛС (currentPartner пустой) — не звоним
+    if (!currentPartner || currentPartner === "general" || currentPartner === "null") {
+        return alert("Выберите собеседника в списке контактов для звонка!");
+    }
+    
+    // 2. ОТКРЫВАЕМ ОКНО (режим "Исходящий")
+    showCallUI(currentPartner, true);
+    
+    // 3. СИГНАЛ ПАРТНЕРУ (чтобы у него зазвонило)
+    const initSignal = { 
+        type: "CALL_INIT", 
+        from: myName, 
+        av: localStorage.getItem('pinnogram_avatar') 
+    };
+    ws.send(`TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`);
+    
+    // 4. ЗАПУСК СВЯЗИ
+    await initRTCPeer(true, currentPartner);
+}
+
 
 // Функция входа с паролем и проверкой на сервере
 async function saveNameAndStart() {
