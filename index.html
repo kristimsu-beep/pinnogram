@@ -611,7 +611,30 @@
         cursor: pointer;
         background: none;
     }
-    
+    #incoming-call-ui {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100vh;
+        background: linear-gradient(135s, #1a1a1a 0%, #2c3e50 100%); /* Твой градиент */
+        z-index: 11000; /* Самый высокий приоритет! */
+        display: none; /* Включается через JS */
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    #video-call-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100vh;
+        background: #000;
+        z-index: 10000; /* ВАЖНО: это меньше, чем 11000 у градиента! */
+        display: none; /* Скрыт по умолчанию */
+    }
+
     .apply-bg-btn {
         background: #2196f3;
         color: white;
@@ -1703,14 +1726,6 @@ async function initRTCPeer(isCaller, targetUser) {
         // Показываем превью СВОЕЙ камеры
         const localVid = document.getElementById('localVideo');
         if (localVid) localVid.srcObject = localStream;
-        
-        // 🎯 КРИТИЧНОЕ ИСПРАВЛЕНИЕ:
-        // Если я ПОЛУЧАТЕЛЬ (isCaller === false) и я уже нажал "Принять", 
-        // то открываем видео-оверлей. 
-        // Если я ЗВОНЯЩИЙ, видео-оверлей откроется сам, когда придет 'answer'.
-        if (!isCaller) {
-            document.getElementById('video-call-overlay').style.display = 'block';
-        }
 
         const configuration = {
             iceServers: [
