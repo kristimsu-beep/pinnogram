@@ -1110,18 +1110,22 @@
 
         ws.onmessage = async (event) => {
             const raw = event.data;
-            // --- ОБНОВЛЕННЫЙ БЛОК RTC_SIGNAL (ИСПРАВЛЕНО ДЛЯ ОТКРЫТИЯ ОКНА) ---
+            // --- ОБНОВЛЕННЫЙ БЛОК RTC_SIGNAL (ИСПРАВЛЕНО ДЛЯ КРАСИВОГО ОКНА) ---
             if (raw.includes("RTC_SIGNAL:")) {
                 console.log("🎯 ПАКЕТ ЗВОНКА ПОЛУЧЕН:", raw);
                 try {
                     const parts = raw.split("RTC_SIGNAL:");
                     const signalData = JSON.parse(parts[1]);
 
-                    // 🎯 ВОТ ЭТОГО КУСКА У ТЕБЯ НЕ ХВАТАЛО:
-                    // Если в сигнале есть 'offer', значит нам ЗВОНЯТ. Включаем окно!
+                    // 🎯 ИСПРАВЛЕНИЕ: Если пришел offer (тебе звонят), открываем ГРАДИЕНТ
                     if (signalData.offer) {
-                        const overlay = document.getElementById('video-call-overlay');
-                        if (overlay) overlay.style.display = 'block';
+                        // Вызываем твою функцию красивого окна вместо черного оверлея
+                        if (typeof showCallUI === "function") {
+                            showCallUI(signalData.from, false, signalData.av);
+                        } else {
+                            // Если вдруг функции нет, хотя бы так
+                            document.getElementById('incoming-call-ui').style.display = 'flex';
+                        }
                     }
                     
                     if (typeof handleSignalingData === "function") {
@@ -1132,6 +1136,7 @@
                 }
                 return;
             }
+
 
 
             // --- ЛОВИМ ДОСРОЧНЫЙ РАЗБАН ---
