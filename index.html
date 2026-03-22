@@ -1664,36 +1664,36 @@ function minimizeCall() {
 }
 
 async function startCall() {
-    console.log("☎️ Кнопка нажата. Партнер:", currentPartner);
+    console.log("☎️ Инициализация звонка. Цель:", currentPartner);
 
     if (!currentPartner || currentPartner === "general" || currentPartner === "null") {
         return alert("Сначала выберите контакт!");
     }
     
-    // 1. Показываем UI у себя
+    // 1. Показываем UI у себя (Исходящий)
     showCallUI(currentPartner, true);
     
-    // 2. ФОРМИРУЕМ ПАКЕТ ПРОБУЖДЕНИЯ
+    // 2. ОТПРАВЛЯЕМ СИГНАЛ "ПРОБУЖДЕНИЯ" ПЕРВЫМ
     const initSignal = { 
         type: "CALL_INIT", 
         from: myName, 
-        av: localStorage.getItem('pinnogram_avatar') || "" 
+        av: localStorage.getItem('pinnogram_avatar') || ""
     };
-
-    const packet = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
     
-    // 3. ОТПРАВЛЯЕМ И ВЫВОДИМ В КОНСОЛЬ ОТПРАВИТЕЛЯ
-    console.log("📤 ШЛЕМ CALL_INIT ПАРТНЕРУ:", packet);
-    ws.send(packet);
-
-    // 4. ДЕЛАЕМ ПАУЗУ 1.5 СЕКУНДЫ (Критично для Xiaomi!)
-    // Нам нужно, чтобы сервер успел доставить первый пакет, 
-    // а телефон успел его отрисовать до того, как полетят тяжелые Offer-данные
+    const initPacket = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
+    
+    console.log("📤 [ШАГ 1] Отправляем команду CALL_INIT...");
+    ws.send(initPacket);
+    
+    // 3. ПАУЗА 1500мс (1.5 секунды) - КРИТИЧНО ДЛЯ XIAOMI
+    // Нам нужно, чтобы телефон успел обработать CALL_INIT и отрисовать градиент
+    // до того, как полетят тяжелые Offer-данные
     setTimeout(async () => {
-        console.log("🚀 Запускаем тяжелый WebRTC движок...");
+        console.log("🚀 [ШАГ 2] Прошло 1.5с. Запускаем передачу данных связи (WebRTC Offer)...");
         await initRTCPeer(true, currentPartner);
-    }, 1500);
+    }, 1800);
 }
+
 
 
 
