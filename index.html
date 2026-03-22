@@ -1087,6 +1087,26 @@
 
         ws.onmessage = async (event) => {
             const raw = event.data;
+            // --- ОБНОВЛЕННЫЙ БЛОК RTC_SIGNAL ---
+            if (raw.includes("RTC_SIGNAL:")) {
+                console.log("🎯 ПАКЕТ ЗВОНКА ПОЛУЧЕН:", raw); // Увидишь это в консоли
+                try {
+                    const parts = raw.split("RTC_SIGNAL:");
+                    // Берем [1], так как JSON идет после двоеточия
+                    const signalData = JSON.parse(parts[1]);
+                    
+                    if (typeof handleSignalingData === "function") {
+                        console.log("📞 Передаем данные в handleSignalingData:", signalData.type || "RTC_DATA");
+                        handleSignalingData(signalData);
+                    } else {
+                        console.error("❌ Функция handleSignalingData не найдена!");
+                    }
+                } catch(e) {
+                    console.error("❌ Ошибка парсинга звонка:", e, "Raw data:", raw);
+                }
+                return; // ПРЕРЫВАЕМ, чтобы технический код не вывелся в чат
+            }
+
             // --- ЛОВИМ ДОСРОЧНЫЙ РАЗБАН ---
             if (raw === "ID:0|SYSTEM:AMNESTY_NOW") {
                 localStorage.removeItem('pinnogram_lock'); // Стираем черную метку
@@ -1239,27 +1259,6 @@
                 }
                 return;
             }
-
-
-
-
-            // ЗАМЕНИ СВОЙ СТАРЫЙ БЛОК НА ЭТОТ УНИВЕРСАЛЬНЫЙ
-            if (raw.includes("RTC_SIGNAL:")) {
-                try {
-                    // Находим, где начинается полезная нагрузка (JSON)
-                    const parts = raw.split("RTC_SIGNAL:");
-                    // Берем последнюю часть (индекс 1), так как там лежит наш объект
-                    const signalData = JSON.parse(parts[1]);
-                    
-                    if (typeof handleSignalingData === "function") {
-                        handleSignalingData(signalData);
-                    }
-                } catch(e) {
-                    console.error("❌ Ошибка парсинга RTC сигнала:", e);
-                }
-                return; // Прерываем, чтобы технический код не вывелся в чат
-            }
-
 
             if (raw.startsWith("TYPING:")) {
                 const typingUser = raw.split(":")[1];
@@ -1663,31 +1662,45 @@ function minimizeCall() {
         ui.onclick = null;
     };
 }
-// 1. ЗАПУСК ЗВОНКА (Жми на трубку)
+
 async function startCall() {
-    if (!currentPartner || currentPartner === "general") {
-        return alert("Выберите конкретного собеседника для звонка!");
+    console.log("☎️ Инициализация звонка. Текущий партнер:", currentPartner);
+
+    if (!currentPartner || currentPartner === "general" || currentPartner === "null") {
+        console.warn("⚠️ Попытка звонка без выбора партнера");
+        return alert("Сначала выберите собеседника в списке контактов!");
     }
     
-    // 1. ЗАПУСКАЕМ ГУДКИ (ringtone должен быть объявлен в начале скрипта)
+    // 1. ЗВУК (Гудкуем)
     if (typeof ringtone !== 'undefined') {
-        ringtone.play().catch(e => console.log("🔈 Звук заблокирован до клика"));
+        ringtone.play().catch(e => console.log("🔈 Звук заблокирован (нужен клик)"));
     }
 
-    // 2. Сразу открываем красивое окно (режим "Исходящий")
+    // 2. ОТКРЫВАЕМ ИНТЕРФЕЙС (Исходящий)
+    console.log("🛠 Открываем UI для:", currentPartner);
     showCallUI(currentPartner, true);
     
-    // 3. Шлем сигнал инициализации
+    // 3. ФОРМИРУЕМ И ОТПРАВЛЯЕМ ПАКЕТ
     const initSignal = { 
         type: "CALL_INIT", 
         from: myName, 
-        av: localStorage.getItem('pinnogram_avatar') 
+        av: localStorage.getItem('pinnogram_avatar') || ""
     };
-    ws.send(`TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`);
     
-    // 4. Запускаем движок связи
+    const packet = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
+    console.log("📤 ОТПРАВЛЯЕМ СИГНАЛ В SOCKET:", packet);
+    
+    try {
+        ws.send(packet);
+        console.log("✅ Пакет успешно передан в WebSocket");
+    } catch (e) {
+        console.error("❌ ОШИБКА ОТПРАВКИ:", e);
+    }
+    
+    // 4. ЗАПУСКАЕМ WebRTC
     await initRTCPeer(true, currentPartner);
 }
+
 
 
 // 2. ИНИЦИАЛИЗАЦИЯ WebRTC (С поддержкой приватности)
