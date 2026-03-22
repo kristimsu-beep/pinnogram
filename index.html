@@ -1778,42 +1778,30 @@ function startVoiceVisualization(stream) {
 async function handleSignalingData(data) {
     if (data.from === myName) return;
     
-    // ЛОГ ДЛЯ ПРОВЕРКИ:
-    console.log("🎯 ТИП ПРИШЕДШЕГО ПАКЕТА:", data.type || (data.offer ? "OFFER" : "ICE"));
+    const ui = document.getElementById('incoming-call-ui');
+    const isVisible = ui && ui.style.display === 'flex';
 
-    if (data.type === "CALL_INIT") {
-        console.log("✅ СРАБОТАЛА КОМАНДА ОТКРЫТИЯ ЭКРАНА!");
+    // 🎯 ГАРАНТИЯ ОТКРЫТИЯ: Если пришел любой сигнал звонка, а окно закрыто — ОТКРЫВАЕМ
+    if (!isVisible && (data.type === "CALL_INIT" || data.offer)) {
+        console.log("🚨 АВТО-ПРОБУЖДЕНИЕ: Обнаружен входящий поток!");
         currentCallData = data;
         showCallUI(data.from, false, data.av);
         if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
-        return;
+        // Если это был сразу Offer — сохраняем его и выходим
+        if (data.offer) return; 
     }
 
-
-    // 2. ОТКЛОНЕНИЕ
+    // Стандартная логика
     if (data.type === "CALL_REJECT") {
         alert("Вызов отклонен");
         endCall();
-        return;
-    }
-
-    // 3. ТЕХНИЧЕСКИЕ ДАННЫЕ (SDP Offer)
-    if (data.offer) {
-        console.log("📝 Получен Offer от:", data.from);
-        currentCallData = data; // Сохраняем, чтобы использовать при нажатии "Принять"
-    } 
-    // 4. ТЕХНИЧЕСКИЕ ДАННЫЕ (SDP Answer)
-    else if (data.answer && pc) {
+    } else if (data.offer) {
+        currentCallData = data; 
+    } else if (data.answer && pc) {
         await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-        // Очищаем очередь кандидатов
-        while (iceQueue.length > 0) { 
-            try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){} 
-        }
-    } 
-    // 5. СЕТЕВЫЕ КАНАЛЫ (ICE Candidates)
-    else if (data.candidate) {
+        while (iceQueue.length > 0) { try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){} }
+    } else if (data.candidate) {
         const cand = new RTCIceCandidate(data.candidate);
-        // Если соединение уже готово — добавляем сразу, иначе — в очередь
         if (pc && pc.remoteDescription && pc.remoteDescription.type) {
             try { await pc.addIceCandidate(cand); } catch(e){}
         } else {
@@ -1822,32 +1810,37 @@ async function handleSignalingData(data) {
     }
 }
 
+
 // 4. УПРАВЛЕНИЕ ИНТЕРФЕЙСОМ
 function showCallUI(name, isOutgoing, avatarUrl = null) {
     console.log("🛠 Запуск интерфейса звонка...");
     const ui = document.getElementById('incoming-call-ui');
-    if (!ui) return console.error("❌ ОШИБКА: Блок incoming-call-ui не найден в HTML!");
+    if (!ui) return console.error("❌ ОШИБКА: Блок incoming-call-ui не найден!");
 
-    // 1. Безопасно ставим имя
+    // 1. Ставим данные
     const nameLabel = document.getElementById('call-sender-name');
     if (nameLabel) nameLabel.textContent = name || "Аноним";
 
-    // 2. Безопасно ставим первую букву
     const initialLabel = document.getElementById('call-initial');
     if (initialLabel && name) initialLabel.textContent = name.charAt(0).toUpperCase();
 
-    // 3. Ставим статус (Вызов/Входящий)
     const statusLabel = document.getElementById('call-status-text');
     if (statusLabel) statusLabel.textContent = isOutgoing ? "Вызов..." : "Входящий видеозвонок";
 
-    // 4. Управляем кнопкой "Принять" (только если она есть в HTML)
     const acceptBtn = document.getElementById('accept-btn-float');
     if (acceptBtn) acceptBtn.style.display = isOutgoing ? 'none' : 'flex';
 
-    // 5. Показываем само окно
+    // 2. ГАРАНТИЯ ВИДИМОСТИ (Критично для Android)
     ui.style.display = 'flex';
-    console.log("✅ Окно должно быть видно!");
+    ui.style.opacity = '1';
+    ui.style.visibility = 'visible';
+    ui.style.zIndex = '2147483647'; // Самый высокий z-index в браузере
+    
+    // 3. ПРОВЕРКА КЛИКОВ
+    // Если на телефоне экран не появился, этот алерт выскочит и "пробьет" блокировку
+    console.log("✅ Окно активировано. Статус отображения:", ui.style.display);
 }
+
 
 
 async function acceptCall() {
