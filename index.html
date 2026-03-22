@@ -1877,32 +1877,53 @@ async function acceptCall() {
     if (navigator.vibrate) navigator.vibrate(0); // Стоп вибро
     if (!currentCallData) return;
 
-    // Скрываем звонок, открываем видео-слой
+    // Скрываем входящее окно, открываем видео-слой
     document.getElementById('incoming-call-ui').style.display = 'none';
     document.getElementById('video-call-overlay').style.display = 'block';
 
-    // Запускаем WebRTC
+    // 1. Инициализируем WebRTC (как получатель)
     await initRTCPeer(false, currentCallData.from);
 
     if (currentCallData.offer) {
-        await pc.setRemoteDescription(new RTCSessionDescription(currentCallData.offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        
-        ws.send(`TO_USER:${currentCallData.from}|RTC_SIGNAL:${JSON.stringify({ answer: answer, from: myName })}`);
-        
-        // ГАРАНТИЯ КАРТИНКИ: Ждем полсекунды и принудительно жмем Play
-        setTimeout(() => {
-            const remoteVid = document.getElementById('remoteVideo');
-            if (remoteVid) {
-                remoteVid.play().catch(() => {
-                    // Если браузер заблокировал — видео включится, как только ты тапнешь по экрану
-                    window.addEventListener('click', () => remoteVid.play(), {once: true});
-                });
+        try {
+            // 2. Устанавливаем удаленное описание (Offer от звонящего)
+            await pc.setRemoteDescription(new RTCSessionDescription(currentCallData.offer));
+
+            // 🎯 КРИТИЧЕСКИЙ МОМЕНТ: Вытряхиваем накопившиеся ICE-кандидаты из очереди
+            // Они прилетели, пока ты не нажал "Принять", и теперь их нужно добавить в pc
+            console.log(`🧊 Пробрасываем ${iceQueue.length} кандидатов из очереди...`);
+            while (iceQueue.length > 0) {
+                const cand = iceQueue.shift();
+                try {
+                    await pc.addIceCandidate(cand);
+                } catch(e) {
+                    console.warn("Ошибка добавления кандидата из очереди:", e);
+                }
             }
-        }, 500);
+
+            // 3. Создаем и отправляем ответ (Answer)
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            
+            ws.send(`TO_USER:${currentCallData.from}|RTC_SIGNAL:${JSON.stringify({ answer: answer, from: myName })}`);
+            
+            // 4. Гарантия запуска видео
+            setTimeout(() => {
+                const remoteVid = document.getElementById('remoteVideo');
+                if (remoteVid) {
+                    remoteVid.play().catch(() => {
+                        window.addEventListener('click', () => remoteVid.play(), {once: true});
+                    });
+                }
+            }, 500);
+
+        } catch (err) {
+            console.error("Ошибка при приеме звонка:", err);
+            endCall();
+        }
     }
 }
+
 
 
 
