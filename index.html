@@ -1664,28 +1664,37 @@ function minimizeCall() {
 }
 
 async function startCall() {
-    if (!currentPartner || currentPartner === "general") return alert("Выбери контакт!");
+    console.log("☎️ Начинаем супер-звонок для:", currentPartner);
 
-    // 1. Показываем UI у себя (Исходящий)
+    if (!currentPartner || currentPartner === "general" || currentPartner === "null") {
+        return alert("Сначала выберите контакт!");
+    }
+    
+    // 1. Показываем UI у себя
     showCallUI(currentPartner, true);
     
-    // 2. ОТПРАВЛЯЕМ СИГНАЛ "ПРОСНИСЬ" (Самый легкий пакет)
+    // 2. ФОРМИРУЕМ СИГНАЛ ПРОБУЖДЕНИЯ
     const initSignal = { 
         type: "CALL_INIT", 
         from: myName, 
         av: localStorage.getItem('pinnogram_avatar') || "" 
     };
     
-    console.log("📤 [ШАГ 1] Будим телефон...");
-    ws.send(`TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`);
+    const packet = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
+    
+    // 3. ОТПРАВЛЯЕМ И ВЫВОДИМ В КОНСОЛЬ
+    console.log("📤 ШЛЕМ CALL_INIT ПАРТНЕРУ...");
+    ws.send(packet);
 
-    // 3. ПАУЗА 1500мс (Критично для Xiaomi/Android)
-    // Даем телефону время отрисовать CSS и включить вибро БЕЗ нагрузки видео-движка
+    // 4. ГИГАНТСКАЯ ПАУЗА (2 секунды) 
+    // Этого хватит любому телефону, чтобы отрисовать градиент.
+    // Пока эта пауза идет, WebRTC НЕ ЗАПУСКАЕТСЯ.
     setTimeout(async () => {
-        console.log("🚀 [ШАГ 2] UI открыт, запускаем передачу видео...");
+        console.log("🚀 Пауза прошла. Теперь запускаем видео-движок!");
         await initRTCPeer(true, currentPartner);
-    }, 1500);
+    }, 2000);
 }
+
     
 // 2. ИНИЦИАЛИЗАЦИЯ WebRTC (С поддержкой приватности)
 async function initRTCPeer(isCaller, targetUser) {
