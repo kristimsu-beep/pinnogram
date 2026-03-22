@@ -340,7 +340,18 @@ class ConnectionManager:
 
     async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None, reply_to_id: int = None):
         now = client_time if client_time else datetime.now().strftime("%H:%M")        
-        
+    
+        # 🎯 ПРИОРИТЕТ №1: МГНОВЕННЫЙ ПРОБРОС ЗВОНКА
+        if text and "RTC_SIGNAL:" in text:
+            if to_user:
+                room_users = self.rooms.get(room_id, {})
+                if to_user in room_users:
+                    try:
+                        await room_users[to_user].send_text(text)
+                        print(f"🚀 СИГНАЛ ЗВОНКА ПРОБИТ ДЛЯ {to_user}")
+                    except: pass
+            return # Выходим сразу, не трогаем БД и ники
+
         if username and text:
             # --- НОВАЯ ЛОГИКА ДЛЯ ЗВОНКОВ ---
             if "RTC_SIGNAL:" in text:
