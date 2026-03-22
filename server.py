@@ -341,7 +341,20 @@ class ConnectionManager:
     async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None, reply_to_id: int = None):
         now = client_time if client_time else datetime.now().strftime("%H:%M")        
         
-        if username and text:        
+        if username and text:
+            # --- НОВАЯ ЛОГИКА ДЛЯ ЗВОНКОВ ---
+            if "RTC_SIGNAL:" in text:
+                final_msg = text  # Шлем чистый JSON сигнал без оберток
+                if to_user:
+                    room_users = self.rooms.get(room_id, {})
+                    # Отправляем только получателю (и отправителю для подтверждения)
+                    for name in [username, to_user]:
+                        if name in room_users:
+                            try: await room_users[name].send_text(final_msg)
+                            except: continue
+                return # ПРЕРЫВАЕМ: звонки не должны попадать в БД!
+
+            # --- ОБЫЧНЫЕ СООБЩЕНИЯ (Твой старый код) ---
             async with aiosqlite.connect(DB_PATH) as db:        
                 cursor = await db.execute(        
                     "INSERT INTO messages (username, text, timestamp, room_id, avatar, to_user, is_read, reply_to_id) VALUES (?, ?, ?, ?, ?, ?, 0, ?)",         
@@ -358,10 +371,8 @@ class ConnectionManager:
                     room_users = self.rooms.get(room_id, {})
                     for name in [username, to_user]:        
                         if name in room_users:        
-                            try: 
-                                await room_users[name].send_text(final_msg)        
-                            except: 
-                                continue        
+                            try: await room_users[name].send_text(final_msg)        
+                            except: continue        
                         
                     if to_user not in room_users:        
                         async with db.execute("SELECT subscription_json FROM push_subscriptions WHERE username = ?", (to_user,)) as c:        
@@ -379,18 +390,9 @@ class ConnectionManager:
                 else:        
                     for ws in self.rooms.get(room_id, {}).values():        
                         if ws.client_state == WebSocketState.CONNECTED:        
-                            try: 
-                                await ws.send_text(final_msg)        
-                            except: 
-                                continue        
-        else:        
-            final_msg = f"ID:0|SYSTEM: {message}"        
-            for ws in self.rooms.get(room_id, {}).values():        
-                if ws.client_state == WebSocketState.CONNECTED:        
-                    try: 
-                        await ws.send_text(final_msg)        
-                    except: 
-                        continue
+                            try: await ws.send_text(final_msg)        
+                            except: continue
+
 
 manager = ConnectionManager()
 
