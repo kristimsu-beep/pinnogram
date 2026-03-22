@@ -1664,21 +1664,23 @@ function minimizeCall() {
 }
 
 async function startCall() {
-    console.log("☎️ Инициализация звонка. Партнер:", currentPartner);
+    console.log("☎️ Инициализация звонка. Цель:", currentPartner);
 
     if (!currentPartner || currentPartner === "general" || currentPartner === "null") {
         return alert("Сначала выберите собеседника в списке контактов!");
     }
     
-    // 1. ЗВУК (Гудкуем)
+    // 1. ПРИНУДИТЕЛЬНО ВКЛЮЧАЕМ ЗВУК (Гудкуем)
     if (typeof ringtone !== 'undefined') {
-        ringtone.play().catch(e => console.log("🔈 Звук заблокирован"));
+        ringtone.currentTime = 0;
+        ringtone.play().catch(e => console.warn("🔈 Звук заблокирован браузером"));
     }
 
-    // 2. ОТКРЫВАЕМ ИНТЕРФЕЙС У СЕБЯ (Исходящий)
+    // 2. ПОКАЗЫВАЕМ ЭКРАН У СЕБЯ
     showCallUI(currentPartner, true);
     
-    // 3. ОТПРАВЛЯЕМ СИГНАЛ "ВКЛЮЧИ ЭКРАН" (Первым делом!)
+    // 3. ОТПРАВЛЯЕМ СИГНАЛ "ПРОБУЖДЕНИЯ" (CALL_INIT)
+    // Это самый важный пакет, он должен дойти до телефона первым
     const initSignal = { 
         type: "CALL_INIT", 
         from: myName, 
@@ -1686,16 +1688,17 @@ async function startCall() {
     };
     
     const packet = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
-    console.log("📤 Шлем CALL_INIT на телефон...");
+    console.log("📤 [1/2] ОТПРАВЛЯЕМ CALL_INIT...");
     ws.send(packet);
     
-    // 4. КРИТИЧЕСКАЯ ПАУЗА (500мс)
-    // Даем телефону время отрисовать градиент и включить вибро
+    // 4. УВЕЛИЧЕННАЯ ПАУЗА (800мс)
+    // Даем телефону время отрисовать градиент, включить вибро и быть готовым к SDP Offer
     setTimeout(async () => {
-        console.log("🚀 Запускаем движок WebRTC (Offer)...");
+        console.log("📤 [2/2] ТЕПЕРЬ ЗАПУСКАЕМ WebRTC (OFFER)...");
         await initRTCPeer(true, currentPartner);
-    }, 500);
+    }, 800);
 }
+
 
 
 
@@ -1786,32 +1789,47 @@ function startVoiceVisualization(stream) {
 // 3. ОБРАБОТЧИК СИГНАЛОВ (Signaling)
 async function handleSignalingData(data) {
     if (data.from === myName) return;
+    console.log("📩 Получен сигнал типа:", data.type || (data.offer ? "OFFER" : "ICE"));
 
-    // Входящий запрос (Telegram UI)
+    // 1. ПЕРВЫЙ КОНТАКТ (Включаем экран)
     if (data.type === "CALL_INIT") {
         currentCallData = data;
         showCallUI(data.from, false, data.av);
         
-        // ВИБРАЦИЯ ( Xiaomi ритм: 500мс вибро, 300мс пауза )
+        // Вибрация (Xiaomi Style)
         if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
         return;
     }
 
+    // 2. ОТКЛОНЕНИЕ
     if (data.type === "CALL_REJECT") {
         alert("Вызов отклонен");
         endCall();
         return;
     }
 
+    // 3. ТЕХНИЧЕСКИЕ ДАННЫЕ (SDP Offer)
     if (data.offer) {
-        currentCallData = data; 
-    } else if (data.answer && pc) {
+        console.log("📝 Получен Offer от:", data.from);
+        currentCallData = data; // Сохраняем, чтобы использовать при нажатии "Принять"
+    } 
+    // 4. ТЕХНИЧЕСКИЕ ДАННЫЕ (SDP Answer)
+    else if (data.answer && pc) {
         await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-        while (iceQueue.length > 0) { try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){} }
-    } else if (data.candidate) {
+        // Очищаем очередь кандидатов
+        while (iceQueue.length > 0) { 
+            try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){} 
+        }
+    } 
+    // 5. СЕТЕВЫЕ КАНАЛЫ (ICE Candidates)
+    else if (data.candidate) {
         const cand = new RTCIceCandidate(data.candidate);
-        if (pc && pc.remoteDescription) { try { await pc.addIceCandidate(cand); } catch(e){} }
-        else { iceQueue.push(cand); }
+        // Если соединение уже готово — добавляем сразу, иначе — в очередь
+        if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+            try { await pc.addIceCandidate(cand); } catch(e){}
+        } else {
+            iceQueue.push(cand);
+        }
     }
 }
 
