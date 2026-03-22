@@ -1698,10 +1698,12 @@ async function initRTCPeer(isCaller, targetUser) {
         
         startVoiceVisualization(localStream); 
         
-        document.getElementById('localVideo').srcObject = localStream;
+        // Показываем превью своей камеры
+        const localVid = document.getElementById('localVideo');
+        if (localVid) localVid.srcObject = localStream;
         
-        // Само видео-окно с камерами открываем только когда связь пошла
-        if (!isCaller) document.getElementById('video-call-overlay').style.display = 'block';
+        // 🎯 ИСПРАВЛЕНО: Окно звонка должно открываться у ОБЕИХ сторон сразу!
+        document.getElementById('video-call-overlay').style.display = 'block';
 
         const configuration = {
             iceServers: [
@@ -1715,17 +1717,24 @@ async function initRTCPeer(isCaller, targetUser) {
 
         pc.ontrack = (event) => {
             const remoteVid = document.getElementById('remoteVideo');
-            remoteVid.srcObject = event.streams[0] || new MediaStream([event.track]);
+            if (remoteVid) {
+                remoteVid.srcObject = event.streams[0] || new MediaStream([event.track]);
+            }
             
-            // Xiaomi/iOS Fix
-            const trigger = () => { forceRender(); window.removeEventListener('click', trigger); };
+            // Исправленный блок активации (без forceRender)
+            const trigger = () => { 
+                console.log("Интерфейс активирован");
+                window.dispatchEvent(new Event('resize')); 
+                window.removeEventListener('click', trigger); 
+            };
             window.addEventListener('click', trigger);
-            setTimeout(forceRender, 1000);
-        };
+            setTimeout(() => window.dispatchEvent(new Event('resize')), 1000);
+        }; // <-- ВОТ ЭТУ СКОБКУ ТЫ ЗАБЫЛ!
 
         pc.onicecandidate = e => {
             if (e.candidate) {
                 const signal = JSON.stringify({ candidate: e.candidate, from: myName });
+                // Используем ws.send, как в твоем коде
                 ws.send(`TO_USER:${targetUser}|RTC_SIGNAL:${signal}`);
             }
         };
@@ -1735,7 +1744,10 @@ async function initRTCPeer(isCaller, targetUser) {
             await pc.setLocalDescription(offer);
             ws.send(`TO_USER:${targetUser}|RTC_SIGNAL:${JSON.stringify({ offer: offer, from: myName })}`);
         }
-    } catch (e) { console.error(e); endCall(); }
+    } catch (e) { 
+        console.error("RTC Error:", e); 
+        endCall(); 
+    }
 }
 
 function startVoiceVisualization(stream) {
