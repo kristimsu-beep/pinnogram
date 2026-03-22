@@ -1664,43 +1664,29 @@ function minimizeCall() {
 }
 
 async function startCall() {
-    console.log("☎️ Инициализация звонка. Цель:", currentPartner);
+    if (!currentPartner || currentPartner === "general") return alert("Выбери контакт!");
 
-    if (!currentPartner || currentPartner === "general" || currentPartner === "null") {
-        return alert("Сначала выберите контакт!");
-    }
-    
     // 1. Показываем UI у себя (Исходящий)
     showCallUI(currentPartner, true);
     
-    // 2. ОТПРАВЛЯЕМ СИГНАЛ "ПРОБУЖДЕНИЯ" ПЕРВЫМ
+    // 2. ОТПРАВЛЯЕМ СИГНАЛ "ПРОСНИСЬ" (Самый легкий пакет)
     const initSignal = { 
         type: "CALL_INIT", 
         from: myName, 
-        av: localStorage.getItem('pinnogram_avatar') || ""
+        av: localStorage.getItem('pinnogram_avatar') || "" 
     };
     
-    const initPacket = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
-    
-    console.log("📤 [ШАГ 1] Отправляем команду CALL_INIT...");
-    ws.send(initPacket);
-    
-    // 3. ПАУЗА 1500мс (1.5 секунды) - КРИТИЧНО ДЛЯ XIAOMI
-    // Нам нужно, чтобы телефон успел обработать CALL_INIT и отрисовать градиент
-    // до того, как полетят тяжелые Offer-данные
+    console.log("📤 [ШАГ 1] Будим телефон...");
+    ws.send(`TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`);
+
+    // 3. ПАУЗА 1500мс (Критично для Xiaomi/Android)
+    // Даем телефону время отрисовать CSS и включить вибро БЕЗ нагрузки видео-движка
     setTimeout(async () => {
-        console.log("🚀 [ШАГ 2] Прошло 1.5с. Запускаем передачу данных связи (WebRTC Offer)...");
+        console.log("🚀 [ШАГ 2] UI открыт, запускаем передачу видео...");
         await initRTCPeer(true, currentPartner);
-    }, 1800);
+    }, 1500);
 }
-
-
-
-
-
-
-
-
+    
 // 2. ИНИЦИАЛИЗАЦИЯ WebRTC (С поддержкой приватности)
 async function initRTCPeer(isCaller, targetUser) {
     try {
@@ -1861,31 +1847,37 @@ function showCallUI(name, isOutgoing, avatarUrl = null) {
 
 
 async function acceptCall() {
-    if (navigator.vibrate) navigator.vibrate(0);
+    if (navigator.vibrate) navigator.vibrate(0); // Стоп вибро
     if (!currentCallData) return;
 
+    // Скрываем звонок, открываем видео-слой
     document.getElementById('incoming-call-ui').style.display = 'none';
     document.getElementById('video-call-overlay').style.display = 'block';
 
-    // Запускаем камеру
+    // Запускаем WebRTC
     await initRTCPeer(false, currentCallData.from);
 
     if (currentCallData.offer) {
         await pc.setRemoteDescription(new RTCSessionDescription(currentCallData.offer));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
+        
         ws.send(`TO_USER:${currentCallData.from}|RTC_SIGNAL:${JSON.stringify({ answer: answer, from: myName })}`);
         
-        // ЧИНИМ ЧЕРНЫЙ ЭКРАН: Принудительно стартуем видео через 100мс
+        // ГАРАНТИЯ КАРТИНКИ: Ждем полсекунды и принудительно жмем Play
         setTimeout(() => {
             const remoteVid = document.getElementById('remoteVideo');
-            if (remoteVid) remoteVid.play().catch(() => {
-                console.log("Нужен клик для видео");
-                window.addEventListener('click', () => remoteVid.play(), {once: true});
-            });
+            if (remoteVid) {
+                remoteVid.play().catch(() => {
+                    // Если браузер заблокировал — видео включится, как только ты тапнешь по экрану
+                    window.addEventListener('click', () => remoteVid.play(), {once: true});
+                });
+            }
         }, 500);
     }
 }
+
+
 
 
 
