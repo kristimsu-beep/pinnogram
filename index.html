@@ -1243,10 +1243,23 @@
 
 
 
-            if (raw.startsWith("RTC_SIGNAL:")) {
-                if (typeof handleSignalingData === "function") handleSignalingData(JSON.parse(raw.replace("RTC_SIGNAL:", "")));
-                return;
+            // ЗАМЕНИ СВОЙ СТАРЫЙ БЛОК НА ЭТОТ УНИВЕРСАЛЬНЫЙ
+            if (raw.includes("RTC_SIGNAL:")) {
+                try {
+                    // Находим, где начинается полезная нагрузка (JSON)
+                    const parts = raw.split("RTC_SIGNAL:");
+                    // Берем последнюю часть (индекс 1), так как там лежит наш объект
+                    const signalData = JSON.parse(parts[1]);
+                    
+                    if (typeof handleSignalingData === "function") {
+                        handleSignalingData(signalData);
+                    }
+                } catch(e) {
+                    console.error("❌ Ошибка парсинга RTC сигнала:", e);
+                }
+                return; // Прерываем, чтобы технический код не вывелся в чат
             }
+
 
             if (raw.startsWith("TYPING:")) {
                 const typingUser = raw.split(":")[1];
@@ -1871,9 +1884,10 @@ function endCall() {
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
     
     // ДОБАВЬ ЭТО: Закрываем аудио-контекст визуализатора
-    if (audioContext && audioContext.state !== 'closed') {
-        audioContext.close();
+    if (window.audioContextInstance && window.audioContextInstance.state !== 'closed') {
+        window.audioContextInstance.close();
     }
+
 
     document.getElementById('video-call-overlay').style.display = 'none';
     document.getElementById('incoming-call-ui').style.display = 'none';
