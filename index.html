@@ -1826,31 +1826,46 @@ function startVoiceVisualization(stream) {
 
 // 3. ОБРАБОТЧИК СИГНАЛОВ (Signaling)
 async function handleSignalingData(data) {
-    if (data.from === myName) return;
+    // 1. ЖЕСТКАЯ ПРОВЕРКА: Не звоню ли я сам себе?
+    console.log("📥 КТО ПРИСЛАЛ ПАКЕТ:", data.from, "А КТО Я:", myName);
+    const sender = String(data.from || "").trim().toLowerCase();
+    const me = String(myName || "").trim().toLowerCase();
     
-    const ui = document.getElementById('incoming-call-ui');
-    const isVisible = ui && ui.style.display === 'flex';
+    if (sender === me || !data.from) {
+        console.log("🚫 Пропускаю эхо-пакет от самого себя или пустой отправитель");
+        return;
+    }
+    
+    console.log("📥 ПОЛУЧЕН СИГНАЛ ОТ:", data.from, "ТИП:", data.type || (data.offer ? "OFFER" : "ICE"));
 
-    // 🎯 ГАРАНТИЯ ОТКРЫТИЯ: Если пришел любой сигнал звонка, а окно закрыто — ОТКРЫВАЕМ
+    const ui = document.getElementById('incoming-call-ui');
+    const isVisible = ui && (ui.style.display === 'flex' || ui.style.display === 'block');
+
+    // 🎯 АВТО-ПРОБУЖДЕНИЕ (Интерфейс)
     if (!isVisible && (data.type === "CALL_INIT" || data.offer)) {
-        console.log("🚨 АВТО-ПРОБУЖДЕНИЕ: Обнаружен входящий поток!");
-        currentCallData = data; // Сохраняем сразу
+        console.log("🚨 АВТО-ПРОБУЖДЕНИЕ: Открываю экран звонка...");
+        currentCallData = data; 
         showCallUI(data.from, false, data.av);
         if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
-        // НЕ ДЕЛАЙ return здесь, пусть код идет дальше к сохранению offer
     }
 
-
-    // Стандартная логика
+    // 🎯 ОБРАБОТКА ДАННЫХ (Логика WebRTC)
     if (data.type === "CALL_REJECT") {
-        alert("Вызов отклонен");
+        console.log("❌ Собеседник сбросил вызов");
         endCall();
-    } else if (data.offer) {
-        currentCallData = data; 
-    } else if (data.answer && pc) {
+    } 
+    else if (data.offer) {
+        console.log("📦 Получен OFFER, сохраняю...");
+        currentCallData = data; // Обновляем данные, чтобы внутри был offer
+    } 
+    else if (data.answer && pc) {
+        console.log("✅ Получен ANSWER, устанавливаю связь...");
         await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-        while (iceQueue.length > 0) { try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){} }
-    } else if (data.candidate) {
+        while (iceQueue.length > 0) { 
+            try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){} 
+        }
+    } 
+    else if (data.candidate) {
         const cand = new RTCIceCandidate(data.candidate);
         if (pc && pc.remoteDescription && pc.remoteDescription.type) {
             try { await pc.addIceCandidate(cand); } catch(e){}
@@ -1859,6 +1874,7 @@ async function handleSignalingData(data) {
         }
     }
 }
+
 
 
 // 4. УПРАВЛЕНИЕ ИНТЕРФЕЙСОМ
