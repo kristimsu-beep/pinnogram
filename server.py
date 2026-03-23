@@ -345,16 +345,20 @@ class ConnectionManager:
         # Этот блок должен быть ПЕРВЫМ и единственным для звонков
         if text and "RTC_SIGNAL:" in text:
             room_users = self.rooms.get(room_id, {})
-            # Отправляем ТОЛЬКО отправителю и получателю
-            targets = [username]
-            if to_user: targets.append(to_user)
             
-            for name in targets:
-                if name in room_users:
-                    try:
-                        await room_users[name].send_text(text)
-                    except: pass
-            return # ВАЖНО: выходим, чтобы не писать звонок в БД и не слать всем!
+            # 🎯 ФИКС: Отправляем ТОЛЬКО получателю. Себе слать НЕЛЬЗЯ!
+            if to_user and to_user in room_users:
+                try:
+                    # Шлем пакет ТОЛЬКО тому, чей ник указан в TO_USER
+                    await room_users[to_user].send_text(text)
+                    print(f"📡 [RTC] Сигнал передан: {username} -> {to_user}")
+                except Exception as e:
+                    print(f"❌ Ошибка отправки RTC: {e}")
+            else:
+                print(f"⚠️ [RTC] Получатель {to_user} не найден в этой комнате")
+                
+            return # Выходим, чтобы не спамить в общий чат и не писать в БД
+
 
         # 🎯 2. ОБЫЧНЫЕ СООБЩЕНИЯ (Запись в базу и рассылка)
         if username and text:
