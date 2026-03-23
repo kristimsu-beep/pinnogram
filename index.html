@@ -672,97 +672,101 @@
     @keyframes shake-call { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(10deg); } 75% { transform: rotate(-10deg); } }
 
     
+    /* 0. ПЕРЕМЕННЫЕ ЦВЕТОВ (NEON 2026) */
     :root {
-      --neon-blue: #00d2ff;
-      --neon-pink: #ff00c1;
-      --neon-yellow: #fcd116;
-      --neon-purple: #9d00ff;
+      --neon-blue: #32ade6;
+      --neon-purple: #bf5af2;
+      --neon-pink: #ff375f;
+      --neon-yellow: #ffcc00;
+    }
+
+    /* 1. КОНТЕЙНЕР ДЛЯ КНОПОК В РЯД */
+    .neon-row-controls {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        width: 100%;
+        padding-bottom: 40px;
     }
     
-    /* 0. БАЗОВЫЙ КРУГЛЫЙ НЕОН (GLASS-EFFECT) */
+    /* 2. БАЗОВЫЙ КРУГЛЫЙ НЕОН (GLASSMORPHISM) */
     .neon-btn-round {
-        width: 72px; height: 72px;
-        border-radius: 50% !important; /* Строго круглые */
-        background: rgba(255, 255, 255, 0.05); /* Едва заметный глянец */
-        border: 2px solid;
+        width: 70px; height: 70px;
+        border-radius: 50% !important;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.2);
         display: flex; align-items: center; justify-content: center;
         cursor: pointer; transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         position: relative;
-        backdrop-filter: blur(12px); /* Эффект матового стекла */
+        backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
-        overflow: hidden;
     }
     
-    /* Эффект блика при наведении или нажатии */
-    .neon-btn-round::before {
-        content: ''; position: absolute; top: -50%; left: -50%;
-        width: 200%; height: 200%;
-        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-        opacity: 0; transition: 0.3s;
+    .neon-btn-round:active { transform: scale(0.85); filter: brightness(1.5); }
+    
+    /* ЦВЕТА И СВЕЧЕНИЕ (ДВОЙНОЙ ГЛОУ) */
+    .btn-purple { color: var(--neon-purple); border-color: var(--neon-purple); box-shadow: 0 0 20px rgba(191, 90, 242, 0.4), inset 0 0 10px rgba(191, 90, 242, 0.2); }
+    .btn-pink   { color: var(--neon-pink); border-color: var(--neon-pink); box-shadow: 0 0 20px rgba(255, 45, 85, 0.4), inset 0 0 10px rgba(255, 45, 85, 0.2); }
+    .btn-cyan   { color: var(--neon-blue); border-color: var(--neon-blue); box-shadow: 0 0 20px rgba(50, 173, 230, 0.5), inset 0 0 10px rgba(50, 173, 230, 0.2); }
+    .btn-yellow { color: var(--neon-yellow); border-color: var(--neon-yellow); box-shadow: 0 0 20px rgba(255, 204, 0, 0.4), inset 0 0 10px rgba(255, 204, 0, 0.2); }
+    
+    /* 3. ДИЗАЙНЕРСКИЕ ИКОНКИ (ЧИСТЫЙ CSS) */
+    
+    /* МИКРОФОН */
+    .ui-icon-mic {
+        width: 14px; height: 22px;
+        border: 2.5px solid currentColor; border-radius: 10px;
+        position: relative; filter: drop-shadow(0 0 5px currentColor);
+    }
+    .ui-icon-mic::after {
+        content: ''; position: absolute; top: 12px; left: -7px;
+        width: 24px; height: 12px; border: 2.5px solid currentColor;
+        border-top: 0; border-radius: 0 0 14px 14px;
     }
     
-    .neon-btn-round:active { transform: scale(0.88); filter: brightness(1.4); }
-    .neon-btn-round:active::before { opacity: 1; }
-    
-    /* 1. ПРИНЯТЬ (Azure Mist) */
-    .btn-cyan {
-        color: #32ade6; border-color: #32ade6;
-        box-shadow: 0 0 25px rgba(50, 173, 230, 0.5), inset 0 0 10px rgba(50, 173, 230, 0.3);
+    /* КАМЕРА С ЛИНЗОЙ */
+    .ui-icon-vid {
+        width: 26px; height: 18px;
+        border: 2.5px solid currentColor; border-radius: 6px;
+        position: relative; filter: drop-shadow(0 0 5px currentColor);
     }
-    .ui-icon-phone { 
-        width: 26px; height: 11px; background: currentColor; border-radius: 4px; 
-        position: relative; transform: rotate(-45deg); 
-        filter: drop-shadow(0 0 5px currentColor);
-    }
-    .ui-icon-phone::before, .ui-icon-phone::after { 
-        content: ''; position: absolute; width: 10px; height: 8px; 
-        background: currentColor; top: -5px; border-radius: 4px 4px 0 0;
-    }
-    .ui-icon-phone::before { left: 0; } .ui-icon-phone::after { right: 0; }
-    
-    /* 2. МИКРОФОН (Violet Night) */
-    .btn-purple {
-        color: #bf5af2; border-color: #bf5af2;
-        box-shadow: 0 0 25px rgba(191, 90, 242, 0.5), inset 0 0 10px rgba(191, 90, 242, 0.3);
-    }
-    .ui-icon-mic { 
-        width: 14px; height: 22px; background: currentColor; border-radius: 10px; position: relative; 
-        filter: drop-shadow(0 0 5px currentColor);
-    }
-    .ui-icon-mic::after { 
-        content: ''; position: absolute; top: 13px; left: -6px; width: 22px; height: 11px; 
-        border: 2.5px solid; border-top: 0; border-radius: 0 0 12px 12px; 
+    .ui-icon-vid::before {
+        content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 8px; height: 8px; border: 2px solid currentColor; border-radius: 50%;
     }
     
-    /* 3. КАМЕРА (Rose Neon) */
-    .btn-pink {
-        color: #ff375f; border-color: #ff375f;
-        box-shadow: 0 0 25px rgba(255, 55, 95, 0.5), inset 0 0 10px rgba(255, 55, 95, 0.3);
+    /* ТРУБКА (КАК НА ТВОЕМ ФОТО) */
+    .ui-icon-phone {
+        width: 28px; height: 12px;
+        border: 3.5px solid currentColor; /* Толстый контур */
+        border-top: 0; border-radius: 6px 6px 16px 16px;
+        position: relative; transform: rotate(-45deg);
+        filter: drop-shadow(0 0 8px currentColor);
     }
-    .ui-icon-vid { 
-        width: 24px; height: 18px; background: currentColor; border-radius: 5px; position: relative; 
-        filter: drop-shadow(0 0 5px currentColor);
+    .ui-icon-phone::before, .ui-icon-phone::after {
+        content: ''; position: absolute; width: 10px; height: 8px;
+        border: 3.5px solid currentColor; border-bottom: 0;
+        top: -10px; border-radius: 5px 5px 0 0;
     }
-    .ui-icon-vid::after { 
-        content: ''; position: absolute; right: -9px; top: 4px; 
-        border-left: 9px solid currentColor; border-top: 5px solid transparent; border-bottom: 5px solid transparent; 
+    .ui-icon-phone::before { left: -3.5px; }
+    .ui-icon-phone::after { right: -3.5px; }
+    
+    /* 4. ФИКС АВАТАРКИ (ПЛАВНОЕ ДЫХАНИЕ) */
+    #call-avatar-circle {
+        transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease-out;
+        will-change: transform;
     }
     
-    /* 4. СБРОС (Cyber Gold) */
-    .btn-yellow {
-        color: #ffcc00; border-color: #ffcc00;
-        box-shadow: 0 0 25px rgba(255, 204, 0, 0.5), inset 0 0 10px rgba(255, 204, 0, 0.3);
-    }
-    /* Используем ту же трубку, но развернутую */
-    .btn-yellow .ui-icon-phone { transform: rotate(135deg); }
-    
-    /* Анимация пульсации: теперь она мягкая и "дышащая" */
+    /* Мягкая пульсация кнопки ответа */
     @keyframes neon-pulse-soft {
-      0% { box-shadow: 0 0 15px currentColor, inset 0 0 5px currentColor; transform: scale(1); }
-      50% { box-shadow: 0 0 35px currentColor, inset 0 0 15px currentColor; transform: scale(1.05); }
-      100% { box-shadow: 0 0 15px currentColor, inset 0 0 5px currentColor; transform: scale(1); }
+      0% { transform: scale(1); box-shadow: 0 0 15px currentColor; }
+      50% { transform: scale(1.08); box-shadow: 0 0 35px currentColor; }
+      100% { transform: scale(1); box-shadow: 0 0 15px currentColor; }
     }
     .pulse-active { animation: neon-pulse-soft 2s infinite ease-in-out; }
+
+
+
 
 
 
@@ -812,15 +816,14 @@
 <!-- ВОТ ЭТО ДОЛЖНО БЫТЬ ОТДЕЛЬНО ОТ STYLE -->
 <div id="incoming-call-ui" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background: linear-gradient(180deg, #6a82fb 0%, #fc5c7d 100%); z-index:2000000; flex-direction:column; align-items:center; justify-content:space-around; padding: 60px 0; color:white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
     
-    <!-- КНОПКА СВЕРНУТЬ (Сделали более аккуратной) -->
+    <!-- КНОПКА СВЕРНУТЬ -->
     <button onclick="minimizeCall()" style="position:absolute; top:25px; right:25px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.1); color:white; padding:8px 16px; border-radius:20px; cursor:pointer; font-size:12px; backdrop-filter:blur(10px); font-weight: 500;">↙️ Свернуть</button>
 
     <div style="text-align:center;">
-        <!-- ОРАНЖЕВЫЙ КРУГ С ГЛУБОКОЙ ТЕНЬЮ -->
+        <!-- ОРАНЖЕВЫЙ КРУГ -->
         <div id="call-avatar-circle" style="width:160px; height:160px; border-radius:50%; background:#e67e22; display:flex; align-items:center; justify-content:center; margin:0 auto 25px; font-size:70px; font-weight:bold; box-shadow: 0 15px 45px rgba(0,0,0,0.3); position:relative; border: 4px solid rgba(255,255,255,0.15);">
             <span id="call-initial">?</span>
             <img id="call-avatar" src="" style="display:none; width:100%; height:100%; border-radius:50%; object-fit:cover; position:absolute; top:0; left:0;">
-            <!-- Пульсирующая рябь из твоего CSS -->
             <div class="ripple"></div>
         </div>
         <h2 id="call-sender-name" style="margin:0; font-size:36px; font-weight:800; letter-spacing: -0.5px;">Пользователь</h2>
@@ -830,7 +833,7 @@
     <!-- ТЕ САМЫЕ ПРЕМИУМ-КНОПКИ В РЯД -->
     <div style="display:flex; justify-content:center; gap:25px; width:100%; padding-bottom:20px;">
         
-        <!-- Микрофон (Фиолетовый) -->
+        <!-- Микрофон (Фиолет) -->
         <div class="neon-btn-round btn-purple" onclick="toggleMic(this)">
             <div class="ui-icon-mic"></div>
         </div>
@@ -845,13 +848,15 @@
             <div class="ui-icon-phone"></div>
         </div>
         
-        <!-- Сброс (Желтый) -->
+        <!-- Сброс (Желтый - ПЕРЕВЕРНУТЫЙ) -->
         <div class="neon-btn-round btn-yellow" onclick="rejectCall()">
-            <div class="ui-icon-phone"></div>
+            <!-- ВАЖНО: Добавили поворот для иконки сброса -->
+            <div class="ui-icon-phone" style="transform: rotate(135deg);"></div>
         </div>
         
     </div>
 </div>
+
 
 
 
@@ -1854,9 +1859,23 @@ function toggleVideo(btn) {
 }
 
 async function startCall() {
-    if (!currentPartner || currentPartner === "general") return alert("Выбери контакт!");
+    console.log("%c📞 [START] Подготовка вызова...", "color: white; background: #007bff; padding: 2px 5px;");
+    
+    // 1. Проверяем, кому звоним
+    if (!currentPartner || currentPartner === "general") {
+        console.error("❌ ОШИБКА: Цель (currentPartner) не определена!");
+        return alert("Сначала выбери, кому звонить!");
+    }
 
-    // Открываем наш крутой UI
+    // 2. Проверяем, не звоним ли мы сами себе случайно
+    if (String(currentPartner).trim().toLowerCase() === String(myName).trim().toLowerCase()) {
+        console.error("❌ ОШИБКА: Попытка позвонить самому себе заблокирована.");
+        return alert("Ты не можешь звонить самому себе!");
+    }
+
+    console.log("📍 МОЕ ИМЯ:", myName);
+    console.log("📍 ЦЕЛЬ (josef?):", currentPartner);
+
     showCallUI(currentPartner, true); 
     
     const initSignal = { 
@@ -1864,17 +1883,19 @@ async function startCall() {
         from: myName, 
         av: localStorage.getItem('pinnogram_avatar') || "" 
     };
-    
-    // Отправляем сигнал ТОЛЬКО партнеру
+
     const packet = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
+    
+    console.log("%c📤 В СОКЕТ УЛЕТАЕТ:", "color: yellow;", packet);
     ws.send(packet); 
 
     // Запускаем WebRTC через 500мс
     setTimeout(async () => {
-        console.log("🚀 WebRTC ENGINE START...");
+        console.log("🚀 WebRTC: Запуск двигателя...");
         await initRTCPeer(true, currentPartner);
     }, 500); 
 }
+
 
 
 
@@ -1950,76 +1971,101 @@ async function initRTCPeer(isCaller, targetUser) {
 
 function startVoiceVisualization(stream) {
     try {
-        // Проверяем, не открыт ли уже контекст, чтобы не создавать дубликат
         if (!window.audioContextInstance || window.audioContextInstance.state === 'closed') {
             window.audioContextInstance = new (window.AudioContext || window.webkitAudioContext)();
         }
         
-        analyser = window.audioContextInstance.createAnalyser();
+        // Создаем анализатор с большим сглаживанием (smoothing)
+        const analyser = window.audioContextInstance.createAnalyser();
+        analyser.smoothingTimeConstant = 0.8; // Это делает движения "тягучими" и плавными
+        
         const source = window.audioContextInstance.createMediaStreamSource(stream);
         source.connect(analyser);
-        analyser.fftSize = 32;
-        dataArray = new Uint8Array(analyser.frequencyBinCount);
+        analyser.fftSize = 64; 
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
         const updateWaves = () => {
             if (!analyser || (window.audioContextInstance && window.audioContextInstance.state === 'closed')) return;
             
             analyser.getByteFrequencyData(dataArray);
-            const volume = dataArray.reduce((a, b) => a + b) / dataArray.length;
+            
+            // Считаем среднюю громкость
+            let volume = dataArray.reduce((a, b) => a + b) / dataArray.length;
+            
+            // 🛡️ ФИЛЬТР ШУМА: Если звук тихий (фон, кулер), обнуляем, чтобы не было микро-дерганий
+            const threshold = 15; 
+            const cleanVolume = volume > threshold ? volume - threshold : 0;
             
             const circle = document.getElementById('call-avatar-circle');
             if (circle) {
-                // Пульсация аватарки
-                circle.style.transform = `scale(${1 + volume/150})`;
-                // Свечение в такт (используем желтый или твой акцентный цвет)
-                circle.style.boxShadow = `0 0 ${volume/2}px rgba(255, 255, 255, 0.4), 0 0 ${volume/4}px rgba(0, 0, 0, 0.2)`;
+                // 💎 ПЛАВНОЕ ДЫХАНИЕ: Делитель 1200 делает пульсацию едва заметной и дорогой
+                const targetScale = 1 + (cleanVolume / 1200); 
+                
+                // Применяем масштаб
+                circle.style.transform = `scale(${targetScale})`;
+                
+                // Мягкое свечение (туман), которое не "мигает" в глаза
+                if (cleanVolume > 0) {
+                    circle.style.boxShadow = `0 15px 45px rgba(0,0,0,0.3), 0 0 ${cleanVolume/3}px rgba(255, 255, 255, 0.25)`;
+                } else {
+                    circle.style.boxShadow = `0 15px 45px rgba(0,0,0,0.3)`;
+                }
             }
             requestAnimationFrame(updateWaves);
         };
         updateWaves();
     } catch (e) {
-        console.error("Ошибка визуализации голоса:", e);
+        console.error("Ошибка визуализации:", e);
     }
 }
 
 
 
+
 // 3. ОБРАБОТЧИК СИГНАЛОВ (Signaling)
 async function handleSignalingData(data) {
-    // 1. ЖЕСТКАЯ ПРОВЕРКА: Не звоню ли я сам себе?
-    console.log("📥 КТО ПРИСЛАЛ ПАКЕТ:", data.from, "А КТО Я:", myName);
+    // 1. ДЕТЕКТИВНЫЙ ЛОГ: Проверяем реальные значения имен
+    console.log("%c🔍 АНАЛИЗ ПАКЕТА:", "color: white; background: #222; padding: 4px; border-radius: 4px;");
+    console.log("👤 ОТПРАВИТЕЛЬ (data.from):", `"${data.from}"`);
+    console.log("👤 ТЕКУЩИЙ ЮЗЕР (myName):", `"${myName}"`);
+    
+    // Подготовка имен для сравнения (убираем пробелы и регистр)
     const sender = String(data.from || "").trim().toLowerCase();
     const me = String(myName || "").trim().toLowerCase();
     
+    console.log(`🔎 СРАВНЕНИЕ: [${sender}] === [${me}] ?`, sender === me);
+
+    // 2. ЖЕСТКАЯ БЛОКИРОВКА ЭХА
     if (sender === me || !data.from) {
-        console.log("🚫 Пропускаю эхо-пакет от самого себя или пустой отправитель");
+        console.log("%c🚫 ЭХО-СТОП: Пакет пришел от меня же. Сбрасываю.", "color: #ff4444; font-weight: bold;");
         return;
     }
     
-    console.log("📥 ПОЛУЧЕН СИГНАЛ ОТ:", data.from, "ТИП:", data.type || (data.offer ? "OFFER" : "ICE"));
+    console.log("%c✅ ПРОВЕРКА ПРОЙДЕНА: Пакет от другого юзера!", "color: #00ff00;");
+    console.log("📦 ТИП СИГНАЛА:", data.type || (data.offer ? "OFFER" : "ICE"));
 
     const ui = document.getElementById('incoming-call-ui');
     const isVisible = ui && (ui.style.display === 'flex' || ui.style.display === 'block');
 
     // 🎯 АВТО-ПРОБУЖДЕНИЕ (Интерфейс)
     if (!isVisible && (data.type === "CALL_INIT" || data.offer)) {
-        console.log("🚨 АВТО-ПРОБУЖДЕНИЕ: Открываю экран звонка...");
+        console.log("🚨 UI: Открываю экран входящего звонка от:", data.from);
         currentCallData = data; 
-        showCallUI(data.from, false, data.av);
+        showCallUI(data.from, false, data.av); // false = Входящий
         if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
     }
 
     // 🎯 ОБРАБОТКА ДАННЫХ (Логика WebRTC)
     if (data.type === "CALL_REJECT") {
-        console.log("❌ Собеседник сбросил вызов");
+        console.log("❌ Собеседник нажал 'СБРОС'");
         endCall();
     } 
     else if (data.offer) {
-        console.log("📦 Получен OFFER, сохраняю...");
-        currentCallData = data; // Обновляем данные, чтобы внутри был offer
+        console.log("📦 [OFFER] Данные WebRTC сохранены");
+        currentCallData = data; 
     } 
     else if (data.answer && pc) {
-        console.log("✅ Получен ANSWER, устанавливаю связь...");
+        console.log("✅ [ANSWER] Соединение установлено!");
         await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
         while (iceQueue.length > 0) { 
             try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){} 
@@ -2030,10 +2076,12 @@ async function handleSignalingData(data) {
         if (pc && pc.remoteDescription && pc.remoteDescription.type) {
             try { await pc.addIceCandidate(cand); } catch(e){}
         } else {
+            console.log("🧊 [ICE] Кандидат в очереди...");
             iceQueue.push(cand);
         }
     }
 }
+
 
 
 
