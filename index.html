@@ -1859,7 +1859,7 @@ function toggleVideo(btn) {
 }
 
 async function startCall() {
-    // ЖЕСТКИЙ ЛОГ: Проверяем, видит ли кнопка Йозефа
+    // ЖЕСТКИЙ ЛОГ: Проверяем, видит ли кнопка чубриканта
     console.log("📍 КНОПКА ВИДИТ ПАРТНЕРА:", currentPartner);
 
     if (!currentPartner || currentPartner === "general") {
@@ -1947,22 +1947,25 @@ async function initRTCPeer(isCaller, targetUser) {
             console.log("%c🎬 [WebRTC] ВИДЕО ПОЛУЧЕНО!", "color: lime; font-weight: bold;");
             const remoteVid = document.getElementById('remoteVideo');
             if (remoteVid) {
-                remoteVid.srcObject = event.streams[0] || new MediaStream([event.track]);
+                // 🎯 УМНЫЙ ПОДХОД: Берем поток или создаем его из трека
+                if (event.streams && event.streams[0]) {
+                    remoteVid.srcObject = event.streams[0];
+                } else {
+                    remoteVid.srcObject = new MediaStream([event.track]);
+                }
                 
-                // 🎯 ГАРАНТИЯ: Если видео пошло — убираем экран звонка (и для Caller, и для Callee)
+                // 🎯 ГАРАНТИЯ: Переключаем UI мгновенно
                 document.getElementById('incoming-call-ui').style.display = 'none';
                 document.getElementById('video-call-overlay').style.display = 'block';
                 
-                remoteVid.play().catch(e => console.log("Автозапуск заблокирован, нужен клик"));
+                // Запуск с "пинком" для мобилок
+                remoteVid.play().catch(() => {
+                    console.log("Автозапуск заблокирован, ждем тапа по экрану");
+                    window.addEventListener('click', () => remoteVid.play(), {once: true});
+                });
             }
-
-            // Фикс активации звука для мобилок
-            const trigger = () => { 
-                window.dispatchEvent(new Event('resize')); 
-                window.removeEventListener('click', trigger); 
-            };
-            window.addEventListener('click', trigger);
         };
+
 
 
         pc.onicecandidate = e => {
@@ -1989,12 +1992,21 @@ async function initRTCPeer(isCaller, targetUser) {
             }
         };
 
-
         if (isCaller) {
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            ws.send(`TO_USER:${targetUser}|RTC_SIGNAL:${JSON.stringify({ offer: offer, from: myName })}`);
+            
+            // ДОБАВЛЯЕМ ЯВНЫЙ ТИП, чтобы handleSignalingData на телефоне сработал
+            const offerSignal = {
+                type: "OFFER", // Явно указываем тип
+                offer: offer,
+                from: myName,
+                av: localStorage.getItem('pinnogram_avatar') || ""
+            };
+            
+            ws.send(`TO_USER:${targetUser}|RTC_SIGNAL:${JSON.stringify(offerSignal)}`);
         }
+
     } catch (e) { 
         console.error("RTC Error:", e); 
         endCall(); 
@@ -2053,8 +2065,6 @@ function startVoiceVisualization(stream) {
 }
 
 
-
-
 // 3. ОБРАБОТЧИК СИГНАЛОВ (Signaling)
 async function handleSignalingData(data) {
     console.log("%c🔍 АНАЛИЗ ПАКЕТА:", "color: white; background: #222; padding: 4px; border-radius: 4px;");
@@ -2064,22 +2074,27 @@ async function handleSignalingData(data) {
     
     if (sender === me || !data.from) return; // Эхо-стоп
 
-    const ui = document.getElementById('incoming-call-ui');
-    const isVisible = ui && (ui.style.display === 'flex' || ui.style.display === 'block');
-
-    // 🎯 1. ЛОГИКА ВХОДЯЩЕГО ВЫЗОВА
-    if (!isVisible && (data.type === "CALL_INIT" || data.offer)) {
-        console.log("🚨 UI: Открываю экран входящего звонка от:", data.from);
+    // 🎯 1. ЛОГИКА ВХОДЯЩЕГО ВЫЗОВА (Усиленная)
+    // Добавили проверку на OFFER и CALL_INIT, чтобы окно вылетало мгновенно
+    if (data.type === "CALL_INIT" || data.type === "OFFER" || (data.offer && !pc)) {
+        console.log("%c🔥 [SIGNAL] ЖЕСТКИЙ ЗАПУСК UI ОТ:", "color: #ff375f; font-weight: bold;", data.from);
         
-        currentCallData = data; // Сохраняем всё: и оффер, и аватарку
+        currentCallData = data; 
+        
+        // Показываем неоновый интерфейс
         showCallUI(data.from, false, data.av); 
 
-        // 🔊 ВКЛЮЧАЕМ РИНГТОН (если он у тебя объявлен)
+        // Звук и вибрация
         if (typeof ringtone !== 'undefined') {
-            ringtone.play().catch(() => console.log("Ждем клика для звука"));
+            ringtone.play().catch(() => console.log("Браузер ждет клика для звука"));
         }
-        
         if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
+        
+        // Если это оффер — сохраняем его, чтобы при нажатии "Принять" он был под рукой
+        if (data.offer) {
+            console.log("📦 [OFFER] Сохранено в текущие данные");
+        }
+        return; // Выходим из функции, чтобы не обрабатывать этот же пакет ниже
     }
 
     // 🎯 2. ОБРАБОТКА ОТКЛОНЕНИЯ
@@ -2089,40 +2104,32 @@ async function handleSignalingData(data) {
         endCall();
     } 
     
-    // 🎯 3. ОБРАБОТКА OFFER (Если он пришел отдельно или в инициации)
-    else if (data.offer) {
-        console.log("📦 [OFFER] Сохраняю удаленное описание");
-        currentCallData = data; 
-    } 
-    
-    // 🎯 4. ОБРАБОТКА ANSWER (Для того, кто звонил)
+    // 🎯 3. ОБРАБОТКА ANSWER (Для того, кто звонил первым)
     else if (data.answer && pc) {
         console.log("✅ [ANSWER] Устанавливаю связь...");
         try {
             await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-            // Вытряхиваем очередь кандидатов, которые прилетели раньше ансвера
             while (iceQueue.length > 0) { 
                 await pc.addIceCandidate(iceQueue.shift()); 
             }
         } catch(e) { console.error("Ошибка Answer:", e); }
     } 
     
-    // 🎯 5. ОБРАБОТКА ICE-КАНДИДАТОВ (Связующие нити)
+    // 🎯 4. ОБРАБОТКА ICE-КАНДИДАТОВ
     else if (data.candidate) {
         const cand = new RTCIceCandidate(data.candidate);
-        // Если соединение уже готово — добавляем сразу
         if (pc && pc.remoteDescription && pc.remoteDescription.type) {
             try { 
                 await pc.addIceCandidate(cand); 
-                console.log("🧊 [ICE] Кандидат добавлен мгновенно");
+                console.log("🧊 [ICE] Добавлен");
             } catch(e) { console.warn("Ошибка ICE:", e); }
         } else {
-            // Если еще ждем Answer/Offer — кладем в очередь
             iceQueue.push(cand);
-            console.log("🧊 [ICE] Кандидат в очереди (ждем SDP)");
+            console.log("🧊 [ICE] В очередь");
         }
     }
 }
+
 
 
 
@@ -2209,7 +2216,13 @@ async function acceptCall() {
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             
-            ws.send(`TO_USER:${currentCallData.from}|RTC_SIGNAL:${JSON.stringify({ answer: answer, from: myName })}`);
+            // 🎯 ВАЖНО: Шлем Answer СРАЗУ, чтобы партнер начал строить туннель
+            ws.send(`TO_USER:${currentCallData.from}|RTC_SIGNAL:${JSON.stringify({ 
+                type: "ANSWER", // Явно указываем тип для handleSignalingData
+                answer: answer, 
+                from: myName 
+            })}`);
+
             
             // 5. ПИНК ДЛЯ ВИДЕО (Xiaomi Fix)
             setTimeout(() => {
