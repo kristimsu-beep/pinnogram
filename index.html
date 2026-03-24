@@ -1859,49 +1859,63 @@ function toggleVideo(btn) {
 }
 
 async function startCall() {
-    console.log("%c📞 [NEON CALL] Инициализация...", "color: white; background: #007bff; padding: 2px 5px; border-radius: 4px;");
+    console.log("%c📞 [NEON CALL] Инициализация вызова...", "color: white; background: #007bff; padding: 2px 5px; border-radius: 4px;");
     
-    // 1. ПРОВЕРКИ
+    // 1. ПРОВЕРКИ (Безопасность)
     if (!currentPartner || currentPartner === "general") {
         console.error("❌ ОШИБКА: Собеседник не выбран!");
-        return alert("Сначала выбери, кому звонить в списке контактов!");
+        return alert("Сначала выбери Josef (или другого юзера) в списке контактов!");
     }
 
+    // Жесткая проверка на самозвонок (регистронезависимая)
     if (String(currentPartner).trim().toLowerCase() === String(myName).trim().toLowerCase()) {
-        console.error("❌ ОШИБКА: Самозвонок заблокирован.");
+        console.error("❌ ОШИБКА: Попытка позвонить самому себе заблокирована.");
         return alert("Ты не можешь звонить самому себе!");
     }
 
-    // 🎯 2. ОЧИСТКА ПЕРЕД ЗВОНКОМ (Важно!)
+    // 🎯 2. ГЕНЕРАЛЬНАЯ УБОРКА (Очистка перед новым соединением)
     iceQueue = []; 
     currentCallData = null;
-    if (pc) { pc.close(); pc = null; }
+    if (pc) { 
+        console.log("🧹 Закрываю старое RTC соединение...");
+        try { pc.close(); } catch(e){} 
+        pc = null; 
+    }
 
     console.log("📍 ОТПРАВИТЕЛЬ:", myName);
     console.log("📍 ПОЛУЧАТЕЛЬ:", currentPartner);
 
-    // 3. ОТКРЫВАЕМ ПРЕМИУМ-ОКНО (true = исходящий)
+    // 3. ЗАПУСК ИНТЕРФЕЙСА (true = Исходящий)
     showCallUI(currentPartner, true); 
     
+    // Гарантируем, что окно на весь экран (на случай, если прошлый звонок сворачивали)
+    const ui = document.getElementById('incoming-call-ui');
+    if (ui) {
+        ui.style.height = '100dvh';
+        ui.style.padding = '60px 0';
+        ui.style.justifyContent = 'space-around';
+    }
+
+    // 4. ФОРМИРОВАНИЕ СИГНАЛА
     const initSignal = { 
         type: "CALL_INIT", 
         from: myName, 
         av: localStorage.getItem('pinnogram_avatar') || "" 
     };
 
-    // Формируем пакет для сервера
+    // Собираем пакет для сервера (TO_USER:Josef|RTC_SIGNAL:...)
     const packet = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
     
-    console.log("%c📤 [SOCKET] Пакет улетел:", "color: #ffcc00;", packet);
+    console.log("%c📤 [SOCKET] Пакет улетает:", "color: #ffcc00;", packet);
     ws.send(packet); 
 
-    // 4. ЗАПУСК WEBRTC ENGINE
-    // Даем серверу 500мс, чтобы "разбудить" получателя
+    // 5. ЗАПУСК ДВИЖКА WebRTC (Задержка 500мс для прогрева)
     setTimeout(async () => {
-        console.log("🚀 [WebRTC] Запуск потоков и захват камеры...");
+        console.log("🚀 [WebRTC] Запуск захвата камеры и микрофона...");
         await initRTCPeer(true, currentPartner);
     }, 500); 
 }
+
 
 
 
