@@ -1859,13 +1859,14 @@ function toggleVideo(btn) {
 }
 
 async function startCall() {
-    console.log("📞 Нажал кнопку звонка. currentPartner сейчас:", currentPartner);
-    
-    if (!currentPartner || currentPartner === "null") {
-        console.error("❌ ОШИБКА: Ты не выбрал Josef в списке!");
-        return alert("Нажми на Josef в списке слева перед звонком!");
+    // ЖЕСТКИЙ ЛОГ: Проверяем, видит ли кнопка Йозефа
+    console.log("📍 КНОПКА ВИДИТ ПАРТНЕРА:", currentPartner);
+
+    if (!currentPartner || currentPartner === "general") {
+        return alert("Сначала нажми на Josef в списке слева!");
     }
 
+    showCallUI(currentPartner, true); 
     // Жесткая проверка на самозвонок (регистронезависимая)
     if (String(currentPartner).trim().toLowerCase() === String(myName).trim().toLowerCase()) {
         console.error("❌ ОШИБКА: Попытка позвонить самому себе заблокирована.");
@@ -1917,6 +1918,7 @@ async function startCall() {
    
 // 2. ИНИЦИАЛИЗАЦИЯ WebRTC (С поддержкой приватности)
 async function initRTCPeer(isCaller, targetUser) {
+    console.log("📡 Запуск WebRTC для цели:", targetUser);
     try {
         // 1. Получаем доступ к камере и микрофону
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -1965,16 +1967,28 @@ async function initRTCPeer(isCaller, targetUser) {
 
         pc.onicecandidate = e => {
             if (e.candidate) {
-                // Добавляем target, чтобы принимающий JS точно знал, что это для него
+                // 1. ОПРЕДЕЛЯЕМ ПОЛУЧАТЕЛЯ (Берем targetUser из аргументов функции или currentPartner)
+                const finalTarget = targetUser || currentPartner;
+
+                if (!finalTarget || finalTarget === "undefined" || finalTarget === "general") {
+                    console.warn("⚠️ [RTC] Не могу отправить ICE: Получатель не определен!");
+                    return;
+                }
+
+                // 2. ФОРМИРУЕМ СИГНАЛ (Добавляем поле 'to' для сервера)
                 const signal = JSON.stringify({ 
                     candidate: e.candidate, 
                     from: myName,
-                    target: targetUser 
+                    to: finalTarget // Сервер ищет именно 'to' или 'to_user'
                 });
-                console.log("🧊 Отправляю сетевой путь (ICE) для:", targetUser);
-                ws.send(`TO_USER:${targetUser}|RTC_SIGNAL:${signal}`);
+
+                console.log(`%c🧊 [ICE] Сетевой путь улетает для: ${finalTarget}`, "color: #32ade6;");
+                
+                // 3. ОТПРАВЛЯЕМ ПО ПРЯМОМУ АДРЕСУ
+                ws.send(`TO_USER:${finalTarget}|RTC_SIGNAL:${signal}`);
             }
         };
+
 
         if (isCaller) {
             const offer = await pc.createOffer();
