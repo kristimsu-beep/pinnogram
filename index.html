@@ -1859,23 +1859,28 @@ function toggleVideo(btn) {
 }
 
 async function startCall() {
-    console.log("%c📞 [START] Подготовка вызова...", "color: white; background: #007bff; padding: 2px 5px;");
+    console.log("%c📞 [NEON CALL] Инициализация...", "color: white; background: #007bff; padding: 2px 5px; border-radius: 4px;");
     
-    // 1. Проверяем, кому звоним
+    // 1. ПРОВЕРКИ
     if (!currentPartner || currentPartner === "general") {
-        console.error("❌ ОШИБКА: Цель (currentPartner) не определена!");
-        return alert("Сначала выбери, кому звонить!");
+        console.error("❌ ОШИБКА: Собеседник не выбран!");
+        return alert("Сначала выбери, кому звонить в списке контактов!");
     }
 
-    // 2. Проверяем, не звоним ли мы сами себе случайно
     if (String(currentPartner).trim().toLowerCase() === String(myName).trim().toLowerCase()) {
-        console.error("❌ ОШИБКА: Попытка позвонить самому себе заблокирована.");
+        console.error("❌ ОШИБКА: Самозвонок заблокирован.");
         return alert("Ты не можешь звонить самому себе!");
     }
 
-    console.log("📍 МОЕ ИМЯ:", myName);
-    console.log("📍 ЦЕЛЬ (josef?):", currentPartner);
+    // 🎯 2. ОЧИСТКА ПЕРЕД ЗВОНКОМ (Важно!)
+    iceQueue = []; 
+    currentCallData = null;
+    if (pc) { pc.close(); pc = null; }
 
+    console.log("📍 ОТПРАВИТЕЛЬ:", myName);
+    console.log("📍 ПОЛУЧАТЕЛЬ:", currentPartner);
+
+    // 3. ОТКРЫВАЕМ ПРЕМИУМ-ОКНО (true = исходящий)
     showCallUI(currentPartner, true); 
     
     const initSignal = { 
@@ -1884,17 +1889,20 @@ async function startCall() {
         av: localStorage.getItem('pinnogram_avatar') || "" 
     };
 
+    // Формируем пакет для сервера
     const packet = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
     
-    console.log("%c📤 В СОКЕТ УЛЕТАЕТ:", "color: yellow;", packet);
+    console.log("%c📤 [SOCKET] Пакет улетел:", "color: #ffcc00;", packet);
     ws.send(packet); 
 
-    // Запускаем WebRTC через 500мс
+    // 4. ЗАПУСК WEBRTC ENGINE
+    // Даем серверу 500мс, чтобы "разбудить" получателя
     setTimeout(async () => {
-        console.log("🚀 WebRTC: Запуск двигателя...");
+        console.log("🚀 [WebRTC] Запуск потоков и захват камеры...");
         await initRTCPeer(true, currentPartner);
     }, 500); 
 }
+
 
 
 
@@ -2024,60 +2032,69 @@ function startVoiceVisualization(stream) {
 
 // 3. ОБРАБОТЧИК СИГНАЛОВ (Signaling)
 async function handleSignalingData(data) {
-    // 1. ДЕТЕКТИВНЫЙ ЛОГ: Проверяем реальные значения имен
     console.log("%c🔍 АНАЛИЗ ПАКЕТА:", "color: white; background: #222; padding: 4px; border-radius: 4px;");
-    console.log("👤 ОТПРАВИТЕЛЬ (data.from):", `"${data.from}"`);
-    console.log("👤 ТЕКУЩИЙ ЮЗЕР (myName):", `"${myName}"`);
     
-    // Подготовка имен для сравнения (убираем пробелы и регистр)
     const sender = String(data.from || "").trim().toLowerCase();
     const me = String(myName || "").trim().toLowerCase();
     
-    console.log(`🔎 СРАВНЕНИЕ: [${sender}] === [${me}] ?`, sender === me);
-
-    // 2. ЖЕСТКАЯ БЛОКИРОВКА ЭХА
-    if (sender === me || !data.from) {
-        console.log("%c🚫 ЭХО-СТОП: Пакет пришел от меня же. Сбрасываю.", "color: #ff4444; font-weight: bold;");
-        return;
-    }
-    
-    console.log("%c✅ ПРОВЕРКА ПРОЙДЕНА: Пакет от другого юзера!", "color: #00ff00;");
-    console.log("📦 ТИП СИГНАЛА:", data.type || (data.offer ? "OFFER" : "ICE"));
+    if (sender === me || !data.from) return; // Эхо-стоп
 
     const ui = document.getElementById('incoming-call-ui');
     const isVisible = ui && (ui.style.display === 'flex' || ui.style.display === 'block');
 
-    // 🎯 АВТО-ПРОБУЖДЕНИЕ (Интерфейс)
+    // 🎯 1. ЛОГИКА ВХОДЯЩЕГО ВЫЗОВА
     if (!isVisible && (data.type === "CALL_INIT" || data.offer)) {
         console.log("🚨 UI: Открываю экран входящего звонка от:", data.from);
-        currentCallData = data; 
-        showCallUI(data.from, false, data.av); // false = Входящий
+        
+        currentCallData = data; // Сохраняем всё: и оффер, и аватарку
+        showCallUI(data.from, false, data.av); 
+
+        // 🔊 ВКЛЮЧАЕМ РИНГТОН (если он у тебя объявлен)
+        if (typeof ringtone !== 'undefined') {
+            ringtone.play().catch(() => console.log("Ждем клика для звука"));
+        }
+        
         if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
     }
 
-    // 🎯 ОБРАБОТКА ДАННЫХ (Логика WebRTC)
+    // 🎯 2. ОБРАБОТКА ОТКЛОНЕНИЯ
     if (data.type === "CALL_REJECT") {
         console.log("❌ Собеседник нажал 'СБРОС'");
+        if (typeof ringtone !== 'undefined') { ringtone.pause(); ringtone.currentTime = 0; }
         endCall();
     } 
+    
+    // 🎯 3. ОБРАБОТКА OFFER (Если он пришел отдельно или в инициации)
     else if (data.offer) {
-        console.log("📦 [OFFER] Данные WebRTC сохранены");
+        console.log("📦 [OFFER] Сохраняю удаленное описание");
         currentCallData = data; 
     } 
+    
+    // 🎯 4. ОБРАБОТКА ANSWER (Для того, кто звонил)
     else if (data.answer && pc) {
-        console.log("✅ [ANSWER] Соединение установлено!");
-        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-        while (iceQueue.length > 0) { 
-            try { await pc.addIceCandidate(iceQueue.shift()); } catch(e){} 
-        }
+        console.log("✅ [ANSWER] Устанавливаю связь...");
+        try {
+            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+            // Вытряхиваем очередь кандидатов, которые прилетели раньше ансвера
+            while (iceQueue.length > 0) { 
+                await pc.addIceCandidate(iceQueue.shift()); 
+            }
+        } catch(e) { console.error("Ошибка Answer:", e); }
     } 
+    
+    // 🎯 5. ОБРАБОТКА ICE-КАНДИДАТОВ (Связующие нити)
     else if (data.candidate) {
         const cand = new RTCIceCandidate(data.candidate);
+        // Если соединение уже готово — добавляем сразу
         if (pc && pc.remoteDescription && pc.remoteDescription.type) {
-            try { await pc.addIceCandidate(cand); } catch(e){}
+            try { 
+                await pc.addIceCandidate(cand); 
+                console.log("🧊 [ICE] Кандидат добавлен мгновенно");
+            } catch(e) { console.warn("Ошибка ICE:", e); }
         } else {
-            console.log("🧊 [ICE] Кандидат в очереди...");
+            // Если еще ждем Answer/Offer — кладем в очередь
             iceQueue.push(cand);
+            console.log("🧊 [ICE] Кандидат в очереди (ждем SDP)");
         }
     }
 }
