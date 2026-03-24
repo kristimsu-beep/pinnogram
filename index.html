@@ -1825,96 +1825,104 @@ function minimizeCall() {
         document.getElementById('call-avatar-circle').style.transform = 'scale(1)';
         
         // ВКЛЮЧАЕМ КНОПКИ В РЯД (ВАЖНО: ставим flex, а не grid!)
-        if (controls) controls.style.display = 'flex'; 
+        // Внутри ui.onclick в функции minimizeCall:
+        if (controls) {
+            controls.style.display = 'flex';
+            controls.style.justifyContent = 'center';
+            controls.style.gap = '20px'; // Чтобы кнопки не слиплись
+        }
+ 
         
         ui.onclick = null; 
     };
 }
 
-// УПРАВЛЕНИЕ МИКРОФОНОМ
+// УПРАВЛЕНИЕ МИКРОФОНОМ (Neon Style)
 function toggleMic(btn) {
-    if (localStream) {
-        const audioTrack = localStream.getAudioTracks()[0];
-        if (!audioTrack) return;
+    if (!localStream) return;
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (audioTrack) {
         audioTrack.enabled = !audioTrack.enabled;
         
-        // Визуальный эффект "выкл" — кнопка тускнеет
-        btn.style.filter = audioTrack.enabled ? "brightness(1.2)" : "grayscale(1) brightness(0.4)";
+        // Переключаем стиль: если выключен — красный неон, если включен — фиолет (как в CSS)
+        if (!audioTrack.enabled) {
+            btn.style.filter = "grayscale(0.8) brightness(0.5)";
+            btn.style.borderColor = "#ff3b30"; // Красный контур
+            btn.style.boxShadow = "0 0 10px rgba(255, 59, 48, 0.4)";
+        } else {
+            btn.style.filter = "";
+            btn.style.borderColor = ""; 
+            btn.style.boxShadow = ""; 
+        }
         console.log("🎤 Микрофон:", audioTrack.enabled ? "ВКЛ" : "ВЫКЛ");
     }
 }
 
-// УПРАВЛЕНИЕ КАМЕРОЙ
+// УПРАВЛЕНИЕ КАМЕРОЙ (Neon Style)
 function toggleVideo(btn) {
-    if (localStream) {
-        const videoTrack = localStream.getVideoTracks()[0];
-        if (!videoTrack) return;
+    if (!localStream) return;
+    const videoTrack = localStream.getVideoTracks()[0];
+    if (videoTrack) {
         videoTrack.enabled = !videoTrack.enabled;
         
-        btn.style.filter = videoTrack.enabled ? "brightness(1.2)" : "grayscale(1) brightness(0.4)";
-        const lv = document.getElementById('localVideo');
-        if (lv) lv.style.opacity = videoTrack.enabled ? "1" : "0.2";
+        if (!videoTrack.enabled) {
+            btn.style.filter = "grayscale(0.8) brightness(0.5)";
+            btn.style.borderColor = "#ff3b30"; 
+            btn.style.boxShadow = "0 0 10px rgba(255, 59, 48, 0.4)";
+            const lv = document.getElementById('localVideo');
+            if (lv) lv.style.opacity = "0.2";
+        } else {
+            btn.style.filter = "";
+            btn.style.borderColor = "";
+            btn.style.boxShadow = "";
+            const lv = document.getElementById('localVideo');
+            if (lv) lv.style.opacity = "1";
+        }
         console.log("📷 Камера:", videoTrack.enabled ? "ВКЛ" : "ВЫКЛ");
     }
 }
 
-async function startCall() {
-    // ЖЕСТКИЙ ЛОГ: Проверяем, видит ли кнопка чубриканта
-    console.log("📍 КНОПКА ВИДИТ ПАРТНЕРА:", currentPartner);
 
+async function startCall() {
+    // 🎯 ФИКС №1: Если partner не определен, пробуем взять его из заголовка чата
     if (!currentPartner || currentPartner === "general") {
+        const titleName = document.getElementById('chat-sender-name')?.textContent;
+        if (titleName && titleName !== "Общий чат") {
+            currentPartner = titleName.trim();
+        }
+    }
+
+    console.log("📞 Попытка звонка для:", currentPartner);
+
+    if (!currentPartner || currentPartner === "general" || currentPartner === "undefined") {
         return alert("Сначала нажми на Josef в списке слева!");
     }
 
-    showCallUI(currentPartner, true); 
-    // Жесткая проверка на самозвонок (регистронезависимая)
-    if (String(currentPartner).trim().toLowerCase() === String(myName).trim().toLowerCase()) {
-        console.error("❌ ОШИБКА: Попытка позвонить самому себе заблокирована.");
-        return alert("Ты не можешь звонить самому себе!");
-    }
-
-    // 🎯 2. ГЕНЕРАЛЬНАЯ УБОРКА (Очистка перед новым соединением)
+    // 🎯 ФИКС №2: Очистка WebRTC перед стартом
     iceQueue = []; 
-    currentCallData = null;
-    if (pc) { 
-        console.log("🧹 Закрываю старое RTC соединение...");
-        try { pc.close(); } catch(e){} 
-        pc = null; 
-    }
+    if (pc) { try { pc.close(); } catch(e){} pc = null; }
 
-    console.log("📍 ОТПРАВИТЕЛЬ:", myName);
-    console.log("📍 ПОЛУЧАТЕЛЬ:", currentPartner);
-
-    // 3. ЗАПУСК ИНТЕРФЕЙСА (true = Исходящий)
     showCallUI(currentPartner, true); 
     
-    // Гарантируем, что окно на весь экран (на случай, если прошлый звонок сворачивали)
-    const ui = document.getElementById('incoming-call-ui');
-    if (ui) {
-        ui.style.height = '100dvh';
-        ui.style.padding = '60px 0';
-        ui.style.justifyContent = 'space-around';
-    }
-
-    // 4. ФОРМИРОВАНИЕ СИГНАЛА
     const initSignal = { 
         type: "CALL_INIT", 
         from: myName, 
         av: localStorage.getItem('pinnogram_avatar') || "" 
     };
 
-    // Собираем пакет для сервера (TO_USER:Josef|RTC_SIGNAL:...)
-    const packet = `TO_USER:${currentPartner}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
+    // 🎯 ФИКС №3: Принудительно вставляем имя в пакет
+    const target = currentPartner; 
+    const packet = `TO_USER:${target}|RTC_SIGNAL:${JSON.stringify(initSignal)}`;
     
-    console.log("%c📤 [SOCKET] Пакет улетает:", "color: #ffcc00;", packet);
+    console.log("📤 УЛЕТАЕТ ПЕРВЫЙ ПАКЕТ:", packet);
     ws.send(packet); 
 
-    // 5. ЗАПУСК ДВИЖКА WebRTC (Задержка 500мс для прогрева)
     setTimeout(async () => {
-        console.log("🚀 [WebRTC] Запуск захвата камеры и микрофона...");
-        await initRTCPeer(true, currentPartner);
+        // Передаем target напрямую, чтобы внутри initRTCPeer не было undefined
+        await initRTCPeer(true, target);
     }, 500); 
 }
+
    
 // 2. ИНИЦИАЛИЗАЦИЯ WebRTC (С поддержкой приватности)
 async function initRTCPeer(isCaller, targetUser) {
@@ -2131,15 +2139,12 @@ async function handleSignalingData(data) {
 }
 
 
-
-
-
 function showCallUI(name, isOutgoing, avatarUrl = null) {
     console.log("🛠 [NEON UI] Запуск интерфейса...");
     const ui = document.getElementById('incoming-call-ui');
     if (!ui) return console.error("❌ ОШИБКА: Блок incoming-call-ui не найден!");
 
-    // 1. Ставим данные
+    // 1. Установка данных (Имя и Аватар)
     const nameLabel = document.getElementById('call-sender-name');
     if (nameLabel) nameLabel.textContent = name || "Аноним";
 
@@ -2149,27 +2154,22 @@ function showCallUI(name, isOutgoing, avatarUrl = null) {
     const statusLabel = document.getElementById('call-status-text');
     if (statusLabel) statusLabel.textContent = isOutgoing ? "Вызов..." : "Входящий видеозвонок";
 
-    // 2. УПРАВЛЕНИЕ КРУГЛОЙ КНОПКОЙ ПРИНЯТЬ (Голубая)
-    // В твоем HTML она имеет ID "accept-btn-ui"
+    // 2. Управление кнопкой "Принять"
     const acceptBtnUi = document.getElementById('accept-btn-ui');
     if (acceptBtnUi) {
         if (isOutgoing) {
-            // Если звоним МЫ — кнопку "Принять" скрываем
-            acceptBtnUi.style.display = 'none';
+            acceptBtnUi.style.display = 'none'; // Если звоним мы — кнопки ответа нет
         } else {
-            // Если звонят НАМ — показываем и включаем пульсацию
             acceptBtnUi.style.display = 'flex';
-            acceptBtnUi.classList.add('pulse-active'); 
+            acceptBtnUi.classList.add('pulse-active'); // Неоновая пульсация
         }
     }
 
-    // 3. ГАРАНТИЯ ВИДИМОСТИ (Xiaomi Fix)
+    // 3. Гарантия видимости (Xiaomi / iPhone Fix)
     ui.style.display = 'flex';
     ui.style.opacity = '1';
     ui.style.visibility = 'visible';
     ui.style.zIndex = '2147483647'; 
-    
-    // Принудительно сбрасываем стили сворачивания, если они остались
     ui.style.height = '100dvh';
     ui.style.padding = '60px 0';
     ui.style.justifyContent = 'space-around';
@@ -2178,75 +2178,69 @@ function showCallUI(name, isOutgoing, avatarUrl = null) {
     console.log("✅ Интерфейс активирован для:", name);
 }
 
-
-
-
-
 async function acceptCall() {
     console.log("📞 [NEON UI] Принимаю вызов...");
     
-    // 1. ОСТАНОВКА СИГНАЛОВ
-    if (navigator.vibrate) navigator.vibrate(0); // Стоп вибро
-    if (typeof ringtone !== 'undefined') { ringtone.pause(); ringtone.currentTime = 0; } // Стоп звук
+    // 1. Мгновенная остановка шума
+    if (navigator.vibrate) navigator.vibrate(0);
+    if (typeof ringtone !== 'undefined' && ringtone) { 
+        ringtone.pause(); 
+        ringtone.currentTime = 0; 
+    }
 
-    // 2. ОЧИСТКА ИНТЕРФЕЙСА
     const acceptBtnUi = document.getElementById('accept-btn-ui');
-    if (acceptBtnUi) acceptBtnUi.classList.remove('pulse-active'); // Гасим пульсацию синего квадрата
+    if (acceptBtnUi) acceptBtnUi.classList.remove('pulse-active');
     
     if (!currentCallData) return;
 
-    // Скрываем неоновое окно, открываем видео-слой
+    // 2. Переключение слоев
     document.getElementById('incoming-call-ui').style.display = 'none';
     document.getElementById('video-call-overlay').style.display = 'block';
 
-    // 3. ЗАПУСК WebRTC
+    // 3. Запуск WebRTC Engine
     await initRTCPeer(false, currentCallData.from);
 
-    if (currentCallData.offer) {
+    if (currentCallData.offer || currentCallData.type === "OFFER") {
         try {
-            await pc.setRemoteDescription(new RTCSessionDescription(currentCallData.offer));
+            const offer = currentCallData.offer || currentCallData;
+            await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-            // 🎯 ПРОБРОС КАНДИДАТОВ ИЗ ОЧЕРЕДИ
-            console.log(`🧊 Обработка ${iceQueue.length} кандидатов...`);
+            // 🎯 Обработка очереди кандидатов (чтобы видео не лагало в начале)
+            console.log(`🧊 В очереди ${iceQueue.length} кандидатов, вливаем...`);
             while (iceQueue.length > 0) {
                 try { await pc.addIceCandidate(iceQueue.shift()); } catch(e) {}
             }
 
-            // 4. ОТВЕТ (Answer)
+            // 4. Генерация ответа
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             
-            // 🎯 ВАЖНО: Шлем Answer СРАЗУ, чтобы партнер начал строить туннель
             ws.send(`TO_USER:${currentCallData.from}|RTC_SIGNAL:${JSON.stringify({ 
-                type: "ANSWER", // Явно указываем тип для handleSignalingData
+                type: "ANSWER", 
                 answer: answer, 
                 from: myName 
             })}`);
-
             
-            // 5. ПИНК ДЛЯ ВИДЕО (Xiaomi Fix)
+            // 5. Xiaomi Video Force Start
             setTimeout(() => {
                 const remoteVid = document.getElementById('remoteVideo');
                 if (remoteVid) {
                     remoteVid.play().catch(() => {
+                        console.log("Нужен тап для старта видео");
                         window.addEventListener('click', () => remoteVid.play(), {once: true});
                     });
                 }
             }, 500);
 
         } catch (err) {
-            console.error("Критическая ошибка WebRTC:", err);
+            console.error("WebRTC Error:", err);
             endCall();
         }
     }
 }
 
 function rejectCall() {
-    // Останавливаем гудки и вибро
-    if (typeof ringtone !== 'undefined') {
-        ringtone.pause();
-        ringtone.currentTime = 0;
-    }
+    if (typeof ringtone !== 'undefined' && ringtone) { ringtone.pause(); ringtone.currentTime = 0; }
     if (navigator.vibrate) navigator.vibrate(0);
 
     document.getElementById('incoming-call-ui').style.display = 'none';
@@ -2264,21 +2258,25 @@ function endCall() {
     if (pc) { try { pc.close(); } catch(e){} pc = null; }
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
     
-    // 2. Audio Context (Визуализатор)
-    if (window.audioContextInstance && window.audioContextInstance.state !== 'closed') {
-        window.audioContextInstance.close();
+    // 2. Audio Context & Визуализатор
+    // 🎯 ФИКС: Явно обнуляем анализатор, чтобы updateWaves остановился
+    if (window.audioContextInstance) {
+        try {
+            window.audioContextInstance.close();
+        } catch(e) {}
         window.audioContextInstance = null;
     }
+    // Если у тебя была переменная для анимации (например, animationId)
+    // if (window.voiceAnimId) cancelAnimationFrame(window.voiceAnimId);
 
-    // 3. ИНТЕРФЕЙС (Сброс к дефолту)
+    // 3. ИНТЕРФЕЙС
     const ui = document.getElementById('incoming-call-ui');
     if (ui) {
         ui.style.display = 'none';
-        // 🎯 ВАЖНО: Возвращаем высоту и отступы, если звонок был свернут
         ui.style.height = '100dvh'; 
         ui.style.padding = '60px 0';
         ui.style.justifyContent = 'space-around';
-        ui.onclick = null; // Убираем клик развертывания
+        ui.onclick = null; 
     }
 
     const overlay = document.getElementById('video-call-overlay');
@@ -2287,16 +2285,19 @@ function endCall() {
     // 4. Очистка данных
     currentCallData = null;
     iceQueue = [];
-    voiceWaves = []; 
     
     // 5. Визуальный сброс аватарки
     const circle = document.getElementById('call-avatar-circle');
     if (circle) {
+        // 🎯 ФИКС: Убираем transition на мгновение, чтобы сброс был четким
+        circle.style.transition = 'none'; 
         circle.style.transform = 'scale(1)';
         circle.style.boxShadow = 'none';
+        // Возвращаем плавность через мгновение для будущих звонков
+        setTimeout(() => { circle.style.transition = ''; }, 100);
     }
 
-    console.log("🧹 Система готова к новому вызову!");
+    console.log("🧹 Система стерильна и готова к новому вызову!");
 }
 
 
