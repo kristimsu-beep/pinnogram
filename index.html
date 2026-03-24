@@ -1859,12 +1859,11 @@ function toggleVideo(btn) {
 }
 
 async function startCall() {
-    console.log("%c📞 [NEON CALL] Инициализация вызова...", "color: white; background: #007bff; padding: 2px 5px; border-radius: 4px;");
+    console.log("📞 Нажал кнопку звонка. currentPartner сейчас:", currentPartner);
     
-    // 1. ПРОВЕРКИ (Безопасность)
-    if (!currentPartner || currentPartner === "general") {
-        console.error("❌ ОШИБКА: Собеседник не выбран!");
-        return alert("Сначала выбери Josef (или другого юзера) в списке контактов!");
+    if (!currentPartner || currentPartner === "null") {
+        console.error("❌ ОШИБКА: Ты не выбрал Josef в списке!");
+        return alert("Нажми на Josef в списке слева перед звонком!");
     }
 
     // Жесткая проверка на самозвонок (регистронезависимая)
@@ -1915,13 +1914,7 @@ async function startCall() {
         await initRTCPeer(true, currentPartner);
     }, 500); 
 }
-
-
-
-
-
-
-    
+   
 // 2. ИНИЦИАЛИЗАЦИЯ WebRTC (С поддержкой приватности)
 async function initRTCPeer(isCaller, targetUser) {
     try {
@@ -1949,32 +1942,36 @@ async function initRTCPeer(isCaller, targetUser) {
 
         // Когда получаем видео от собеседника
         pc.ontrack = (event) => {
-            console.log("🎬 Получено видео от собеседника");
+            console.log("%c🎬 [WebRTC] ВИДЕО ПОЛУЧЕНО!", "color: lime; font-weight: bold;");
             const remoteVid = document.getElementById('remoteVideo');
             if (remoteVid) {
                 remoteVid.srcObject = event.streams[0] || new MediaStream([event.track]);
                 
-                // ГАРАНТИЯ ЗАПУСКА ВИДЕО
+                // 🎯 ГАРАНТИЯ: Если видео пошло — убираем экран звонка (и для Caller, и для Callee)
+                document.getElementById('incoming-call-ui').style.display = 'none';
+                document.getElementById('video-call-overlay').style.display = 'block';
+                
                 remoteVid.play().catch(e => console.log("Автозапуск заблокирован, нужен клик"));
-
-                if (isCaller) {
-                    document.getElementById('incoming-call-ui').style.display = 'none';
-                    document.getElementById('video-call-overlay').style.display = 'block';
-                }
             }
 
-            
-            // Фикс активации звука
+            // Фикс активации звука для мобилок
             const trigger = () => { 
                 window.dispatchEvent(new Event('resize')); 
                 window.removeEventListener('click', trigger); 
             };
             window.addEventListener('click', trigger);
-        }; 
+        };
+
 
         pc.onicecandidate = e => {
             if (e.candidate) {
-                const signal = JSON.stringify({ candidate: e.candidate, from: myName });
+                // Добавляем target, чтобы принимающий JS точно знал, что это для него
+                const signal = JSON.stringify({ 
+                    candidate: e.candidate, 
+                    from: myName,
+                    target: targetUser 
+                });
+                console.log("🧊 Отправляю сетевой путь (ICE) для:", targetUser);
                 ws.send(`TO_USER:${targetUser}|RTC_SIGNAL:${signal}`);
             }
         };
@@ -2617,6 +2614,7 @@ function updateUnreadUI() {
 // 3. Умное переключение чата с подгрузкой истории
 function switchChat(partner) {
     currentPartner = partner;
+    console.log("%c🎯 ТЕПЕРЬ ТВОЯ ЦЕЛЬ:", "background: green; color: white;", currentPartner);
     localStorage.setItem("pinnogram_last_chat", partner); 
     
     // ДОБАВЬ ЭТО: Обновляем заголовок чата, чтобы ты видел, кому звонишь
