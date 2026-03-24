@@ -2359,54 +2359,6 @@ function stopVoice() {
     }
 }
 
-
-
-
-function startCall() { initRTCPeer(true); }
-
-// Функция входа с паролем и проверкой на сервере
-async function saveNameAndStart() {
-    const username = document.getElementById("nameInput").value.trim();
-    if (!username) return;
-    
-    let password = localStorage.getItem("pinnogram_pass") || prompt("Введите пароль для регистрации или входа:");
-    if (!password) return;
-
-    try {
-        const res = await fetch(`${API_URL}/auth`, {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({ username, password })
-        });
-        const data = await res.json();
-
-               if (data.status === "ok") {
-            localStorage.setItem("pinnogram_user", username);
-            localStorage.setItem("pinnogram_pass", password);
-            localStorage.setItem("pinnogram_room", "general");
-            
-            // 1. ОПРЕДЕЛЯЕМ АВАТАР (база или надежная ПРЯМАЯ ссылка)
-            const finalAvatar = data.avatar || "https://i.ibb.co/4pSbxsh/user-avatar.png";
-            
-            // 2. ЗАПИСЫВАЕМ В ПАМЯТЬ БРАУЗЕРА (только рабочую ссылку!)
-            localStorage.setItem("pinnogram_avatar", finalAvatar);
-            
-            // 3. УСТАНАВЛИВАЕМ В КНОПКУ
-            const avIcon = document.getElementById("user-avatar-icon");
-            if (avIcon) avIcon.src = finalAvatar;
-            
-            startChat(username, "general");
-        
-        } else {
-            // ... остальное без изменений
-            alert(data.message);
-            localStorage.removeItem("pinnogram_pass");
-        }
-    } catch (e) {
-        alert("Ошибка связи с сервером");
-    }
-}
-
 // Функция смены аватарки
 async function changeAvatar() {
     const fileInput = document.createElement('input');
