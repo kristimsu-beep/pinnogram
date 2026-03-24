@@ -1231,32 +1231,32 @@
 
 
         ws.onmessage = async (event) => {
+            // 1. ДЕБАГ-ЛОГ (Тот самый, черный)
+            console.log("%c📥 ВСЁ, ЧТО ПРИШЛО ИЗ СОКЕТА:", "color: white; background: black;", event.data);
+            
             const raw = event.data;
-            // --- ОБНОВЛЕННЫЙ БЛОК RTC_SIGNAL (ИСПРАВЛЕНО ДЛЯ КРАСИВОГО ОКНА) ---
+        
+            // --- БЛОК RTC_SIGNAL (ЗВОНКИ) ---
             if (raw.includes("RTC_SIGNAL:")) {
-                console.log("🎯 ПАКЕТ ЗВОНКА ПОЛУЧЕН:", raw);
+                console.log("%c🎯 ПАКЕТ ЗВОНКА ПОЙМАН!", "color: lime; font-weight: bold;");
+                
                 try {
+                    // Извлекаем JSON (отрезаем всё до RTC_SIGNAL:)
                     const parts = raw.split("RTC_SIGNAL:");
                     const signalData = JSON.parse(parts[1]);
-
-                    // 🎯 ИСПРАВЛЕНИЕ: Если пришел offer (тебе звонят), открываем ГРАДИЕНТ
-                    if (signalData.offer) {
-                        // Вызываем твою функцию красивого окна вместо черного оверлея
-                        if (typeof showCallUI === "function") {
-                            showCallUI(signalData.from, false, signalData.av);
-                        } else {
-                            // Если вдруг функции нет, хотя бы так
-                            document.getElementById('incoming-call-ui').style.display = 'flex';
-                        }
-                    }
-                    
+        
+                    // 🎯 ГЛАВНОЕ ПРАВИЛО: Просто передаем данные в твой обработчик
+                    // handleSignalingData сама проверит, не эхо ли это, и откроет [NEON UI]
                     if (typeof handleSignalingData === "function") {
                         handleSignalingData(signalData);
+                    } else {
+                        console.error("❌ ОШИБКА: Функция handleSignalingData не найдена!");
                     }
+                    
                 } catch(e) {
-                    console.error("❌ Ошибка парсинга звонка:", e);
+                    console.error("❌ Ошибка парсинга звонка:", e, "Сырые данные:", raw);
                 }
-                return;
+                return; // ⛔ ОСТАНАВЛИВАЕМ, чтобы звонок не попал в обычный чат
             }
 
 
