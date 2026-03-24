@@ -342,22 +342,36 @@ class ConnectionManager:
         now = client_time if client_time else datetime.now().strftime("%H:%M")        
     
         # 🎯 1. ПРИВАТНЫЙ ПРОБРОС ЗВОНКА (RTC_SIGNAL)
-        # Этот блок должен быть ПЕРВЫМ и единственным для звонков
         if text and "RTC_SIGNAL:" in text:
             room_users = self.rooms.get(room_id, {})
             
-            # 🎯 ФИКС: Отправляем ТОЛЬКО получателю. Себе слать НЕЛЬЗЯ!
-            if to_user and to_user in room_users:
+            # 🎯 УМНЫЙ ПОИСК ПОЛУЧАТЕЛЯ (Игнорируем регистр букв)
+            target_ws = None
+            actual_name = None
+            
+            if to_user:
+                # Ищем юзера в словаре, не обращая внимания на заглавные/строчные
+                search_name = to_user.strip().lower()
+                for name, ws_conn in room_users.items():
+                    if name.strip().lower() == search_name:
+                        target_ws = ws_conn
+                        actual_name = name
+                        break
+
+            if target_ws:
                 try:
-                    # Шлем пакет ТОЛЬКО тому, чей ник указан в TO_USER
-                    await room_users[to_user].send_text(text)
-                    print(f"📡 [RTC] Сигнал передан: {username} -> {to_user}")
+                    # Шлем пакет найденному соединению
+                    await target_ws.send_text(text)
+                    print(f"📡 [RTC] Сигнал передан: {username} -> {actual_name} (найден как {to_user})")
                 except Exception as e:
-                    print(f"❌ Ошибка отправки RTC: {e}")
+                    print(f"❌ [RTC] Ошибка отправки: {e}")
             else:
-                print(f"⚠️ [RTC] Получатель {to_user} не найден в этой комнате")
+                # Если не нашли, выводим в логи, кто реально сейчас в сети
+                online_now = ", ".join(room_users.keys())
+                print(f"⚠️ [RTC] Получатель '{to_user}' НЕ НАЙДЕН. В сети сейчас: [{online_now}]")
                 
-            return # Выходим, чтобы не спамить в общий чат и не писать в БД
+            return # ⛔ ВАЖНО: Выходим, чтобы звонок не улетел в общий чат
+
 
 
         # 🎯 2. ОБЫЧНЫЕ СООБЩЕНИЯ (Запись в базу и рассылка)
