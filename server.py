@@ -326,17 +326,34 @@ class ConnectionManager:
 
     async def broadcast_online(self, room_id: str):
         if room_id in self.rooms:
+            # 1. СОБИРАЕМ ЖИВЫХ ЮЗЕРОВ (как и раньше)
             users_info = []
             for name, ws in self.rooms[room_id].items():
                 ip = ws.client.host if ws.client else "unknown"
                 info = await get_user_info(ip) 
                 users_info.append(f"{name}|{ip}|{info['country']}|{info['city']}|{info['org']}|{info['tz']}|{info['asn']}")
             
-            msg = f"ID:0|SYSTEM:ONLINE_LIST:{','.join(users_info)}"
+            # 2. ДОСТАЕМ ГРУППЫ ИЗ БАЗЫ (с пометкой GROUP:)
+            groups_info = []
+            async with aiosqlite.connect(DB_PATH) as db:
+                # Тянем имя и количество подписчиков
+                async with db.execute("SELECT name, subscribers_count FROM groups") as cursor:
+                    async for row in cursor:
+                        g_name, subs = row
+                        # Формат: GROUP:Имя|Подписчики|Метка_Группы
+                        groups_info.append(f"GROUP:{g_name}|{subs}|GROUP")
+
+            # 3. СОЕДИНЯЕМ И ШЛЕМ ВСЕМ
+            all_entities = users_info + groups_info
+            msg = f"ID:0|SYSTEM:ONLINE_LIST:{','.join(all_entities)}"
+            
             for ws in self.rooms[room_id].values():
                 if ws.client_state == WebSocketState.CONNECTED:
-                    try: await ws.send_text(msg)
-                    except: continue
+                    try: 
+                        await ws.send_text(msg)
+                    except: 
+                        continue
+
 
     async def broadcast(self, room_id: str, message: str = "", username: str = None, text: str = None, avatar: str = "", client_time: str = None, to_user: str = None, reply_to_id: int = None):
         now = client_time if client_time else datetime.now().strftime("%H:%M")        
@@ -362,7 +379,32 @@ class ConnectionManager:
 
         # 🎯 2. ОБЫЧНЫЕ СООБЩЕНИЯ (Запись в базу и рассылка)
         if username and text:
-            async with aiosqlite.connect(DB_PATH) as db:        
+            async with aiosqlite.connect(DB_PATH) as db:
+                # --- ПРОВЕРКА ПРАВ В ГРУППЕ ---
+                is_group_msg = False
+                room_users = self.rooms.get(room_id, {}) # Достаем юзеров заранее для ответов
+                
+                if to_user:
+                    cur = await db.execute("SELECT owner FROM groups WHERE name = ?", (to_user,))
+                    group_data = await cur.fetchone()
+                    if group_data:
+                        is_group_msg = True
+                        owner = group_data[0]
+                        
+                        # 1. Проверяем подписку
+                        sub = await db.execute("SELECT 1 FROM group_subs WHERE username=? AND group_name=?", (username, to_user))
+                        if not await sub.fetchone():
+                            if username in room_users:
+                                await room_users[username].send_text("ID:0|SYSTEM:ERROR:Сначала вступи в группу!")
+                            return
+                        
+                        # 2. Только владелец может слать ссылки (картинки) и звонки
+                        if username != owner and ("http" in text or "RTC_SIGNAL" in text):
+                            if username in room_users:
+                                await room_users[username].send_text("ID:0|SYSTEM:ERROR:Только владелец может постить медиа!")
+                            return
+
+                # --- ЗАПИСЬ В БАЗУ ---
                 cursor = await db.execute(        
                     "INSERT INTO messages (username, text, timestamp, room_id, avatar, to_user, is_read, reply_to_id) VALUES (?, ?, ?, ?, ?, ?, 0, ?)",         
                     (username, text, now, room_id, avatar, to_user, reply_to_id)        
@@ -374,15 +416,23 @@ class ConnectionManager:
                 reply_info = f"REPLY:{reply_to_id}|" if reply_to_id else ""
                 final_msg = f"ID:{msg_id}|{reply_info}{prefix}[{now}] {username}: {text}|{avatar}|0"
       
-                # Рассылка сообщения
-                if to_user:        
-                    room_users = self.rooms.get(room_id, {})
+                # --- РАССЫЛКА ---
+                room_users = self.rooms.get(room_id, {})
+                
+                if is_group_msg:
+                    # 📢 Если это группа — шлем ВООБЩЕ ВСЕМ в комнате
+                    # Каждый сам решит (через JS), показывать это в окне группы или нет
+                    for ws_client in room_users.values():
+                        try: await ws_client.send_text(final_msg)
+                        except: continue
+                elif to_user:        
+                    # 👤 Если это личка — только двоим
                     for name in [username, to_user]:        
                         if name in room_users:        
                             try: await room_users[name].send_text(final_msg)        
-                            except: continue        
+                            except: continue
                     
-                    # Push-уведомление, если получатель оффлайн
+                    # Push-уведомление (только для лички)
                     if to_user not in room_users:        
                         async with db.execute("SELECT subscription_json FROM push_subscriptions WHERE username = ?", (to_user,)) as c:        
                             sub_row = await c.fetchone()        
@@ -397,11 +447,11 @@ class ConnectionManager:
                                     )        
                                 except: pass        
                 else:        
-                    # Общая рассылка в комнату
-                    for ws in self.rooms.get(room_id, {}).values():        
-                        if ws.client_state == WebSocketState.CONNECTED:        
-                            try: await ws.send_text(final_msg)        
-                            except: continue
+                    # 🌍 Общий чат
+                    for ws_client in room_users.values():
+                        try: await ws_client.send_text(final_msg)        
+                        except: continue
+
 
 
 
@@ -516,11 +566,23 @@ async def startup():
                 reason TEXT
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE,
+                owner TEXT,
+                subscribers_count INTEGER DEFAULT 0
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS group_subs (
+                username TEXT,
+                group_name TEXT,
+                PRIMARY KEY (username, group_name)
+            )
+        """)
 
 
-
-
-        
         # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
         columns = [
             ("messages", "avatar", "TEXT DEFAULT ''"),
@@ -701,13 +763,21 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
             
             # 1. ЗАПРОС ИСТОРИИ (С ПОДДЕРЖКОЙ ОТВЕТОВ И РЕАКЦИЙ)
             if clean_text.startswith("GET_HISTORY:"):
-                target = clean_text.replace("GET_HISTORY:", "")
+                target = clean_text.replace("GET_HISTORY:", "").strip()
                 async with aiosqlite.connect(DB_PATH) as db:
-                    # Определяем, какую историю тянуть (общую или личку)
+                    # 🎯 ПРОВЕРКА: Это группа или личка?
+                    check_group = await db.execute("SELECT 1 FROM groups WHERE name = ?", (target,))
+                    is_group = await check_group.fetchone()
+            
                     if target in ["null", "general", "None", "undefined"]:
                         sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read, reply_to_id FROM messages WHERE room_id = ? AND to_user IS NULL ORDER BY id ASC LIMIT 100"
                         params = (room_id,)
+                    elif is_group:
+                        # 📢 Если это группа — тянем все сообщения, где TO_USER = ИмяГруппы
+                        sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read, reply_to_id FROM messages WHERE to_user = ? ORDER BY id ASC LIMIT 100"
+                        params = (target,)
                     else:
+                        # 👤 Личка (без изменений)
                         sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read, reply_to_id FROM messages WHERE room_id = ? AND ((username = ? AND to_user = ?) OR (username = ? AND to_user = ?)) ORDER BY id ASC LIMIT 100"
                         params = (room_id, username, target, target, username)
                     
@@ -733,8 +803,45 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                             full_packet = f"ID:{m_id}|{react_pfx}{reply_pfx}{pfx}[{tm}] {u}: {txt}|{av or ''}|{is_r}"
                             await websocket.send_text(full_packet)
                 continue
+                
+            # 🎯 1. СОЗДАНИЕ ГРУППЫ
+            if clean_text and clean_text.startswith("CREATE_GROUP:"):
+                g_name = clean_text.replace("CREATE_GROUP:", "").strip()
+                if not g_name: continue # Заменил return на continue
+                
+                async with aiosqlite.connect(DB_PATH) as db:
+                    try:
+                        check = await db.execute("SELECT name FROM groups WHERE name = ?", (g_name,))
+                        if await check.fetchone():
+                            await websocket.send_text(f"ID:0|SYSTEM:ERROR:Группа '{g_name}' уже существует")
+                            continue # Заменил return на continue
+    
+                        await db.execute("INSERT INTO groups (name, owner, subscribers_count) VALUES (?, ?, 1)", (g_name, username))
+                        await db.execute("INSERT INTO group_subs (username, group_name) VALUES (?, ?)", (username, g_name))
+                        await db.commit()
+                        
+                        print(f"📢 Группа {g_name} создана")
+                        await self.broadcast_online(room_id) # Убедись, что метод называется так в твоем ConnectionManager
+                    except Exception as e:
+                        print(f"❌ Ошибка SQL: {e}")
+                continue # Заменил return на continue
+    
+            # 🎯 2. ВСТУПЛЕНИЕ В ГРУППУ
+            if clean_text and clean_text.startswith("JOIN_GROUP:"):
+                g_name = clean_text.replace("JOIN_GROUP:", "").strip()
+                async with aiosqlite.connect(DB_PATH) as db:
+                    cur = await db.execute("SELECT 1 FROM group_subs WHERE username=? AND group_name=?", (username, g_name))
+                    if not await cur.fetchone():
+                        await db.execute("INSERT INTO group_subs (username, group_name) VALUES (?, ?)", (username, g_name))
+                        await db.execute("UPDATE groups SET subscribers_count = subscribers_count + 1 WHERE name=?", (g_name,))
+                        await db.commit()
+                        print(f"👥 {username} вступил в {g_name}")
+                        await self.broadcast_online(room_id)
+                continue # Заменил return на continue
 
 
+
+    
                 
             # 2. RTC СИГНАЛЫ (УЛЬТРА-СТАБИЛЬНЫЙ ВАРИАНТ)
             elif clean_text.startswith("RTC_SIGNAL:"):
@@ -1002,15 +1109,19 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         await manager.broadcast(room_id, username="AI_BOT", text=f"⚠️ Ошибка: {str(e)[:50]}", to_user=username)
 
 
-
-
-
-                # 6. Проверка PUSH (если это не бот, а обычный юзер оффлайн)
-                elif target_user and target_user != "AI_BOT":
+                # 6. Проверка PUSH (только для ЛС, не для ботов и не для групп)
+                # Добавляем проверку, что это не группа
+                is_it_group = False
+                if target_user:
+                    async with aiosqlite.connect(DB_PATH) as db:
+                        async with db.execute("SELECT 1 FROM groups WHERE name = ?", (target_user,)) as cur:
+                            if await cur.fetchone(): is_it_group = True
+        
+                if target_user and target_user not in ["AI_BOT", "undefined", "null"] and not is_it_group:
                     is_online = False
                     if room_id in manager.rooms and target_user in manager.rooms[room_id]:
                         is_online = True
-
+                    
                     if not is_online:
                         async with aiosqlite.connect(DB_PATH) as db:
                             async with db.execute("SELECT subscription_json FROM push_subscriptions WHERE username = ?", (target_user,)) as c:
@@ -1025,6 +1136,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                                             vapid_claims=VAPID_CLAIMS
                                         )
                                     except: pass
+
 
     except WebSocketDisconnect:
         manager.disconnect(room_id, username)
