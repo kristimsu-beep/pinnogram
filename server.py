@@ -478,13 +478,13 @@ async def keep_alive_bot(manager):
                     print(f"📡 Внешний пинг: OK (Render увидел запрос в {now})")
             
             # --- 2. ВНУТРЕННИЙ ПИНГ В ЧАТ (Для логов и сокетов) ---
-            # active_rooms = list(manager.rooms.keys())
-            # if active_rooms:
-            #     for r_id in active_rooms:
-            #         await manager.broadcast(room_id=r_id, message=f"Pinnogram Heartbeat {now}")
-            #     print(f"✅ Внутренний пинг: Отправлен в {len(active_rooms)} комнат")
-            # else:
-            #     print(f"💤 Внутренний пинг: В чате пусто, жду юзеров ({now})")
+            active_rooms = list(manager.rooms.keys())
+            if active_rooms:
+                for r_id in active_rooms:
+                    await manager.broadcast(room_id=r_id, message=f"Pinnogram Heartbeat {now}")
+                print(f"✅ Внутренний пинг: Отправлен в {len(active_rooms)} комнат")
+            else:
+                print(f"💤 Внутренний пинг: В чате пусто, жду юзеров ({now})")
 
             # --- 3. СПИМ РОВНО 5 МИНУТ ---
             await asyncio.sleep(300) 
