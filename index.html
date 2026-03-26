@@ -925,33 +925,38 @@
 
 <!-- БОКОВАЯ ПАНЕЛЬ -->
 <div id="sidebar">
+    <!-- Шапка сайдбара -->
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; margin-top:30px;">
         <h3 style="margin:0; color:var(--accent);">Диалоги</h3>
         <button onclick="toggleSidebar()" style="background:none; border:none; color:#777; font-size:20px; cursor:pointer;">✕</button>
     </div>
     
+    <!-- Кнопка Общего чата -->
     <div onclick="switchChat(null)" id="global-chat-btn" class="contact-item contact-active">
         <span>🌐</span> <b>Общий чат</b>
     </div>
 
-    <!-- Кнопка создания группы теперь тут (сразу под общим чатом) -->
+    <!-- Кнопка создания группы (ТЕПЕРЬ ВСЕ ТЕГИ ЗАКРЫТЫ) -->
     <div style="padding: 5px;">
         <button onclick="promptCreateGroup()" class="neon-btn-orange" 
                 style="width: 100%; padding: 10px; background: rgba(255, 149, 0, 0.1); border: 1px solid #ff9500; color: #ff9500; border-radius: 10px; cursor: pointer; font-weight: bold; text-transform: uppercase; font-size: 11px;">
             + СОЗДАТЬ ГРУППУ
-        </div>
+        </button>
     </div>
 
+    <!-- Блок Групп -->
     <div style="font-size:11px; opacity:0.5; margin:15px 0 5px 5px; letter-spacing:1px; color:#ff9500;">📢 ГРУППЫ И СООБЩЕСТВА</div>
     <div id="groups-list" style="overflow-y:auto; max-height: 200px; margin-bottom: 10px;">
         <!-- Сюда JS добавит только группы -->
     </div>
 
+    <!-- Блок Людей -->
     <div style="font-size:11px; opacity:0.5; margin:15px 0 5px 5px; letter-spacing:1px;">👤 ЛЮДИ ОНЛАЙН</div>
     <div id="contacts-list" style="overflow-y:auto; flex:1;">
         <!-- Сюда JS добавит людей -->
     </div>
 
+    <!-- Нижние кнопки настроек -->
     <div style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
         <button onclick="document.body.classList.toggle('light-theme')" 
                 style="width:100%; padding:12px; background:var(--msg-in); border:1px solid var(--accent); color:var(--text); border-radius:10px; cursor:pointer; font-weight:bold;">
@@ -963,7 +968,6 @@
         </button>
     </div>
 </div>
-
 
 <link rel="icon" href="data:,">
 
