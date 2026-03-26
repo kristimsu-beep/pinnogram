@@ -925,25 +925,37 @@
     <div onclick="switchChat(null)" id="global-chat-btn" class="contact-item contact-active">
         <span>🌐</span> <b>Общий чат</b>
     </div>
-    
-    <div style="font-size:11px; opacity:0.5; margin:15px 0 5px 5px; letter-spacing:1px;">ЛЮДИ ОНЛАЙН</div>
+
+    <!-- Кнопка создания группы теперь тут (сразу под общим чатом) -->
+    <div style="padding: 5px;">
+        <button onclick="promptCreateGroup()" class="neon-btn-orange" 
+                style="width: 100%; padding: 10px; background: rgba(255, 149, 0, 0.1); border: 1px solid #ff9500; color: #ff9500; border-radius: 10px; cursor: pointer; font-weight: bold; text-transform: uppercase; font-size: 11px;">
+            + СОЗДАТЬ ГРУППУ
+        </div>
+    </div>
+
+    <div style="font-size:11px; opacity:0.5; margin:15px 0 5px 5px; letter-spacing:1px; color:#ff9500;">📢 ГРУППЫ И СООБЩЕСТВА</div>
+    <div id="groups-list" style="overflow-y:auto; max-height: 200px; margin-bottom: 10px;">
+        <!-- Сюда JS добавит только группы -->
+    </div>
+
+    <div style="font-size:11px; opacity:0.5; margin:15px 0 5px 5px; letter-spacing:1px;">👤 ЛЮДИ ОНЛАЙН</div>
     <div id="contacts-list" style="overflow-y:auto; flex:1;">
         <!-- Сюда JS добавит людей -->
     </div>
-    <button onclick="document.body.classList.toggle('light-theme')" 
-            style="width:100%; margin-top:20px; padding:12px; background:var(--msg-in); border:1px solid var(--accent); color:var(--text); border-radius:10px; cursor:pointer; font-weight:bold;">
-        🌓 Сменить тему
-    </button>
-    <!-- Вставь это в sidebar рядом с другими кнопками -->
-    <button onclick="toggleBgSettings(); toggleSidebar();" 
-            style="width:100%; margin-top:10px; padding:12px; background:var(--panel); border:1px solid var(--accent); color:var(--text); border-radius:10px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:10px;">
-        🎨 Оформление чата
-    </button>
-    <div class="sidebar-actions" style="padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-        <button onclick="promptCreateGroup()" class="neon-btn-orange" style="width: 100%;">+ СОЗДАТЬ ГРУППУ</button>
-    </div>
 
+    <div style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+        <button onclick="document.body.classList.toggle('light-theme')" 
+                style="width:100%; padding:12px; background:var(--msg-in); border:1px solid var(--accent); color:var(--text); border-radius:10px; cursor:pointer; font-weight:bold;">
+            🌓 Тема
+        </button>
+        <button onclick="toggleBgSettings(); toggleSidebar();" 
+                style="width:100%; padding:12px; background:var(--panel); border:1px solid var(--accent); color:var(--text); border-radius:10px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:10px;">
+            🎨 Оформление
+        </button>
+    </div>
 </div>
+
 
 <link rel="icon" href="data:,">
 
@@ -2685,35 +2697,59 @@ function switchChat(partner) {
     console.log("%c🎯 ТЕПЕРЬ ТВОЯ ЦЕЛЬ:", "background: green; color: white;", currentPartner);
     localStorage.setItem("pinnogram_last_chat", partner); 
     
-    // ДОБАВЬ ЭТО: Обновляем заголовок чата, чтобы ты видел, кому звонишь
     const chatTitle = document.getElementById('chat-sender-name');
     if (chatTitle) chatTitle.textContent = partner || "Общий чат";
     
+    // 🎯 1. ПРОВЕРКА НА ГРУППУ (по классу или иконке)
+    const contactEl = Array.from(document.querySelectorAll('.contact-item'))
+                           .find(el => el.textContent.includes(partner));
+    
+    // Группа это если: есть иконка рупора ИЛИ есть спец. класс
+    const isGroup = contactEl && (contactEl.textContent.includes("📢") || contactEl.classList.contains('group-neon-item'));
+
+    const joinArea = document.getElementById('join-group-bar');
+    const inputArea = document.getElementById('input-area');
+
+    if (isGroup) {
+        // Показываем плашку вступления
+        if (joinArea) joinArea.style.display = 'flex';
+        console.log("📢 Это группа. Режим чтения активирован.");
+    } else {
+        // Обычный чат
+        if (joinArea) joinArea.style.display = 'none';
+        if (inputArea) inputArea.style.opacity = "1";
+    }
+
     const chat = document.getElementById('chat');
     chat.innerHTML = "<div style='text-align:center; opacity:0.3; margin-top:20px;'>Загрузка истории...</div>"; 
 
-    // Просим у сервера историю именно для этого чата (партнер или null)
+    // Запрос истории
     ws.send(`GET_HISTORY:${partner}`);
 
-    // Сбрасываем уведомления для этого человека
+    // Сброс уведомлений
     if (partner && unreadCounts[partner]) {
         unreadCounts[partner] = 0;
         saveUnread();
         updateUnreadUI();
     }
 
-    // Красивая подсветка активного диалога
+    // Подсветка активного контакта
     document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('contact-active'));
     if (!partner) {
-        document.getElementById('global-chat-btn').classList.add('contact-active');
+        const globalBtn = document.getElementById('global-chat-btn');
+        if (globalBtn) globalBtn.classList.add('contact-active');
     } else {
-        // Ищем элемент по тексту и подсвечиваем
-        Array.from(document.querySelectorAll('.contact-item'))
-             .find(el => el.textContent.includes(partner))?.classList.add('contact-active');
+        if (contactEl) contactEl.classList.add('contact-active');
     }
     
-    toggleSidebar();
+    // Мобильный фикс
+    if (window.innerWidth < 768) {
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar && sidebar.classList.contains('active')) toggleSidebar();
+    }
 }
+
+
 function toggleVoice(id, btn) {
     const a = document.getElementById(id);
     if (a.paused) {
@@ -3271,7 +3307,19 @@ function promptCreateGroup() {
 function joinCurrentGroup() {
     if (currentPartner) {
         ws.send(`JOIN_GROUP:${currentPartner}`);
-        alert("Вы вступили в группу!");
+        
+        // 🎯 Скрываем панель вступления сразу после нажатия
+        const joinArea = document.getElementById('join-group-bar');
+        if (joinArea) joinArea.style.display = 'none';
+        
+        alert(`Вы вступили в группу ${currentPartner}! Теперь вы можете писать сообщения.`);
+        // Сразу после alert:
+        // Принудительно подсвечиваем группу в новом списке
+        setTimeout(() => {
+            const contactEl = Array.from(document.querySelectorAll('.contact-item'))
+                                   .find(el => el.textContent.includes(currentPartner));
+            if (contactEl) contactEl.classList.add('contact-active');
+        }, 500); 
     }
 }
 
