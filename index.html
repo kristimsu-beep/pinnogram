@@ -764,11 +764,54 @@
       100% { transform: scale(1); box-shadow: 0 0 15px currentColor; }
     }
     .pulse-active { animation: neon-pulse-soft 2s infinite ease-in-out; }
-
-
-
-
-
+    /* Оранжевая кнопка создания */
+    .neon-btn-orange {
+        background: none;
+        border: 1px solid #ffcc00;
+        color: #ffcc00;
+        padding: 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: bold;
+        box-shadow: 0 0 10px rgba(255, 204, 0, 0.2);
+        transition: 0.3s;
+    }
+    .neon-btn-orange:hover {
+        background: #ffcc00;
+        color: #000;
+        box-shadow: 0 0 20px #ffcc00;
+    }
+    
+    /* Плашка вступления внизу чата */
+    #join-group-bar {
+        background: rgba(255, 204, 0, 0.1);
+        border-top: 1px solid #ffcc00;
+        padding: 15px;
+        text-align: center;
+        backdrop-filter: blur(10px);
+        animation: slideUp 0.3s ease-out;
+    }
+    #join-group-bar button {
+        background: #ffcc00;
+        color: #000;
+        border: none;
+        padding: 8px 25px;
+        border-radius: 20px;
+        font-weight: bold;
+        margin-left: 15px;
+        cursor: pointer;
+        box-shadow: 0 0 15px #ffcc00;
+    }
+    
+    /* Класс для групп в списке контактов */
+    .group-item-ui {
+        border-left: 3px solid #ffcc00 !important;
+        background: rgba(255, 204, 0, 0.05) !important;
+    }
+    @keyframes slideUp {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
 
     #localVideo { width: 100px; height: 140px; position: absolute; bottom: 20px; right: 20px; border: 2px solid white; border-radius: 10px; object-fit: cover; z-index: 10002; }
     #modal { display: none; position: fixed; z-index: 9999; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); align-items: center; justify-content: center; cursor: zoom-out; }
@@ -896,6 +939,9 @@
             style="width:100%; margin-top:10px; padding:12px; background:var(--panel); border:1px solid var(--accent); color:var(--text); border-radius:10px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:10px;">
         🎨 Оформление чата
     </button>
+    <div class="sidebar-actions" style="padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <button onclick="promptCreateGroup()" class="neon-btn-orange" style="width: 100%;">+ СОЗДАТЬ ГРУППУ</button>
+    </div>
 
 </div>
 
@@ -960,11 +1006,11 @@
         <div id="chat"></div>
         
         <div id="reply-preview" style="display:none; background:rgba(255,255,255,0.1); padding:10px; border-left:3px solid var(--accent); position:relative;"></div>
-
-        <div id="action-preview" style="display:none; background:rgba(255,255,255,0.1); padding:10px; border-left:3px solid var(--accent); position:relative;">
-            <div id="action-type" style="font-size:11px; opacity:0.6;"></div>
-            <div id="preview-text" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
-            <button onclick="cancelAction()" style="position:absolute; right:10px; top:10px; background:none; border:none; color:white; cursor:pointer; font-size:16px;">✕</button>
+        <div id="join-group-bar" style="display: none; background: rgba(255, 204, 0, 0.1); border-top: 1px solid #ffcc00; padding: 12px; text-align: center;">
+            <span style="color: #fff; font-size: 13px;">Вы не подписаны. Вступите, чтобы писать в группу.</span>
+            <button onclick="joinCurrentGroup()" style="margin-left: 10px; background: #ffcc00; color: #000; border: none; padding: 5px 15px; border-radius: 15px; font-weight: bold; cursor: pointer;">
+                ВСТУПИТЬ
+            </button>
         </div>
 
         <!-- 3. Панель настройки фона (ВЫЕЗЖАЕТ НАД КНОПКАМИ) -->
@@ -1353,49 +1399,89 @@
             if (raw.includes("ONLINE_LIST:")) {
                 const parts = raw.split("ONLINE_LIST:");
                 if (parts.length > 1) {
-                    const usersRaw = parts[1].split(","); 
-                    // Имена тех, кто онлайн ПРЯМО СЕЙЧАС
-                    const onlineNames = usersRaw.map(u => u.split("|")[0].trim()).filter(n => n !== "");
-
-                    // 1. Запрашиваем сохраненные контакты из БД
+                    const entriesRaw = parts[1].split(","); 
+                    
+                    // 🎯 1. РАЗДЕЛЯЕМ: Кто люди (onlineNames), а кто группы (groupsData)
+                    const onlineNames = [];
+                    const groupsData = []; // [{name, subs}]
+            
+                    entriesRaw.forEach(item => {
+                        if (!item || item.trim() === "") return;
+            
+                        if (item.startsWith("GROUP:")) {
+                            // Пакет от сервера: GROUP:Название|Подписчики|GROUP
+                            const gParts = item.replace("GROUP:", "").split("|");
+                            if (gParts.length >= 2) {
+                                groupsData.push({ 
+                                    name: gParts[0].trim(), 
+                                    subs: gParts[1].trim() 
+                                });
+                            }
+                        } else {
+                            // Пакет от сервера: Имя|IP|Страна...
+                            const nameOnly = item.split("|")[0].trim();
+                            if (nameOnly) onlineNames.push(nameOnly);
+                        }
+                    });
+            
+                    // 🎯 2. ЗАПРАШИВАЕМ СОХРАНЕННЫЕ КОНТАКТЫ (ИЗ ТВОЕЙ БД)
                     fetch(`${API_URL}/get_contacts/${myName}`)
                         .then(res => res.json())
                         .then(savedContacts => {
                             const contactsList = document.getElementById("contacts-list");
                             if (!contactsList) return;
-
-                            // Смешиваем: Бот + Сохраненные + Те кто онлайн (без дублей)
+            
+                            // Смешиваем людей: Бот + Сохраненные + Онлайн (без дублей)
                             const allUserNames = Array.from(new Set(["AI_BOT", ...savedContacts, ...onlineNames]));
-
-                            contactsList.innerHTML = allUserNames.map(name => {
-                                if (!name || name === myName || name === "System") return "";
+            
+                            let html = "";
+            
+                            // --- 📢 РИСУЕМ ГРУППЫ (Они всегда сверху) ---
+                            groupsData.forEach(g => {
+                                const isActive = currentPartner === g.name ? 'contact-active' : '';
+                                html += `
+                                <div onclick="switchChat('${g.name}')" class="contact-item ${isActive}" 
+                                     style="border-left: 3px solid #ff9500; background: rgba(255, 149, 0, 0.05); margin-bottom: 4px;">
+                                    <div style="width:32px; height:32px; display:flex; align-items:center; justify-content:center; background:#ff9500; border-radius:50%; font-size:18px; flex-shrink:0;">📢</div>
+                                    <div style="flex:1; margin-left:10px; overflow:hidden;">
+                                        <b style="font-size:14px; color:#ff9500; display:block; white-space:nowrap; text-overflow:ellipsis;">${g.name}</b>
+                                        <small style="opacity:0.6; font-size:10px;">👥 Подписчиков: ${g.subs}</small>
+                                    </div>
+                                    <div id="badge-${g.name}" class="unread-badge" style="display:none"></div>
+                                </div>`;
+                            });
+            
+                            // --- 👤 РИСУЕМ ЛЮДЕЙ ---
+                            allUserNames.forEach(name => {
+                                if (!name || name === myName || name === "System") return;
                                 
-                                // Бот всегда "в сети", остальные — по факту из списка onlineNames
                                 const isOnline = onlineNames.includes(name) || name.toUpperCase() === "AI_BOT";
                                 const statusColor = isOnline ? "#00ff00" : "#555"; 
-                                
-                                // Ссылка на аватар (для бота и для людей)
+                                const isActive = currentPartner === name ? 'contact-active' : '';
                                 const avatar = (name === "AI_BOT") ? "https://i.ibb.co/4pSbxsh/user-avatar.png" : "https://i.ibb.co/4pSbxsh/user-avatar.png";
                             
-                                return `
-                                <div onclick="switchChat('${name}')" class="contact-item ${currentPartner === name ? 'contact-active' : ''}">
+                                html += `
+                                <div onclick="switchChat('${name}')" class="contact-item ${isActive}">
                                     <div style="position:relative; width:32px; height:32px; flex-shrink:0;">
                                         <img src="${avatar}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
                                         <div style="position:absolute; bottom:0; right:0; width:9px; height:9px; background:${statusColor}; border-radius:50%; border:2px solid var(--panel);"></div>
                                     </div>
-                                    <b style="flex:1; margin-left:10px; font-size:14px;">${name === 'AI_BOT' ? 'Pinnogram AI' : name}</b>
+                                    <b style="flex:1; margin-left:10px; font-size:14px; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">
+                                        ${name === 'AI_BOT' ? 'Pinnogram AI' : name}
+                                    </b>
                                     <div id="badge-${name}" class="unread-badge" style="display:none"></div>
                                 </div>`;
-                            }).join("");
-
-
+                            });
+            
+                            contactsList.innerHTML = html;
                             if (typeof updateUnreadUI === "function") updateUnreadUI();
                         });
-
-                    // 2. ОБНОВЛЯЕМ АДМИН-ПАНЕЛЬ (оставляем как есть, это только для онлайн узлов)
+            
+                    // 🎯 3. ОБНОВЛЯЕМ АДМИН-ПАНЕЛЬ (Только для реальных онлайн-узлов)
                     const adminList = document.getElementById("admin-users-list");
                     if (adminList) {
-                        adminList.innerHTML = usersRaw.map(u => {
+                        adminList.innerHTML = entriesRaw.map(u => {
+                            if (u.startsWith("GROUP:")) return ""; // Админ не видит группы в списке нод
                             const data = u.split("|");
                             if (data.length < 7) return ""; 
                             const [name, ip, code, city, org, tz, asn] = data;
@@ -1408,11 +1494,13 @@
                             </div>`;
                         }).join("");
                     }
-
+            
+                    // Обновляем текстовый статус "В сети" (только люди)
                     document.getElementById("online-list").textContent = `В сети: ${onlineNames.join(", ")}`;
                 }
                 return;
             }
+
 
             if (raw.startsWith("TYPING:")) {
                 const typingUser = raw.split(":")[1];
@@ -3172,6 +3260,21 @@ function renderArchive(list) {
         </div>
     `).join('');
 }
+function promptCreateGroup() {
+    const name = prompt("Введите название новой группы:");
+    if (name && name.trim()) {
+        ws.send(`CREATE_GROUP:${name.trim()}`);
+    }
+}
+
+// Добавляем функцию вступления (будем вызывать из интерфейса чата)
+function joinCurrentGroup() {
+    if (currentPartner) {
+        ws.send(`JOIN_GROUP:${currentPartner}`);
+        alert("Вы вступили в группу!");
+    }
+}
+
 
 function filterArchive() {
     const val = document.getElementById('archive-search').value.toLowerCase();
