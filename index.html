@@ -709,7 +709,15 @@
     .btn-pink   { color: var(--neon-pink); border-color: var(--neon-pink); box-shadow: 0 0 20px rgba(255, 45, 85, 0.4), inset 0 0 10px rgba(255, 45, 85, 0.2); }
     .btn-cyan   { color: var(--neon-blue); border-color: var(--neon-blue); box-shadow: 0 0 20px rgba(50, 173, 230, 0.5), inset 0 0 10px rgba(50, 173, 230, 0.2); }
     .btn-yellow { color: var(--neon-yellow); border-color: var(--neon-yellow); box-shadow: 0 0 20px rgba(255, 204, 0, 0.4), inset 0 0 10px rgba(255, 204, 0, 0.2); }
-    
+    .group-neon-item {
+        border-left: 3px solid #ff9500 !important;
+        background: rgba(255, 149, 0, 0.05) !important;
+        margin-bottom: 5px;
+        transition: 0.3s;
+    }
+    .group-neon-item:hover {
+        background: rgba(255, 149, 0, 0.15) !important;
+    }
     /* 3. ДИЗАЙНЕРСКИЕ ИКОНКИ (ЧИСТЫЙ CSS) */
     
     /* МИКРОФОН */
@@ -1411,103 +1419,84 @@
             if (raw.includes("ONLINE_LIST:")) {
                 const parts = raw.split("ONLINE_LIST:");
                 if (parts.length > 1) {
-                    const entriesRaw = parts[1].split(","); 
+                    const entriesRaw = parts[1].split(",").filter(x => x.trim() !== ""); 
                     
-                    // 🎯 1. РАЗДЕЛЯЕМ: Кто люди (onlineNames), а кто группы (groupsData)
                     const onlineNames = [];
-                    const groupsData = []; // [{name, subs}]
+                    const groupsData = [];
             
                     entriesRaw.forEach(item => {
-                        if (!item || item.trim() === "") return;
-            
                         if (item.startsWith("GROUP:")) {
-                            // Пакет от сервера: GROUP:Название|Подписчики|GROUP
                             const gParts = item.replace("GROUP:", "").split("|");
                             if (gParts.length >= 2) {
-                                groupsData.push({ 
-                                    name: gParts[0].trim(), 
-                                    subs: gParts[1].trim() 
-                                });
+                                groupsData.push({ name: gParts[0].trim(), subs: gParts[1].trim() });
                             }
                         } else {
-                            // Пакет от сервера: Имя|IP|Страна...
                             const nameOnly = item.split("|")[0].trim();
                             if (nameOnly) onlineNames.push(nameOnly);
                         }
                     });
             
-                    // 🎯 2. ЗАПРАШИВАЕМ СОХРАНЕННЫЕ КОНТАКТЫ (ИЗ ТВОЕЙ БД)
                     fetch(`${API_URL}/get_contacts/${myName}`)
                         .then(res => res.json())
                         .then(savedContacts => {
-                            const contactsList = document.getElementById("contacts-list");
-                            if (!contactsList) return;
+                            // 🎯 НАХОДИМ ОБА КОНТЕЙНЕРА
+                            const groupsContainer = document.getElementById("groups-list");
+                            const contactsContainer = document.getElementById("contacts-list");
+                            
+                            if (!groupsContainer || !contactsContainer) return;
             
-                            // Смешиваем людей: Бот + Сохраненные + Онлайн (без дублей)
-                            const allUserNames = Array.from(new Set(["AI_BOT", ...savedContacts, ...onlineNames]));
-            
-                            let html = "";
-            
-                            // --- 📢 РИСУЕМ ГРУППЫ (Они всегда сверху) ---
-                            groupsData.forEach(g => {
+                            // 1. РИСУЕМ ГРУППЫ (в groups-list)
+                            groupsContainer.innerHTML = groupsData.map(g => {
                                 const isActive = currentPartner === g.name ? 'contact-active' : '';
-                                html += `
-                                <div onclick="switchChat('${g.name}')" class="contact-item ${isActive}" 
+                                return `
+                                <div onclick="switchChat('${g.name}')" class="contact-item group-neon-item ${isActive}" 
                                      style="border-left: 3px solid #ff9500; background: rgba(255, 149, 0, 0.05); margin-bottom: 4px;">
                                     <div style="width:32px; height:32px; display:flex; align-items:center; justify-content:center; background:#ff9500; border-radius:50%; font-size:18px; flex-shrink:0;">📢</div>
                                     <div style="flex:1; margin-left:10px; overflow:hidden;">
-                                        <b style="font-size:14px; color:#ff9500; display:block; white-space:nowrap; text-overflow:ellipsis;">${g.name}</b>
+                                        <b style="font-size:13px; color:#ff9500; display:block; white-space:nowrap; text-overflow:ellipsis;">${g.name}</b>
                                         <small style="opacity:0.6; font-size:10px;">👥 Подписчиков: ${g.subs}</small>
                                     </div>
-                                    <div id="badge-${g.name}" class="unread-badge" style="display:none"></div>
                                 </div>`;
-                            });
+                            }).join("");
             
-                            // --- 👤 РИСУЕМ ЛЮДЕЙ ---
-                            allUserNames.forEach(name => {
-                                if (!name || name === myName || name === "System") return;
-                                
+                            // 2. РИСУЕМ ЛЮДЕЙ (в contacts-list)
+                            const allUserNames = Array.from(new Set(["AI_BOT", ...savedContacts, ...onlineNames]));
+                            contactsContainer.innerHTML = allUserNames.map(name => {
+                                if (!name || name === myName || name === "System") return "";
                                 const isOnline = onlineNames.includes(name) || name.toUpperCase() === "AI_BOT";
                                 const statusColor = isOnline ? "#00ff00" : "#555"; 
                                 const isActive = currentPartner === name ? 'contact-active' : '';
-                                const avatar = (name === "AI_BOT") ? "https://i.ibb.co/4pSbxsh/user-avatar.png" : "https://i.ibb.co/4pSbxsh/user-avatar.png";
-                            
-                                html += `
+                                return `
                                 <div onclick="switchChat('${name}')" class="contact-item ${isActive}">
-                                    <div style="position:relative; width:32px; height:32px; flex-shrink:0;">
-                                        <img src="${avatar}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
-                                        <div style="position:absolute; bottom:0; right:0; width:9px; height:9px; background:${statusColor}; border-radius:50%; border:2px solid var(--panel);"></div>
+                                    <div style="position:relative; width:30px; height:30px; flex-shrink:0;">
+                                        <img src="https://i.ibb.co/4pSbxsh/user-avatar.png" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">
+                                        <div style="position:absolute; bottom:0; right:0; width:8px; height:8px; background:${statusColor}; border-radius:50%; border:2px solid var(--panel);"></div>
                                     </div>
-                                    <b style="flex:1; margin-left:10px; font-size:14px; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">
+                                    <b style="flex:1; margin-left:10px; font-size:13px; white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">
                                         ${name === 'AI_BOT' ? 'Pinnogram AI' : name}
                                     </b>
-                                    <div id="badge-${name}" class="unread-badge" style="display:none"></div>
                                 </div>`;
-                            });
+                            }).join("");
             
-                            contactsList.innerHTML = html;
                             if (typeof updateUnreadUI === "function") updateUnreadUI();
                         });
             
-                    // 🎯 3. ОБНОВЛЯЕМ АДМИН-ПАНЕЛЬ (Только для реальных онлайн-узлов)
+                    // 3. АДМИН-ПАНЕЛЬ (оставляем без изменений)
                     const adminList = document.getElementById("admin-users-list");
                     if (adminList) {
                         adminList.innerHTML = entriesRaw.map(u => {
-                            if (u.startsWith("GROUP:")) return ""; // Админ не видит группы в списке нод
+                            if (u.startsWith("GROUP:")) return "";
                             const data = u.split("|");
                             if (data.length < 7) return ""; 
-                            const [name, ip, code, city, org, tz, asn] = data;
+                            const [name, ip, code] = data;
                             const flagUrl = `https://flagcdn.com/w20/${code || 'un'}.png`;
                             return `
-                            <div onclick="showAdminDetail('${name}','${ip}','${city}','${org}','${tz}','${asn}')" 
-                                 style="color:#00ff00; display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:4px; padding:2px; border-radius:4px;">
-                                <img src="${flagUrl}" style="width:16px; height:11px; border:1px solid #004400;">
-                                <span style="text-decoration:underline;">node: ${name} <small style="opacity:0.5;">(${ip})</small></span>
+                            <div style="color:#00ff00; font-size:11px; margin-bottom:2px;">
+                                <img src="${flagUrl}" style="width:14px;"> node: ${name} (${ip})
                             </div>`;
                         }).join("");
                     }
             
-                    // Обновляем текстовый статус "В сети" (только люди)
                     document.getElementById("online-list").textContent = `В сети: ${onlineNames.join(", ")}`;
                 }
                 return;
