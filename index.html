@@ -1418,8 +1418,20 @@
                 if (typeof loadPollData === "function") loadPollData(pId);
                 return;
             }
+            
+            if (raw.includes("SUB_STATUS:")) {
+                const parts = raw.split("|"); 
+                // parts[3] — это наше число (0 или 1)
+                const isSubbed = parts[3] === "1"; 
+                
+                const joinBar = document.getElementById('join-group-bar');
+                if (joinBar) {
+                    // Если 1 (подписан) — скрываем кнопку вступления ('none')
+                    // Если 0 (не подписан) — показываем ('flex')
+                    joinBar.style.display = isSubbed ? 'none' : 'flex';
+                }
+            }
 
-           
             if (raw.includes("ONLINE_LIST:")) {
                 const parts = raw.split("ONLINE_LIST:");
                 if (parts.length > 1) {
@@ -2686,6 +2698,7 @@ function updateUnreadUI() {
 
 // 3. Умное переключение чата с подгрузкой истории
 function switchChat(partner) {
+    // 🎯 1. ОБНОВЛЯЕМ ЦЕЛЬ И ЗАГОЛОВОК
     currentPartner = partner;
     console.log("%c🎯 ТЕПЕРЬ ТВОЯ ЦЕЛЬ:", "background: green; color: white;", currentPartner);
     localStorage.setItem("pinnogram_last_chat", partner); 
@@ -2693,40 +2706,35 @@ function switchChat(partner) {
     const chatTitle = document.getElementById('chat-sender-name');
     if (chatTitle) chatTitle.textContent = partner || "Общий чат";
     
-    // 🎯 1. ПРОВЕРКА НА ГРУППУ (по классу или иконке)
+    // 🎯 2. ПРОВЕРЯЕМ, ГРУППА ЭТО ИЛИ НЕТ
+    // Ищем элемент в списке контактов (по тексту или классу)
     const contactEl = Array.from(document.querySelectorAll('.contact-item'))
                            .find(el => el.textContent.includes(partner));
     
-    // Группа это если: есть иконка рупора ИЛИ есть спец. класс
     const isGroup = contactEl && (contactEl.textContent.includes("📢") || contactEl.classList.contains('group-neon-item'));
 
-    const joinArea = document.getElementById('join-group-bar');
+    const joinBar = document.getElementById('join-group-bar');
     const inputArea = document.getElementById('input-area');
 
-    if (isGroup) {
-        // Показываем плашку вступления
-        if (joinArea) joinArea.style.display = 'flex';
-        console.log("📢 Это группа. Режим чтения активирован.");
-    } else {
-        // Обычный чат
-        if (joinArea) joinArea.style.display = 'none';
-        if (inputArea) inputArea.style.opacity = "1";
-    }
+    // 🎯 3. СБРОС СОСТОЯНИЯ КНОПКИ ВСТУПИТЬ
+    // Скрываем её по умолчанию. Сервер сам скажет показать её через SUB_STATUS
+    if (joinBar) joinBar.style.display = 'none';
 
+    // 🎯 4. ПОДГОТОВКА ОКНА ЧАТА
     const chat = document.getElementById('chat');
     chat.innerHTML = "<div style='text-align:center; opacity:0.3; margin-top:20px;'>Загрузка истории...</div>"; 
 
-    // Запрос истории
+    // 🎯 5. ЗАПРОС ИСТОРИИ (Сервер пришлет SUB_STATUS перед историей)
     ws.send(`GET_HISTORY:${partner}`);
 
-    // Сброс уведомлений
+    // 🎯 6. СБРОС УВЕДОМЛЕНИЙ ДЛЯ ЭТОГО ЧАТА
     if (partner && unreadCounts[partner]) {
         unreadCounts[partner] = 0;
         saveUnread();
         updateUnreadUI();
     }
 
-    // Подсветка активного контакта
+    // 🎯 7. ПОДСВЕТКА АКТИВНОГО КОНТАКТА В СПИСКЕ
     document.querySelectorAll('.contact-item').forEach(el => el.classList.remove('contact-active'));
     if (!partner) {
         const globalBtn = document.getElementById('global-chat-btn');
@@ -2735,10 +2743,14 @@ function switchChat(partner) {
         if (contactEl) contactEl.classList.add('contact-active');
     }
     
-    // Мобильный фикс
-    if (window.innerWidth < 768) {
-        const sidebar = document.getElementById('sidebar');
-        if (sidebar && sidebar.classList.contains('active')) toggleSidebar();
+    // 🎯 8. АВТО-ЗАКРЫТИЕ САЙДБАРА (Для мобилок и комфорта на ПК)
+    const sidebar = document.getElementById('sidebar');
+    // Если у тебя сайдбар открывается через добавление класса 'active'
+    if (sidebar && sidebar.classList.contains('active')) {
+        toggleSidebar(); 
+    } else if (window.innerWidth < 768) {
+        // Запасной вариант для мобильных, если нет класса active
+        if (typeof toggleSidebar === 'function') toggleSidebar();
     }
 }
 
