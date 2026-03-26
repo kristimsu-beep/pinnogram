@@ -765,6 +765,16 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
             if clean_text.startswith("GET_HISTORY:"):
                 target = clean_text.replace("GET_HISTORY:", "").strip()
                 async with aiosqlite.connect(DB_PATH) as db:
+                    # 🎯 1. Проверяем статус подписки
+                    is_subbed = False
+                    check_sub = await db.execute("SELECT 1 FROM group_subs WHERE username=? AND group_name=?", (username, target))
+                    if await check_sub.fetchone():
+                        is_subbed = True
+                    
+                    # 🎯 2. Сразу шлем пакет фронтенду (1 - подписан, 0 - нет)
+                    # Это должно улететь ДО истории сообщений
+                    status_msg = f"ID:0|SYSTEM:SUB_STATUS|{target}|{1 if is_subbed else 0}"
+                    await websocket.send_text(status_msg)
                     # 🎯 ПРОВЕРКА: Это группа или личка?
                     check_group = await db.execute("SELECT 1 FROM groups WHERE name = ?", (target,))
                     is_group = await check_group.fetchone()
