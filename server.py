@@ -218,29 +218,31 @@ admin_data_cache = {}
 
 async def get_user_info(ip):
     if ip in admin_data_cache: return admin_data_cache[ip]
-    # Фильтр для локальных и тестовых адресов
+    
+    # Заглушка для локалки
     if not ip or ip in ["127.0.0.1", "localhost", "::1", "testclient"]: 
-        return {"city": "Local", "org": "Internal", "country": "un", "tz": "UTC", "asn": "LAN"}
+        return {"city": "Local Node", "org": "Internal Net", "country": "un", "tz": "UTC", "asn": "LAN"}
     
     try:
         async with httpx.AsyncClient() as client:
-            # ИСПРАВЛЕНО: Добавлен / после .co
+            # Используем ipapi.co (у него 1000 бесплатных запросов в сутки)
             res = await client.get(f"https://ipapi.co/{ip}/json/", timeout=2.0)
             if res.status_code == 200:
                 data = res.json()
                 info = {
-                    "city": data.get("city", "Unknown"),
+                    "city": data.get("city", "Private"),
                     "org": data.get("org", "Unknown ISP"),
                     "country": data.get("country_code", "un").lower(),
-                    "tz": data.get("timezone", "UTC/Unknown"),
-                    "asn": data.get("asn", "Unknown") 
+                    "tz": data.get("timezone", "UTC"),
+                    "asn": data.get("asn", "N/A") 
                 }
                 if info["country"] == "su": info["country"] = "ru"
                 admin_data_cache[ip] = info
                 return info
     except Exception as e: 
-        print(f"Geo Error: {e}")
-    return {"city": "Unknown", "org": "Unknown", "country": "un", "tz": "UTC", "asn": "Unknown"}
+        print(f"📡 [GEO_ERR]: {e}")
+        
+    return {"city": "Unknown", "org": "Unknown", "country": "un", "tz": "UTC", "asn": "N/A"}
 
 # В методе broadcast_online внутри ConnectionManager исправь сборку info:
 # info = await get_user_info(ip)
@@ -330,8 +332,13 @@ class ConnectionManager:
             users_info = []
             for name, ws in self.rooms[room_id].items():
                 ip = ws.client.host if ws.client else "unknown"
-                info = await get_user_info(ip) 
+                # Внутри ConnectionManager -> broadcast_online
+                info = await get_user_info(ip)
+                
+                # 🎯 ВАЖНО: Порядок должен быть именно таким, чтобы JS (parts[0], [1], [2]...) не перепутал город с IP
+                # 0:name | 1:ip | 2:country | 3:city | 4:org | 5:tz | 6:asn
                 users_info.append(f"{name}|{ip}|{info['country']}|{info['city']}|{info['org']}|{info['tz']}|{info['asn']}")
+
             
             # 2. ДОСТАЕМ ГРУППЫ ИЗ БАЗЫ (с пометкой GROUP:)
             groups_info = []
