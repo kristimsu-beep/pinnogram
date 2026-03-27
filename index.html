@@ -369,15 +369,22 @@
         transform: translate(-50%, -50%);
         background: #000; 
         border: 2px solid #00ff00; 
-        padding: 20px; 
+        padding: 15px; /* Чуть уменьшил отступ, чтобы влезло больше кнопок */
         z-index: 30000;
         font-family: monospace; 
         color: #00ff00; 
         border-radius: 12px; 
-        min-width: 280px;
-        box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
+        min-width: 300px; /* Увеличил до 300, чтобы кнопки DM и COPY стояли ровно в ряд */
+        max-height: 90vh; /* Чтобы окно не уходило за пределы экрана */
+        overflow-y: auto; /* Если контента много — появится хакерский скролл */
+        box-shadow: 0 0 30px rgba(0, 255, 0, 0.4);
+        transition: 0.3s ease-in-out;
     }
     
+    /* Красивый хакерский скролл для досье */
+    #admin-user-info::-webkit-scrollbar { width: 4px; }
+    #admin-user-info::-webkit-scrollbar-thumb { background: #00ff00; border-radius: 10px; }
+
     .info-content-row {
         margin-bottom: 8px;
         border-bottom: 1px solid #003300;
@@ -3077,51 +3084,54 @@ function showAdminDetail(name, ip, city, org, tz, asn) {
     const content = document.getElementById('info-content');
     if (!box || !content) return;
 
-    // 🎯 ИСПРАВЛЕНО: Правильная ссылка на Google Maps
+    // 🌍 Ссылка на карты
     const mapLink = `https://www.google.com/maps/search/${encodeURIComponent(city || 'Unknown')}`;
 
     content.innerHTML = `
-        <div style="border-bottom: 1px solid #00ff00; margin-bottom: 15px; padding-bottom: 5px;">
-            <span style="font-size: 9px; opacity: 0.5; display: block;">TARGET_IDENTIFIER</span>
-            <b style="color:#00ff00; font-size:16px; text-transform: uppercase;">[ ${name} ]</b>
+        <div style="border-bottom: 1px solid #00ff00; margin-bottom: 12px; padding-bottom: 5px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <span style="font-size: 8px; opacity: 0.5; display: block; color:#00ff00;">TARGET_IDENTIFIER</span>
+                <b style="color:#00ff00; font-size:14px; text-transform: uppercase;">[ ${name} ]</b>
+            </div>
+            <div onclick="document.getElementById('admin-user-info').style.display='none'" style="cursor:pointer; color:red; font-size:12px;">[X]</div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px;">
-            <div class="info-content-row">
-                <span class="info-label">IPv4_ADDRESS</span>
-                <b style="color:white; display:block; font-size:12px;">${ip}</b>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 10px;">
+            <div style="background:rgba(0,255,0,0.05); padding:5px; border-radius:3px;">
+                <span style="opacity: 0.5; font-size: 8px; display:block;">IPv4_ADDRESS</span>
+                <b style="color:white;">${ip}</b>
             </div>
-            <div class="info-content-row">
-                <span class="info-label">GEOLOCATION</span>
-                <a href="${mapLink}" target="_blank" style="color:#00ff00; text-decoration: underline; display:block;">${city || 'Private'}</a>
+            <div style="background:rgba(0,255,0,0.05); padding:5px; border-radius:3px;">
+                <span style="opacity: 0.5; font-size: 8px; display:block;">GEOLOCATION</span>
+                <a href="${mapLink}" target="_blank" style="color:#00ff00; text-decoration: underline;">${city || 'Private'}</a>
             </div>
-            <div class="info-content-row">
-                <span class="info-label">TIME_ZONE</span>
-                <b style="color:white; display:block;">${tz || 'UTC'}</b>
+            <div style="background:rgba(0,255,0,0.05); padding:5px; border-radius:3px;">
+                <span style="opacity: 0.5; font-size: 8px; display:block;">TIME_ZONE</span>
+                <b style="color:white;">${tz || 'UTC'}</b>
             </div>
-            <div class="info-content-row">
-                <span class="info-label">ASN_CODE</span>
-                <b style="color:white; display:block;">${asn || 'N/A'}</b>
+            <div style="background:rgba(0,255,0,0.05); padding:5px; border-radius:3px;">
+                <span style="opacity: 0.5; font-size: 8px; display:block;">ASN_CODE</span>
+                <b style="color:white;">${asn || 'N/A'}</b>
             </div>
         </div>
 
-        <div class="info-content-row" style="margin-top: 10px; border-top: 1px solid #003300; padding-top: 5px;">
-            <span class="info-label">ISP_INFRASTRUCTURE</span>
-            <div style="color:#00ff00; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${org || 'Unknown Network'}</div>
+        <div style="margin-top: 8px; background:rgba(0,255,0,0.05); padding:5px; border-radius:3px;">
+            <span style="opacity: 0.5; font-size: 8px; display:block;">ISP_INFRASTRUCTURE</span>
+            <div style="color:#00ff00; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${org || 'Unknown Network'}</div>
         </div>
 
-        <!-- 🚀 ФУНКЦИИ УПРАВЛЕНИЯ -->
-        <div style="margin-top:20px; display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
-            <button onclick="adminDirectMessage('${name}')" style="background:#003300; color:#00ff00; border:1px solid #00ff00; padding:8px; cursor:pointer; font-family:monospace; border-radius:3px; font-size:10px;">💬 OPEN_DM</button>
-            <button onclick="copyToClipboard('${ip}')" style="background:#1a1a1a; color:#00ff00; border:1px solid #00ff00; padding:8px; cursor:pointer; font-family:monospace; border-radius:3px; font-size:10px;">📋 COPY_IP</button>
+        <!-- 🚀 ПАНЕЛЬ УПРАВЛЕНИЯ -->
+        <div style="margin-top:15px; display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
+            <button onclick="adminDirectMessage('${name}')" style="background:#003300; color:#00ff00; border:1px solid #00ff00; padding:6px; cursor:pointer; font-family:monospace; border-radius:3px; font-size:9px;">💬 OPEN_DM</button>
+            <button onclick="copyToClipboard('${ip}')" style="background:#1a1a1a; color:#00ff00; border:1px solid #00ff00; padding:6px; cursor:pointer; font-family:monospace; border-radius:3px; font-size:9px;">📋 COPY_IP</button>
             
-            <button onclick="adminBanUserPrompt('${name}')" style="background:#440000; color:white; border:1px solid red; padding:8px; cursor:pointer; font-family:monospace; border-radius:3px; font-size:10px; grid-column: span 2;">⛔ TERMINATE (BAN_USER)</button>
-            
-            <button onclick="document.getElementById('admin-user-info').style.display='none'" style="background:#333; color:white; border:none; padding:6px; cursor:pointer; font-family:monospace; border-radius:3px; font-size:10px; grid-column: span 2; opacity: 0.5;">[ CLOSE_WINDOW ]</button>
+            <button onclick="adminBanUserPrompt('${name}')" style="background:#440000; color:white; border:1px solid red; padding:8px; cursor:pointer; font-family:monospace; border-radius:3px; font-size:10px; grid-column: span 2; font-weight:bold;">⛔ TERMINATE_NODE (BAN)</button>
         </div>
     `;
     
     box.style.display = 'block';
+    // Авто-скролл, чтобы кнопки всегда были видны
+    box.scrollTop = 0;
 }
 
 // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ АДМИНА ---
