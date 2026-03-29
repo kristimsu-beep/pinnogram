@@ -3156,6 +3156,26 @@ function adminBanUserPrompt(name) {
     }
 }
 
+function saveNameAndStart() {
+    const input = document.getElementById("nameInput");
+    const name = input ? input.value.trim() : "";
+    
+    if (name) {
+        // 1. Сохраняем имя, чтобы оно было доступно везде
+        myName = name;
+        localStorage.setItem("pinnogram_user", name);
+        
+        // 2. 🚀 ЗАПУСКАЕМ ТВОЙ ДВИГАТЕЛЬ
+        // Передаем имя и название комнаты по умолчанию (например, "general")
+        startChat(name, "general");
+        
+        console.log("✅ Вход выполнен как: " + name);
+    } else {
+        alert("Введите имя!");
+    }
+}
+
+
 
 
 // Вспомогательная функция копирования
