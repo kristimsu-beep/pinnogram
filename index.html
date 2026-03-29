@@ -3156,27 +3156,47 @@ function adminBanUserPrompt(name) {
     }
 }
 
-function saveNameAndStart() {
-    const input = document.getElementById("nameInput");
-    const name = input ? input.value.trim() : "";
+async function saveNameAndStart() {
+    const username = document.getElementById("nameInput").value.trim();
+    if (!username) return;
     
-    if (name) {
-        // 1. Сохраняем имя, чтобы оно было доступно везде
-        myName = name;
-        localStorage.setItem("pinnogram_user", name);
+    let password = localStorage.getItem("pinnogram_pass") || prompt("Введите пароль для регистрации или входа:");
+    if (!password) return;
+
+    try {
+        const res = await fetch(`${API_URL}/auth`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+
+               if (data.status === "ok") {
+            localStorage.setItem("pinnogram_user", username);
+            localStorage.setItem("pinnogram_pass", password);
+            localStorage.setItem("pinnogram_room", "general");
+            
+            // 1. ОПРЕДЕЛЯЕМ АВАТАР (база или надежная ПРЯМАЯ ссылка)
+            const finalAvatar = data.avatar || "https://i.ibb.co/4pSbxsh/user-avatar.png";
+            
+            // 2. ЗАПИСЫВАЕМ В ПАМЯТЬ БРАУЗЕРА (только рабочую ссылку!)
+            localStorage.setItem("pinnogram_avatar", finalAvatar);
+            
+            // 3. УСТАНАВЛИВАЕМ В КНОПКУ
+            const avIcon = document.getElementById("user-avatar-icon");
+            if (avIcon) avIcon.src = finalAvatar;
+            
+            startChat(username, "general");
         
-        // 2. 🚀 ЗАПУСКАЕМ ТВОЙ ДВИГАТЕЛЬ
-        // Передаем имя и название комнаты по умолчанию (например, "general")
-        startChat(name, "general");
-        
-        console.log("✅ Вход выполнен как: " + name);
-    } else {
-        alert("Введите имя!");
+        } else {
+            // ... остальное без изменений
+            alert(data.message);
+            localStorage.removeItem("pinnogram_pass");
+        }
+    } catch (e) {
+        alert("Ошибка связи с сервером");
     }
 }
-
-
-
 
 // Вспомогательная функция копирования
 function copyToClipboard(text) {
