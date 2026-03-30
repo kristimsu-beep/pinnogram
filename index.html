@@ -1731,71 +1731,33 @@
                 div.appendChild(avImg);
 
 
+                // --- 1. СОЗДАЕМ ПУЗЫРЬ ---
+                // --- 1. СОЗДАЕМ ПУЗЫРЬ ---
                 const msgBubble = document.createElement('div');
                 msgBubble.className = (sender === myName) ? 'msg msg-right' : 'msg msg-left';
                 
-                // 🎯 1. ВСТАВЛЯЕМ ТЕКСТ (Без этого сообщения будут пустыми!)
-                const textSpan = document.createElement('span');
-                textSpan.textContent = text;
-                msgBubble.appendChild(textSpan);
-
-                // 🎯 2. ВСТАВЛЯЕМ ВРЕМЯ
-                const timeSmall = document.createElement('small');
-                timeSmall.style = "display:block; font-size:8px; opacity:0.5; margin-top:4px; text-align:right;";
-                timeSmall.textContent = time;
-                msgBubble.appendChild(timeSmall);
-
-                // 🎯 3. ИСПРАВЛЕННЫЙ БЛОК РЕАКЦИЙ
-                if (savedReactions) {
-                    const rContainer = document.createElement('div');
-                    rContainer.className = 'reactions-container';
-                    // Добавляем стиль, чтобы они были в ряд под текстом
-                    rContainer.style = "display:flex; gap:4px; margin-top:5px; flex-wrap:wrap;";
-                    
-                    rContainer.innerHTML = savedReactions.split(",").filter(r => r).map(r => {
-                        const [emoji, count] = r.split(":");
-                        return `<div class="reaction-tag" onclick="sendReaction(${msgId}, '${emoji}')" style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:10px; font-size:10px; cursor:pointer;">${emoji} ${count}</div>`;
-                    }).join("");
-                    
-                    // Кладем реакции ВНУТРЬ пузыря, чтобы они не улетали
-                    msgBubble.appendChild(rContainer); 
+                // 👤 ИМЯ ОТПРАВИТЕЛЯ (ВСЕГДА В САМОМ ВЕРХУ, если не я)
+                if (sender !== myName) {
+                    const nSpan = document.createElement('span');
+                    nSpan.style = "display:block; font-size:10px; font-weight:bold; color:var(--accent); margin-bottom:4px; opacity:0.8;";
+                    nSpan.textContent = sender;
+                    msgBubble.appendChild(nSpan);
                 }
 
-                // КЛАДЕМ ПУЗЫРЬ В СТРОКУ
-                div.appendChild(msgBubble);
-
-
-                // Меню
-                div.oncontextmenu = (e) => { if(typeof openMenu === "function") openMenu(e, msgId, text, sender); };
-                let pressTimer;
-                div.ontouchstart = (e) => {
-                    pressTimer = setTimeout(() => {
-                        const touch = e.touches[0];
-                        if(typeof openMenu === "function") openMenu({ preventDefault: () => e.preventDefault(), clientX: touch.clientX, clientY: touch.clientY }, msgId, text, sender);
-                    }, 500);
-                };
-                div.ontouchend = () => clearTimeout(pressTimer);
-
-                // Цитата ответа
-                                // Цитата ответа (Улучшенная)
+                // --- 2. ЦИТАТА ОТВЕТА (ПОД ИМЕНЕМ) ---
                 if (replyId && replyId !== "null") {
                     const quote = document.createElement('div');
                     quote.className = 'reply-quote';
+                    quote.style = "background:rgba(255,255,255,0.1); border-left:2px solid #ff9500; padding:4px 8px; margin-bottom:6px; border-radius:4px; cursor:pointer; font-size:11px;";
                     
                     const targetMsg = document.getElementById(`msg-${replyId}`);
                     let quotedText = "Сообщение...";
                     if (targetMsg) {
-                        const textNode = targetMsg.querySelector('.msg-text');
-                        // Берем текст целиком (без троеточия)
+                        const textNode = targetMsg.querySelector('span'); 
                         if (textNode) quotedText = textNode.textContent;
                     }
                 
-                    // Убрали надпись "Ответ на №1", оставили только текст оригинала
-                    quote.innerHTML = `
-                        <div style="font-size:11px; opacity:0.6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                            ${quotedText}
-                        </div>
-                    `;
+                    quote.innerHTML = `<div style="opacity:0.6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${quotedText}</div>`;
                     
                     quote.onclick = (e) => {
                         e.stopPropagation();
@@ -1805,13 +1767,53 @@
                     msgBubble.appendChild(quote);
                 }
 
+                // --- 3. ТЕКСТ СООБЩЕНИЯ ---
+                const textSpan = document.createElement('span');
+                textSpan.textContent = text;
+                msgBubble.appendChild(textSpan);
 
+                // --- 4. ВРЕМЯ СООБЩЕНИЯ ---
+                const timeSmall = document.createElement('small');
+                timeSmall.style = "display:block; font-size:8px; opacity:0.5; margin-top:4px; text-align:right;";
+                timeSmall.textContent = time;
+                msgBubble.appendChild(timeSmall);
 
-                if (sender !== myName) {
-                    const nSpan = document.createElement('span');
-                    nSpan.className = "msg-sender"; nSpan.textContent = sender;
-                    msgBubble.appendChild(nSpan);
+                // --- 5. РЕАКЦИИ (В САМОМ НИЗУ) ---
+                if (savedReactions) {
+                    const rContainer = document.createElement('div');
+                    rContainer.className = 'reactions-container';
+                    rContainer.style = "display:flex; gap:4px; margin-top:5px; flex-wrap:wrap; border-top:1px solid rgba(255,255,255,0.05); padding-top:4px;";
+                    
+                    rContainer.innerHTML = savedReactions.split(",").filter(r => r).map(r => {
+                        const [emoji, count] = r.split(":");
+                        return `<div class="reaction-tag" onclick="sendReaction(${msgId}, '${emoji}')" style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:10px; font-size:10px; cursor:pointer;">${emoji} ${count}</div>`;
+                    }).join("");
+                    
+                    msgBubble.appendChild(rContainer); 
                 }
+
+                // --- 6. 🛡️ ЗАЩИТА ОТ ДУБЛЕЙ ---
+                if (document.getElementById(`msg-${msgId}`)) return; 
+
+                // --- 7. СБОРКА И ВЫВОД НА ЭКРАН ---
+                div.appendChild(msgBubble); 
+                
+                const chatContainer = document.getElementById('chat');
+                if (chatContainer) {
+                    chatContainer.appendChild(div); 
+                    chatContainer.scrollTop = chatContainer.scrollHeight; 
+                }
+
+                // --- 8. КОНТЕКСТНОЕ МЕНЮ (ПК И ТАЧ) ---
+                div.oncontextmenu = (e) => { if(typeof openMenu === "function") openMenu(e, msgId, text, sender); };
+                let pressTimer;
+                div.ontouchstart = (e) => {
+                    pressTimer = setTimeout(() => {
+                        const touch = e.touches[0];
+                        if(typeof openMenu === "function") openMenu({ preventDefault: () => e.preventDefault(), clientX: touch.clientX, clientY: touch.clientY }, msgId, text, sender);
+                    }, 500);
+                };
+                div.ontouchend = () => clearTimeout(pressTimer);
 
                 // Контент (Опрос/Голос/Видео/Текст)
                 if (text.startsWith("POLL_ID:")) {
