@@ -1733,19 +1733,36 @@
 
                 const msgBubble = document.createElement('div');
                 msgBubble.className = (sender === myName) ? 'msg msg-right' : 'msg msg-left';
-                // --- ВОТ СЮДА ВСТАВЛЯЕМ ОТРИСОВКУ СОХРАНЕННЫХ РЕАКЦИЙ ---
-                // --- ИСПРАВЛЕННЫЙ БЛОК ОТРИСОВКИ РЕАКЦИЙ ---
+                
+                // 🎯 1. ВСТАВЛЯЕМ ТЕКСТ (Без этого сообщения будут пустыми!)
+                const textSpan = document.createElement('span');
+                textSpan.textContent = text;
+                msgBubble.appendChild(textSpan);
+
+                // 🎯 2. ВСТАВЛЯЕМ ВРЕМЯ
+                const timeSmall = document.createElement('small');
+                timeSmall.style = "display:block; font-size:8px; opacity:0.5; margin-top:4px; text-align:right;";
+                timeSmall.textContent = time;
+                msgBubble.appendChild(timeSmall);
+
+                // 🎯 3. ИСПРАВЛЕННЫЙ БЛОК РЕАКЦИЙ
                 if (savedReactions) {
                     const rContainer = document.createElement('div');
                     rContainer.className = 'reactions-container';
+                    // Добавляем стиль, чтобы они были в ряд под текстом
+                    rContainer.style = "display:flex; gap:4px; margin-top:5px; flex-wrap:wrap;";
+                    
                     rContainer.innerHTML = savedReactions.split(",").filter(r => r).map(r => {
                         const [emoji, count] = r.split(":");
-                        return `<div class="reaction-tag" onclick="sendReaction(${msgId}, '${emoji}')">${emoji} ${count}</div>`;
+                        return `<div class="reaction-tag" onclick="sendReaction(${msgId}, '${emoji}')" style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:10px; font-size:10px; cursor:pointer;">${emoji} ${count}</div>`;
                     }).join("");
                     
-                    // Ставим плашку СРАЗУ ПОСЛЕ пузыря сообщения
-                    msgBubble.after(rContainer); 
+                    // Кладем реакции ВНУТРЬ пузыря, чтобы они не улетали
+                    msgBubble.appendChild(rContainer); 
                 }
+
+                // КЛАДЕМ ПУЗЫРЬ В СТРОКУ
+                div.appendChild(msgBubble);
 
 
                 // Меню
@@ -2983,10 +3000,14 @@ function openMenu(e, id, text, sender) {
 // ФУНКЦИЯ ОТПРАВКИ РЕАКЦИИ
 function sendReaction(id, emoji) {
     if (ws && ws.readyState === WebSocket.OPEN) {
+        // Шлем пакет: ADD_REACTION:45|🔥
         ws.send(`ADD_REACTION:${id}|${emoji}`);
+        console.log(`✨ Сигнал реакции отправлен: ${emoji} на ID:${id}`);
     }
-    document.getElementById('msg-menu').style.display = 'none';
+    const menu = document.getElementById('msg-menu');
+    if (menu) menu.style.display = 'none';
 }
+
 
 // 2. УДАЛЕНИЕ (ЕДИНАЯ ФУНКЦИЯ)
 function confirmDelete() {
