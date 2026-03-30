@@ -1705,25 +1705,13 @@
                     return; 
                 }
 
-                // --- ФИЛЬТР ТЕКУЩЕГО ЧАТА (ГРУППЫ + ЛИЧКА) ---
+
+                // Фильтр текущего чата
                 if (currentPartner) {
-                    // 📢 ПРОВЕРКА НА ГРУППУ
-                    // Если в списке контактов у этого партнера есть рупор — значит это группа
-                    const contactEl = Array.from(document.querySelectorAll('.contact-item'))
-                                           .find(el => el.textContent.includes(currentPartner));
-                    const isGroupChat = contactEl && contactEl.textContent.includes("📢");
-                
-                    if (isGroupChat) {
-                        // Если открыта группа — показываем сообщение, только если оно пришло В ЭТУ группу
-                        if (!rawContent.includes(`PRIVATE:${currentPartner}:`)) return;
-                    } else {
-                        // Если открыта личка — показываем только если это между мной и партнером
-                        if (!rawContent.includes(`PRIVATE:${currentPartner}:`) && !rawContent.includes(`PRIVATE:${myName}:`)) {
-                            return;
-                        }
-                    }
+                    const c = rawContent || ""; // ИСПОЛЬЗУЕМ rawContent
+                    if (!c.includes(`PRIVATE:${currentPartner}:`) && !c.includes(`PRIVATE:${myName}:`)) return;
+
                 } else if (isPrivate) {
-                    // Если открыт Общий чат, но пришло приватное/групповое — скрываем
                     return;
                 }
 
@@ -1745,40 +1733,18 @@
 
                 const msgBubble = document.createElement('div');
                 msgBubble.className = (sender === myName) ? 'msg msg-right' : 'msg msg-left';
-                
-                // 🎯 1. ВСТАВЛЯЕМ САМ ТЕКСТ СООБЩЕНИЯ
-                const textSpan = document.createElement('span');
-                textSpan.textContent = text;
-                msgBubble.appendChild(textSpan);
-
-                // 🎯 2. ВСТАВЛЯЕМ ВРЕМЯ (маленьким шрифтом в углу)
-                const timeSpan = document.createElement('small');
-                timeSpan.style = "display:block; font-size:8px; opacity:0.5; margin-top:4px; text-align:right;";
-                timeSpan.textContent = time;
-                msgBubble.appendChild(timeSpan);
-
-                // 🎯 3. ИСПРАВЛЕННЫЙ БЛОК РЕАКЦИЙ
+                // --- ВОТ СЮДА ВСТАВЛЯЕМ ОТРИСОВКУ СОХРАНЕННЫХ РЕАКЦИЙ ---
+                // --- ИСПРАВЛЕННЫЙ БЛОК ОТРИСОВКИ РЕАКЦИЙ ---
                 if (savedReactions) {
                     const rContainer = document.createElement('div');
                     rContainer.className = 'reactions-container';
-                    rContainer.style = "display:flex; gap:4px; margin-top:6px; flex-wrap:wrap; border-top:1px solid rgba(255,255,255,0.05); padding-top:4px;"; 
-                    
                     rContainer.innerHTML = savedReactions.split(",").filter(r => r).map(r => {
                         const [emoji, count] = r.split(":");
-                        return `<div class="reaction-tag" onclick="sendReaction(${msgId}, '${emoji}')" style="cursor:pointer; background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:10px; font-size:10px;">${emoji} ${count}</div>`;
+                        return `<div class="reaction-tag" onclick="sendReaction(${msgId}, '${emoji}')">${emoji} ${count}</div>`;
                     }).join("");
                     
-                    msgBubble.appendChild(rContainer); 
-                }
-
-                // 🎯 4. СОБИРАЕМ ВСЁ В ОДНУ СТРОКУ (DIV)
-                div.appendChild(msgBubble);
-                
-                // Добавляем сообщение в окно чата
-                const chat = document.getElementById('chat');
-                if (chat) {
-                    chat.appendChild(div);
-                    chat.scrollTop = chat.scrollHeight; // Авто-скролл вниз
+                    // Ставим плашку СРАЗУ ПОСЛЕ пузыря сообщения
+                    msgBubble.after(rContainer); 
                 }
 
 
