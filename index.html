@@ -861,6 +861,19 @@
         background: var(--neon-pink);
         border-radius: 10px;
     }
+    /* Подсветка сообщения при упоминании пользователя через @ */
+    .msg-pinged {
+        background: linear-gradient(135deg, rgba(255, 204, 0, 0.25) 0%, rgba(255, 170, 0, 0.15) 100%) !important;
+        border: 1px solid rgba(255, 204, 0, 0.4) !important;
+        box-shadow: 0 0 15px rgba(255, 204, 0, 0.2) !important;
+        animation: ping-pulse 2s infinite ease-in-out;
+    }
+    
+    @keyframes ping-pulse {
+        0% { box-shadow: 0 0 10px rgba(255, 204, 0, 0.15); }
+        50% { box-shadow: 0 0 20px rgba(255, 204, 0, 0.35); }
+        100% { box-shadow: 0 0 10px rgba(255, 204, 0, 0.15); }
+    }
 
 </style>
 
@@ -1825,6 +1838,18 @@
 
                 const msgBubble = document.createElement('div');
                 msgBubble.className = (sender === myName) ? 'msg msg-right' : 'msg msg-left';
+                // 🔔 ПРОВЕРКА НА УПОМИНАНИЕ (ПИНГ @username)
+                if (text && myName) {
+                    // Формируем паттерн пинга, например: @Участник
+                    const pingPattern = `@${myName}`;
+                    
+                    // Проверяем, есть ли упоминание в тексте и что это сообщение прислал КТО-ТО ДРУГОЙ
+                    if (text.includes(pingPattern) && sender !== myName) {
+                        msgBubble.classList.add('msg-pinged');
+                        console.log(`🔔 Обнаружено упоминание пользователя: ${myName}`);
+                    }
+                }
+
                 // --- ВОТ СЮДА ВСТАВЛЯЕМ ОТРИСОВКУ СОХРАНЕННЫХ РЕАКЦИЙ ---
                 // --- ИСПРАВЛЕННЫЙ БЛОК ОТРИСОВКИ РЕАКЦИЙ ---
                 if (savedReactions) {
