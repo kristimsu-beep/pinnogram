@@ -87,6 +87,22 @@ async def read_messages(data: dict):
         await db.commit()
     return {"status": "ok"}
 
+# Счетчик для генерации уникальных имен инкогнито (в глобальную область)
+INCOGNITO_COUNTER = 0
+
+@app.post("/incognito_login")
+async def incognito_login():
+    global INCOGNITO_COUNTER
+    INCOGNITO_COUNTER += 1
+    
+    # Формируем уникальное имя для сессии
+    incognito_username = f"инкогнито-{INCOGNITO_COUNTER}"
+    
+    return {
+        "success": True, 
+        "username": incognito_username
+    }
+
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
     async with aiosqlite.connect(DB_PATH) as db:
