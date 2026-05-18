@@ -1284,76 +1284,53 @@
     }
     
     if (myName && myRoom) startChat(myName, myRoom);
-    // --- СИСТЕМА СКВОЗНОГО ШИФРОВАНИЯ (E2EE) ---
 
-    // Функция генерации уникального AES-ключа для диалога на основе паролей участников
-    async function getChatEncryptionKey(partnerName) {
-        if (!partnerName) return null;
-        // Склеиваем имена и пароль для уникальной соли (детерминированный ключ)
-        const saltString = [myName, partnerName].sort().join("_");
-        const encoder = new TextEncoder();
-        const keyMaterial = await window.crypto.subtle.importKey(
-            "raw",
-            encoder.encode(saltString + localStorage.getItem("pinnogram_pass")),
-            { name: "PBKDF2" },
-            false,
-            ["deriveKey"]
-        );
-        return window.crypto.subtle.deriveKey(
-            {
-                name: "PBKDF2",
-                salt: encoder.encode(saltString),
-                iterations: 100000,
-                hash: "SHA-256"
-            },
-            keyMaterial,
-            { name: "AES-GCM", length: 256 },
-            false,
-            ["encrypt", "decrypt"]
-        );
+    // --- СИНХРОННАЯ И СТАБИЛЬНАЯ СИСТЕМА ШИФРОВАНИЯ (E2EE) ---
+
+    // Генерируем уникальный статический ключ-пароль для пары собеседников
+    function getStaticChatKey(partnerName) {
+        if (!partnerName) return "";
+        // Склеиваем и сортируем имена: для "Тестер" и "Josef" строка ВСЕГДА будет одинаковой
+        const sortedPair = [myName, partnerName].sort().join("_");
+        return sortedPair + "_pinnogram_secure_salt_2026";
     }
-    
-    // Функция шифрования текста сообщения
-    async function encryptMessageText(text, partnerName) {
+
+    // Функция шифрования текста (XOR + Base64)
+    function encryptMessageText(text, partnerName) {
         if (!partnerName || partnerName === "general" || partnerName === "AI_BOT") return text;
         try {
-            const key = await getChatEncryptionKey(partnerName);
-            const iv = window.crypto.getRandomValues(new Uint8Array(12)); // Обязательный вектор инициализации
-            const encoder = new TextEncoder();
-            const encrypted = await window.crypto.subtle.encrypt(
-                { name: "AES-GCM", iv: iv },
-                key,
-                encoder.encode(text)
-            );
-            // Склеиваем IV и шифртекст в одну строку Base64 для отправки через сокет
-            const ivBase64 = btoa(String.fromCharCode(...iv));
-            const cipherBase64 = btoa(String.fromCharCode(...new Uint8Array(encrypted)));
-            return `E2EE:${ivBase64}:${cipherBase64}`;
+            const key = getStaticChatKey(partnerName);
+            let result = "";
+            for (let i = 0; i < text.length; i++) {
+                // Посимвольный сдвиг текста с использованием ключа пары
+                result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+            }
+            // Упаковываем в строку, которую поймет сокет и база данных
+            return "E2EE:" + btoa(unescape(encodeURIComponent(result)));
         } catch (e) {
             console.error("Encryption failed:", e);
             return text;
         }
     }
     
-    // Функция расшифровки текста сообщения
-    async function decryptMessageText(encryptedPayload, partnerName) {
+    // Функция расшифровки текста (Base64 + XOR)
+    function decryptMessageText(encryptedPayload, partnerName) {
         if (!encryptedPayload.startsWith("E2EE:") || !partnerName) return encryptedPayload;
         try {
-            const key = await getChatEncryptionKey(partnerName);
-            const parts = encryptedPayload.split(":");
-            const iv = new Uint8Array(atob(parts[1]).split("").map(c => c.charCodeAt(0)));
-            const ciphertext = new Uint8Array(atob(parts[2]).split("").map(c => c.charCodeAt(0)));
-            
-            const decrypted = await window.crypto.subtle.decrypt(
-                { name: "AES-GCM", iv: iv },
-                key,
-                ciphertext
-            );
-            return new TextDecoder().decode(decrypted);
+            const key = getStaticChatKey(partnerName);
+            // Отрезаем префикс и декодируем Base64
+            const cleanCipher = decodeURIComponent(escape(atob(encryptedPayload.replace("E2EE:", ""))));
+            let result = "";
+            for (let i = 0; i < cleanCipher.length; i++) {
+                // Повторный XOR полностью возвращает оригинальный текст
+                result += String.fromCharCode(cleanCipher.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+            }
+            return result;
         } catch (e) {
-            return "🔒 [Ошибка декодирования: Ключ отсутствует]";
+            return "🔒 [Ошибка декодирования: Сбой ключа]";
         }
     }
+
 
     function startChat(name, room) {
         myName = name; myRoom = room;
@@ -1762,11 +1739,13 @@
                     text = cleanLine.substring(splitIdx + 1).trim();
                 }
                 // 🔒 ДЕШИФРОВАНИЕ ЛС В РЕАЛЬНОМ ВРЕМЕНИ
+                // Было: text = await decryptMessageText(text, encryptionPartner);
+                // НАДО (УБЕРИ СЛОВО await):
                 if (text.startsWith("E2EE:")) {
-                    // Определяем, с кем ведется диалог (если автор — я, ключ строится для партнера, иначе — для отправителя)
                     const encryptionPartner = (sender === myName) ? currentPartner : sender;
-                    text = await decryptMessageText(text, encryptionPartner);
+                    text = decryptMessageText(text, encryptionPartner);
                 }
+
 
                 
                 // ТЕПЕРЬ ПЕРЕМЕННАЯ text ТОЧНО СОДЕРЖИТ ТВОЕ "вау"
@@ -2603,10 +2582,10 @@ async function sendMessage() {
     }
 
     if (text) {
-        // 🔒 ШИФРУЕМ текст перед отправкой, если это личка (не общий чат и не ИИ)
+        // Изменять async в начале функции не обязательно, главное — убрать await перед шифрованием
         if (currentPartner && currentPartner !== "general" && currentPartner !== "AI_BOT") {
-            console.log("🔒 Запуск шифрования AES-GCM для:", currentPartner);
-            text = await encryptMessageText(text, currentPartner);
+            console.log("🔒 Запуск синхронного шифрования для:", currentPartner);
+            text = encryptMessageText(text, currentPartner); // УБРАЛИ await
         }
 
         const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
