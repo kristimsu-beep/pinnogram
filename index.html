@@ -982,7 +982,14 @@
 <div id="admin-panel" style="display:none; position:fixed; top:20px; right:20px; width:300px; background:rgba(0,20,0,0.9); border:2px solid #00ff00; border-radius:10px; padding:15px; color:#00ff00; font-family:monospace; z-index:9999; box-shadow:0 0 20px #00ff00;">
     <h3 style="margin:0 0 10px 0; color:#00ff00; border-bottom:1px solid #00ff00; padding-bottom:5px; font-size:14px; text-align:center;">📡 NETWORK NODES</h3>
     
-    <!-- КНОПКА ВВЕРХУ (ДЛЯ БЫСТРОГО ДОСТУПА) -->
+    <!-- 📟 КОНТЕЙНЕР ЖИВОЙ ТЕЛЕМЕТРИИ СЕРВЕРА PINNOGRAM -->
+    <div id="admin-telemetry-ui" style="background:rgba(0,40,0,0.3); padding:10px; border:1px dashed #00ff00; border-radius:8px; margin-bottom:15px; font-size:11px; line-height:1.4; font-family:monospace; color:#00ff00;">
+        📟 MEM_PROCESS: <span id="metric-ram" style="color:white;">Loading...</span><br>
+        💽 DB_SECTOR: <span id="metric-db" style="color:white;">Loading...</span><br>
+        👥 ACT_CONNECTIONS: <span id="metric-nodes" style="color:white;">Loading...</span>
+    </div>
+
+    <!-- КНОПКИ ВВЕРХУ -->
     <button onclick="adminGlobalAlert()" style="width:100%; margin-bottom:15px; background:#00ff00; color:black; border:none; padding:8px; border-radius:5px; cursor:pointer; font-weight:bold; font-family:monospace; box-shadow: 0 0 10px rgba(0,255,0,0.5);">
         [ BROADCAST ALERT ]
     </button>
@@ -990,11 +997,10 @@
         [ 📂 OPEN USERS ARCHIVE ]
     </button>
 
-
     <!-- СПИСОК ЮЗЕРОВ -->
     <div id="admin-users-list" style="font-size:12px; line-height:1.4; margin-bottom:15px; max-height:120px; overflow-y:auto; border-bottom:1px solid #005500;"></div>
     
-    <!-- ОКНО ДИАГНОСТИКИ (добавь этот пустой блок, если хочешь видеть инфо по клику) -->
+    <!-- ОКНО ДИАГНОСТИКИ -->
     <div id="admin-detail-content" style="font-size:11px; margin-bottom:10px; min-height:40px;"></div>
 
     <h4 style="margin:10px 0 5px 0; font-size:11px; opacity:0.7;">📜 DATA STREAM:</h4>
@@ -1004,6 +1010,7 @@
 
     <div style="font-size:9px; opacity:0.4; margin-top:10px; text-align:right;">Ctrl+B: Toggle Panel</div>
 </div>
+
 
 
 
@@ -3685,6 +3692,29 @@ if (chatMainLogo) {
         setTimeout(() => logoTaps = 0, 1000);
     });
 }
+
+    // --- ИНТЕЛЛЕКТУАЛЬНЫЙ МОНИТОР ТЕЛЕМЕТРИИ СЕРВЕРА ---
+setInterval(async () => {
+    const panel = document.getElementById('admin-panel');
+    
+    // Запускаем опрос только если админ-панель открыта (display === 'block')
+    if (panel && panel.style.display === 'block') {
+        try {
+            const key = localStorage.getItem("pinnogram_admin_key") || "admin123";
+            const res = await fetch(`${API_URL}/admin/metrics?key=${key}`);
+            const data = await res.json();
+            
+            if (data.status === "ok") {
+                // Динамически обновляем текстовые ноды в админке
+                document.getElementById('metric-ram').textContent = `${data.ram_usage} (CPU: ${data.cpu_usage})`;
+                document.getElementById('metric-db').textContent = data.db_size;
+                document.getElementById('metric-nodes').textContent = data.active_connections;
+            }
+        } catch(e) {
+            console.error("Telemetry fetch failed:", e);
+        }
+    }
+}, 3000); // Интервал — 3 секунды
 
 </script>
     <!-- Вставь это перед </body> -->
