@@ -9,3 +9,5 @@ aiofiles
 pywebpush
 pytz
 psutil
+supabase
+gotrue
