@@ -13,6 +13,7 @@ import json
 import pytz
 import base64
 import time
+import psutil
 
 # Берем ключ из настроек Render (в коде его не будет видно)
 ADMIN_SECRET_KEY = os.environ.get("ADMIN_KEY", "admin123")
@@ -102,6 +103,37 @@ async def incognito_login():
         "success": True, 
         "username": incognito_username
     }
+
+@app.get("/admin/metrics")
+async def get_server_metrics(key: str):
+    if key != ADMIN_SECRET_KEY: 
+        return {"status": "error", "message": "Wrong Key"}
+    
+    try:
+        # 1. Считаем реальный размер БД на диске Render
+        db_size_mb = 0
+        if os.path.exists(DB_PATH):
+            db_size_mb = round(os.path.getsize(DB_PATH) / (1024 * 1024), 2)
+            
+        # 2. Считываем оперативную память текущего процесса Python
+        process = psutil.Process(os.getpid())
+        ram_mb = round(process.memory_info().rss / (1024 * 1024), 1)
+        
+        # 3. Получаем нагрузку на процессор
+        cpu_percent = psutil.cpu_percent()
+
+        # 4. Считаем общее количество сокетов во всех комнатах
+        active_connections = sum(len(room) for room in manager.rooms.values())
+
+        return {
+            "status": "ok",
+            "db_size": f"{db_size_mb} MB",
+            "ram_usage": f"{ram_mb} MB",
+            "cpu_usage": f"{cpu_percent}%",
+            "active_connections": active_connections
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
