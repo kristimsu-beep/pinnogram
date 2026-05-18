@@ -875,6 +875,41 @@
         100% { box-shadow: 0 0 10px rgba(255, 204, 0, 0.15); }
     }
 
+    /* Адаптация Шортсов под ПК и Ноутбуки (Десктопный UX) */
+    @media (min-width: 769px) {
+        #shorts-screen {
+            /* Центрируем плеер как блок по центру экрана на ПК */
+            max-width: 450px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            border-left: 1px solid #222;
+            border-right: 1px solid #222;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+        }
+        
+        .short-video-card video {
+            /* Идеальное масштабирование видео без искажений и растягивания */
+            object-fit: contain !important;
+            max-height: 100% !important;
+            max-width: 100% !important;
+        }
+    
+        #shorts-comments-drawer {
+            /* Шторка комментов на ПК не разъезжается на весь монитор */
+            max-width: 450px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+        }
+    }
+    
+    /* Общий фикс для видео, чтобы элементы интерфейса не накладывались на кнопки телефона */
+    .short-video-card video {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        background: #000;
+    }
+
 </style>
 
 </head>
@@ -3818,7 +3853,8 @@ async function loadShortsFeed() {
             <div class="short-video-card" style="width:100%; height:100dvh; shrink:0; scroll-snap-align: start; position:relative; display:flex; align-items:center; justify-content:center; background:#000;">
                 
                 <!-- Тег видео: loop (вечный цикл), playsinline и автоплей для первого -->
-                <video src="${s.video_url}" loop playsinline style="width:100%; height:100%; object-fit:contain;" onclick="togglePlayShortVideo(this)"></video>
+                <video src="${s.video_url}" loop playsinline onclick="togglePlayShortVideo(this)"></video>
+
                 
                 <!-- Правое боковое неоновое меню (Лайки, Дизлайки, Комменты) -->
                 <div style="position:absolute; right:15px; bottom:120px; display:flex; flex-direction:column; gap:22px; align-items:center; z-index:5;">
@@ -3925,7 +3961,9 @@ async function submitNewShort() {
         // Если юзер выбрал файл — сначала заливаем его на ТВОЙ бэкэнд сокетов/медиа
         if (currentSelectedVideoFile) {
             const fd = new FormData();
-            fd.append("file", currentSelectedVideoFile, currentSelectedVideoFile.name);
+            // ЗАМЕНИ НА ЭТУ ЧИСТУЮ СТРОКУ (без третьего аргумента):
+            fd.append("file", currentSelectedVideoFile); 
+            
             const uploadRes = await fetch(`${API_URL}/upload`, { method: "POST", body: fd });
             const uploadData = await uploadRes.json();
             if (uploadData.url && uploadData.url !== "error") {
