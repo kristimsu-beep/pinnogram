@@ -224,6 +224,116 @@ async def get_users_archive(key: str):
         print(f"🛑 ARCHIVE DATABASE ERROR: {e}")
         return {"status": "error", "message": str(e)}
 
+# 1. ПОЛУЧЕНИЕ ВСЕХ ШОРТСОВ (Сортировка: новые сверху)
+@app.get("/api/shorts")
+async def get_shorts(username: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Тянем шортсы
+        sql = "SELECT id, title, description, video_url, author, timestamp, likes_count, dislikes_count FROM shorts ORDER BY id DESC"
+        async with db.execute(sql) as cur:
+            rows = await cur.fetchall()
+            
+            shorts_list = []
+            for r in rows:
+                s_id, title, desc, url, author, ts, likes, dislikes = r
+                
+                # Проверяем, лайкал ли этот конкретный юзер это видео
+                my_react = None
+                async with db.execute("SELECT type FROM shorts_reactions WHERE short_id = ? AND username = ?", (s_id, username)) as r_cur:
+                    react_row = await r_cur.fetchone()
+                    if react_row: my_react = react_row[0]
+                
+                # Подтягиваем комментарии для этого видео
+                comments = []
+                async with db.execute("SELECT username, comment_text, timestamp FROM shorts_comments WHERE short_id = ? ORDER BY id ASC", (s_id,)) as c_cur:
+                    async for c_row in c_cur:
+                        comments.append({"username": c_row[0], "text": c_row[1], "time": c_row[2]})
+                
+                shorts_list.append({
+                    "id": s_id, "title": title, "description": desc, "video_url": url,
+                    "author": author, "timestamp": ts, "likes": likes, "dislikes": dislikes,
+                    "my_reaction": my_react, "comments": comments
+                })
+            return shorts_list
+
+# 2. ПУБЛИКАЦИЯ НОВОГО ШОРТСА
+@app.post("/api/shorts/publish")
+async def publish_short(data: dict):
+    title = data.get("title")
+    desc = data.get("description", "")
+    video_url = data.get("video_url")
+    author = data.get("author")
+    
+    # Если название пустое — ставим дату и время по Москве
+    if not title or not title.strip():
+        title = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
+        
+    ts = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
+    
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            INSERT INTO shorts (title, description, video_url, author, timestamp) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (title, desc, video_url, author, ts))
+        await db.commit()
+        
+    return {"status": "ok", "message": "Видео успешно опубликовано!"}
+
+# 3. ЛАЙК / ДИЗЛАЙК ВИДЕО (С автоматическим пересчетом счетчиков)
+@app.post("/api/shorts/react")
+async def react_short(data: dict):
+    short_id = int(data.get("short_id"))
+    username = data.get("username")
+    react_type = data.get("type") # 'like' или 'dislike'
+    
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Проверяем старую реакцию
+        async with db.execute("SELECT type FROM shorts_reactions WHERE short_id = ? AND username = ?", (short_id, username)) as cur:
+            old_row = await cur.fetchone()
+            
+        if old_row:
+            old_type = old_row[0]
+            if old_type == react_type:
+                # Если нажал то же самое — убираем реакцию вообще (отмена)
+                await db.execute("DELETE FROM shorts_reactions WHERE short_id = ? AND username = ?", (short_id, username))
+                sql_update = f"UPDATE shorts SET {react_type}s_count = {react_type}s_count - 1 WHERE id = ?"
+                await db.execute(sql_update, (short_id,))
+                status = "removed"
+            else:
+                # Если поменял лайк на дизлайк (или наоборот)
+                await db.execute("UPDATE shorts_reactions SET type = ? WHERE short_id = ? AND username = ?", (react_type, short_id, username))
+                await db.execute(f"UPDATE shorts SET {old_type}s_count = {old_type}s_count - 1, {react_type}s_count = {react_type}s_count + 1 WHERE id = ?", (short_id,))
+                status = "changed"
+        else:
+            # Новая реакция
+            await db.execute("INSERT INTO shorts_reactions VALUES (?, ?, ?)", (short_id, username, react_type))
+            await db.execute(f"UPDATE shorts SET {react_type}s_count = {react_type}s_count + 1 WHERE id = ?", (short_id,))
+            status = "added"
+            
+        await db.commit()
+        
+        # Возвращаем обновленное количество
+        async with db.execute("SELECT likes_count, dislikes_count FROM shorts WHERE id = ?", (short_id,)) as cur:
+            likes, dislikes = await cur.fetchone()
+            
+        return {"status": "ok", "action": status, "likes": likes, "dislikes": dislikes}
+
+# 4. ДОБАВЛЕНИЕ КОММЕНТАРИЯ
+@app.post("/api/shorts/comment")
+async def add_short_comment(data: dict):
+    short_id = int(data.get("short_id"))
+    username = data.get("username")
+    text = data.get("text")
+    ts = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
+    
+    if not text or not text.strip(): return {"status": "error"}
+    
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("INSERT INTO shorts_comments (short_id, username, comment_text, timestamp) VALUES (?, ?, ?, ?)", 
+                        (short_id, username, text, ts))
+        await db.commit()
+        
+    return {"status": "ok", "username": username, "text": text, "time": ts}
 
 
 # 1. Роут для регистрации и входа
@@ -634,6 +744,41 @@ async def startup():
                 username TEXT,
                 group_name TEXT,
                 PRIMARY KEY (username, group_name)
+            )
+        """)
+        # --- ТАБЛИЦЫ ДЛЯ ПЛАТФОРМЫ ШОРТСОВ ---
+        # 1. Таблица самих видеороликов
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS shorts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT,
+                description TEXT,
+                video_url TEXT,
+                author TEXT,
+                timestamp TEXT,
+                likes_count INTEGER DEFAULT 0,
+                dislikes_count INTEGER DEFAULT 0
+            )
+        """)
+
+        # 2. Таблица лайков/дизлайков (чтобы один юзер не спамил лайками)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS shorts_reactions (
+                short_id INTEGER,
+                username TEXT,
+                type TEXT, -- 'like' или 'dislike'
+                PRIMARY KEY(short_id, username)
+            )
+        """)
+
+        # 3. Таблица комментариев к видео
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS shorts_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                short_id INTEGER,
+                username TEXT,
+                comment_text TEXT,
+                timestamp TEXT
             )
         """)
 
