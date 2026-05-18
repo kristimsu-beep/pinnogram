@@ -3443,24 +3443,188 @@ function unbanAction(name) {
     }
 }
     
-// Открытие админки на телефоне: 3 быстрых тапа по логотипу/названию
-let chatLogo = document.getElementById('chat-logo-id'); // Убедись, что у твоего лого этот ID
+
+// УНИВЕРСАЛЬНЫЙ ОБРАБОТЧИК ДЛЯ ОТКРЫТИЯ АДМИНКИ (3 ТАПА)
 let logoTaps = 0;
 
-if (chatLogo) {
-    chatLogo.style.cursor = 'pointer';
-    chatLogo.addEventListener('click', () => {
+function setupLogoTap(elementId) {
+    let logoEl = document.getElementById(elementId);
+    if (logoEl) {
+        logoEl.style.cursor = 'pointer';
+        logoEl.addEventListener('click', () => {
+            logoTaps++;
+            if (logoTaps === 3) {
+                const panel = document.getElementById('admin-panel');
+                if (panel) {
+                    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+                }
+                logoTaps = 0;
+                console.log(`💻 Admin Panel Toggled via Mobile Gesture on #${elementId}`);
+            }
+            setTimeout(() => logoTaps = 0, 1000); // Сброс через секунду
+        });
+    }
+}
+
+// Запускаем слежку для экрана входа и для самого чата
+setupLogoTap('chat-logo-id');
+setupLogoTap('chat-logo-chat');
+
+// --- СИСТЕМА НЕВИДИМОСТИ: РЕЖИМ ИНКОГНИТО (SHIFT + I) ---
+let isIncognitoActive = false;
+let realUserBackup = null;
+let realPassBackup = null;
+
+// 1. Перехват горячих клавиш
+document.addEventListener('keydown', async (e) => {
+    // Проверяем Shift + I (с учетом регистра и раскладок)
+    if (e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'Ш' || e.key === 'ш' || e.code === 'KeyI')) {
+        e.preventDefault(); // Отменяем системные действия браузера
+        
+        const chatScreen = document.getElementById('chat-screen');
+        // Режим работает только если пользователь уже авторизован и находится в чате
+        if (chatScreen && chatScreen.style.display === 'flex') {
+            await toggleIncognitoProtocol();
+        }
+    }
+});
+
+// 2. Основной протокол переключения сессий
+async function toggleIncognitoProtocol() {
+    if (!isIncognitoActive) {
+        // --- ВХОД В РЕЖИМ ИНКОГНИТО ---
+        console.log("🕵️‍♂️ Запуск протокола анонимности...");
+        
+        // Бэкапим реальные учетные данные из localStorage
+        realUserBackup = localStorage.getItem("pinnogram_user");
+        realPassBackup = localStorage.getItem("pinnogram_pass");
+        
+        try {
+            // Запрашиваем у сервера создание уникального инкрементируемого номера
+            const res = await fetch(`${API_URL}/incognito_login`, { method: "POST" });
+            const data = await res.json();
+            
+            if (data.success) {
+                isIncognitoActive = true;
+                
+                // Закрываем текущее WebSocket соединение реального пользователя
+                if (ws) { ws.close(); }
+                
+                // Подменяем сессию во временных переменных для функции startChat
+                myName = data.username;
+                currentPartner = null; // Инкогнито заходит в чистый общий чат
+                localStorage.setItem("pinnogram_last_chat", "null");
+                
+                // Принудительно очищаем ТВОЙ контейнер сообщений
+                const chatContainer = document.getElementById('chat');
+                if (chatContainer) chatContainer.innerHTML = '';
+                
+                // Меняем имя в шапке чата на Общий Чат
+                const chatTitle = document.getElementById('chat-sender-name');
+                if (chatTitle) chatTitle.textContent = "Общий чат";
+                
+                // Запускаем переподключение сокета под новым анонимным ником
+                // Твой бэкэнд автоматически занесет этот узел в архив сокетов с паролем "nopass"
+                startChat(data.username, "general");
+                
+                // Всплывающее окно уведомления
+                showIncognitoToast(`Режим инкогнито активен. Временный узел: ${data.username}`, "#32ade6");
+            }
+        } catch (err) {
+            console.error("Ошибка активации анонимного режима:", err);
+            showIncognitoToast("Ошибка протокола маршрутизации", "#ff3b30");
+        }
+    } else {
+        // --- ВЫХОД ИЗ РЕЖИМА ИНКОГНИТО ---
+        console.log("🧹 Запуск процедуры деструкции временного узла...");
+        isIncognitoActive = false;
+        
+        // Закрываем анонимный сокет. 
+        // Бэкэнд поймает WebSocketDisconnect и полностью сотрет инкогнито из всех таблиц БД!
+        if (ws) { ws.close(); }
+        
+        // Восстанавливаем реальные данные из бэкапа
+        myName = realUserBackup;
+        currentPartner = null;
+        localStorage.setItem("pinnogram_last_chat", "null");
+        
+        // Возвращаем реальные данные в localStorage, чтобы push-подписки работали корректно
+        localStorage.setItem("pinnogram_user", realUserBackup);
+        localStorage.setItem("pinnogram_pass", realPassBackup);
+        
+        // Стираем следы в памяти
+        realUserBackup = null;
+        realPassBackup = null;
+        
+        // Очищаем окно чата перед загрузкой реальной истории
+        const chatContainer = document.getElementById('chat');
+        if (chatContainer) chatContainer.innerHTML = '';
+        
+        // Переподключаем сокет обратно на твой постоянный аккаунт
+        startChat(myName, "general");
+        
+        showIncognitoToast("Выход из режима инкогнито. Временные логи уничтожены.", "#ffcc00");
+    }
+}
+
+// 3. Динамическая отрисовка всплывающего окна
+function showIncognitoToast(text, neonColor) {
+    const toast = document.createElement('div');
+    toast.textContent = text;
+    
+    // Применяем премиальный дизайн в стиле твоего Neon UI / Glassmorphism
+    Object.assign(toast.style, {
+        position: 'fixed',
+        bottom: '80px',
+        left: '50%',
+        transform: 'translateX(-50%) translateY(30px)',
+        background: 'rgba(20, 20, 20, 0.9)',
+        color: neonColor,
+        border: `1px solid ${neonColor}`,
+        boxShadow: `0 0 15px ${neonColor}, inset 0 0 10px rgba(255,255,255,0.05)`,
+        padding: '12px 24px',
+        borderRadius: '20px',
+        fontSize: '13px',
+        fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+        fontWeight: 'bold',
+        zIndex: '2147483647', // Поверх всего интерфейса
+        opacity: '0',
+        transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+        pointerEvents: 'none',
+        textAlign: 'center',
+        width: '90%',
+        maxWidth: '340px'
+    });
+    
+    document.body.appendChild(toast);
+    
+    // Анимация плавного появления с легким отскоком вверх
+    setTimeout(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateX(-50%) translateY(0)';
+    }, 50);
+    
+    // Исчезновение и полное удаление из DOM через 3 секунды
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(-50%) translateY(20px)';
+        setTimeout(() => toast.remove(), 400);
+    }, 3000);
+}
+    
+let chatMainLogo = document.getElementById('chat-logo-chat');
+if (chatMainLogo) {
+    chatMainLogo.style.cursor = 'pointer';
+    chatMainLogo.addEventListener('click', () => {
         logoTaps++;
         if (logoTaps === 3) {
             const panel = document.getElementById('admin-panel');
             panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
             logoTaps = 0;
-            console.log("💻 Admin Panel Toggled via Mobile Gesture");
         }
-        setTimeout(() => logoTaps = 0, 1000); // Сброс через секунду
+        setTimeout(() => logoTaps = 0, 1000);
     });
 }
-
 
 </script>
     <!-- Вставь это перед </body> -->
