@@ -815,43 +815,44 @@ IMGBB_API_KEY = "140359baf01acef6aa27e35c55b32f99"
 @app.post("/upload")
 async def upload_file(request: Request, file: UploadFile = File(...)):
     try:
-        # Читаем содержимое файла в оперативную память сервера
-        content = await file.read()
-        
-        # --- 1. ЕСЛИ ЭТО ИЗОБРАЖЕНИЕ — ОТПРАВЛЯЕМ НА IMGBB (КАК И РАНЬШЕ) ---
+        # --- 1. ЕСЛИ ЭТО ИЗОБРАЖЕНИЕ — ЧИТАЕМ МАЛЕНЬКИЙ ОБЪЕМ И ШЛЕМ НА IMGBB ---
         if file.content_type and file.content_type.startswith("image/"):
+            content = await file.read()
             url = f"https://api.imgbb.com/1/upload?key={IMGBB_API_KEY}"
             async with httpx.AsyncClient() as client:
                 files = {"image": (file.filename, content)}
                 res = await client.post(url, files=files, timeout=30.0)
-                
                 if res.status_code == 200:
                     return {"url": res.json()["data"]["url"]}
                 print(f"⚠️ ImgBB Error: {res.text}. Резервный запуск в Supabase...")
+                # Если ImgBB упал, сбрасываем указатель файла в начало для Supabase
+                await file.seek(0)
 
-        # --- 2. ЕСЛИ ЭТО ВИДЕО (ШОРТС/КРУЖОК) ИЛИ ГОЛОСОВОЕ — ОТПРАВЛЯЕМ В SUPABASE НАВЕЧНО ---
-        ext = os.path.splitext(file.filename)[1] # Исправил мелкую опечатку с индексом [1], чтобы расширение (.mp4) бралось корректно
+        # --- 2. ДЛЯ ТЯЖЕЛЫХ ВИДЕО (10-50 МБ) — ПОТОКОВАЯ ПЕРЕДАЧА БЕЗ ЗАБИВАНИЯ RAM ---
+        ext = os.path.splitext(file.filename)[1]
         cloud_filename = f"{uuid.uuid4()}{ext}"
         
-        # Загружаем бинарный файл напрямую в облачный бакет Supabase в отдельном потоке
+        # Передаем сам объект файла 'file.file' напрямую в SDK Supabase.
+        # Библиотека под капотом начнет читать файл небольшими порциями (чанками)
+        # и сразу отправлять их по сети в дата-центр, не забивая оперативку Render!
         res = await asyncio.to_thread(
             supabase_client.storage.from_("pinnogram-media").upload,
             path=cloud_filename,
-            file=content,
+            file=file.file, # КРИТИЧНО: Передаем поток файла, а не прочитанный content
             file_options={"content-type": file.content_type or "video/mp4"}
         )
         
-        # Формируем прямую вечную публичную ссылку на видеофайл в облаке
+        # Получаем вечную публичную ссылку
         public_url = supabase_client.storage.from_("pinnogram-media").get_public_url(cloud_filename)
         
-        print(f"📦 Медиа-файл успешно сохранен в облаке Supabase: {public_url}")
+        print(f"📦 Тяжелый файл успешно передан потоком в Supabase: {public_url}")
         return {"url": public_url}
 
     except Exception as e:
-        print(f"❌ Критическая ошибка облачной загрузки: {e}")
+        print(f"❌ Ошибка потоковой загрузки файла: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return {"url": "error"}
-
-
 
 
 @app.websocket("/ws/{room_id}/{username}")
