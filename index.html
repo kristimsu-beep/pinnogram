@@ -842,6 +842,26 @@
     #chat { border-radius: 0; } 
     .controls { padding: 5px; margin: 0; } 
 }
+    /* Плавный скролл-хаки для мобильных устройств (Shorts Feed) */
+    #shorts-feed-container::-webkit-scrollbar {
+        display: none; /* Прячем полосу прокрутки в шортсах для кинематографичности */
+    }
+    
+    /* Ограничиваем карточку видео ровно по экрану */
+    .short-video-card {
+        scroll-snap-align: start;
+        scroll-snap-stop: always;
+    }
+    
+    /* Красивый скроллбар для шторки комментариев */
+    #shorts-comments-list::-webkit-scrollbar {
+        width: 4px;
+    }
+    #shorts-comments-list::-webkit-scrollbar-thumb {
+        background: var(--neon-pink);
+        border-radius: 10px;
+    }
+
 </style>
 
 </head>
@@ -964,17 +984,27 @@
     </div>
 
     <!-- Нижние кнопки настроек -->
+    <!-- Нижние кнопки настроек и развлечений -->
     <div style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+        
+        <!-- Кнопка перехода в Шортс -->
+        <button onclick="openShortsScreen()" 
+                style="width: 100%; padding: 12px; background: rgba(255, 55, 95, 0.1); border: 1px solid var(--neon-pink); color: var(--neon-pink); border-radius: 10px; cursor: pointer; font-weight: bold; text-transform: uppercase; font-size: 11px; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 0 10px rgba(255, 55, 95, 0.15);">
+            🎬 Pinnogram Shorts
+        </button>
+
         <button onclick="document.body.classList.toggle('light-theme')" 
                 style="width:100%; padding:12px; background:var(--msg-in); border:1px solid var(--accent); color:var(--text); border-radius:10px; cursor:pointer; font-weight:bold;">
             🌓 Тема
         </button>
+        
         <button onclick="toggleBgSettings(); toggleSidebar();" 
                 style="width:100%; padding:12px; background:var(--panel); border:1px solid var(--accent); color:var(--text); border-radius:10px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; gap:10px;">
             🎨 Оформление
         </button>
     </div>
 </div>
+
 
 <link rel="icon" href="data:,">
 
@@ -3716,6 +3746,299 @@ setInterval(async () => {
     }
 }, 3000); // Интервал — 3 секунды
 
+// --- ИНТЕГРИРОВАННАЯ ПЛАТФОРМА КОРОТКИХ ВИДЕО (PINNOGRAM SHORTS) ---
+let currentShortsData = [];
+let activeShortIdForComments = null;
+let currentSelectedVideoFile = null;
+
+// 1. ОТКРЫТИЕ И ЗАКРЫТИЕ ЭКРАНА
+async function openShortsScreen() {
+    toggleSidebar(); // Закрываем боковое меню, чтобы не мешало
+    document.getElementById('shorts-screen').style.display = 'flex';
+    await loadShortsFeed();
+}
+
+function closeShortsScreen() {
+    // Останавливаем все играющие видео при выходе, чтобы звук не завис
+    document.querySelectorAll('#shorts-feed-container video').forEach(v => v.pause());
+    document.getElementById('shorts-screen').style.display = 'none';
+}
+
+// 2. ЗАГРУЗКА ЛЕНТЫ СЕРВЕРА
+async function loadShortsFeed() {
+    const container = document.getElementById('shorts-feed-container');
+    container.innerHTML = "<div style='text-align:center; padding-top:40dvh; opacity:0.5;'>Загрузка видео-потока...</div>";
+    
+    try {
+        const res = await fetch(`${API_URL}/api/shorts?username=${encodeURIComponent(myName)}`);
+        currentShortsData = await res.json();
+        
+        // КЕЙС 1: Если видео еще нет — выводим красивый черный экран заглушки
+        if (currentShortsData.length === 0) {
+            container.innerHTML = `
+                <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; text-align:center; padding:40px; color:#777;">
+                    <span style="font-size:60px; margin-bottom:15px; animation: hazard-pulse 2s infinite;">🎬</span>
+                    <b style="color:var(--neon-pink); font-size:18px;">ЛЕНТА ПУСТА</b>
+                    <p style="font-size:13px; max-width:260px; margin-top:5px;">Будь первым! Нажми на плюс внизу, чтобы загрузить свое первое короткое видеоролик</p>
+                </div>`;
+            return;
+        }
+        
+        // КЕЙС 2: Рендерим скользящие Shorts-карточки (TikTok UX)
+        container.innerHTML = currentShortsData.map((s, idx) => {
+            const likeActive = s.my_reaction === 'like' ? 'color:var(--neon-blue); filter:drop-shadow(0 0 5px var(--neon-blue));' : 'color:white;';
+            const dislikeActive = s.my_reaction === 'dislike' ? 'color:var(--neon-pink); filter:drop-shadow(0 0 5px var(--neon-pink));' : 'color:white;';
+            
+            return `
+            <div class="short-video-card" style="width:100%; height:100dvh; shrink:0; scroll-snap-align: start; position:relative; display:flex; align-items:center; justify-content:center; background:#000;">
+                
+                <!-- Тег видео: loop (вечный цикл), playsinline и автоплей для первого -->
+                <video src="${s.video_url}" loop playsinline style="width:100%; height:100%; object-fit:contain;" onclick="togglePlayShortVideo(this)"></video>
+                
+                <!-- Правое боковое неоновое меню (Лайки, Дизлайки, Комменты) -->
+                <div style="position:absolute; right:15px; bottom:120px; display:flex; flex-direction:column; gap:22px; align-items:center; z-index:5;">
+                    
+                    <!-- Лайк -->
+                    <div style="text-align:center; cursor:pointer;" onclick="sendShortReaction(${s.id}, 'like', this)">
+                        <div style="font-size:28px; ${likeActive} transition:0.2s;">👍</div>
+                        <small style="font-size:11px; font-weight:bold; opacity:0.8;" class="count-l">${s.likes}</small>
+                    </div>
+                    
+                    <!-- Дизлайк -->
+                    <div style="text-align:center; cursor:pointer;" onclick="sendShortReaction(${s.id}, 'dislike', this)">
+                        <div style="font-size:28px; ${dislikeActive} transition:0.2s;">👎</div>
+                        <small style="font-size:11px; font-weight:bold; opacity:0.8;" class="count-d">${s.dislikes}</small>
+                    </div>
+                    
+                    <!-- Комментарии -->
+                    <div style="text-align:center; cursor:pointer;" onclick="openShortsCommentsDrawer(${s.id}, ${idx})">
+                        <div style="font-size:28px; color:white; filter:drop-shadow(0 0 5px rgba(255,255,255,0.2));">💬</div>
+                        <small style="font-size:11px; font-weight:bold; opacity:0.8;">${s.comments.length}</small>
+                    </div>
+                </div>
+
+                <!-- Нижнее текстовое описание видео -->
+                <div style="position:absolute; left:0; bottom:60px; width:100%; padding:20px; background:linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0)); z-index:4; pointer-events:none;">
+                    <b style="color:var(--neon-pink); font-size:15px; display:block;">@${s.author} <small style="color:#aaa; font-weight:normal; font-size:11px; margin-left:8px;">${s.timestamp}</small></b>
+                    <h4 style="margin:5px 0 2px 0; font-size:16px; font-weight:bold; color:white;">${s.title}</h4>
+                    <p style="margin:0; font-size:13px; opacity:0.7; color:#eee; max-width:80%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${s.description}</p>
+                </div>
+            </div>`;
+        }).join("");
+
+        // Включаем умный автоплей при скролле (как в TikTok)
+        setupShortsIntersectionObserver();
+
+    } catch (e) { console.error("Shorts feed crash:", e); }
+}
+
+// Поставить видео на паузу или запустить тапом по экрану
+function togglePlayShortVideo(video) {
+    if (video.paused) { video.play().catch(() => {}); } else { video.pause(); }
+}
+
+// 3. УМНЫЙ АВТОПЛЕЙ ПРИ СКРОЛЛЕ
+function setupShortsIntersectionObserver() {
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            const video = entry.target.querySelector('video');
+            if (!video) return;
+            
+            if (entry.isIntersecting) {
+                // Если карточка заняла экран — запускаем видео сначала
+                video.currentTime = 0;
+                video.play().catch(() => {});
+            } else {
+                // Если ушла с экрана — тушим
+                video.pause();
+            }
+        });
+    }, { threshold: 0.6 }); // Срабатывает, когда 60% карточки заняли экран
+
+    document.querySelectorAll('.short-video-card').forEach(card => observer.observe(card));
+}
+
+// 4. МЕНЕДЖЕР ПУБЛИКАЦИИ
+function toggleShortsPublisher(show) {
+    document.getElementById('shorts-publisher-modal').style.display = show ? 'block' : 'none';
+    if (!show) {
+        // Очищаем инпуты
+        document.getElementById('short-url-input').value = "";
+        document.getElementById('short-title-input').value = "";
+        document.getElementById('short-desc-input').value = "";
+        document.getElementById('short-file-status').style.display = 'none';
+        currentSelectedVideoFile = null;
+    }
+}
+
+function handleShortFileSelected() {
+    const fileInput = document.getElementById('short-file-input');
+    if (fileInput.files[0]) {
+        currentSelectedVideoFile = fileInput.files[0];
+        document.getElementById('short-file-status').style.display = 'block';
+    }
+}
+
+// Сабмит публикации шортса
+async function submitNewShort() {
+    const urlInput = document.getElementById('short-url-input').value.trim();
+    const title = document.getElementById('short-title-input').value.trim();
+    const description = document.getElementById('short-desc-input').value.trim();
+    const publishBtn = document.getElementById('short-publish-btn');
+    
+    let finalVideoUrl = urlInput;
+    
+    // Валидация: если нет ни ссылки, ни файла — стоп
+    if (!finalVideoUrl && !currentSelectedVideoFile) {
+        return alert("Вставьте ссылку или выберите видеофайл!");
+    }
+    
+    publishBtn.disabled = true;
+    publishBtn.textContent = "ЗАГРУЗКА...";
+    
+    try {
+        // Если юзер выбрал файл — сначала заливаем его на ТВОЙ бэкэнд сокетов/медиа
+        if (currentSelectedVideoFile) {
+            const fd = new FormData();
+            fd.append("file", currentSelectedVideoFile, currentSelectedVideoFile.name);
+            const uploadRes = await fetch(`${API_URL}/upload`, { method: "POST", body: fd });
+            const uploadData = await uploadRes.json();
+            if (uploadData.url && uploadData.url !== "error") {
+                finalVideoUrl = uploadData.url;
+            } else {
+                throw new Error("Файл не загружен на сервер");
+            }
+        }
+        
+        // Отправляем пакет публикации шортса в БД
+        const res = await fetch(`${API_URL}/api/shorts/publish`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title, description, video_url: finalVideoUrl, author: myName })
+        });
+        const data = await res.json();
+        
+        if (data.status === "ok") {
+            toggleShortsPublisher(false);
+            // 🎯 ТО САМОЕ ЗЕЛЕНЕНЬКОЕ ОКНО УСПЕХА
+            showIncognitoToast(data.message, "#00ff00"); 
+            await loadShortsFeed(); // Перезапускаем ленту
+        }
+    } catch (err) {
+        alert("Ошибка публикации видеоролика: " + err.message);
+    } finally {
+        publishBtn.disabled = false;
+        publishBtn.textContent = "ОПУБЛИКОВАТЬ";
+    }
+}
+
+// 5. ОБРАБОТКА ЛАЙКОВ/ДИЗЛАЙКОВ
+async function sendShortReaction(shortId, type, element) {
+    try {
+        const res = await fetch(`${API_URL}/api/shorts/react`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ short_id: shortId, username: myName, type: type })
+        });
+        const data = await res.json();
+        
+        if (data.status === "ok") {
+            // Мгновенно обновляем цифры счетчиков на карточке шортса
+            const card = element.parentElement;
+            card.querySelector('.count-l').textContent = data.likes;
+            card.querySelector('.count-d').textContent = data.dislikes;
+            
+            // Сбрасываем цвета кнопок
+            const likeDiv = card.children[0].children[0];
+            const dislikeDiv = card.children[1].children[0];
+            
+            likeDiv.style.color = "white"; likeDiv.style.filter = "";
+            dislikeDiv.style.color = "white"; dislikeDiv.style.filter = "";
+            
+            // Подсвечиваем неоном нажатую реакцию, если юзер её добавил
+            if (data.action === "added" || data.action === "changed") {
+                if (type === 'like') {
+                    likeDiv.style.color = "var(--neon-blue)";
+                    likeDiv.style.filter = "drop-shadow(0 0 5px var(--neon-blue))";
+                } else {
+                    dislikeDiv.style.color = "var(--neon-pink)";
+                    dislikeDiv.style.filter = "drop-shadow(0 0 5px var(--neon-pink))";
+                }
+            }
+        }
+    } catch(e) {}
+}
+
+// 6. СИСТЕМА КОММЕНТАРИЕВ (DRAWER-ШТОРКА)
+function openShortsCommentsDrawer(shortId, idx) {
+    activeShortIdForComments = shortId;
+    const commentsList = document.getElementById('shorts-comments-list');
+    const commentsCountLabel = document.getElementById('short-comments-count');
+    
+    const videoData = currentShortsData[idx];
+    commentsCountLabel.textContent = videoData.comments.length;
+    
+    // Рендерим комменты из кэша текущей карточки шортса
+    if (videoData.comments.length === 0) {
+        commentsList.innerHTML = "<div style='text-align:center; padding:40px 0; opacity:0.3; font-size:13px;'>Комментариев пока нет. Будь первым!</div>";
+    } else {
+        commentsList.innerHTML = videoData.comments.map(c => `
+            <div style="background:rgba(255,255,255,0.03); padding:10px; border-radius:10px; border-left:2px solid var(--neon-pink); font-size:13px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <b style="color:var(--neon-pink);">@${c.username}</b>
+                    <small style="opacity:0.4; font-size:10px;">${c.time}</small>
+                </div>
+                <span style="color:#eee; line-height:1.4;">${c.text}</span>
+            </div>`).join("");
+    }
+    
+    toggleShortsComments(true);
+}
+
+function toggleShortsComments(show) {
+    const drawer = document.getElementById('shorts-comments-drawer');
+    drawer.style.display = show ? 'flex' : 'none';
+    if (!show) {
+        document.getElementById('short-comment-input').value = "";
+        activeShortIdForComments = null;
+    }
+}
+
+// Отправка комментария
+async function submitShortComment() {
+    const input = document.getElementById('short-comment-input');
+    const text = input.value.trim();
+    if (!text || !activeShortIdForComments) return;
+    
+    try {
+        const res = await fetch(`${API_URL}/api/shorts/comment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ short_id: activeShortIdForComments, username: myName, text: text })
+        });
+        const data = await res.json();
+        
+        if (data.status === "ok") {
+            input.value = "";
+            
+            // Находим нужный шортс в кэше и добавляем коммент туда, чтобы счетчик обновился
+            const videoIdx = currentShortsData.findIndex(s => s.id === activeShortIdForComments);
+            if (videoIdx !== -1) {
+                currentShortsData[videoIdx].comments.push({ username: data.username, text: data.text, time: data.time });
+                // Обновляем список на экране (переоткрываем шторку для рендера новых данных)
+                openShortsCommentsDrawer(activeShortIdForComments, videoIdx);
+                
+                // Перезагружаем фон ленты, чтобы обновилась цифра на кнопке комментов
+                const activeCardCommentLabel = document.querySelectorAll('.short-video-card')[videoIdx].querySelector('div[onclick*="openShortsCommentsDrawer"] small');
+                if (activeCardCommentLabel) {
+                    activeCardCommentLabel.textContent = currentShortsData[videoIdx].comments.length;
+                }
+            }
+        }
+    } catch(e) {}
+}
+
+    
 </script>
     <!-- Вставь это перед </body> -->
 <div id="msg-menu" class="context-menu">
@@ -3729,6 +4052,60 @@ setInterval(async () => {
     <input type="text" id="archive-search" placeholder="Поиск по имени..." oninput="filterArchive()" style="width:100%; padding:12px; background:#000; border:1px solid #008800; color:#00ff00; border-radius:10px; margin-bottom:20px; font-family:monospace;">
     <div id="archive-list" style="overflow-y:auto; height:calc(100% - 160px);"></div>
     <button onclick="document.getElementById('archive-modal').style.display='none'" style="width:100%; margin-top:20px; padding:12px; background:#333; border:none; color:white; border-radius:12px; cursor:pointer;">ЗАКРЫТЬ</button>
+</div>
+<!-- ПОЛНОЭКРАННЫЙ СУПЕР-ИНТЕРФЕЙС ШОРТСОВ -->
+<div id="shorts-screen" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100dvh; background:#000; z-index:150000; color:white; font-family:sans-serif; flex-direction:column; overflow:hidden;">
+    
+    <!-- Верхняя панель: Шапка и Кнопка Выхода -->
+    <div style="position:absolute; top:0; left:0; width:100%; padding:20px; display:flex; justify-content:space-between; align-items:center; background:linear-gradient(to bottom, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%); z-index:10;">
+        <h3 style="margin:0; color:var(--neon-pink); font-weight:900; letter-spacing:1px;">🎬 SHORTS FEED</h3>
+        <button onclick="closeShortsScreen()" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; padding:8px 16px; border-radius:20px; cursor:pointer; font-size:12px; backdrop-filter:blur(10px);">✕ ЗАКРЫТЬ</button>
+    </div>
+
+    <!-- КОНТЕЙНЕР ЛЕНТЫ (Вертикальный скролл как в TikTok/Shorts) -->
+    <div id="shorts-feed-container" style="flex:1; width:100%; height:100%; overflow-y:scroll; scroll-snap-type: y mandatory; -webkit-overflow-scrolling: touch;">
+        <!-- Сюда JS вставит черный экран или видео-карточки -->
+    </div>
+
+    <!-- Нижняя панель: Конструктор добавления видео -->
+    <div style="position:absolute; bottom:0; left:0; width:100%; padding:15px; background:linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%); display:flex; justify-content:center; z-index:10; padding-bottom:env(safe-area-inset-bottom, 15px);">
+        <button onclick="toggleShortsPublisher(true)" style="width:50px; height:50px; border-radius:50% !important; background:var(--neon-pink); color:white; font-size:24px; display:flex; align-items:center; justify-content:center; border:none; cursor:pointer; box-shadow:0 0 15px var(--neon-pink);">+</button>
+    </div>
+</div>
+
+<!-- МОДАЛЬНОЕ ОКНО ПУБЛИКАЦИИ ВИДЕО -->
+<div id="shorts-publisher-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#1a1a1a; border:2px solid var(--neon-pink); padding:25px; border-radius:20px; z-index:160000; width:90%; max-width:360px; color:white; box-shadow: 0 0 30px rgba(255, 55, 95, 0.3);">
+    <h3 style="margin-top:0; color:var(--neon-pink); text-align:center;">🎬 НОВОЕ ВИДЕО</h3>
+    
+    <!-- Выбор источника -->
+    <input type="text" id="short-url-input" placeholder="Вставьте ссылку на видео или..." style="width:100%; padding:10px; background:#000; border:1px solid #333; color:white; border-radius:8px; margin-bottom:10px; outline:none;">
+    
+    <input type="file" id="short-file-input" style="display:none;" accept="video/*" onchange="handleShortFileSelected()">
+    <button onclick="document.getElementById('short-file-input').click()" style="width:100%; margin-bottom:15px; background:rgba(255,255,255,0.05); border:1px dashed #555; color:#ccc; padding:10px; border-radius:8px; cursor:pointer; font-size:12px;">📁 ЗАГРУЗИТЬ ФАЙЛ С УСТРОЙСТВА</button>
+    <div id="short-file-status" style="font-size:11px; color:#00ff00; margin-top:-10px; margin-bottom:10px; display:none; text-align:center;">✓ Файл выбран</div>
+
+    <input type="text" id="short-title-input" placeholder="Название (по умолчанию дата/время)..." style="width:100%; padding:10px; background:#000; border:1px solid #333; color:white; border-radius:8px; margin-bottom:10px; outline:none;">
+    <textarea id="short-desc-input" placeholder="Описание (не обязательно)..." style="width:100%; height:60px; padding:10px; background:#000; border:1px solid #333; color:white; border-radius:8px; margin-bottom:15px; outline:none; resize:none;"></textarea>
+    
+    <div style="display:flex; gap:10px;">
+        <button id="short-publish-btn" onclick="submitNewShort()" style="flex:1; background:var(--neon-pink); color:white; padding:12px; border-radius:10px; font-weight:bold; cursor:pointer; border:none;">ОПУБЛИКОВАТЬ</button>
+        <button onclick="toggleShortsPublisher(false)" style="flex:1; background:#333; color:white; padding:12px; border-radius:10px; cursor:pointer; border:none;">ОТМЕНА</button>
+    </div>
+</div>
+
+<!-- ОКНО КОММЕНТАРИЕВ ДЛЯ ШОРТСОВ (ВЫДВИЖНАЯ ШТОРКА) -->
+<div id="shorts-comments-drawer" style="display:none; position:fixed; bottom:0; left:0; width:100%; height:60vh; background:#141414; border-top:2px solid var(--neon-pink); border-radius:20px 20px 0 0; z-index:170000; color:white; padding:20px; flex-direction:column; box-shadow:0 -10px 30px rgba(0,0,0,0.5);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #222; padding-bottom:10px;">
+        <b style="font-size:16px; color:var(--neon-pink);">💬 КОММЕНТАРИИ (<span id="short-comments-count">0</span>)</b>
+        <span onclick="toggleShortsComments(false)" style="cursor:pointer; color:#777; font-size:20px; font-weight:bold; padding:5px;">✕</span>
+    </div>
+    <div id="shorts-comments-list" style="flex:1; overflow-y:auto; margin-bottom:15px; display:flex; flex-direction:column; gap:10px;">
+        <!-- Сюда JS рендерит комменты -->
+    </div>
+    <div style="display:flex; gap:10px; align-items:center; padding-bottom:env(safe-area-inset-bottom, 5px);">
+        <input type="text" id="short-comment-input" placeholder="Напишите комментарий..." style="flex:1; padding:12px 16px; background:#000; border:1px solid #333; color:white; border-radius:25px; outline:none;">
+        <button onclick="submitShortComment()" style="background:var(--neon-pink); width:42px; height:42px; border-radius:50% !important; display:flex; align-items:center; justify-content:center; padding:0; font-size:16px; border:none; cursor:pointer; color:white;">🚀</button>
+    </div>
 </div>
 
 </body>
