@@ -14,6 +14,13 @@ import pytz
 import base64
 import time
 import psutil
+from supabase import create_client, Client # Добавь в самый верх к импортам, если еще не добавил!
+
+# Вечное облачное хранилище для видео и голосовых Pinnogram
+SUPABASE_URL = "https://zzcfdrryfsychezckjov.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6Y2ZkcnJ5ZnN5Y2hlemNram92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMTk1MTgsImV4cCI6MjA5NDY5NTUxOH0.L5QdbaIumhGTwATLNZnrTklUOHYD9PhYUYBpM--OZds"
+
+supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Берем ключ из настроек Render (в коде его не будет видно)
 ADMIN_SECRET_KEY = os.environ.get("ADMIN_KEY", "admin123")
@@ -808,10 +815,10 @@ IMGBB_API_KEY = "140359baf01acef6aa27e35c55b32f99"
 @app.post("/upload")
 async def upload_file(request: Request, file: UploadFile = File(...)):
     try:
-        # Читаем содержимое файла в память
+        # Читаем содержимое файла в оперативную память сервера
         content = await file.read()
         
-        # 1. Если это ИЗОБРАЖЕНИЕ — отправляем на ImgBB (навечно)
+        # --- 1. ЕСЛИ ЭТО ИЗОБРАЖЕНИЕ — ОТПРАВЛЯЕМ НА IMGBB (КАК И РАНЬШЕ) ---
         if file.content_type and file.content_type.startswith("image/"):
             url = f"https://api.imgbb.com/1/upload?key={IMGBB_API_KEY}"
             async with httpx.AsyncClient() as client:
@@ -819,27 +826,31 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
                 res = await client.post(url, files=files, timeout=30.0)
                 
                 if res.status_code == 200:
-                    # Возвращаем прямую ссылку из облака ImgBB
                     return {"url": res.json()["data"]["url"]}
-                else:
-                    print(f"ImgBB Error: {res.text}")
-                    # Если облако выдало ошибку, пробуем сохранить локально как запасной вариант
+                print(f"⚠️ ImgBB Error: {res.text}. Резервный запуск в Supabase...")
 
-        # 2. Если это ВИДЕО (кружок) или ошибка облака — сохраняем локально на Render
-        # (Эти файлы удалятся через 15 минут простоя, но они будут работать в моменте)
-        ext = os.path.splitext(file.filename)[1]
-        name = f"{uuid.uuid4()}{ext}"
-        path = os.path.join(UPLOAD_DIR, name)
+        # --- 2. ЕСЛИ ЭТО ВИДЕО (ШОРТС/КРУЖОК) ИЛИ ГОЛОСОВОЕ — ОТПРАВЛЯЕМ В SUPABASE НАВЕЧНО ---
+        ext = os.path.splitext(file.filename)[1] # Исправил мелкую опечатку с индексом [1], чтобы расширение (.mp4) бралось корректно
+        cloud_filename = f"{uuid.uuid4()}{ext}"
         
-        async with aiofiles.open(path, "wb") as buffer:
-            await buffer.write(content)
-            
-        # Формируем ссылку на локальный файл
-        return {"url": f"{str(request.base_url).rstrip('/')}/files/{name}"}
+        # Загружаем бинарный файл напрямую в облачный бакет Supabase в отдельном потоке
+        res = await asyncio.to_thread(
+            supabase_client.storage.from_("pinnogram-media").upload,
+            path=cloud_filename,
+            file=content,
+            file_options={"content-type": file.content_type or "video/mp4"}
+        )
+        
+        # Формируем прямую вечную публичную ссылку на видеофайл в облаке
+        public_url = supabase_client.storage.from_("pinnogram-media").get_public_url(cloud_filename)
+        
+        print(f"📦 Медиа-файл успешно сохранен в облаке Supabase: {public_url}")
+        return {"url": public_url}
 
     except Exception as e:
-        print(f"Upload Exception: {e}")
+        print(f"❌ Критическая ошибка облачной загрузки: {e}")
         return {"url": "error"}
+
 
 
 
