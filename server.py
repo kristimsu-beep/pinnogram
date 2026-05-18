@@ -828,25 +828,27 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
                 # Если ImgBB упал, сбрасываем указатель файла в начало для Supabase
                 await file.seek(0)
 
-        # --- 2. ДЛЯ ТЯЖЕЛЫХ ВИДЕО (10-50 МБ) — ПОТОКОВАЯ ПЕРЕДАЧА БЕЗ ЗАБИВАНИЯ RAM ---
+        # --- 2. ДЛЯ ТЯЖЕЛЫХ ВИДЕО (10-50 МБ) — СТАБИЛЬНАЯ ЗАГРУЗКА БАЙТОВ ---
         ext = os.path.splitext(file.filename)[1]
         cloud_filename = f"{uuid.uuid4()}{ext}"
         
-        # Передаем сам объект файла 'file.file' напрямую в SDK Supabase.
-        # Библиотека под капотом начнет читать файл небольшими порциями (чанками)
-        # и сразу отправлять их по сети в дата-центр, не забивая оперативку Render!
+        # Читаем байты тяжелого файла
+        video_bytes = await file.read()
+        
+        # Загружаем байты напрямую в облачный бакет Supabase в отдельном потоке
         res = await asyncio.to_thread(
             supabase_client.storage.from_("pinnogram-media").upload,
             path=cloud_filename,
-            file=file.file, # КРИТИЧНО: Передаем поток файла, а не прочитанный content
+            file=video_bytes, # 🎯 ИСПРАВЛЕНО: Передаем видео в виде байт-массива
             file_options={"content-type": file.content_type or "video/mp4"}
         )
         
         # Получаем вечную публичную ссылку
         public_url = supabase_client.storage.from_("pinnogram-media").get_public_url(cloud_filename)
         
-        print(f"📦 Тяжелый файл успешно передан потоком в Supabase: {public_url}")
+        print(f"📦 Тяжелый файл успешно передан в Supabase: {public_url}")
         return {"url": public_url}
+
 
     except Exception as e:
         print(f"❌ Ошибка потоковой загрузки файла: {str(e)}")
