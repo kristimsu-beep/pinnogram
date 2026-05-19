@@ -25,6 +25,8 @@ supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 # Берем ключ из настроек Render (в коде его не будет видно)
 ADMIN_SECRET_KEY = os.environ.get("ADMIN_KEY", "admin123")
 BANNED_DATA = {} # { "IP": timestamp_unban }
+# Хранилище активных мутов: { "username": timestamp_unmute }
+MUTED_DATA = {}
 
 
 app = FastAPI()
@@ -141,6 +143,32 @@ async def get_server_metrics(key: str):
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+        
+@app.post("/api/admin/mute")
+async def admin_mute_user(data: dict):
+    key = data.get("key")
+    target = data.get("target", "").strip()
+    minutes = int(data.get("minutes", 1))
+    
+    # Сверяем секретный ключ админа
+    if key != ADMIN_SECRET_KEY:
+        return {"status": "error", "message": "ACCESS DENIED: Сбой ключа доступа"}
+        
+    if not target:
+        return {"status": "error", "message": "Узел-цель не определен"}
+        
+    # Вычисляем время окончания мута в секундах
+    unmute_timestamp = time.time() + (minutes * 60)
+    MUTED_DATA[target.lower()] = unmute_timestamp
+    
+    print(f"🔇 Узел {target} изолирован на {minutes} мин. Протокол запущен.")
+    
+    # Отправляем технический пакет в сокеты, чтобы мгновенно уведомить жертву
+    if "general" in manager.rooms:
+        for conn in manager.rooms["general"].values():
+            await conn.send_text(f"ID:0|SYSTEM:MUTE_UPDATE|{target}|{unmute_timestamp}")
+            
+    return {"status": "ok", "message": f"Узел {target} успешно изолирован на {minutes} минут(ы)."}
 
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
@@ -263,13 +291,22 @@ async def get_shorts(username: str):
                 })
             return shorts_list
 
-# 2. ПУБЛИКАЦИЯ НОВОГО ШОРТСА
+# 2. ПУБЛИКАЦИЯ НОВОГО ШОРТСА (PostgreSQL + MUTE SYSTEM)
 @app.post("/api/shorts/publish")
 async def publish_short(data: dict):
+    author = data.get("author", "").strip()
+    
+    # 🔇 КАПКАН ДЛЯ ИЗОЛИРОВАННЫХ УЗЛОВ В ШОРТСАХ
+    if author.lower() in MUTED_DATA:
+        if time.time() < MUTED_DATA[author.lower()]:
+            return {"status": "error", "message": "Ваш узел изолирован админом. Публикация shorts заблокирована!"}
+        else:
+            # Срок мута истек — бесшумно амнистируем узел
+            del MUTED_DATA[author.lower()]
+
     title = data.get("title")
     desc = data.get("description", "")
     video_url = data.get("video_url")
-    author = data.get("author")
     
     # Если название пустое — ставим дату и время по Москве
     if not title or not title.strip():
@@ -277,14 +314,20 @@ async def publish_short(data: dict):
         
     ts = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
     
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("""
+    # Подключаемся к вечной облачной базе данных Supabase
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        await conn.execute("""
             INSERT INTO shorts (title, description, video_url, author, timestamp) 
-            VALUES (?, ?, ?, ?, ?)
-        """, (title, desc, video_url, author, ts))
-        await db.commit()
-        
-    return {"status": "ok", "message": "Видео успешно опубликовано!"}
+            VALUES ($1, $2, $3, $4, $5)
+        """, title, desc, video_url, author, ts)
+        return {"status": "ok", "message": "Видео успешно опубликовано!"}
+    except Exception as e:
+        print(f"🛑 Ошибка публикации шортса в облако: {e}")
+        return {"status": "error", "message": "Ошибка записи в глобальный реестр шортсов"}
+    finally:
+        await conn.close()
+
 
 # 3. ЛАЙК / ДИЗЛАЙК ВИДЕО (С автоматическим пересчетом счетчиков)
 @app.post("/api/shorts/react")
@@ -947,7 +990,17 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                 except Exception as e:
                     print(f"Admin CMD Error: {e}")
                     continue
-
+            # 🎯 ЖЕСТКИЙ КАПКАН ДЛЯ ЗАГЛУШЕННЫХ УЗЛОВ (MUTE SYSTEM)
+            # Перехватывает любые попытки писать, слать эмодзи, удалять сообщения или флудить
+            if username.lower() in MUTED_DATA:
+                if time.time() < MUTED_DATA[username.lower()]:
+                    left_sec = int(MUTED_DATA[username.lower()] - time.time())
+                    # Шлем системное предупреждение в сокет нарушителя с таймером обратного отсчета
+                    await websocket.send_text(f"ID:0|SYSTEM:⚠️ Твой узел изолирован! Отправка сообщений и медиа заблокирована. Осталось {left_sec} сек.")
+                    continue # Жестко сбрасываем пакет, прерывая выполнение цикла
+                else:
+                    # Срок действия мута официально истек — бесшумно амнистируем пользователя
+                    del MUTED_DATA[username.lower()]
 
             
             # --- ШАГ 0: УМНАЯ ОЧИСТКА ПРЕФИКСОВ ---
