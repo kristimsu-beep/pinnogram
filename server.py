@@ -27,6 +27,8 @@ ADMIN_SECRET_KEY = os.environ.get("ADMIN_KEY", "admin123")
 BANNED_DATA = {} # { "IP": timestamp_unban }
 # Хранилище активных мутов: { "username": timestamp_unmute }
 MUTED_DATA = {}
+# Хранилище активных деморганов: { "username": timestamp_release }
+DEMORGAN_DATA = {}
 
 
 app = FastAPI()
@@ -169,6 +171,41 @@ async def admin_mute_user(data: dict):
             await conn.send_text(f"ID:0|SYSTEM:MUTE_UPDATE|{target}|{unmute_timestamp}")
             
     return {"status": "ok", "message": f"Узел {target} успешно изолирован на {minutes} минут(ы)."}
+    
+# 1. РОУТ ДЛЯ СНЯТИЯ МУТА (;unmute)
+@app.post("/api/admin/unmute")
+async def admin_unmute_user(data: dict):
+    key = data.get("key")
+    target = data.get("target", "").strip().lower()
+    if key != ADMIN_SECRET_KEY: return {"status": "error", "message": "Сбой ключа доступа"}
+    
+    if target in MUTED_DATA:
+        del MUTED_DATA[target]
+        # Уведомляем систему по сокетам
+        if "general" in manager.rooms:
+            for conn in manager.rooms["general"].values():
+                await conn.send_text(f"ID:0|SYSTEM:UNMUTE_UPDATE|{target}")
+        return {"status": "ok", "message": f"Узел {target} успешно размучен!"}
+    return {"status": "error", "message": "Пользователь не замучен"}
+
+# 2. РОУТ ДЛЯ ОТПРАВКИ В ДЕМОРГАН (;demorgan)
+@app.post("/api/admin/demorgan")
+async def admin_demorgan_user(data: dict):
+    key = data.get("key")
+    target = data.get("target", "").strip()
+    minutes = int(data.get("minutes", 1))
+    if key != ADMIN_SECRET_KEY: return {"status": "error", "message": "Сбой ключа доступа"}
+    if not target: return {"status": "error", "message": "Узел-цель не определен"}
+    
+    release_timestamp = time.time() + (minutes * 60)
+    DEMORGAN_DATA[target.lower()] = release_timestamp
+    
+    # Мощный пинок в сокеты: принудительно перекидываем жертву в чистилище
+    if "general" in manager.rooms:
+        for conn in manager.rooms["general"].values():
+            await conn.send_text(f"ID:0|SYSTEM:DEMORGAN_UPDATE|{target}|{release_timestamp}")
+            
+    return {"status": "ok", "message": f"Узел {target} отправлен в Деморган на {minutes} мин."}
 
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
@@ -1001,6 +1038,15 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                 else:
                     # Срок действия мута официально истек — бесшумно амнистируем пользователя
                     del MUTED_DATA[username.lower()]
+            # ⚖️ КАПКАН ДЕМОРГАНА НА ОТПРАВКУ СООБЩЕНИЙ
+            if username.lower() in DEMORGAN_DATA:
+                if time.time() < DEMORGAN_DATA[username.lower()]:
+                    # Принудительно изолируем сообщение в мрачную спец-комнату
+                    room_id = "demorgan"
+                    target_user = None # Аннулируем любые личные сообщения
+                else:
+                    # Срок отсидки вышел — амнистируем узел
+                    del DEMORGAN_DATA[username.lower()]
 
             
             # --- ШАГ 0: УМНАЯ ОЧИСТКА ПРЕФИКСОВ ---
@@ -1028,25 +1074,39 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
             
 
             
-            # 1. ЗАПРОС ИСТОРИИ (С ПОДДЕРЖКОЙ ОТВЕТОВ И РЕАКЦИЙ)
+            # 1. ЗАПРОС ИСТОРИИ (С ИЗОЛЯЦИЕЙ ДЕМОРГАНА — ИСПРАВЛЕНО)
             if clean_text.startswith("GET_HISTORY:"):
                 target = clean_text.replace("GET_HISTORY:", "").strip()
+                
+                # ⚖️ ПРОВЕРКА: Если узел изолирован в Деморгане — перенаправляем в спец-комнату
+                if username.lower() in DEMORGAN_DATA:
+                    if time.time() < DEMORGAN_DATA[username.lower()]:
+                        target = "demorgan" # Весь остальной мир для него исчезает
+                    else:
+                        del DEMORGAN_DATA[username.lower()]
+
                 async with aiosqlite.connect(DB_PATH) as db:
-                    # 🎯 1. Проверяем статус подписки
+                    # 🎯 1. Проверяем статус подписки (только если это не Деморган)
                     is_subbed = False
-                    check_sub = await db.execute("SELECT 1 FROM group_subs WHERE username=? AND group_name=?", (username, target))
-                    if await check_sub.fetchone():
-                        is_subbed = True
+                    if target != "demorgan":
+                        check_sub = await db.execute("SELECT 1 FROM group_subs WHERE username=? AND group_name=?", (username, target))
+                        if await check_sub.fetchone():
+                            is_subbed = True
                     
-                    # 🎯 2. Сразу шлем пакет фронтенду (1 - подписан, 0 - нет)
-                    # Это должно улететь ДО истории сообщений
+                    # 🎯 2. Сразу шлем пакет статуса подписки фронтенду
                     status_msg = f"ID:0|SYSTEM:SUB_STATUS|{target}|{1 if is_subbed else 0}"
                     await websocket.send_text(status_msg)
-                    # 🎯 ПРОВЕРКА: Это группа или личка?
+                    
+                    # 🎯 3. ПРОВЕРКА: Это группа или личка?
                     check_group = await db.execute("SELECT 1 FROM groups WHERE name = ?", (target,))
                     is_group = await check_group.fetchone()
             
-                    if target in ["null", "general", "None", "undefined"]:
+                    # --- ЕДИНАЯ ЦЕПОЧКА УСЛОВИЙ ДЛЯ ВЫБОРА SQL ---
+                    if target == "demorgan":
+                        # ⛓️ ТЮРЕМНЫЙ ЧАТ: Тянем историю только из спец-комнаты demorgan
+                        sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read, reply_to_id FROM messages WHERE room_id = 'demorgan' ORDER BY id ASC LIMIT 100"
+                        params = ()
+                    elif target in ["null", "general", "None", "undefined"]:
                         sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read, reply_to_id FROM messages WHERE room_id = ? AND to_user IS NULL ORDER BY id ASC LIMIT 100"
                         params = (room_id,)
                     elif is_group:
@@ -1054,10 +1114,11 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                         sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read, reply_to_id FROM messages WHERE to_user = ? ORDER BY id ASC LIMIT 100"
                         params = (target,)
                     else:
-                        # 👤 Личка (без изменений)
+                        # 👤 Личка
                         sql = "SELECT id, username, text, timestamp, avatar, to_user, is_read, reply_to_id FROM messages WHERE room_id = ? AND ((username = ? AND to_user = ?) OR (username = ? AND to_user = ?)) ORDER BY id ASC LIMIT 100"
                         params = (room_id, username, target, target, username)
                     
+                    # Выполняем выбранный SQL-запрос
                     async with db.execute(sql, params) as cursor:
                         history = await cursor.fetchall()
                         
@@ -1067,7 +1128,6 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                             async with db.execute("SELECT emoji, COUNT(*) FROM reactions WHERE msg_id = ? GROUP BY emoji", (m_id,)) as r_cur:
                                 r_rows = await r_cur.fetchall()
                                 if r_rows:
-                                    # Склеиваем в формат: 👍:2,🔥:1
                                     r_data = ",".join([f"{row[0]}:{row[1]}" for row in r_rows])
                                     react_pfx = f"REACTION:{r_data}|"
 
@@ -1076,10 +1136,10 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, username: str):
                             reply_pfx = f"REPLY:{r_id}|" if r_id else ""
                             
                             # --- ШАГ В: ОТПРАВКА ПОЛНОГО ПАКЕТА ---
-                            # Формат: ID | РЕАКЦИИ | ОТВЕТ | ПРИВАТ | [ВРЕМЯ] ИМЯ: ТЕКСТ | АВАТАР | ПРОЧИТАНО
                             full_packet = f"ID:{m_id}|{react_pfx}{reply_pfx}{pfx}[{tm}] {u}: {txt}|{av or ''}|{is_r}"
                             await websocket.send_text(full_packet)
                 continue
+
                 
             # 🎯 1. СОЗДАНИЕ ГРУППЫ
             if clean_text and clean_text.startswith("CREATE_GROUP:"):
