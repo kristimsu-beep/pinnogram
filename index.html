@@ -914,6 +914,20 @@
 
 </head>
 <body>
+<!-- ВЫПЛЫВАЮЩАЯ СВЕРХУ КОМАНДНАЯ СТРОКА АДМИНА -->
+<div id="admin-console-bar" style="display:none; position:fixed; top:-120px; left:0; width:100%; background:rgba(0,15,0,0.95); border-bottom:2px solid #00ff00; padding:15px 20px; z-index:999999; font-family:monospace; box-shadow:0 10px 30px rgba(0,255,0,0.2); transition: top 0.3s cubic-bezier(0.1, 0.8, 0.2, 1);">
+    <div style="display:flex; align-items:center; gap:10px;">
+        <span style="color:#00ff00; font-weight:bold; font-size:14px;">PINNOGRAM_CORE_CLI></span>
+        <input type="text" id="admin-console-input" placeholder="Введите команду (шаблон: ;mute ник минуты пароль)..." style="flex:1; background:transparent; border:none; color:#00ff00; font-family:monospace; font-size:14px; outline:none; caret-color:#00ff00;" oninput="handleConsoleInputEvents(this.value)">
+    </div>
+    
+    <!-- ВСПЛЫВАЮЩИЙ СПИСОК ДОСТУПНЫХ ЮЗЕРОВ ДЛЯ КЛИКА -->
+    <div id="console-users-dropdown" style="display:none; margin-top:10px; padding-top:8px; border-top:1px dashed #004400; max-height:100px; overflow-y:auto;">
+        <div style="font-size:10px; color:#00aa00; margin-bottom:5px;">[ СИСТЕМА ОБНАРУЖЕНИЯ УЗЛОВ: Кликните по нику для автоподстановки ]</div>
+        <div id="console-users-list-target" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+    </div>
+</div>
+
 <div id="ban-overlay">
     <div class="ban-card">
         <h1 style="margin:0;">[ ACCESS DENIED ]</h1>
@@ -4101,6 +4115,140 @@ async function submitShortComment() {
     } catch(e) {}
 }
 
+// --- ХАКЕРСКАЯ ВЫПЛЫВАЮЩАЯ КОНСОЛЬ КИБЕР-УПРАВЛЕНИЯ (CLI) ---
+let isConsoleOpen = false;
+
+// 1. Перехват горячей клавиши "э" (или апострофа ' в английской раскладке)
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'э' || e.key === 'Э' || e.code === 'Quote') {
+        // Если админ уже пишет текст в обычном чате или других инпутах — игнорируем перехват
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+            if (document.activeElement.id !== 'admin-console-input') return;
+        }
+        
+        e.preventDefault(); // Блокируем системное пропечатывание буквы "э" в чат
+        toggleAdminConsoleBar();
+    }
+    
+    // Выполнение команды по Enter внутри открытой консоли
+    if (e.key === 'Enter' && document.activeElement.id === 'admin-console-input') {
+        executeAdminConsoleCommand();
+    }
+});
+
+function toggleAdminConsoleBar() {
+    const bar = document.getElementById('admin-console-bar');
+    const input = document.getElementById('admin-console-input');
+    if (!bar || !input) return;
+    
+    if (!isConsoleOpen) {
+        bar.style.display = 'block';
+        // Даем микро-задержку для анимации выезда сверху вниз через CSS-transition
+        setTimeout(() => { bar.style.top = '0'; input.focus(); }, 10);
+        isConsoleOpen = true;
+    } else {
+        bar.style.top = '-120px';
+        setTimeout(() => { bar.style.display = 'none'; }, 300);
+        input.value = "";
+        document.getElementById('console-users-dropdown').style.display = 'none';
+        isConsoleOpen = false;
+    }
+}
+
+// 2. Умная слежка за вводом: ищем никнеймы людей
+function handleConsoleInputEvents(val) {
+    const dropdown = document.getElementById('console-users-dropdown');
+    const targetList = document.getElementById('console-users-list-target');
+    if (!dropdown || !targetList) return;
+
+    // Разбиваем строку по пробелам, чтобы понять параметры
+    const parts = val.trim().split(/\s+/);
+    const command = parts[0];
+    
+    // Если введена команда ;mute и админ перешел к вводу или уточнению второго параметра (ника)
+    if (command === ';mute' && parts.length >= 2) {
+        // Считываем всех пользователей, которые сейчас физически отрендерены в боковом меню сайдбара контактов!
+        const onlineUsers = Array.from(document.querySelectorAll('.contact-item b')).map(b => b.textContent.trim());
+        const cleanUsers = [...new Set(onlineUsers)].filter(name => name && name !== "Общий чат");
+        
+        // Фильтруем список по ходу набора части имени во втором параметре
+        const currentTypedName = parts[1] || "";
+        const filteredUsers = cleanUsers.filter(u => u.toLowerCase().includes(currentTypedName.toLowerCase()));
+
+        if (filteredUsers.length > 0) {
+            dropdown.style.display = 'block';
+            targetList.innerHTML = filteredUsers.map(name => `
+                <span onclick="injectUserToConsoleCommand('${name}')" style="background:#002200; border:1px solid #00ff00; padding:4px 10px; border-radius:4px; font-size:11px; cursor:pointer; color:#00ff00; transition:0.2s; font-family:monospace; display:inline-block;" onmouseover="this.style.background='#00ff00'; this.style.color='black';" onmouseout="this.style.background='#002200'; this.style.color='#00ff00';">
+                    ${name}
+                </span>
+            `).join("");
+        } else {
+            dropdown.style.display = 'none';
+        }
+    } else {
+        dropdown.style.display = 'none';
+    }
+}
+
+// Автоподстановка ника при клике по плашке из выпадающего списка
+function injectUserToConsoleCommand(name) {
+    const input = document.getElementById('admin-console-input');
+    if (!input) return;
+    
+    const parts = input.value.trim().split(/\s+/);
+    parts[1] = name; // Заменяем введенный кусок на точное отрендеренное имя
+    
+    input.value = parts.join(" ") + " "; // Собираем строку обратно и ставим пробел для перехода к вводу минут
+    input.focus();
+}
+
+// 3. Отправка команды на бэкэнд
+async function executeAdminConsoleCommand() {
+    const input = document.getElementById('admin-console-input');
+    if (!input) return;
+    
+    const rawCmd = input.value.trim();
+    if (!rawCmd.startsWith(';')) return;
+    
+    const parts = rawCmd.split(/\s+/);
+    const command = parts[0];
+    
+    if (command === ';mute') {
+        const targetUser = parts[1];
+        const minutes = parts[2];
+        const secretPassword = parts[3];
+        
+        if (!targetUser || !minutes || !secretPassword) {
+            alert("⚠️ Синтаксическая ошибка CLI! Шаблон: ;mute ник минуты пароль");
+            return;
+        }
+        
+        try {
+            const res = await fetch(`${API_URL}/api/admin/mute`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ key: secretPassword, target: targetUser, minutes: parseInt(minutes) })
+            });
+            const data = await res.json();
+            
+            if (data.status === "ok") {
+                // Используем твою готовую неоновую тост-плашку успеха
+                if (typeof showIncognitoToast === "function") {
+                    showIncognitoToast(data.message, "#00ff00");
+                } else {
+                    alert("✓ " + data.message);
+                }
+                toggleAdminConsoleBar(); // Закрываем консоль
+            } else {
+                alert("🔴 CLI_ERROR: " + data.message);
+            }
+        } catch (e) {
+            alert("🔴 Ошибка соединения с терминалом ядра");
+        }
+    } else {
+        alert("⚠️ Команда не распознана встроенным интерпретатором CLI");
+    }
+}
     
 </script>
     <!-- Вставь это перед </body> -->
