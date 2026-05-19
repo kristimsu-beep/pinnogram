@@ -1482,6 +1482,65 @@
                 return; // ⛔ ОСТАНАВЛИВАЕМ, чтобы звонок не попал в обычный чат
             }
 
+                // --- 🎯 ОБЪЕДИНЕННЫЙ БЛОК МОДЕРАЦИИ: МУТ, РАЗМУТ И ДЕМОРГАН ---
+    
+            // 1. СИСТЕМНЫЙ ПАКЕТ: НАЛОЖЕНИЕ МУТА
+            if (raw.includes("SYSTEM:MUTE_UPDATE|")) {
+                const parts = raw.split("|");
+                const mutedNick = parts[2];
+                const untilTime = parseFloat(parts[3]);
+                
+                if (mutedNick && mutedNick.toLowerCase() === myName.toLowerCase()) {
+                    if (navigator.vibrate) navigator.vibrate([100, 100, 100]); // Вибро-тревога
+                    showIncognitoToast(`🚨 Внимание: Твой узел изолирован админом до ${new Date(untilTime * 1000).toLocaleTimeString()}`, "#ff3b30");
+                }
+                return; // Это технический пакет, глушим его, чтобы не шёл в чат
+            }
+        
+            // 2. СИСТЕМНЫЙ ПАКЕТ: СНЯТИЕ МУТА (РАЗМУТ)
+            if (raw.includes("SYSTEM:UNMUTE_UPDATE|")) {
+                const parts = raw.split("|");
+                const unmutedNick = parts[2];
+                if (unmutedNick && unmutedNick.toLowerCase() === myName.toLowerCase()) {
+                    showIncognitoToast("🔊 Ограничения сняты! Твой узел снова в сети.", "#00ff00");
+                }
+                return;
+            }
+        
+            // 3. СИСТЕМНЫЙ ПАКЕТ: ЗАКЛЮЧЕНИЕ В ДЕМОРГАН
+            if (raw.includes("SYSTEM:DEMORGAN_UPDATE|")) {
+                const parts = raw.split("|");
+                const targetNick = parts[2];
+                const untilTime = parseFloat(parts[3]);
+                
+                if (targetNick && targetNick.toLowerCase() === myName.toLowerCase()) {
+                    // Включаем зловещую мрачную тему Деморгана
+                    document.body.style.setProperty('--accent', '#ff3b30'); // Кроваво-красный неон
+                    document.body.style.setProperty('--bg', '#050505');      // Абсолютная темнота
+                    document.body.style.setProperty('--panel', '#111111');   // Гробовой серый
+        
+                    // Полностью изолируем интерфейс от внешнего мира
+                    const sidebar = document.getElementById('sidebar');
+                    if (sidebar) sidebar.style.display = 'none'; // Прячем контакты и шортсы
+                    currentPartner = null; // Сбрасываем текущие лички
+        
+                    // Выводим красный тост-предупреждение
+                    showIncognitoToast(`⛓️ Твой узел изолирован в ДЕМОРГАН до ${new Date(untilTime * 1000).toLocaleTimeString()}`, "#ff3b30");
+                    
+                    // Запрашиваем историю общего чата (бэкэнд подменит её на депрессивную комнату demorgan)
+                    ws.send("GET_HISTORY:general"); 
+                    
+                    // Таймер автоматического выхода на свободу
+                    const timeDiff = (untilTime * 1000) - Date.now();
+                    if (timeDiff > 0) {
+                        setTimeout(() => {
+                            // Перезагружаем страницу, чтобы вернуть стандартный Pinnogram
+                            window.location.reload();
+                        }, timeDiff);
+                    }
+                }
+                return;
+            }
 
 
             // --- ЛОВИМ ДОСРОЧНЫЙ РАЗБАН ---
@@ -4202,7 +4261,6 @@ function injectUserToConsoleCommand(name) {
     input.focus();
 }
 
-// 3. Отправка команды на бэкэнд
 async function executeAdminConsoleCommand() {
     const input = document.getElementById('admin-console-input');
     if (!input) return;
@@ -4213,6 +4271,7 @@ async function executeAdminConsoleCommand() {
     const parts = rawCmd.split(/\s+/);
     const command = parts[0];
     
+    // --- КОМАНДА ;mute ---
     if (command === ';mute') {
         const targetUser = parts[1];
         const minutes = parts[2];
@@ -4230,25 +4289,67 @@ async function executeAdminConsoleCommand() {
                 body: JSON.stringify({ key: secretPassword, target: targetUser, minutes: parseInt(minutes) })
             });
             const data = await res.json();
-            
             if (data.status === "ok") {
-                // Используем твою готовую неоновую тост-плашку успеха
-                if (typeof showIncognitoToast === "function") {
-                    showIncognitoToast(data.message, "#00ff00");
-                } else {
-                    alert("✓ " + data.message);
-                }
-                toggleAdminConsoleBar(); // Закрываем консоль
-            } else {
-                alert("🔴 CLI_ERROR: " + data.message);
-            }
-        } catch (e) {
-            alert("🔴 Ошибка соединения с терминалом ядра");
+                if (typeof showIncognitoToast === "function") showIncognitoToast(data.message, "#00ff00");
+                toggleAdminConsoleBar();
+            } else { alert("🔴 CLI_ERROR: " + data.message); }
+        } catch (e) { alert("🔴 Ошибка соединения с терминалом ядра"); }
+    } 
+    
+    // --- КОМАНДА ;unmute ---
+    else if (command === ';unmute') {
+        const targetUser = parts[1];
+        const secretPassword = parts[2];
+        
+        if (!targetUser || !secretPassword) {
+            alert("⚠️ Синтаксическая ошибка CLI! Шаблон: ;unmute ник пароль");
+            return;
         }
-    } else {
-        alert("⚠️ Команда не распознана встроенным интерпретатором CLI");
+        
+        try {
+            const res = await fetch(`${API_URL}/api/admin/unmute`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ key: secretPassword, target: targetUser })
+            });
+            const data = await res.json();
+            if (data.status === "ok") {
+                if (typeof showIncognitoToast === "function") showIncognitoToast(data.message, "#00ff00");
+                toggleAdminConsoleBar();
+            } else { alert("🔴 CLI_ERROR: " + data.message); }
+        } catch (e) { alert("🔴 Ошибка соединения с терминалом ядра"); }
+    }
+    
+    // --- КОМАНДА ;demorgan ---
+    else if (command === ';demorgan') {
+        const targetUser = parts[1];
+        const minutes = parts[2];
+        const secretPassword = parts[3];
+        
+        if (!targetUser || !minutes || !secretPassword) {
+            alert("⚠️ Синтаксическая ошибка CLI! Шаблон: ;demorgan ник минуты пароль");
+            return;
+        }
+        
+        try {
+            const res = await fetch(`${API_URL}/api/admin/demorgan`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ key: secretPassword, target: targetUser, minutes: parseInt(minutes) })
+            });
+            const data = await res.json();
+            if (data.status === "ok") {
+                if (typeof showIncognitoToast === "function") showIncognitoToast(data.message, "#00ff00");
+                toggleAdminConsoleBar();
+            } else { alert("🔴 CLI_ERROR: " + data.message); }
+        } catch (e) { alert("🔴 Ошибка соединения с терминалом ядра"); }
+    }
+    
+    else {
+        alert("⚠️ Команда не распознана системным интерпретатором");
     }
 }
+
     
 </script>
     <!-- Вставь это перед </body> -->
