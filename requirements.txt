@@ -11,3 +11,4 @@ pytz
 psutil
 supabase
 gotrue
+asyncpg
