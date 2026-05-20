@@ -905,6 +905,9 @@ IMGBB_API_KEY = "140359baf01acef6aa27e35c55b32f99"
 
 @app.post("/upload")
 async def upload_file(request: Request, file: UploadFile = File(...)):
+    # Явно указываем область видимости для облачного клиента
+    global supabase_client
+    
     try:
         # --- 1. ЕСЛИ ЭТО ИЗОБРАЖЕНИЕ — ЧИТАЕМ МАЛЕНЬКИЙ ОБЪЕМ И ШЛЕМ НА IMGBB ---
         if file.content_type and file.content_type.startswith("image/"):
@@ -916,7 +919,6 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
                 if res.status_code == 200:
                     return {"url": res.json()["data"]["url"]}
                 print(f"⚠️ ImgBB Error: {res.text}. Резервный запуск в Supabase...")
-                # Если ImgBB упал, сбрасываем указатель файла в начало для Supabase
                 await file.seek(0)
 
         # --- 2. ДЛЯ ТЯЖЕЛЫХ ВИДЕО (10-50 МБ) — СТАБИЛЬНАЯ ЗАГРУЗКА БАЙТОВ ---
@@ -930,7 +932,7 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
         res = await asyncio.to_thread(
             supabase_client.storage.from_("pinnogram-media").upload,
             path=cloud_filename,
-            file=video_bytes, # 🎯 ИСПРАВЛЕНО: Передаем видео в виде байт-массива
+            file=video_bytes,
             file_options={"content-type": file.content_type or "video/mp4"}
         )
         
@@ -940,12 +942,13 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
         print(f"📦 Тяжелый файл успешно передан в Supabase: {public_url}")
         return {"url": public_url}
 
-
     except Exception as e:
-        print(f"❌ Ошибка потоковой загрузки файла: {str(e)}")
+        print(f"❌ Ошибка загрузки файла: {str(e)}")
         import traceback
         traceback.print_exc()
-        return {"url": "error"}
+        # Возвращаем четкую структуру, которую фронтенд сможет распарсить без вылетов
+        return {"url": "error", "error_details": str(e)}
+
 
 
 @app.websocket("/ws/{room_id}/{username}")
