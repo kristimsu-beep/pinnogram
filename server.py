@@ -330,12 +330,10 @@ async def get_shorts(username: str):
                 })
             return shorts_list
 
-# 2. ПУБЛИКАЦИЯ НОВОГО ШОРТСА (PostgreSQL + MUTE SYSTEM — ИСПРАВЛЕННЫЙ)
+# 2. ПУБЛИКАЦИЯ НОВОГО ШОРТСА (aiosqlite + MUTE SYSTEM — ФИНАЛЬНЫЙ ФИКС)
 @app.post("/api/shorts/publish")
 async def publish_short(data: dict):
-    # 🎯 Явно говорим Python использовать глобальный словарь мутов из памяти сервера
     global MUTED_DATA
-    
     try:
         author = data.get("author", "").strip()
         
@@ -358,25 +356,19 @@ async def publish_short(data: dict):
             
         ts = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
         
-        # Подключаемся к вечной облачной базе данных Supabase
-        conn = await asyncpg.connect(DATABASE_URL)
-        try:
-            await conn.execute("""
+        # 🎯 СОХРАНЯЕМ В ТЕКУЩУЮ ЛОКАЛЬНУЮ БАЗУ ДАННЫХ PINNOGRAM
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("""
                 INSERT INTO shorts (title, description, video_url, author, timestamp) 
-                VALUES ($1, $2, $3, $4, $5)
-            """, title, desc, video_url, author, ts)
-            return {"status": "ok", "message": "Видео успешно опубликовано!"}
-        except Exception as e:
-            print(f"🛑 Ошибка публикации шортса в облако: {e}")
-            return {"status": "error", "message": "Ошибка записи в глобальный реестр шортсов"}
-        finally:
-            await conn.close()
+                VALUES (?, ?, ?, ?, ?)
+            """, (title, desc, video_url, author, ts))
+            await db.commit()
+            
+        return {"status": "ok", "message": "Видео успешно опубликовано!"}
 
     except Exception as main_err:
-        # Если случится любой непредвиденный сбой, бэкэнд вернет JSON, а не крашнется в 500 ошибку
         print(f"❌ Критический сбой роута публикации шортса: {main_err}")
         return {"status": "error", "message": f"Системный сбой ядра: {str(main_err)}"}
-
 
 
 # 3. ЛАЙК / ДИЗЛАЙК ВИДЕО (С автоматическим пересчетом счетчиков)
