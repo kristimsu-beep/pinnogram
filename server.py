@@ -15,6 +15,8 @@ import base64
 import time
 import psutil
 from supabase import create_client, Client # Добавь в самый верх к импортам, если еще не добавил!
+import asyncpg
+
 
 # Вечное облачное хранилище для видео и голосовых Pinnogram
 SUPABASE_URL = "https://zzcfdrryfsychezckjov.supabase.co"
