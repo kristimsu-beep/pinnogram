@@ -1126,25 +1126,15 @@
         <button onclick="saveNameAndStart()">Войти</button>
     </div>
 
-    <div id="chat-screen" style="display:none; position: relative;"> <!-- 🎯 Добавили position: relative -->
+    <div id="chat-screen" style="display:none;">
+        <!-- 1. Верхняя инфо-панель -->
         <h2 id="chat-logo-id" style="text-align:center; cursor:pointer; color:var(--accent); margin:10px 0; font-family: 'Segoe UI', sans-serif;">Pinnogram</h2>
         <div id="online-list" style="font-size:11px; color:var(--accent); opacity:0.8; margin:2px 5px; height:15px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;"></div>
         <div id="typing-indicator" style="font-size:12px; color:var(--accent); font-style:italic; margin:5px; height:15px;"></div>
-    
-        <!-- 🌐 ТВОЯ НОВАЯ КНОПКА АВТО-ПЕРЕВОДА -->
-        <div id="auto-translate-panel" style="position: absolute; top: 15px; right: 15px; z-index: 10000; font-family: monospace;">
-            <select id="target-lang-select" onchange="changeAutoTranslateLanguage(this.value)" style="background: rgba(0,20,0,0.9); border: 1px solid #00ff00; color: #00ff00; padding: 5px 10px; border-radius: 8px; font-size: 11px; outline: none; cursor: pointer; box-shadow: 0 0 10px rgba(0,255,0,0.2); font-family: monospace; font-weight: bold;">
-                <option value="off">🌐 Перевод: ВЫКЛ</option>
-                <option value="ru">🇷🇺 Русский</option>
-                <option value="en">🇺🇸 English</option>
-                <option value="zh">🇨🇳 中文 (Китайский)</option>
-                <option value="es">🇪🇸 Español</option>
-                <option value="de">🇩🇪 Deutsch</option>
-            </select>
-        </div>
-        
+
         <!-- 2. Окно чата -->
         <div id="chat"></div>
+        
         <div id="reply-preview" style="display:none; background:rgba(255,255,255,0.1); padding:10px; border-left:3px solid var(--accent); position:relative;"></div>
         <div id="join-group-bar" style="display: none; background: rgba(255, 204, 0, 0.1); border-top: 1px solid #ffcc00; padding: 12px; text-align: center;">
             <span style="color: #fff; font-size: 13px;">Вы не подписаны. Вступите, чтобы писать в группу.</span>
@@ -2046,6 +2036,7 @@
                 } else {
                     // --- 6. КОНТЕНТ (ИИ, Картинки, Видео, Текст) ---
                     let cleanDisplay = text || ""; // Защита: если text вдруг undefined
+
                     const lowerT = cleanDisplay.toLowerCase();
                     const isLink = cleanDisplay.trim().startsWith("http");
                     
@@ -2058,41 +2049,12 @@
 
                     const isVid = isLink && [".mp4", ".webm", ".mov"].some(ext => lowerT.includes(ext));
 
-                    // 🎯 1. ЕСЛИ ЭТО ОБЫЧНЫЙ ТЕКСТ (НЕ КАРТИНКА И НЕ ССЫЛКА)
-                    if (!isImg && !isLink && !isVid) {
-                        const textSpan = document.createElement('span');
-                        textSpan.className = "msg-text";               // Добавили класс для ручного перевода
-                        textSpan.id = `msg-text-node-${msgId}`;          // Уникальный ID для автоперевода
-                        textSpan.textContent = cleanDisplay;
-                        
-                        // Блок времени внутри текста
-                        const timeSpan = document.createElement('small');
-                        timeSpan.className = "msg-time";
-                        timeSpan.textContent = ` ${time}`;
-                        timeSpan.style = "font-size: 9px; opacity: 0.4; margin-left: 8px; font-family: monospace; display: inline-block; vertical-align: bottom;";
-                        textSpan.appendChild(timeSpan);
-                        
-                        msgBubble.appendChild(textSpan);
-
-                        // 🌐 ИНТЕГРАЦИЯ АВТО-ПЕРЕВОДА НА ЛЕТУ ДЛЯ ВХОДЯЩИХ СООБЩЕНИЙ
-                        if (currentAutoTranslateLang !== "off" && sender !== myName && cleanDisplay) {
-                            const targetSpanId = `msg-text-node-${msgId}`;
-                            
-                            // Запускаем фоновый перевод через промис, чтобы интерфейс сокета не лагал
-                            translateTextViaGoogle(cleanDisplay, currentAutoTranslateLang).then(translated => {
-                                const span = document.getElementById(targetSpanId);
-                                if (span && translated !== cleanDisplay) {
-                                    // Меняем текст, сохраняя маленький тег системного времени чата
-                                    span.innerHTML = `${translated} <small style="font-size:9px; opacity:0.3; display:block; margin-top:2px; font-family:monospace;">🌐 auto-translated to ${currentAutoTranslateLang.toUpperCase()}</small> ${timeSpan.outerHTML}`;
-                                }
-                            });
-                        } 
-                    } 
-                    // 🖼️ 2. ЕСЛИ ЭТО ИЗОБРАЖЕНИЕ (ВОЗВРАЩЕНО НА МЕСТО)
-                    else if (isImg) {
+                    if (isImg) {
                         const img = document.createElement('img');
+                        // 1. Разрешаем чтение пикселей для цветной пыли
                         img.crossOrigin = "anonymous"; 
                         img.src = cleanDisplay; 
+                        
                         img.className = "chat-img";
                         img.style = "max-width:100%; border-radius:10px; margin-top:5px; cursor:pointer; border:1px solid rgba(255,255,255,0.1);";
                         
@@ -2109,12 +2071,12 @@
                             aiLabel.textContent = "🎨 Сгенерировано Pinnogram AI";
                             msgBubble.appendChild(aiLabel);
                         }
-                    }
-                    // 📹 3. ЕСЛИ ЭТО ВИДЕО
-                    else if (isVid) {
+                    } else if (isVid) {
                         const v = document.createElement('video');
+                        // 2. ОБЯЗАТЕЛЬНО для цветной пыли из видео
                         v.crossOrigin = "anonymous"; 
                         v.src = cleanDisplay; 
+                        
                         v.autoplay = true; 
                         v.loop = true; 
                         v.muted = true; 
@@ -2122,14 +2084,13 @@
                         v.controls = true;
                         v.style = "max-width:100%; border-radius:12px; margin-top:5px;";
                         msgBubble.appendChild(v);
-                    } 
-                    // 🔗 4. СТРАХОВОЧНЫЙ ВАРИАНТ ДЛЯ ССЫЛОК
-                    else {
+                    } else {
                         const s = document.createElement('span');
                         s.className = "msg-text";
                         s.textContent = cleanDisplay.trim() || "..."; 
                         msgBubble.appendChild(s);
                     }
+
                 }
 
 
@@ -4397,82 +4358,6 @@ async function executeAdminConsoleCommand() {
     }
 }
 
-// --- 🌐 СИСТЕМА ДИНАМИЧЕСКОГО И АВТО-ПЕРЕВОДА GOOGLE TRANSLATE ---
-let currentAutoTranslateLang = localStorage.getItem("pinnogram_translate_lang") || "off";
-
-// Выставляем сохраненный язык в селекторе при загрузке страницы
-document.addEventListener("DOMContentLoaded", () => {
-    const select = document.getElementById("target-lang-select");
-    if (select) select.value = currentAutoTranslateLang;
-});
-
-// Асинхронный запрос к бесплатному шлюзу Google Translate
-async function translateTextViaGoogle(text, targetLang) {
-    if (!text || text.trim() === "" || text.startsWith("E2EE:")) return text;
-    try {
-        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`;
-        const res = await fetch(url);
-        const data = await res.json();
-        
-        if (data && data[0]) {
-            return data[0].map(item => item[0]).join("");
-        }
-        return text;
-    } catch (e) {
-        console.error("Translation failed:", e);
-        return text;
-    }
-}
-
-// 1. РУЧНОЙ ПЕРЕВОД ИЗ КОНТЕКСТНОГО МЕНЮ (Строго на русский)
-async function translateSelectedMessage() {
-    if (!currentMenuMsgId) return;
-    
-    const msgRow = document.getElementById(`msg-${currentMenuMsgId}`);
-    if (!msgRow) return;
-    
-    const textNode = msgRow.querySelector('.msg-text');
-    if (!textNode) return;
-    
-    if (typeof closeMenu === "function") closeMenu(); // Сворачиваем контекстное меню
-    
-    // Вытаскиваем чистый текст (без вложенного тега времени)
-    let originalText = "";
-    for (let child of textNode.childNodes) {
-        if (child.nodeType === Node.TEXT_NODE) {
-            originalText += child.textContent;
-        }
-    }
-    originalText = originalText.trim();
-    
-    if (originalText.includes("🌐 Переведено") || originalText.startsWith("🔒") || !originalText) return;
-
-    // Ставим временную заглушку загрузки
-    const savedTimeHTML = textNode.querySelector('.msg-time') ? textNode.querySelector('.msg-time').outerHTML : "";
-    textNode.innerHTML = `<span style="opacity:0.5; font-style:italic;">Перевод...</span> ${savedTimeHTML}`;
-    
-    // Шлем запрос в Google на русский ("ru") язык
-    const translatedText = await translateTextViaGoogle(originalText, "ru");
-    
-    textNode.innerHTML = `${translatedText} <small style="font-size:9px; opacity:0.4; display:block; margin-top:4px; font-family:monospace; color:#00ff00;">🌐 Переведено на русский</small> ${savedTimeHTML}`;
-}
-
-// 2. СМЕНА РЕЖИМА АВТО-ПЕРЕВОДА ВСЕХ СООБЩЕНИЙ ЧАТА
-function changeAutoTranslateLanguage(lang) {
-    currentAutoTranslateLang = lang;
-    localStorage.setItem("pinnogram_translate_lang", lang);
-    
-    if (typeof showIncognitoToast === "function") {
-        const msg = lang === "off" ? "Авто-перевод отключен" : `Авто-перевод активен: ${lang.toUpperCase()}`;
-        showIncognitoToast(msg, lang === "off" ? "#ff3b30" : "#00ff00");
-    }
-    
-    // Перезапрашиваем историю чата, чтобы на лету применить авто-перевод к старым сообщениям
-    if (typeof ws !== "undefined" && ws.readyState === WebSocket.OPEN) {
-        ws.send(`GET_HISTORY:${currentPartner || "general"}`);
-    }
-}
-
     
 </script>
     <!-- Вставь это перед </body> -->
@@ -4480,13 +4365,8 @@ function changeAutoTranslateLanguage(lang) {
     <div class="menu-item" onclick="prepareReply()">↩️ Ответ</div>
     <div class="menu-item" id="edit-menu-btn" onclick="prepareEdit()">✏️ Изменить</div>
     <div class="menu-item" onclick="copyMsgText()">📋 Копировать</div>
-    
-    <!-- 🌐 ТВОЯ НОВАЯ КНОПКА ПЕРЕВОДА (Строго на русский по клику) -->
-    <div class="menu-item" onclick="translateSelectedMessage()" style="color: #00ff00; font-weight: bold; border-top: 1px dashed #333; margin-top: 5px; padding-top: 5px;">🌐 Перевести</div>
-    
     <div id="delete-menu-btn" class="menu-item" onclick="confirmDelete()" style="border-top:1px solid #333; margin-top:5px; padding-top:10px;">🗑 Удалить</div>
 </div>
-
 <div id="archive-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:rgba(0,10,0,0.95); border:2px solid #00ff00; width:90%; max-width:500px; height:80vh; z-index:40000; border-radius:20px; padding:25px; color:#00ff00; font-family:monospace; box-shadow: 0 0 50px #000;">
     <h3 style="margin-top:0; text-align:center; border-bottom:1px solid #005500; padding-bottom:10px;">📂 DATABASE: USERS ARCHIVE</h3>
     <input type="text" id="archive-search" placeholder="Поиск по имени..." oninput="filterArchive()" style="width:100%; padding:12px; background:#000; border:1px solid #008800; color:#00ff00; border-radius:10px; margin-bottom:20px; font-family:monospace;">
