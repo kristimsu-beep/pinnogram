@@ -4038,7 +4038,15 @@ async function submitNewShort() {
             fd.append("file", currentSelectedVideoFile); 
             
             const uploadRes = await fetch(`${API_URL}/upload`, { method: "POST", body: fd });
+            
+            // 🛡️ ЗАЩИТА: Проверяем, что сервер вернул именно JSON, а не HTML-страницу ошибки
+            const contentType = uploadRes.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) {
+                throw new Error(`Сервер перегружен или файл слишком тяжелый (Статус: ${uploadRes.status})`);
+            }
+            
             const uploadData = await uploadRes.json();
+
             if (uploadData.url && uploadData.url !== "error") {
                 finalVideoUrl = uploadData.url;
             } else {
