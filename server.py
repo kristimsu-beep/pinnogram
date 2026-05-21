@@ -209,48 +209,95 @@ async def admin_demorgan_user(data: dict):
             
     return {"status": "ok", "message": f"Узел {target} отправлен в Деморган на {minutes} мин."}
 
- # 1. ПОЛУЧЕНИЕ СПИСКА ПЕРСОНАЛА ИЗ DISCORD БОТА
+
+# Иерархия должностей
+STAFF_HIERARCHY = [
+    "Младший Модератор", "Модератор", "Старший Модератор", 
+    "Младший Администратор", "Администратор", "Старший Администратор",
+    "Заместитель Главного Модератора", "Главный Модератор", "Отдел по набору",
+    "Заместитель Главного Администратора", "Главный Администратор", 
+    "Зам.Менеджера", "Менеджер", "Тех. Админ"
+]
+
 @app.get("/api/forum/staff")
 async def get_forum_staff():
-    try:
-        # Стучимся в локальный порт бота, который мы открыли в Tishina.py
-        async with httpx.AsyncClient() as client:
-            res = await client.get("http://localhost:9000/api/staff", timeout=5.0)
-            if res.status_code == 200:
-                return res.json()
-    except Exception as e:
-        print(f"⚠️ Ошибка связи с Discord-ботом: {e}")
-    return [] # Возвращаем пустой список, если бот выключен
-
-# 2. ОСТАВИТЬ ОТЗЫВ О МОДЕРАТОРЕ
-@app.post("/api/forum/review")
-async def add_staff_review(data: dict):
-    target_id = data.get("target_id") # ID дискорд-аккаунта модератора
-    author = data.get("author")       # Ник того, кто оставляет отзыв
-    text = data.get("text", "").strip()
-    rating = int(data.get("rating", 5))
-    ts = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
+    BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+    GUILD_ID = "1487896132511076465"
     
-    if not target_id or not author or not text:
-        return {"status": "error", "message": "Заполните все поля отзыва!"}
+    if not BOT_TOKEN:
+        print("❌ Ошибка безопасности: DISCORD_BOT_TOKEN не настроен в переменных Render!")
+        return []
+    
+    staff_list = []
+    
+    try:
+        headers = {"Authorization": f"Bot {BOT_TOKEN}"}
         
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("""
-            INSERT INTO forum_reviews (target_id, author, review_text, rating, timestamp)
-            VALUES (?, ?, ?, ?, ?)
-        """, (target_id, author, text, rating, ts))
-        await db.commit()
-    return {"status": "ok", "message": "Отзыв успешно опубликован!"}
+        # 1. СИСТЕМНЫЙ ФИКС: Указали полный и правильный путь к API ролей Discord
+        roles_url = f"https://discord.com/api/v10/guilds/{GUILD_ID}/roles"
+        
+        async with httpx.AsyncClient() as client:
+            roles_res = await client.get(roles_url, headers=headers, timeout=10.0)
+            if roles_res.status_code != 200:
+                print(f"❌ Ошибка получения ролей Discord: {roles_res.text}")
+                return []
+                
+            roles_data = roles_res.json()
+            # Делаем словарь { "role_id": "Имя Роли" }
+            roles_map = {r["id"]: r["name"] for r in roles_data}
+            
+            # 2. СИСТЕМНЫЙ ФИКС: Указали полный и правильный путь к API участников Discord
+            members_url = f"https://discord.com/api/v10/guilds/{GUILD_ID}/members?limit=1000"
+            members_res = await client.get(members_url, headers=headers, timeout=10.0)
+            
+            if members_res.status_code != 200:
+                print(f"❌ Ошибка получения участников Discord: {members_res.text}")
+                return []
+                
+            members_data = members_res.json()
+            
+            # 3. Фильтруем участников по иерархии ролей
+            for m in members_data:
+                if "user" in m and m["user"].get("bot"):
+                    continue
+                    
+                user_id = m["user"]["id"]
+                display_name = m.get("nick") or m["user"].get("global_name") or m["user"]["username"]
+                username = m["user"]["username"]
+                
+                # Собираем текстовые имена ролей, которые есть у этого юзера
+                member_role_ids = m.get("roles", [])
+                member_role_names = [roles_map[rid] for rid in member_role_ids if rid in roles_map]
+                
+                # Ищем совпадения с нашей иерархией STAFF_HIERARCHY
+                matched_roles = [r for r in member_role_names if r in STAFF_HIERARCHY]
+                
+                if matched_roles:
+                    # Сортируем по приоритету должностей
+                    matched_roles.sort(key=lambda x: STAFF_HIERARCHY.index(x))
+                    highest_role = matched_roles[-1]
+                    
+                    # СИСТЕМНЫЙ ФИКС: Сборка ссылки на аватарку через официальный cdn.discordapp.com
+                    avatar_hash = m["user"].get("avatar")
+                    if avatar_hash:
+                        avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png"
+                    else:
+                        avatar_url = "https://i.ibb.co/image.png"
+                        
+                    staff_list.append({
+                        "id": user_id,
+                        "name": display_name,
+                        "username": username,
+                        "avatar": avatar_url,
+                        "role": highest_role
+                    })
+                    
+    except Exception as e:
+        print(f"🛑 Ошибка шлюза Discord API в server.py: {e}")
+        
+    return staff_list
 
-# 3. ПОЛУЧЕНИЕ ОТЗЫВОВ ДЛЯ КОНКРЕТНОГО ПРОФИЛЯ
-@app.get("/api/forum/reviews/{target_id}")
-async def get_staff_reviews(target_id: str):
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT author, review_text, rating, timestamp FROM forum_reviews WHERE target_id = ? ORDER BY id DESC", (target_id,)) as cursor:
-            rows = await cursor.fetchall()
-            return [{"author": r[0], "text": r[1], "rating": r[2], "time": r[3]} for r in rows]
-
-# 4. РЕНДЕРИНГ САМОЙ СТРАНИЦЫ ФОРУМА
+# 4. РЕНДЕРИНГ САМОЙ СТРАНИЦЫ ФОРУМА (Убедись, что переменная BASE_DIR объявлена выше в коде)
 @app.get("/forum")
 async def serve_forum_page():
     from fastapi.responses import FileResponse
