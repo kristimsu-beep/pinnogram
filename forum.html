@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pinnogram | STAFF FORUM</title>
+    <style>
+        :root {
+            --bg: #0a0a0c;
+            --panel: #121216;
+            --accent: #00ff00;
+            --neon-blue: #00f0ff;
+            --text: #ffffff;
+        }
+        body {
+            margin: 0; background: var(--bg); color: var(--text);
+            font-family: 'Segoe UI', monospace; overflow-x: hidden;
+        }
+        .header {
+            padding: 20px; text-align: center; border-bottom: 1px solid rgba(0,255,0,0.2);
+            box-shadow: 0 0 20px rgba(0,255,0,0.05);
+        }
+        .header h1 { margin: 0; font-size: 28px; color: var(--accent); text-transform: uppercase; letter-spacing: 2px; }
+        
+        .container { max-width: 1200px; margin: 40px auto; padding: 0 20px; }
+        
+        /* СЕТКА НЕОНОВЫХ КАРТОЧЕК */
+        .staff-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 25px;
+        }
+        .card {
+            background: var(--panel); border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 16px; padding: 20px; text-align: center; cursor: pointer;
+            transition: 0.3s cubic-bezier(0.1, 0.8, 0.2, 1); position: relative; overflow: hidden;
+        }
+        .card:hover {
+            transform: translateY(-5px); border-color: var(--accent);
+            box-shadow: 0 10px 25px rgba(0,255,0,0.15);
+        }
+        .card img {
+            width: 100px; height: 100px; border-radius: 50%; border: 2px solid var(--neon-blue);
+            object-fit: cover; margin-bottom: 15px; box-shadow: 0 0 15px rgba(0,240,255,0.2);
+        }
+        .card h3 { margin: 5px 0; font-size: 18px; font-weight: bold; }
+        .card p {
+            margin: 5px 0 0; font-size: 11px; text-transform: uppercase;
+            letter-spacing: 1px; color: var(--accent); background: rgba(0,255,0,0.05);
+            padding: 4px 10px; border-radius: 20px; display: inline-block;
+        }
+
+        /* МОДАЛЬНОЕ ОКНО ПРОФИЛЯ С ОТЗЫВАМИ */
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 99999;
+            align-items: center; justify-content: center;
+        }
+        .modal-content {
+            background: var(--panel); border: 2px solid var(--neon-blue); width: 90%; max-width: 600px;
+            border-radius: 24px; padding: 30px; position: relative; box-shadow: 0 0 40px rgba(0,240,255,0.1);
+        }
+        .close-btn {
+            position: absolute; top: 20px; right: 20px; background: none; border: none;
+            color: white; font-size: 24px; cursor: pointer; opacity: 0.6;
+        }
+        .close-btn:hover { opacity: 1; color: red; }
+        
+        .profile-header { text-align: center; margin-bottom: 25px; }
+        .profile-header img { width: 80px; height: 80px; border-radius: 50%; border: 2px solid var(--accent); }
+        
+        .reviews-section { max-height: 200px; overflow-y: auto; margin-bottom: 20px; border-top: 1px dashed #333; padding-top: 15px; }
+        .review-item { background: rgba(255,255,255,0.02); padding: 10px 15px; border-radius: 8px; margin-bottom: 10px; border-left: 2px solid var(--accent); }
+        .review-meta { display: flex; justify-content: space-between; font-size: 10px; opacity: 0.5; margin-bottom: 4px; }
+        
+        .review-form input, .review-form textarea {
+            width: 100%; background: #000; border: 1px solid #333; color: white;
+            padding: 10px; border-radius: 8px; margin-bottom: 10px; outline: none; box-sizing: border-box;
+        }
+        .review-form button {
+            width: 100%; background: var(--accent); color: black; font-weight: bold;
+            border: none; padding: 12px; border-radius: 10px; cursor: pointer; text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Pinnogram Staff Forum</h1>
+    </div>
+
+    <div class="container">
+        <!-- Сетка карточек персонала, заполняется автоматически через API -->
+        <div class="staff-grid" id="staff-container"></div>
+    </div>
+
+    <!-- ВСПЛЫВАЮЩИЙ ПРОФИЛЬ МОДЕРАТОРА -->
+    <div class="modal" id="profile-modal">
+        <div class="modal-content">
+            <button class="close-btn" onclick="closeProfileModal()">✕</button>
+            
+            <div class="profile-header">
+                <img id="modal-avatar" src="">
+                <h2 id="modal-name" style="margin: 5px 0 0;">Ник</h2>
+                <p id="modal-role" style="color: var(--accent); font-size: 12px; text-transform: uppercase; margin: 4px 0 0;"></p>
+            </div>
+
+            <!-- Раздел существующих отзывов -->
+            <h3 style="margin: 0 0 10px; font-size: 14px; opacity: 0.7;">📋 ОТЗЫВЫ СОСТАВА:</h3>
+            <div class="reviews-section" id="reviews-container"></div>
+
+            <!-- Форма написания отзыва -->
+            <div class="review-form">
+                <h3 style="margin: 0 0 10px; font-size: 14px; opacity: 0.7;">✍️ ОСТАВИТЬ ОТЗЫВ:</h3>
+                <input type="text" id="review-author" placeholder="Ваш никнейм...">
+                <textarea id="review-text" rows="3" placeholder="Напишите ваш отзыв или оценку работы сотрудника..."></textarea>
+                <button onclick="submitForumReview()">Отправить отзыв</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin;
+        let selectedStaffId = null;
+
+        // Загрузка состава персонала с Discord через API бота
+        async function loadStaffForum() {
+            const container = document.getElementById("staff-container");
+            container.innerHTML = "<div style='color:var(--accent)'>Синхронизация с сервером Discord...</div>";
+            
+            try {
+                const res = await fetch(`${API_URL}/api/forum/staff`);
+                const staff = await res.json();
+                
+                if (staff.length === 0) {
+                    container.innerHTML = "<div>⚠️ Состав не найден. Убедитесь, что бот в сети.</div>";
+                    return;
+                }
+                
+                container.innerHTML = staff.map(u => `
+                    <div class="card" onclick="openProfileModal('${u.id}', '${u.name}', '${u.avatar}', '${u.role}')">
+                        <img src="${u.avatar}">
+                        <h3>${u.name}</h3>
+                        <p>${u.role}</p>
+                    </div>
+                `).join("");
+            } catch (e) {
+                container.innerHTML = "<div>🔴 Ошибка подключения к ядру модерации</div>";
+            }
+        }
+
+        // Открытие профиля для чтения и написания отзывов
+        async function openProfileModal(id, name, avatar, role) {
+            selectedStaffId = id;
+            document.getElementById("modal-avatar").src = avatar;
+            document.getElementById("modal-name").textContent = name;
+            document.getElementById("modal-role").textContent = role;
+            
+            // Подгружаем отзывы для этого человека из нашей базы данных aiosqlite
+            const reviewsContainer = document.getElementById("reviews-container");
+            reviewsContainer.innerHTML = "Загрузка отзывов...";
+            
+            try {
+                const res = await fetch(`${API_URL}/api/forum/reviews/${id}`);
+                const reviews = await res.json();
+                
+                if (reviews.length === 0) {
+                    reviewsContainer.innerHTML = "<div style='opacity:0.4; font-size:12px;'>Отзывов пока нет. Будьте первым!</div>";
+                } else {
+                    reviewsContainer.innerHTML = reviews.map(r => `
+                        <div class="review-item">
+                            <div class="review-meta">
+                                <b>${r.author}</b>
+                                <span>${r.time}</span>
+                            </div>
+                            <div style="font-size:13px; margin-top:4px;">${r.text}</div>
+                        </div>
+                    `).join("");
+                }
+            } catch (e) { reviewsContainer.innerHTML = "Ошибка загрузки архива отзывов"; }
+            
+            document.getElementById("profile-modal").style.display = "flex";
+        }
+
+        function closeProfileModal() {
+            document.getElementById("profile-modal").style.display = "none";
+            document.getElementById("review-author").value = "";
+            document.getElementById("review-text").value = "";
+        }
+
+        // Отправка нового отзыва в базу данных
+        async function submitForumReview() {
+            const author = document.getElementById("review-author").value.trim();
+            const text = document.getElementById("review-text").value.trim();
+            
+            if (!author || !text) return alert("Пожалуйста, заполните ваш ник и текст отзыва!");
+            
+            try {
+                const res = await fetch(`${API_URL}/api/forum/review`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ target_id: selectedStaffId, author: author, text: text })
+                });
+                const data = await res.json();
+                if (data.status === "ok") {
+                    alert(data.message);
+                    // Перезапускаем профиль, чтобы отзыв сразу отобразился на экране
+                    openProfileModal(selectedStaffId, document.getElementById("modal-name").textContent, document.getElementById("modal-avatar").src, document.getElementById("modal-role").textContent);
+                } else { alert("Ошибка: " + data.message); }
+            } catch (e) { alert("Не удалось опубликовать отзыв"); }
+        }
+
+        // Запуск форума при старте страницы
+        loadStaffForum();
+    </script>
+</body>
+</html>
