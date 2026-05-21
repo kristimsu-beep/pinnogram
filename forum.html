@@ -122,31 +122,60 @@
         const API_URL = window.location.origin;
         let selectedStaffId = null;
 
-        // Загрузка состава персонала с Discord через API бота
+        // Загрузка состава персонала с Discord (БЕЗ использования innerHTML)
         async function loadStaffForum() {
             const container = document.getElementById("staff-container");
-            container.innerHTML = "<div style='color:var(--accent)'>Синхронизация с сервером Discord...</div>";
+            if (!container) return;
+            
+            container.textContent = "Синхронизация с сервером Discord...";
             
             try {
                 const res = await fetch(`${API_URL}/api/forum/staff`);
                 const staff = await res.json();
                 
-                if (staff.length === 0) {
-                    container.innerHTML = "<div>⚠️ Состав не найден. Убедитесь, что бот в сети.</div>";
+                // Очищаем контейнер перед загрузкой карточек
+                container.textContent = "";
+                
+                if (!staff || staff.length === 0) {
+                    const errDiv = document.createElement("div");
+                    errDiv.textContent = "⚠️ Состав не найден. Убедитесь, что бот в сети и роли выданы.";
+                    container.appendChild(errDiv);
                     return;
                 }
                 
-                container.innerHTML = staff.map(u => `
-                    <div class="card" onclick="openProfileModal('${u.id}', '${u.name}', '${u.avatar}', '${u.role}')">
-                        <img src="${u.avatar}">
-                        <h3>${u.name}</h3>
-                        <p>${u.role}</p>
-                    </div>
-                `).join("");
+                // 🎯 СБОРКА КАРТОЧЕК БЕЗОПАСНЫМ СПОСОБОМ DOM-УЗЛОВ
+                staff.forEach(u => {
+                    const card = document.createElement("div");
+                    card.className = "card";
+                    
+                    // Навешиваем клик для вызова модального окна профиля отзыва
+                    card.onclick = () => openProfileModal(u.id, u.name, u.avatar, u.role);
+                    
+                    const img = document.createElement("img");
+                    // Резервная аватарка если у пользователя в Дискорде ее нет
+                    img.src = u.avatar && u.avatar !== "https://ibb.co" ? u.avatar : "https://ibb.co";
+                    
+                    const h3 = document.createElement("h3");
+                    h3.textContent = u.name;
+                    
+                    const p = document.createElement("p");
+                    p.textContent = u.role;
+                    
+                    // Собираем элементы воедино внутрь карточки
+                    card.appendChild(img);
+                    card.appendChild(h3);
+                    card.appendChild(p);
+                    
+                    // Пушим готовую карточку в общую сетку
+                    container.appendChild(card);
+                });
+                
             } catch (e) {
-                container.innerHTML = "<div>🔴 Ошибка подключения к ядру модерации</div>";
+                console.error(e);
+                container.textContent = "🔴 Ошибка подключения к ядру модерации";
             }
         }
+
 
         // Открытие профиля для чтения и написания отзывов
         async function openProfileModal(id, name, avatar, role) {
