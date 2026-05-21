@@ -4415,41 +4415,70 @@ function initPinnogramTranslationObserver() {
     observer.observe(chatBox, { childList: true, subtree: true });
 }
 
-// Функция точечного перевода текста внутри пузыря чата
+// Функция точечного перевода текста (ИСПРАВЛЕНА: Игнорирует ники)
 async function processNodeForTranslation(node, lang, force = false) {
-    // Проверяем, что это не наше сообщение (чтобы не переводить исходящие)
+    // Проверяем, что это не наше сообщение (чтобы не переводить свои же исходящие)
     if (!force && node.classList && node.classList.contains("my-msg")) return;
 
-    // Ищем внутри узла текст сообщения. Так как класса .msg-text нет, ищем любой текстовый узел или span, исключая аватарки, картинки и время
-    let textElements = node.querySelectorAll("span, p, div");
+    // 🎯 ТОЧНЫЙ ПОИСК ТЕКСТА: Ищем элемент, который содержит чистый текст сообщения
+    // Проверяем твои CSS-классы. Если у отправителя класс msg-sender, мы его жестко исключаем!
     let targetElement = null;
+    let textElements = node.querySelectorAll("span, p, div");
 
-    // Находим именно тот элемент, который содержит чистый текст сообщения
     for (let el of textElements) {
-        if (!el.classList.contains("msg-sender") && !el.classList.contains("msg-time") && !el.querySelector("img, video, audio") && el.textContent.trim().length > 0) {
+        // Условие: элемент НЕ должен быть ником (msg-sender) и НЕ должен быть временем (msg-time)
+        if (
+            !el.classList.contains("msg-sender") && 
+            !el.classList.contains("msg-time") && 
+            !el.classList.contains("reply-quote") && // Игнорируем цитаты ответов
+            !el.querySelector("img, video, audio") && // Игнорируем медиа-файлы
+            el.textContent.trim().length > 0
+        ) {
             targetElement = el;
             break;
         }
     }
 
-    if (!targetElement && node.tagName === "SPAN") targetElement = node;
+    // Резервная копия: если точечный элемент не найден, но сам узел является span
+    if (!targetElement && node.tagName === "SPAN" && !node.classList.contains("msg-sender")) {
+        targetElement = node;
+    }
 
     if (targetElement) {
-        let originalText = targetElement.getAttribute("data-original-text") || targetElement.innerText.split("\n")[0].trim();
+        // Считываем чистый текст сообщения
+        let originalText = targetElement.getAttribute("data-original-text");
+        
+        if (!originalText) {
+            // Вытаскиваем только текстовый контент, отрезая вложенное время, если оно прилипло
+            originalText = targetElement.innerText.split("\n")[0].trim();
+            
+            // Если в тексте остался никнейм из-за отсутствия классов, отрезаем его по двоеточию
+            if (originalText.includes(":")) {
+                originalText = originalText.substring(originalText.indexOf(":") + 1).trim();
+            }
+        }
+        
         if (!originalText || originalText.startsWith("E2EE:") || originalText.includes("🌐 translated")) return;
 
-        // Сохраняем оригинал, чтобы не переводить повторно
+        // Сохраняем оригинал в скрытую память, чтобы при выключении вернуть всё обратно
         if (!targetElement.hasAttribute("data-original-text")) {
             targetElement.setAttribute("data-original-text", originalText);
         }
 
+        // Шлем чистый текст сообщения в Google Translate
         const translated = await fetchCleanGoogleTranslation(originalText, lang);
-        if (translated !== originalText) {
-            // Подменяем текст, оставляя плашку перевода
-            targetElement.innerHTML = `${translated} <small style="font-size: 9px; opacity: 0.3; display: block; margin-top: 2px; font-family: monospace;">🌐 auto-translated to ${lang.toUpperCase()}</small>`;
+        
+        if (translated && translated !== originalText) {
+            // Меняем ТЕКСТ внутри пузыря, вообще никак не меняя дизайн, обёртки и структуру сообщения!
+            // Подтягиваем старое время, если оно было внутри этого узла
+            const timeEl = targetElement.querySelector('.msg-time');
+            const timeHTML = timeEl ? timeEl.outerHTML : "";
+            
+            targetElement.innerHTML = `${translated} <small style="font-size: 9px; opacity: 0.3; display: block; margin-top: 2px; font-family: monospace; color: var(--accent);">🌐 auto-translated to ${lang.toUpperCase()}</small> ${timeHTML}`;
         }
     }
 }
+
 
 // 1. Ручной перевод из контекстного меню
 async function translateSelectedMessageMenu() {
