@@ -215,7 +215,7 @@ STAFF_HIERARCHY = [
     "Младший Модератор", "Модератор", "Старший Модератор", 
     "Младший Администратор", "Администратор", "Старший Администратор",
     "Заместитель Главного Модератора", "Главный Модератор", "Отдел по набору",
-    "Заместитель Главного Администратора", "Главный Администратор", 
+    "Заместитель Куратора Администраторов", "Куратор Администраторов", 
     "Зам.Менеджера", "Менеджер", "Тех. Админ"
 ]
 
@@ -302,6 +302,64 @@ async def get_forum_staff():
 async def serve_forum_page():
     from fastapi.responses import FileResponse
     return FileResponse(os.path.join(BASE_DIR, "forum.html"))
+
+# ==========================================
+# 🏛️ СИСТЕМА ОТЗЫВОВ ДЛЯ PINNOGRAM FORUM
+# ==========================================
+
+# 1. ПРИЕМ И СОХРАНЕНИЕ ОТЗЫВОВ В БАЗУ ДАННЫХ
+@app.post("/api/forum/review")
+async def add_staff_review(data: dict):
+    try:
+        target_id = str(data.get("target_id", "")).strip() # ID дискорд-аккаунта модератора
+        author = data.get("author", "").strip()            # Ник того, кто оставляет отзыв
+        text = data.get("text", "").strip()                # Текст отзыва
+        rating = int(data.get("rating", 5))                # Оценка (по дефолту 5)
+        
+        # Получаем текущее время по МСК для фиксации отзыва
+        ts = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
+        
+        if not target_id or not author or not text:
+            return {"status": "error", "message": "Заполните все поля отзыва!"}
+            
+        # Записываем отзыв в твою локальную базу данных мессенджера (aiosqlite)
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("""
+                INSERT INTO forum_reviews (target_id, author, review_text, rating, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            """, (target_id, author, text, rating, ts))
+            await db.commit()
+            
+        print(f"✅ [FORUM] Успешно сохранен отзыв для модератора {target_id} от {author}")
+        return {"status": "ok", "message": "Отзыв успешно опубликован!"}
+        
+    except Exception as e:
+        print(f"🛑 Ошибка сохранения отзыва: {e}")
+        return {"status": "error", "message": f"Ошибка СУБД: {str(e)}"}
+
+
+# 2. ПОЛУЧЕНИЕ И ВЫДАЧА ОТЗЫВОВ НА ЭКРАН ПРОФИЛЯ
+@app.get("/api/forum/reviews/{target_id}")
+async def get_staff_reviews(target_id: str):
+    try:
+        target_id_str = str(target_id).strip()
+        
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute("""
+                SELECT author, review_text, rating, timestamp 
+                FROM forum_reviews 
+                WHERE target_id = ? 
+                ORDER BY id DESC
+            """, (target_id_str,)) as cursor:
+                rows = await cursor.fetchall()
+                
+                # Формируем чистый массив словарей, который JavaScript на фронтенде распарсит без ошибок
+                return [{"author": r[0], "text": r[1], "rating": r[2], "time": r[3]} for r in rows]
+                
+    except Exception as e:
+        print(f"🛑 Ошибка чтения отзывов для {target_id}: {e}")
+        return []
+
 
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
