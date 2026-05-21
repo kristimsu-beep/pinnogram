@@ -209,6 +209,53 @@ async def admin_demorgan_user(data: dict):
             
     return {"status": "ok", "message": f"Узел {target} отправлен в Деморган на {minutes} мин."}
 
+ # 1. ПОЛУЧЕНИЕ СПИСКА ПЕРСОНАЛА ИЗ DISCORD БОТА
+@app.get("/api/forum/staff")
+async def get_forum_staff():
+    try:
+        # Стучимся в локальный порт бота, который мы открыли в Tishina.py
+        async with httpx.AsyncClient() as client:
+            res = await client.get("http://localhost:9000/api/staff", timeout=5.0)
+            if res.status_code == 200:
+                return res.json()
+    except Exception as e:
+        print(f"⚠️ Ошибка связи с Discord-ботом: {e}")
+    return [] # Возвращаем пустой список, если бот выключен
+
+# 2. ОСТАВИТЬ ОТЗЫВ О МОДЕРАТОРЕ
+@app.post("/api/forum/review")
+async def add_staff_review(data: dict):
+    target_id = data.get("target_id") # ID дискорд-аккаунта модератора
+    author = data.get("author")       # Ник того, кто оставляет отзыв
+    text = data.get("text", "").strip()
+    rating = int(data.get("rating", 5))
+    ts = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
+    
+    if not target_id or not author or not text:
+        return {"status": "error", "message": "Заполните все поля отзыва!"}
+        
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            INSERT INTO forum_reviews (target_id, author, review_text, rating, timestamp)
+            VALUES (?, ?, ?, ?, ?)
+        """, (target_id, author, text, rating, ts))
+        await db.commit()
+    return {"status": "ok", "message": "Отзыв успешно опубликован!"}
+
+# 3. ПОЛУЧЕНИЕ ОТЗЫВОВ ДЛЯ КОНКРЕТНОГО ПРОФИЛЯ
+@app.get("/api/forum/reviews/{target_id}")
+async def get_staff_reviews(target_id: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT author, review_text, rating, timestamp FROM forum_reviews WHERE target_id = ? ORDER BY id DESC", (target_id,)) as cursor:
+            rows = await cursor.fetchall()
+            return [{"author": r[0], "text": r[1], "rating": r[2], "time": r[3]} for r in rows]
+
+# 4. РЕНДЕРИНГ САМОЙ СТРАНИЦЫ ФОРУМА
+@app.get("/forum")
+async def serve_forum_page():
+    from fastapi.responses import FileResponse
+    return FileResponse(os.path.join(BASE_DIR, "forum.html"))
+
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
     async with aiosqlite.connect(DB_PATH) as db:
@@ -874,6 +921,17 @@ async def startup():
             )
         """)
 
+        # Таблица отзывов на форуме
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS forum_reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                target_id TEXT,
+                author TEXT,
+                review_text TEXT,
+                rating INTEGER,
+                timestamp TEXT
+            )
+        """)
 
         # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
         columns = [
