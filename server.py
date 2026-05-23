@@ -349,6 +349,7 @@ async def discord_callback(code: str, request: Request, response: Response):
             access_token = tokens.get("access_token")
             
             if not access_token:
+                print(f"❌ Не удалось получить токен доступа. Ответ Discord: {tokens}")
                 return RedirectResponse("/forum?auth=error")
                 
             # Запрашиваем информацию о вошедшем пользователе (его имя и аватарку)
@@ -356,33 +357,41 @@ async def discord_callback(code: str, request: Request, response: Response):
             user_res = await client.get("https://discord.com/api/v10/users/@me", headers=user_headers)
             user_info = user_res.json()
             
-            u_id = user_info["id"]
+            u_id = str(user_info["id"])
             u_name = user_info.get("global_name") or user_info["username"]
             avatar_hash = user_info.get("avatar")
             
+            # 1. Базовая сборка ссылки (стандарт Дискорда)
             if avatar_hash:
-                # Определяем формат: анимированный или статичный
                 ext = "gif" if avatar_hash.startswith("a_") else "png"
                 u_avatar = f"https://cdn.discordapp.com/avatars/{u_id}/{avatar_hash}.{ext}"
             else:
-                # 🛠️ СИСТЕМНЫЙ АВТО-ПЕРЕХВАТ: Если аватар кастомный/сложный или пустой,
-                # рассчитываем официальную дефолтную аватарку Дискорда по их формуле индекса
                 try:
                     discriminator = int(user_info.get("discriminator", 0))
                     if discriminator == 0:
-                        # Для новых никнеймов без тегов (#0000) Дискорд считает индекс по ID пользователя
                         def_avatar_index = (int(u_id) >> 22) % 6
                     else:
-                        # Для старых аккаунтов с тегами
                         def_avatar_index = discriminator % 5
                 except:
                     def_avatar_index = 0
-                    
                 u_avatar = f"https://cdn.discordapp.com/embed/avatars/{def_avatar_index}.png"
+
+            # 🎯 2. СУПЕР-ФИКС: Синхронизируем аватарку со списком STAFF-карточек (где она 100% рабочая)
+            try:
+                # Вызываем асинхронную функцию получения состава проекта, объявленную у тебя в server.py
+                staff_members = await get_forum_staff()
+                # Ищем вошедшего пользователя среди модераторов по его ID
+                for staff_user in staff_members:
+                    if str(staff_user.get("id")) == u_id:
+                        # Заменяем ссылку на ту, которая успешно отрендерилась на карточке!
+                        u_avatar = staff_user.get("avatar")
+                        print(f"🎯 [FORUM AUTH] Аватарка для {u_name} успешно скопирована из STAFF-карточки!")
+                        break
+            except Exception as e:
+                print(f"⚠️ Ошибка синхронизации аватарки со списком staff: {e}")
 
             
             # Сохраняем данные пользователя прямо в куки браузера, чтобы сессия не сбрасывалась
-            # Куки будут жить 30 дней
             response = RedirectResponse("/forum?auth=success")
             response.set_cookie(key="forum_user_name", value=u_name, max_age=2592000)
             response.set_cookie(key="forum_user_avatar", value=u_avatar, max_age=2592000)
@@ -391,6 +400,7 @@ async def discord_callback(code: str, request: Request, response: Response):
     except Exception as e:
         print(f"🛑 Ошибка OAuth2: {e}")
         return RedirectResponse("/forum?auth=error")
+
 
 # 3. Выход из аккаунта (очистка кук)
 @app.get("/api/forum/auth/logout")
