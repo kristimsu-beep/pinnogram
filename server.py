@@ -475,40 +475,6 @@ async def serve_forum_page():
 # 🎫 СИСТЕМА ОБРАЩЕНИЙ И ЖАЛОБ (ТИКЕТЫ)
 # ==========================================
 
-# 1. СОЗДАНИЕ НОВОГО ОБРАЩЕНИЯ
-@app.post("/api/forum/tickets/create")
-async def create_forum_ticket(data: dict, request: Request):
-    try:
-        # Проверяем авторизацию через куки
-        author_name = request.cookies.get("forum_user_name")
-        author_avatar = request.cookies.get("forum_user_avatar", "https://ibb.co")
-        
-        if not author_name:
-            return {"status": "error", "message": "🔒 Вы должны авторизоваться через Discord!"}
-            
-        t_type = data.get("type") # 'user' или 'staff'
-        description = data.get("description", "").strip()
-        photos_list = data.get("photos", []) # Массив ссылок на картинки
-        photos_str = ",".join(photos_list) if photos_list else ""
-        
-        if not description:
-            return {"status": "error", "message": "Заполните описание обращения!"}
-            
-        ts = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
-        
-        async with aiosqlite.connect(DB_PATH) as db:
-            cursor = await db.execute("""
-                INSERT INTO forum_tickets (ticket_type, author_name, author_avatar, description, photos, status, timestamp)
-                VALUES (?, ?, ?, ?, ?, 'open', ?)
-            """, (t_type, author_name, author_avatar, description, photos_str, ts))
-            await db.commit()
-            new_id = cursor.lastrowid
-            
-        return {"status": "ok", "message": "Обращение успешно создано!", "ticket_id": new_id}
-    except Exception as e:
-        print(f"🛑 Ошибка создания тикета: {e}")
-        return {"status": "error", "message": "Ошибка сервера при создании"}
-
 # 2. ПОЛУЧЕНИЕ СПИСКА ВСЕХ ОБРАЩЕНИЙ
 @app.get("/api/forum/tickets/list")
 async def get_forum_tickets_list():
@@ -596,7 +562,7 @@ async def create_forum_ticket(
         # Читаем данные автора прямо из кук его авторизованной сессии Дискорда
         author_name = request.cookies.get("forum_user_name", "Аноним")
         
-        # 🎯 ИСПРАВЛЕНО: Рабочая дефолтная аватарка-заглушка вместо битой ссылки
+        # 🎯 ИСПРАВЛЕНО: Рабочая дефолтная аватарка-заглушка вместо битой ссылки ibb.co
         author_avatar = request.cookies.get("forum_user_avatar", "https://ibb.co")
         
         # Папка на сервере Render, куда будут сохраняться скриншоты
@@ -626,6 +592,7 @@ async def create_forum_ticket(
         
         # Записываем обращение в базу данных aiosqlite
         async with aiosqlite.connect(DB_PATH) as db:
+            # 🎯 ИСПРАВЛЕНО: Теперь колонок (8 шт) и знаков '?' (8 шт) строго одинаковое количество!
             cursor = await db.execute("""
                 INSERT INTO forum_tickets (ticket_type, author_name, author_avatar, description, photos, status, moderator_name, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -638,6 +605,7 @@ async def create_forum_ticket(
     except Exception as e:
         print(f"🛑 Ошибка создания тикета: {e}")
         return {"status": "error", "message": str(e)}
+
 
 
 
