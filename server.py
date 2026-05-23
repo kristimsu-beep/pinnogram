@@ -1259,7 +1259,7 @@ async def startup():
                 timestamp TEXT
             )
         """)
-        # Убедись, что таблица создается с колонкой rating REAL
+        # 1. Создание таблицы отзывов (Комментарии убраны внутрь кода Python, а не SQL)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS forum_reviews (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1273,24 +1273,23 @@ async def startup():
         """)
         await db.commit()
         
-        # Новая таблица обращений и жалоб форума
+        # 2. Создание таблицы обращений и жалоб форума (Все знаки '#' внутри запроса ПОЛНОСТЬЮ вычищены)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS forum_tickets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ticket_type TEXT,        # 'user' (жалоба на игрока) или 'staff' (на админа)
-                author_name TEXT,        # Кто создал (из Дискорд-куки)
-                author_avatar TEXT,      # Аватарка автора
-                author_id TEXT,          # Дискорд ID автора
-                description TEXT,        # Текст жалобы
-                photos TEXT,             # Ссылки на фото через запятую
-                status TEXT,             # 'open' (открыто), 'progress' (в работе), 'approved' (одобрено), 'rejected' (отклонено)
-                moderator_name TEXT,     # Кто взял в работу
-                moderator_id TEXT,       # Дискорд ID модератора
-                timestamp TEXT           # Дата создания
+                ticket_type TEXT,        
+                author_name TEXT,        
+                author_avatar TEXT,      
+                author_id TEXT,          
+                description TEXT,        
+                photos TEXT,             
+                status TEXT,             
+                moderator_name TEXT,     
+                moderator_id TEXT,       
+                timestamp TEXT           
             )
         """)
         await db.commit()
-
 
         # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
         columns = [
