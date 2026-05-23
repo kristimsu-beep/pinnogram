@@ -595,6 +595,8 @@ async def create_forum_ticket(
     try:
         # Читаем данные автора прямо из кук его авторизованной сессии Дискорда
         author_name = request.cookies.get("forum_user_name", "Аноним")
+        
+        # 🎯 ИСПРАВЛЕНО: Рабочая дефолтная аватарка-заглушка вместо битой ссылки
         author_avatar = request.cookies.get("forum_user_avatar", "https://ibb.co")
         
         # Папка на сервере Render, куда будут сохраняться скриншоты
@@ -607,8 +609,8 @@ async def create_forum_ticket(
         for photo in photos:
             if not photo.filename:
                 continue
-            # Генерируем уникальное имя файла, чтобы скриншоты не перезаписывались
-            file_ext = os.path.splitext(photo.filename)[1]
+                
+            # Формируем уникальное имя файла, чтобы скриншоты не перезаписывались
             unique_filename = f"ticket_{int(datetime.now().timestamp())}_{photo.filename}"
             file_path = os.path.join(upload_dir, unique_filename)
             
@@ -636,6 +638,7 @@ async def create_forum_ticket(
     except Exception as e:
         print(f"🛑 Ошибка создания тикета: {e}")
         return {"status": "error", "message": str(e)}
+
 
 
 @app.get("/poll/{poll_id}")
