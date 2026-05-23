@@ -114,21 +114,28 @@
         </div>
 
         <!-- РАЗДЕЛ Б: СПИСОК ОБРАЩЕНИЙ -->
-        <div id="section-tickets" class="page-section">
-            <div class="ticket-top-bar">
+        <div id="section-tickets" class="page-section" style="display: none;">
+            <div class="ticket-top-bar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h2 style="margin:0; font-size:18px; letter-spacing:1px;">📋 РЕЕСТР ЖАЛОБ И ЗАЯВЛЕНИЙ:</h2>
-                <button class="action-btn-neon" onclick="openCreateTicketModal()">➕ Создать обращение</button>
+                <!-- ИСПРАВЛЕНО: Кнопка вызова модального окна -->
+                <button class="action-btn-neon" onclick="openCreateTicketModal()" style="background: var(--accent); color: black; border: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; cursor: pointer;">➕ Создать обращение</button>
             </div>
             <div class="ticket-list" id="tickets-container"></div>
         </div>
 
-        <!-- РАЗДЕЛ В: ПРОСМОТР КОНКРЕТНОГО ОБРАЩЕНИЯ ПО ССЫЛКЕ -->
-        <div id="section-single-view" class="page-section">
-            <button class="tab-btn" onclick="switchSection('tickets')" style="margin-bottom:20px;">← Назад в список</button>
-            <div id="single-ticket-card" style="background:var(--panel); border:1px solid #222; border-radius:20px; padding:30px; box-shadow:0 0 30px rgba(0,0,0,0.5);"></div>
+        <!-- 🎯 РАЗДЕЛ В: ПРОСМОТР КОНКРЕТНОГО ОБРАЩЕНИЯ ПО ССЫЛКЕ (ИСПРАВЛЕН ID И ВНУТРЕННЯЯ СТРУКТУРА) -->
+        <div id="section-ticket-view" class="page-section" style="display: none;">
+            <button class="tab-btn" onclick="switchSection('tickets')" style="margin-bottom:20px; background: none; border: 1px solid #333; color: white; padding: 8px 16px; border-radius: 8px; cursor: pointer;">← Назад в список</button>
+            
+            <div style="background:var(--panel); border:1px solid #222; border-radius:20px; padding:30px; box-shadow:0 0 30px rgba(0,0,0,0.5);">
+                <!-- 🛠️ ЭТИ ЧЕТЫРЕ БЛОКА ОБЯЗАТЕЛЬНО ИЩЕТ СКРИПТ ДЛЯ ВЫВОДА ТИ КЕТА: -->
+                <div id="view-meta" style="font-size: 12px; opacity: 0.6; line-height: 1.6; margin-bottom: 15px; border-bottom: 1px dashed #222; padding-bottom: 15px;"></div>
+                <div id="view-text" style="font-size: 15px; font-weight: bold; line-height: 1.5; margin-bottom: 25px; white-space: pre-wrap;"></div>
+                <div id="view-gallery" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 25px;"></div>
+                <div id="view-actions" style="margin-top: 20px; border-top: 1px dashed #222; padding-top: 20px;"></div>
+            </div>
         </div>
 
-    </div>
 
     <!-- МОДАЛЬНОЕ ОКНО ОТЗЫВОВ О МОДЕРАТОРЕ -->
     <div class="modal" id="profile-modal">
@@ -156,28 +163,31 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО СОЗДАНИЯ ОБРАЩЕНИЯ -->
-    <div class="modal" id="ticket-modal">
+    <!-- ТВОЕ ОКНО ПОДАЧИ ОБРАЩЕНИЯ (ОБНОВИ КНОПКИ ВНУТРИ) -->
+    <div id="ticket-modal" class="modal">
         <div class="modal-content">
-            <button class="close-btn" onclick="closeCreateTicketModal()">✕</button>
-            <h2 style="margin:0 0 20px; color:var(--neon-blue); font-size:18px; text-transform:uppercase;">🎫 ПОДАЧА НОВОГО ОБРАЩЕНИЯ</h2>
+            <!-- ✕ ИСПРАВЛЕНО: closeTicketModal вместо closeCreateTicketModal -->
+            <button class="close-btn" onclick="closeTicketModal()">✕</button>
             
-            <label style="font-size:12px; opacity:0.6; display:block; margin-bottom:5px;">Категория жалобы:</label>
-            <select id="ticket-type-select">
+            <h2>■ ПОДАЧА НОВОГО ОБРАЩЕНИЯ</h2>
+            
+            <label>Категория жалобы:</label>
+            <select id="ticket-type">
                 <option value="user">👤 Жалоба на участника сервера</option>
-                <option value="staff">🛡️ Жалоба на администратора / модератора</option>
+                <option value="staff">🚨 Жалоба на администратора</option>
             </select>
-            
-            <label style="font-size:12px; opacity:0.6; display:block; margin-bottom:5px;">Суть нарушения (описание):</label>
-            <textarea id="ticket-description" rows="4" placeholder="Опишите ситуацию подробно, укажите никнеймы, дату и суть инцидента..."></textarea>
-            
-            <label style="font-size:12px; opacity:0.6; display:block; margin-bottom:5px;">Доказательства (до 5 фото):</label>
-            <div class="photo-preview-box" id="upload-preview-box"></div>
-            <!-- Скрытый инпут файлов -->
-            <input type="file" id="ticket-file-input" accept="image/*" multiple onchange="handleTicketFilesUpload(this)" style="display:none;">
-            <button class="action-btn-neon" onclick="document.getElementById('ticket-file-input').click()" style="width:100%; margin-bottom:15px; border-style:dashed;">📸 Прикрепить скриншоты</button>
-            
-            <button class="form-btn" id="ticket-submit-btn" onclick="submitNewTicket()" style="background:var(--neon-blue);">Отправить обращение модераторам</button>
+    
+            <label>Суть нарушения (описание):</label>
+            <textarea id="ticket-text" rows="4" placeholder="тест"></textarea>
+    
+            <!-- 📷 ИСПРАВЛЕНО: убрали handleTicketFilesUpload, оставили чистый input -->
+            <label class="file-label">
+                <input type="file" id="ticket-photos" multiple accept="image/*" style="display:none;">
+                📸 ПРИКРЕПИТЬ СКРИНШОТЫ
+            </label>
+    
+            <!-- 🚀 ИСПРАВЛЕНО: submitForumTicket вместо submitNewTicket -->
+            <button onclick="submitForumTicket()" style="background:var(--neon-blue); color:black;">ОТПРАВИТЬ ОБРАЩЕНИЕ МОДЕРАТОРАМ</button>
         </div>
     </div>
 
