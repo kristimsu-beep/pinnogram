@@ -358,7 +358,28 @@ async def discord_callback(code: str, request: Request, response: Response):
             
             u_id = user_info["id"]
             u_name = user_info.get("global_name") or user_info["username"]
-            u_avatar = f"https://cdn.discordapp.com/avatars/{u_id}/{user_info['avatar']}.png" if user_info.get("avatar") else "https://ibb.co"
+            avatar_hash = user_info.get("avatar")
+            
+            if avatar_hash:
+                # Определяем формат: анимированный или статичный
+                ext = "gif" if avatar_hash.startswith("a_") else "png"
+                u_avatar = f"https://cdn.discordapp.com/avatars/{u_id}/{avatar_hash}.{ext}"
+            else:
+                # 🛠️ СИСТЕМНЫЙ АВТО-ПЕРЕХВАТ: Если аватар кастомный/сложный или пустой,
+                # рассчитываем официальную дефолтную аватарку Дискорда по их формуле индекса
+                try:
+                    discriminator = int(user_info.get("discriminator", 0))
+                    if discriminator == 0:
+                        # Для новых никнеймов без тегов (#0000) Дискорд считает индекс по ID пользователя
+                        def_avatar_index = (int(u_id) >> 22) % 6
+                    else:
+                        # Для старых аккаунтов с тегами
+                        def_avatar_index = discriminator % 5
+                except:
+                    def_avatar_index = 0
+                    
+                u_avatar = f"https://cdn.discordapp.com/embed/avatars/{def_avatar_index}.png"
+
             
             # Сохраняем данные пользователя прямо в куки браузера, чтобы сессия не сбрасывалась
             # Куки будут жить 30 дней
