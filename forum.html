@@ -91,6 +91,79 @@
         .thumb-preview { width: 70px; height: 70px; border-radius: 6px; object-fit: cover; border: 1px solid #333; position: relative; }
         .ticket-gallery img { width: 100px; height: 70px; object-fit: cover; border-radius: 8px; border: 1px solid #333; cursor: pointer; margin-right: 8px; transition: 0.2s; }
         .ticket-gallery img:hover { border-color: var(--neon-blue); transform: scale(1.05); }
+        /* КАРКАС СТРАНИЦЫ ОБРАЩЕНИЯ */
+        .ticket-view-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        /* ОБЩИЙ КЛАСС ДЛЯ БЛОКОВ (Текст, Модерация, Комментарии) */
+        .view-block-card {
+            background: #18181c;
+            border: 1px solid #222226;
+            border-radius: 12px;
+            padding: 24px;
+        }
+        
+        /* КНОПКА НАЗАД И ВЕРХНЯЯ ПАНЕЛЬ */
+        .view-top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .back-forum-btn {
+            background: #222226; color: #aaaaaa; border: 1px solid #333339;
+            padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px;
+            font-weight: 600; transition: 0.2s;
+        }
+        .back-forum-btn:hover { background: #2d2d34; color: #fff; }
+        
+        /* МЕДИАФАЙЛЫ */
+        .media-title { font-size: 14px; font-weight: 600; color: #ffffff; margin: 20px 0 10px; }
+        .media-gallery-grid { display: flex; gap: 15px; flex-wrap: wrap; }
+        .media-thumb {
+            width: 140px; height: 140px; object-fit: cover; border-radius: 8px;
+            border: 1px solid #2d2d34; cursor: pointer; transition: 0.2s;
+        }
+        .media-thumb:hover { border-color: #55555c; transform: scale(1.02); }
+        
+        /* ПАНЕЛЬ МОДЕРАТОРА */
+        .mod-panel-title { font-size: 14px; font-weight: 600; color: #ffffff; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .mod-buttons-row { display: flex; gap: 12px; flex-wrap: wrap; }
+        .mod-btn-action {
+            background: #222226; color: #ffffff; border: 1px solid #333339;
+            padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 13px;
+            cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s;
+        }
+        .mod-btn-action:hover { background: #2d2d34; border-color: #44444c; }
+        .mod-btn-action.btn-approve-neon { color: #00ff00; border-color: rgba(0,255,0,0.3); }
+        .mod-btn-action.btn-reject-neon { color: #ff3b30; border-color: rgba(255,59,48,0.3); }
+        
+        /* БЛОК КОММЕНТАРИЕВ */
+        .comments-title { font-size: 14px; font-weight: 600; color: #ffffff; margin-bottom: 15px; }
+        .comments-feed-list { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; }
+        .comment-empty-text { text-align: center; color: #55555c; font-style: italic; font-size: 13px; padding: 30px 0; }
+        
+        /* ФИКСИРОВАННОЕ ПОЛЕ ВВОДА КОММЕНТАРИЯ */
+        .comment-input-area {
+            display: flex; align-items: center; gap: 12px; background: #141416;
+            border: 1px solid #222226; border-radius: 10px; padding: 10px 16px;
+        }
+        .comment-input-area textarea {
+            flex: 1; background: none; border: none; color: #ffffff; resize: none;
+            font-family: inherit; font-size: 13px; outline: none; max-height: 40px;
+        }
+        .comment-send-btn {
+            background: #5865F2; color: white; border: none; width: 32px; height: 32px;
+            border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: 0.2s;
+        }
+        .comment-send-btn:hover { background: #4752C4; }
+
     </style>
 </head>
 <body>
@@ -123,18 +196,51 @@
             <div class="ticket-list" id="tickets-container"></div>
         </div>
 
-        <!-- 🎯 РАЗДЕЛ В: ПРОСМОТР КОНКРЕТНОГО ОБРАЩЕНИЯ ПО ССЫЛКЕ (ИСПРАВЛЕН ID И ВНУТРЕННЯЯ СТРУКТУРА) -->
+        <!-- РАЗДЕЛ В: ПРОСМОТР КОНКРЕТНОГО ОБРАЩЕНИЯ ПО СКРИНШОТУ -->
         <div id="section-ticket-view" class="page-section" style="display: none;">
-            <button class="tab-btn" onclick="switchSection('tickets')" style="margin-bottom:20px; background: none; border: 1px solid #333; color: white; padding: 8px 16px; border-radius: 8px; cursor: pointer;">← Назад в список</button>
-            
-            <div style="background:var(--panel); border:1px solid #222; border-radius:20px; padding:30px; box-shadow:0 0 30px rgba(0,0,0,0.5);">
-                <!-- 🛠️ ЭТИ ЧЕТЫРЕ БЛОКА ОБЯЗАТЕЛЬНО ИЩЕТ СКРИПТ ДЛЯ ВЫВОДА ТИ КЕТА: -->
-                <div id="view-meta" style="font-size: 12px; opacity: 0.6; line-height: 1.6; margin-bottom: 15px; border-bottom: 1px dashed #222; padding-bottom: 15px;"></div>
-                <div id="view-text" style="font-size: 15px; font-weight: bold; line-height: 1.5; margin-bottom: 25px; white-space: pre-wrap;"></div>
-                <div id="view-gallery" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 25px;"></div>
-                <div id="view-actions" style="margin-top: 20px; border-top: 1px dashed #222; padding-top: 20px;"></div>
+            <div class="ticket-view-container">
+                
+                <!-- Верхняя панель управления -->
+                <div class="view-top-bar">
+                    <button class="back-forum-btn" onclick="switchSection('tickets')">← Вернуться на форум</button>
+                    <div id="view-status-badge-zone"></div>
+                </div>
+
+                <!-- БЛОК 1: Основной текст обращения -->
+                <div class="view-block-card">
+                    <div id="view-meta"></div>
+                    <h2 id="view-title-type" style="font-size: 22px; margin: 15px 0 10px 0; font-weight: bold;">Жалоба</h2>
+                    <div id="view-text" style="font-size: 14px; color: #aaaaaa; line-height: 1.6; white-space: pre-wrap;"></div>
+                    
+                    <div class="media-title">Прикрепленные медиафайлы</div>
+                    <div class="media-gallery-grid" id="view-gallery"></div>
+                </div>
+
+                <!-- БЛОК 2: Панель модератора -->
+                <div class="view-block-card">
+                    <div class="mod-panel-title">Панель модератора</div>
+                    <div class="mod-buttons-row" id="view-actions"></div>
+                </div>
+
+                <!-- БЛОК 3: Комментарии / Переписка -->
+                <div class="view-block-card">
+                    <div class="comments-title">Комментарии</div>
+                    <div class="comments-feed-list" id="view-comments-zone">
+                        <div class="comment-empty-text">Нет комментариев</div>
+                    </div>
+                    
+                    <!-- Инпут отправки сообщения -->
+                    <div class="comment-input-area">
+                        <textarea id="comment-new-text" rows="1" placeholder="Написать комментарий... (используйте @ник для упоминания)"></textarea>
+                        <button class="comment-send-btn" onclick="submitTicketComment()">
+                            <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M15.964.686a.5.5 0 0 0-.65-.65L.767 5.855H.766l-.452.18a.5.5 0 0 0-.082.887l.41.26.001.002 4.995 3.178 3.178 4.995.002.002.26.41a.5.5 0 0 0 .886-.083zm-1.833 1.89L6.637 10.07l-.215-.338a.5.5 0 0 0-.154-.154l-.338-.215 7.494-7.494 1.178-.471z"/></svg>
+                        </button>
+                    </div>
+                </div>
+
             </div>
         </div>
+
 
 
     <!-- МОДАЛЬНОЕ ОКНО ОТЗЫВОВ О МОДЕРАТОРЕ -->
@@ -468,7 +574,7 @@
                 });
             } catch (e) { container.textContent = "Не удалось связаться с базой данных обращений."; }
         }
-        // --- ПРОСМОТР КОНКРЕТНОГО ОБРАЩЕНИЯ ---
+        // --- ПРОСМОТР КОНКРЕТНОГО ОБРАЩЕНИЯ ПО СКРИНШОТУ ---
         async function viewSpecificTicket(id) {
             activeTicketId = id;
             switchSection("ticket_view");
@@ -477,10 +583,13 @@
             const metaBlock = document.getElementById("view-meta");
             const gallery = document.getElementById("view-gallery");
             const actions = document.getElementById("view-actions");
+            const badgeZone = document.getElementById("view-status-badge-zone");
+            const titleType = document.getElementById("view-title-type");
 
             textBlock.textContent = "Загрузка параметров обращения...";
             gallery.innerHTML = "";
             actions.innerHTML = "";
+            if(badgeZone) badgeZone.innerHTML = "";
 
             try {
                 const res = await fetch(`${API_URL}/api/forum/tickets/get/${id}`);
@@ -491,40 +600,108 @@
                     return;
                 }
 
+                // Заголовок и текст тикета
+                titleType.textContent = t.type === "user" ? "Жалоба на игрока" : "Жалоба на администратора";
                 textBlock.textContent = t.text;
-                let statusLabel = "⏳ Ожидает рассмотрения";
-                if (t.status === "processing") statusLabel = "⚙️ Взято в работу сотрудником: " + t.moderator;
-                if (t.status === "approved") statusLabel = "✅ Данное обращение ОДОБРЕНО (" + t.moderator + ")";
-                if (t.status === "rejected") statusLabel = "❌ Данное обращение ОТКЛОНЕНО (" + t.moderator + ")";
 
+                // Красивый бэйдж статуса сверху справа
+                let statusLabel = "● Ожидание";
+                if (t.status === "processing") statusLabel = "⚙️ В работе";
+                if (t.status === "approved") statusLabel = "✅ Одобрено";
+                if (t.status === "rejected") statusLabel = "❌ Отклонено";
+                if(badgeZone) badgeZone.innerHTML = `<span class="status-badge-forum">${statusLabel}</span>`;
+
+                // Мета-линия автора (Аватар, ник, время) строго по шаблону
                 metaBlock.innerHTML = `
-                    ID Обращения: <b>#POST_${t.id}</b> | 
-                    Тип: <b>${t.type === "user" ? "Жалоба на игрока" : "Жалоба на администратора"}</b><br>
-                    Автор заявления: <b>${t.author}</b> | Дата: <b>${t.time}</b><br>
-                    Текущий статус: <span style="color:var(--accent); font-weight:bold;">${statusLabel}</span>
+                    <div class="ticket-header-line" style="margin-bottom:0;">
+                        <img src="${t.avatar || 'https://ibb.co'}">
+                        <div>
+                            <span class="ticket-author-name" style="display:block;">${t.author}</span>
+                            <span class="ticket-time-ago" style="font-size:11px;">${t.time || '1 час назад'} • Гражданские вопросы</span>
+                        </div>
+                    </div>
                 `;
 
+                // Рендеринг галереи скриншотов
                 if (t.photos && t.photos.length > 0) {
                     gallery.innerHTML = t.photos.map(pUrl => `
-                        <img src="${pUrl}" class="t-photo" onclick="window.open('${pUrl}', '_blank')" title='Кликните, чтобы открыть оригинал'>
+                        <img src="${pUrl}" class="media-thumb" onclick="window.open('${pUrl}', '_blank')">
                     `).join("");
                 } else {
-                    gallery.innerHTML = "<div style='opacity:0.3; font-size:12px;'>Доказательства в виде изображений отсутствуют.</div>";
+                    gallery.innerHTML = "<div style='opacity:0.3; font-size:12px;'>Доказательства отсутствуют.</div>";
                 }
 
+                // Кнопки управления модератора (Иконки добавлены текстом/эмодзи под скриншот)
                 if (t.status === "open") {
-                    actions.innerHTML = `<button class="act-btn btn-work" onclick="updateTicketStatus('processing')">💼 Взять обращение в работу</button>`;
+                    actions.innerHTML = `<button class="mod-btn-action" onclick="updateTicketStatus('processing')">🎯 Взять в работу</button>`;
                 } else if (t.status === "processing") {
                     actions.innerHTML = `
-                        <button class="act-btn btn-approve" onclick="updateTicketStatus('approved')">✅ Одобрить обращение</button>
-                        <button class="act-btn btn-reject" onclick="updateTicketStatus('rejected')">❌ Отклонить обращение</button>
+                        <button class="mod-btn-action btn-approve-neon" onclick="updateTicketStatus('approved')">✔ Одобрить</button>
+                        <button class="mod-btn-action btn-reject-neon" onclick="updateTicketStatus('rejected')">✖ Отклонить</button>
                     `;
                 } else {
-                    actions.innerHTML = `<div style='opacity:0.4; font-size:12px; font-weight:bold;'>🔒 Дело закрыто модерацией. Изменение статуса недоступно.</div>`;
+                    actions.innerHTML = `<div style='opacity:0.4; font-size:12px; font-weight:bold;'>🔒 Рассмотрение дела завершено сотрудником: ${t.moderator || 'Администрация'}</div>`;
                 }
+
+                // Загружаем живую переписку из базы данных Render
+                loadTicketComments(id);
+
 
             } catch (e) { textBlock.textContent = "Ошибка получения данных из файлового хранилища."; }
         }
+
+        // --- ЗАГРУЗКА ПЕРЕПИСКИ ИЗ БАЗЫ ДАННЫХ ---
+        async function loadTicketComments(ticketId) {
+            const commentsZone = document.getElementById("view-comments-zone");
+            if (!commentsZone) return;
+
+            try {
+                const res = await fetch(`${API_URL}/api/forum/tickets/comment/list/${ticketId}`);
+                const comments = await res.json();
+
+                if (!comments || comments.length === 0) {
+                    commentsZone.innerHTML = `<div class="comment-empty-text">Нет комментариев. Начните диалог первым!</div>`;
+                    return;
+                }
+
+                // Рендерим сообщения в стиле красивого чата с аватарками
+                commentsZone.innerHTML = comments.map(c => `
+                    <div class="review-item" style="border-left: 2px solid #5865F2; background: rgba(255,255,255,0.01); padding: 12px; margin-bottom: 5px;">
+                        <div class="review-meta" style="margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                            <img src="${c.avatar}" style="width: 20px; height: 20px; border-radius: 50%;">
+                            <b style="font-size: 12px; color: #fff;">${c.author}</b>
+                            <span style="font-size: 10px; opacity: 0.4; margin-left: auto;">${c.time}</span>
+                        </div>
+                        <div style="font-size: 13px; color: #cccccc; line-height: 1.4; white-space: pre-wrap;">${c.text}</div>
+                    </div>
+                `).join("");
+
+                // Автоматический скролл чата вниз к последнему сообщению
+                commentsZone.scrollTop = commentsZone.scrollHeight;
+
+            } catch (e) { commentsZone.innerHTML = `<div class='comment-empty-text'>Ошибка загрузки чата переписки.</div>`; }
+        }
+
+        // --- ОТПРАВКА НОВОГО СООБЩЕНИЯ В БАЗУ ДАННЫХ ---
+        async function submitTicketComment() {
+            const inputElement = document.getElementById("comment-new-text");
+            const text = inputElement.value.trim();
+            if (!text) return;
+
+            try {
+                const res = await fetch(`${API_URL}/api/forum/tickets/comment/send`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ ticket_id: activeTicketId, text: text })
+                });
+                const data = await res.json();
+                if (data.status === "ok") {
+                    inputElement.value = ""; // Очищаем поле ввода
+                    loadTicketComments(activeTicketId); // Мгновенно обновляем чат на экране!
+                } else { alert("Ошибка: " + data.message); }
+            } catch (e) { alert("Не удалось отправить сообщение на сервер."); }
+        }
+
 
         async function updateTicketStatus(newStatus) {
             try {
