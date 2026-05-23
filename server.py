@@ -19,6 +19,7 @@ import asyncpg
 from fastapi.responses import RedirectResponse
 from fastapi import Form, File, UploadFile
 from typing import List
+from fastapi.staticfiles import StaticFiles
 
 
 # Вечное облачное хранилище для видео и голосовых Pinnogram
@@ -73,6 +74,7 @@ async def get_index():
 
 app.mount("/files", StaticFiles(directory=UPLOAD_DIR), name="files")
 
+app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 # Раздача Service Worker (ОБЯЗАТЕЛЬНО для уведомлений)
 @app.get("/sw.js")
 async def get_sw():
@@ -386,7 +388,7 @@ async def discord_callback(code: str, request: Request):
             try:
                 staff_members = await get_forum_staff()
                 for staff_user in staff_members:
-                    if str(staff_user.get("id")) == u_id:
+                    if u_name in str(staff_user.get("name", "")):
                         u_avatar = staff_user.get("avatar")
                         print(f"🎯 [FORUM AUTH] Аватарка для {u_name} успешно скопирована из STAFF-карточки!")
                         break
@@ -533,7 +535,7 @@ async def action_forum_ticket(data: dict, request: Request):
             
         # 2. ПРОВЕРКА ПРАВ: Запрашиваем актуальный состав STAFF из Дискорда
         staff_members = await get_forum_staff()
-        is_admin = any(str(u.get("name")) == mod_name for u in staff_members)
+        is_admin = any(mod_name in str(u.get("name", "")) for u in staff_members)
         
         if not is_admin:
             return {"status": "error", "message": "🛑 Отказано в доступе! Вы не являетесь членом Администрации."}
