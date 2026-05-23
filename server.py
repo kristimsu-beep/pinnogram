@@ -469,6 +469,120 @@ async def serve_forum_page():
     from fastapi.responses import FileResponse
     return FileResponse(os.path.join(BASE_DIR, "forum.html"))
 
+# ==========================================
+# 🎫 СИСТЕМА ОБРАЩЕНИЙ И ЖАЛОБ (ТИКЕТЫ)
+# ==========================================
+
+# 1. СОЗДАНИЕ НОВОГО ОБРАЩЕНИЯ
+@app.post("/api/forum/tickets/create")
+async def create_forum_ticket(data: dict, request: Request):
+    try:
+        # Проверяем авторизацию через куки
+        author_name = request.cookies.get("forum_user_name")
+        author_avatar = request.cookies.get("forum_user_avatar", "https://ibb.co")
+        
+        if not author_name:
+            return {"status": "error", "message": "🔒 Вы должны авторизоваться через Discord!"}
+            
+        t_type = data.get("type") # 'user' или 'staff'
+        description = data.get("description", "").strip()
+        photos_list = data.get("photos", []) # Массив ссылок на картинки
+        photos_str = ",".join(photos_list) if photos_list else ""
+        
+        if not description:
+            return {"status": "error", "message": "Заполните описание обращения!"}
+            
+        ts = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
+        
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute("""
+                INSERT INTO forum_tickets (ticket_type, author_name, author_avatar, description, photos, status, timestamp)
+                VALUES (?, ?, ?, ?, ?, 'open', ?)
+            """, (t_type, author_name, author_avatar, description, photos_str, ts))
+            await db.commit()
+            new_id = cursor.lastrowid
+            
+        return {"status": "ok", "message": "Обращение успешно создано!", "ticket_id": new_id}
+    except Exception as e:
+        print(f"🛑 Ошибка создания тикета: {e}")
+        return {"status": "error", "message": "Ошибка сервера при создании"}
+
+# 2. ПОЛУЧЕНИЕ СПИСКА ВСЕХ ОБРАЩЕНИЙ
+@app.get("/api/forum/tickets/list")
+async def get_forum_tickets_list():
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute("SELECT id, ticket_type, author_name, author_avatar, status, timestamp FROM forum_tickets ORDER BY id DESC") as cursor:
+                rows = await cursor.fetchall()
+                return [{
+                    "id": r[0], "type": r[1], "author": r[2], 
+                    "avatar": r[3], "status": r[4], "time": r[5]
+                } for r in rows]
+    except Exception as e:
+        return []
+
+# 3. ПОЛУЧЕНИЕ ДАННЫХ КОНКРЕТНОГО ОБРАЩЕНИЯ ПО ID
+@app.get("/api/forum/tickets/{ticket_id}")
+async def get_single_forum_ticket(ticket_id: int):
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute("""
+                SELECT id, ticket_type, author_name, author_avatar, description, photos, status, moderator_name 
+                FROM forum_tickets WHERE id = ?
+            """, (ticket_id,)) as cursor:
+                r = await cursor.fetchone()
+                if not r:
+                    return {"status": "error", "message": "Обращение не найдено"}
+                    
+                return {
+                    "status": "ok", "id": r[0], "type": r[1], "author": r[2],
+                    "avatar": r[3], "description": r[4], 
+                    "photos": r[5].split(",") if r[5] else [],
+                    "ticket_status": r[6], "moderator": r[7]
+                }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+# 4. УПРАВЛЕНИЕ СТАТУСОМ ТИКЕТА (Взять в работу / Одобрить / Отклонить)
+@app.post("/api/forum/tickets/action")
+async def action_forum_ticket(data: dict, request: Request):
+    try:
+        # 1. Проверяем, что голосующий вообще авторизован
+        mod_name = request.cookies.get("forum_user_name")
+        if not mod_name:
+            return {"status": "error", "message": "🔒 Вы не авторизованы!"}
+            
+        # 2. ПРОВЕРКА ПРАВ: Запрашиваем актуальный состав STAFF из Дискорда
+        # Кнопки сработают только если никнейм куки есть в списке STAFF_HIERARCHY
+        staff_members = await get_forum_staff()
+        is_admin = any(str(u.get("name")) == mod_name for u in staff_members)
+        
+        if not is_admin:
+            return {"status": "error", "message": "🛑 Отказано в доступе! Вы не являетесь членом Администрации."}
+            
+        ticket_id = int(data.get("ticket_id"))
+        action = data.get("action") # 'take', 'approve', 'reject'
+        
+        async with aiosqlite.connect(DB_PATH) as db:
+            if action == 'take':
+                await db.execute("UPDATE forum_tickets SET status = 'progress', moderator_name = ? WHERE id = ? AND status = 'open'", (mod_name, ticket_id))
+            elif action == 'approve':
+                await db.execute("UPDATE forum_tickets SET status = 'approved' WHERE id = ? AND status = 'progress'", (ticket_id,))
+            elif action == 'reject':
+                await db.execute("UPDATE forum_tickets SET status = 'rejected' WHERE id = ? AND status = 'progress'", (ticket_id,))
+                
+            await db.commit()
+        return {"status": "ok", "message": "Статус обращения успешно обновлен!"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+# 5. ДИНАМИЧЕСКИЙ РОУТ ДЛЯ СТРАНИЦ ТИКЕТОВ ПО ССЫЛКЕ /forum/post_1, /forum/post_2
+@app.get("/forum/post_{ticket_id}")
+async def serve_single_ticket_page(ticket_id: int):
+    # Страница тикета рендерится через тот же файл, фронтенд сам поймет ID из URL-адреса!
+    return FileResponse(os.path.join(BASE_DIR, "forum.html"))
+
+
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
     async with aiosqlite.connect(DB_PATH) as db:
@@ -1158,6 +1272,25 @@ async def startup():
             )
         """)
         await db.commit()
+        
+        # Новая таблица обращений и жалоб форума
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS forum_tickets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_type TEXT,        # 'user' (жалоба на игрока) или 'staff' (на админа)
+                author_name TEXT,        # Кто создал (из Дискорд-куки)
+                author_avatar TEXT,      # Аватарка автора
+                author_id TEXT,          # Дискорд ID автора
+                description TEXT,        # Текст жалобы
+                photos TEXT,             # Ссылки на фото через запятую
+                status TEXT,             # 'open' (открыто), 'progress' (в работе), 'approved' (одобрено), 'rejected' (отклонено)
+                moderator_name TEXT,     # Кто взял в работу
+                moderator_id TEXT,       # Дискорд ID модератора
+                timestamp TEXT           # Дата создания
+            )
+        """)
+        await db.commit()
+
 
         # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
         columns = [
