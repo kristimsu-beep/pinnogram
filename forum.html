@@ -163,6 +163,81 @@
             transition: 0.2s;
         }
         .comment-send-btn:hover { background: #4752C4; }
+        /* ВЕРХНЯЯ ПАНЕЛЬ С КНОПКАМИ */
+        .ticket-actions-bar {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 25px;
+            max-width: 1000px;
+            margin: 0 auto 25px auto;
+        }
+        .top-action-btn {
+            background: #18181c;
+            color: #ffffff;
+            border: 1px solid #222226;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .top-action-btn:hover {
+            background: #1f1f24;
+            border-color: #333339;
+        }
+        
+        /* ОБНОВЛЕННАЯ СУПЕР-КАРТОЧКА БЕЗ ЯРКИХ РАМОК */
+        .ticket-row-box-flat {
+            background: #141416; /* Глубокий матовый фон */
+            border: 1px solid #1c1c1f;
+            border-radius: 12px;
+            padding: 24px;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .ticket-row-box-flat:hover {
+            background: #18181c;
+            border-color: #2d2d34;
+        }
+        
+        /* ПЛАШКА СТАТУСА РЯДОМ С НИКОМ */
+        .status-dot-badge {
+            background: rgba(255, 193, 7, 0.08);
+            color: #ffc107;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid rgba(255, 193, 7, 0.15);
+        }
+        .status-dot-badge::before {
+            content: "";
+            width: 6px;
+            height: 6px;
+            background: #ffc107;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        /* ЦВЕТА ДЛЯ ДРУГИХ СТАТУСОВ */
+        .status-dot-badge.approved-badge {
+            background: rgba(0, 255, 0, 0.06); color: #00ff00; border-color: rgba(0, 255, 0, 0.15);
+        }
+        .status-dot-badge.approved-badge::before { background: #00ff00; }
+        .status-dot-badge.rejected-badge {
+            background: rgba(255, 59, 48, 0.06); color: #ff3b30; border-color: rgba(255, 59, 48, 0.15);
+        }
+        .status-dot-badge.rejected-badge::before { background: #ff3b30; }
 
     </style>
 </head>
@@ -186,15 +261,25 @@
             <div class="staff-grid" id="staff-container"></div>
         </div>
 
-        <!-- РАЗДЕЛ Б: СПИСОК ОБРАЩЕНИЙ -->
-        <div id="section-tickets" class="page-section" style="display: none;">
-            <div class="ticket-top-bar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2 style="margin:0; font-size:18px; letter-spacing:1px;">📋 РЕЕСТР ЖАЛОБ И ЗАЯВЛЕНИЙ:</h2>
-                <!-- ИСПРАВЛЕНО: Кнопка вызова модального окна -->
-                <button class="action-btn-neon" onclick="openCreateTicketModal()" style="background: var(--accent); color: black; border: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; cursor: pointer;">➕ Создать обращение</button>
+        <!-- РАЗДЕЛ Б: СПИСОК ОБРАЩЕНИЙ (ДИЗАЙН ПО СКРИНШОТУ) -->
+        <div id="section-tickets" class="page-section" style="display: none; padding: 10px 0;">
+            
+            <!-- Панель кнопок сверху -->
+            <div class="ticket-actions-bar">
+                <button class="top-action-btn" onclick="openCreateTicketModal()">
+                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/></svg>
+                    Создать обращение
+                </button>
+                <button class="top-action-btn" onclick="switchSection('staff')">
+                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M3.612 15.443c-.386.198-.824-.149-.746-.592l.83-4.73L.173 6.765c-.329-.314-.158-.888.283-.95l4.898-.696L7.538.792c.197-.39.73-.39.927 0l2.184 4.327 4.898.696c.441.062.612.636.282.95l-3.522 3.356.83 4.73c.078.443-.36.79-.746.592L8 13.187l-4.389 2.256z"/></svg>
+                    Отзыв о сотруднике
+                </button>
             </div>
+            
+            <!-- Контейнер для вывода карточек -->
             <div class="ticket-list" id="tickets-container"></div>
         </div>
+
 
         <!-- РАЗДЕЛ В: ПРОСМОТР КОНКРЕТНОГО ОБРАЩЕНИЯ ПО СКРИНШОТУ -->
         <div id="section-ticket-view" class="page-section" style="display: none;">
@@ -551,24 +636,35 @@
 
                 tickets.forEach(t => {
                     const box = document.createElement("div");
-                    box.className = `ticket-row-box status-${t.status}`;
+                    box.className = "ticket-row-box-flat";
                     box.onclick = () => viewSpecificTicket(t.id);
 
-                    let statusLabel = "⏳ На рассмотрении";
-                    if (t.status === "processing") statusLabel = "⚙️ В работе у: " + t.moderator;
-                    if (t.status === "approved") statusLabel = "✅ Одобрено: " + t.moderator;
-                    if (t.status === "rejected") statusLabel = "❌ Отклонено: " + t.moderator;
+                    // Рассчитываем точечный статус по скриншоту
+                    let statusText = "Ожидание";
+                    let badgeStyleClass = "status-dot-badge";
+                    if (t.status === "processing") { statusText = "В работе"; badgeStyleClass = "status-dot-badge"; }
+                    if (t.status === "approved") { statusText = "Одобрено"; badgeStyleClass = "status-dot-badge approved-badge"; }
+                    if (t.status === "rejected") { statusText = "Отклонено"; badgeStyleClass = "status-dot-badge rejected-badge"; }
 
+                    // Сборка разметки карточки строго по предоставленному скриншоту
                     box.innerHTML = `
-                        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
-                            <span class="t-badge">${t.type === "user" ? "👤 Жалоба на игрока" : "🚨 Жалоба на админа"}</span>
-                            <span style="font-size:11px; opacity:0.4; font-family:monospace;">#POST_${t.id}</span>
+                        <div class="ticket-header-line" style="margin-bottom: 0;">
+                            <img src="${t.avatar || 'https://ibb.co'}">
+                            <span class="ticket-author-name">${t.author}</span>
+                            
+                            <!-- Серый силуэт пользователя рядом с ником -->
+                            <svg width="12" height="12" fill="#55555c" viewBox="0 0 16 16" style="margin-left:-4px;"><path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"/></svg>
+                            
+                            <!-- Аккуратный бэйдж статуса с точкой -->
+                            <span class="${badgeStyleClass}">${statusText}</span>
+                            
+                            <div class="ticket-right-meta">
+                                <span class="ticket-time-ago">${t.time || '1 час назад'}</span>
+                                <span class="ticket-category-label">${t.type === "user" ? "Жалоба на игрока" : "Жалоба на игрока"}</span>
+                            </div>
                         </div>
-                        <div style="font-size:13px; font-weight:bold; margin-bottom:12px; opacity:0.9; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${t.text}</div>
-                        <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
-                            <span style="opacity:0.5;">Отправитель: <b>${t.author}</b></span>
-                            <span style="font-weight:bold;">${statusLabel}</span>
-                        </div>
+                        <h3 class="ticket-body-title" style="margin: 4px 0 0 0; font-size: 18px;">${t.type === "user" ? "Жалоба на игрока" : "Жалоба на администратора"}</h3>
+                        <p class="ticket-body-desc" style="color: #66666e; font-size: 13px;">${t.text || 'Описание нарушения отсутствует'}</p>
                     `;
                     container.appendChild(box);
                 });
