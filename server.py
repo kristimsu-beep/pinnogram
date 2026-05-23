@@ -222,7 +222,7 @@ STAFF_HIERARCHY = [
     "Младший Модератор", "Модератор", "Старший Модератор", 
     "Младший Администратор", "Администратор", "Старший Администратор",
     "Заместитель Главного Модератора", "Главный Модератор", "Отдел по набору",
-    "Заместитель Куратора Администраторов", "Куратор Администраторов", 
+    "Заместитель Куратора Администратора", "Куратор Администраторов", 
     "Зам.Менеджера", "Менеджер", "Тех. Админ"
 ]
 
@@ -284,7 +284,7 @@ async def get_forum_staff():
                         if avatar_hash:
                             avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png"
                         else:
-                            avatar_url = "https://ibb.co"
+                            avatar_url = "https://i.ibb.co/4pSbxsh/user-avatar.png"
                             
                         # 🎯 РАСЧЕТ РЕЙТИНГА: Считаем среднюю оценку модератора в базе данных
                         avg_rating = 5.0
@@ -404,12 +404,13 @@ async def discord_callback(code: str, request: Request):
         return RedirectResponse("/forum?auth=error")
 
 
-# 3. Выход из аккаунта (очистка кук)
+# 3. Выход из аккаунта (Исправлена очистка корневых кук)
 @app.get("/api/forum/auth/logout")
-async def discord_logout(response: Response):
+async def discord_logout():
     response = RedirectResponse("/forum")
-    response.delete_cookie("forum_user_name")
-    response.delete_cookie("forum_user_avatar")
+    # 🎯 ИСПРАВЛЕНО: Явно указали path="/", чтобы куки стирались из памяти браузера намертво
+    response.delete_cookie("forum_user_name", path="/")
+    response.delete_cookie("forum_user_avatar", path="/")
     return response
 
 
@@ -423,9 +424,8 @@ async def add_staff_review(data: dict):
         target_id = str(data.get("target_id", "")).strip() 
         author = data.get("author", "").strip()            
         text = data.get("text", "").strip()                
-        rating = int(data.get("rating", 5))                # Ловим оценку звездами (1-5)
+        rating = int(data.get("rating", 5))                
         
-        # Ограничиваем рамки рейтинга для защиты от накрутки
         if rating < 1: rating = 1
         if rating > 5: rating = 5
         
@@ -460,16 +460,17 @@ async def get_staff_reviews(target_id: str):
                 ORDER BY id DESC
             """, (target_id_str,)) as cursor:
                 rows = await cursor.fetchall()
-                # Возвращаем массив, включая оценку rating каждого отзыва
                 return [{"author": r[0], "text": r[1], "rating": r[2], "time": r[3]} for r in rows]
     except Exception as e:
         return []
 
-# 4. РЕНДЕРИНГ САМОЙ СТРАНИЦЫ ФОРУМА (Убедись, что переменная BASE_DIR объявлена выше в коде)
+
+# 4. РЕНДЕРИНГ САМОЙ СТРАНИЦЫ ФОРУМА
 @app.get("/forum")
 async def serve_forum_page():
     from fastapi.responses import FileResponse
     return FileResponse(os.path.join(BASE_DIR, "forum.html"))
+
 
 # ==========================================
 # 🎫 СИСТЕМА ОБРАЩЕНИЙ И ЖАЛОБ (ТИКЕТЫ)
@@ -480,22 +481,25 @@ async def serve_forum_page():
 async def get_forum_tickets_list():
     try:
         async with aiosqlite.connect(DB_PATH) as db:
-            async with db.execute("SELECT id, ticket_type, author_name, author_avatar, status, timestamp FROM forum_tickets ORDER BY id DESC") as cursor:
+            async with db.execute("SELECT id, ticket_type, author_name, author_avatar, status, timestamp, description FROM forum_tickets ORDER BY id DESC") as cursor:
                 rows = await cursor.fetchall()
                 return [{
                     "id": r[0], "type": r[1], "author": r[2], 
-                    "avatar": r[3], "status": r[4], "time": r[5]
+                    "avatar": r[3], "status": r[4], "time": r[5], "text": r[6]
                 } for r in rows]
     except Exception as e:
+        print(f"🛑 Ошибка получения списка тикетов: {e}")
         return []
 
+
 # 3. ПОЛУЧЕНИЕ ДАННЫХ КОНКРЕТНОГО ОБРАЩЕНИЯ ПО ID
-@app.get("/api/forum/tickets/{ticket_id}")
+# 🎯 ИСПРАВЛЕНО: Добавлен префикс /get/, чтобы роут на 100% совпал с вызовами в forum.html!
+@app.get("/api/forum/tickets/get/{ticket_id}")
 async def get_single_forum_ticket(ticket_id: int):
     try:
         async with aiosqlite.connect(DB_PATH) as db:
             async with db.execute("""
-                SELECT id, ticket_type, author_name, author_avatar, description, photos, status, moderator_name 
+                SELECT id, ticket_type, author_name, author_avatar, description, photos, status, moderator_name, timestamp 
                 FROM forum_tickets WHERE id = ?
             """, (ticket_id,)) as cursor:
                 r = await cursor.fetchone()
@@ -503,16 +507,23 @@ async def get_single_forum_ticket(ticket_id: int):
                     return {"status": "error", "message": "Обращение не найдено"}
                     
                 return {
-                    "status": "ok", "id": r[0], "type": r[1], "author": r[2],
-                    "avatar": r[3], "description": r[4], 
+                    "id": r[0], 
+                    "type": r[1], 
+                    "author": r[2],
+                    "avatar": r[3], 
+                    "text": r[4], # Фронтенд ожидает ключ "text", а не "description"
                     "photos": r[5].split(",") if r[5] else [],
-                    "ticket_status": r[6], "moderator": r[7]
+                    "status": r[6], # Фронтенд ожидает ключ "status", а не "ticket_status"
+                    "moderator": r[7],
+                    "time": r[8]
                 }
     except Exception as e:
+        print(f"🛑 Ошибка получения тикета {ticket_id}: {e}")
         return {"status": "error", "message": str(e)}
 
 # 4. УПРАВЛЕНИЕ СТАТУСОМ ТИКЕТА (Взять в работу / Одобрить / Отклонить)
-@app.post("/api/forum/tickets/action")
+# 🎯 ИСПРАВЛЕНО: Изменен адрес роута на /status, чтобы он на 100% совпал с fetch на фронтенде!
+@app.post("/api/forum/tickets/status")
 async def action_forum_ticket(data: dict, request: Request):
     try:
         # 1. Проверяем, что голосующий вообще авторизован
@@ -521,7 +532,6 @@ async def action_forum_ticket(data: dict, request: Request):
             return {"status": "error", "message": "🔒 Вы не авторизованы!"}
             
         # 2. ПРОВЕРКА ПРАВ: Запрашиваем актуальный состав STAFF из Дискорда
-        # Кнопки сработают только если никнейм куки есть в списке STAFF_HIERARCHY
         staff_members = await get_forum_staff()
         is_admin = any(str(u.get("name")) == mod_name for u in staff_members)
         
@@ -529,19 +539,22 @@ async def action_forum_ticket(data: dict, request: Request):
             return {"status": "error", "message": "🛑 Отказано в доступе! Вы не являетесь членом Администрации."}
             
         ticket_id = int(data.get("ticket_id"))
-        action = data.get("action") # 'take', 'approve', 'reject'
+        # 🎯 ИСПРАВЛЕНО: Ловим параметр "status", отправляемый из JavaScript-скрипта
+        new_status = data.get("status") # 'processing', 'approved', 'rejected'
         
         async with aiosqlite.connect(DB_PATH) as db:
-            if action == 'take':
-                await db.execute("UPDATE forum_tickets SET status = 'progress', moderator_name = ? WHERE id = ? AND status = 'open'", (mod_name, ticket_id))
-            elif action == 'approve':
-                await db.execute("UPDATE forum_tickets SET status = 'approved' WHERE id = ? AND status = 'progress'", (ticket_id,))
-            elif action == 'reject':
-                await db.execute("UPDATE forum_tickets SET status = 'rejected' WHERE id = ? AND status = 'progress'", (ticket_id,))
+            # 🎯 ИСПРАВЛЕНО: Условия SQL-запросов синхронизированы с логикой статусов на фронтенде
+            if new_status == 'processing':
+                await db.execute("UPDATE forum_tickets SET status = 'processing', moderator_name = ? WHERE id = ? AND status = 'open'", (mod_name, ticket_id))
+            elif new_status == 'approved':
+                await db.execute("UPDATE forum_tickets SET status = 'approved' WHERE id = ? AND status = 'processing'", (ticket_id,))
+            elif new_status == 'rejected':
+                await db.execute("UPDATE forum_tickets SET status = 'rejected' WHERE id = ? AND status = 'processing'", (ticket_id,))
                 
             await db.commit()
         return {"status": "ok", "message": "Статус обращения успешно обновлен!"}
     except Exception as e:
+        print(f"🛑 Ошибка обновления статуса тикета: {e}")
         return {"status": "error", "message": str(e)}
 
 # 5. ДИНАМИЧЕСКИЙ РОУТ ДЛЯ СТРАНИЦ ТИКЕТОВ ПО ССЫЛКЕ /forum/post_1, /forum/post_2
@@ -563,7 +576,7 @@ async def create_forum_ticket(
         author_name = request.cookies.get("forum_user_name", "Аноним")
         
         # 🎯 ИСПРАВЛЕНО: Рабочая дефолтная аватарка-заглушка вместо битой ссылки ibb.co
-        author_avatar = request.cookies.get("forum_user_avatar", "https://ibb.co")
+        author_avatar = request.cookies.get("forum_user_avatar", "https://i.ibb.co/4pSbxsh/user-avatar.png")
         
         # Папка на сервере Render, куда будут сохраняться скриншоты
         upload_dir = os.path.join(BASE_DIR, "static", "uploads")
@@ -592,7 +605,6 @@ async def create_forum_ticket(
         
         # Записываем обращение в базу данных aiosqlite
         async with aiosqlite.connect(DB_PATH) as db:
-            # 🎯 ИСПРАВЛЕНО: Теперь колонок (8 шт) и знаков '?' (8 шт) строго одинаковое количество!
             cursor = await db.execute("""
                 INSERT INTO forum_tickets (ticket_type, author_name, author_avatar, description, photos, status, moderator_name, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
