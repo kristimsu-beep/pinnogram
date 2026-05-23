@@ -16,12 +16,17 @@ import time
 import psutil
 from supabase import create_client, Client # Добавь в самый верх к импортам, если еще не добавил!
 import asyncpg
+from fastapi.responses import RedirectResponse
 
 
 # Вечное облачное хранилище для видео и голосовых Pinnogram
 SUPABASE_URL = "https://zzcfdrryfsychezckjov.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6Y2ZkcnJ5ZnN5Y2hlemNram92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMTk1MTgsImV4cCI6MjA5NDY5NTUxOH0.L5QdbaIumhGTwATLNZnrTklUOHYD9PhYUYBpM--OZds"
+# Секреты для авторизации через Discord (зададим их в панели Render)
 
+CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
+CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
+REDIRECT_URI = "https://pinnogram-server.onrender.com/api/forum/auth/callback"
 supabase_client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Берем ключ из настроек Render (в коде его не будет видно)
@@ -219,6 +224,7 @@ STAFF_HIERARCHY = [
     "Зам.Менеджера", "Менеджер", "Тех. Админ"
 ]
 
+# 1. ПОЛУЧЕНИЕ STAFF-СОСТАВА С РАСЧЕТОМ СРЕДНЕГО ЗВЕЗДНОГО РЕЙТИНГА
 @app.get("/api/forum/staff")
 async def get_forum_staff():
     BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
@@ -233,9 +239,8 @@ async def get_forum_staff():
     try:
         headers = {"Authorization": f"Bot {BOT_TOKEN}"}
         
-        # 1. СИСТЕМНЫЙ ФИКС: Указали полный и правильный путь к API ролей Discord
+        # Получаем роли
         roles_url = f"https://discord.com/api/v10/guilds/{GUILD_ID}/roles"
-        
         async with httpx.AsyncClient() as client:
             roles_res = await client.get(roles_url, headers=headers, timeout=10.0)
             if roles_res.status_code != 200:
@@ -243,86 +248,159 @@ async def get_forum_staff():
                 return []
                 
             roles_data = roles_res.json()
-            # Делаем словарь { "role_id": "Имя Роли" }
             roles_map = {r["id"]: r["name"] for r in roles_data}
             
-            # 2. СИСТЕМНЫЙ ФИКС: Указали полный и правильный путь к API участников Discord
+            # Получаем участников
             members_url = f"https://discord.com/api/v10/guilds/{GUILD_ID}/members?limit=1000"
             members_res = await client.get(members_url, headers=headers, timeout=10.0)
-            
             if members_res.status_code != 200:
                 print(f"❌ Ошибка получения участников Discord: {members_res.text}")
                 return []
                 
             members_data = members_res.json()
             
-            # 3. Фильтруем участников по иерархии ролей
-            for m in members_data:
-                if "user" in m and m["user"].get("bot"):
-                    continue
-                    
-                user_id = m["user"]["id"]
-                display_name = m.get("nick") or m["user"].get("global_name") or m["user"]["username"]
-                username = m["user"]["username"]
-                
-                # Собираем текстовые имена ролей, которые есть у этого юзера
-                member_role_ids = m.get("roles", [])
-                member_role_names = [roles_map[rid] for rid in member_role_ids if rid in roles_map]
-                
-                # Ищем совпадения с нашей иерархией STAFF_HIERARCHY
-                matched_roles = [r for r in member_role_names if r in STAFF_HIERARCHY]
-                
-                if matched_roles:
-                    # Сортируем по приоритету должностей
-                    matched_roles.sort(key=lambda x: STAFF_HIERARCHY.index(x))
-                    highest_role = matched_roles[-1]
-                    
-                    # СИСТЕМНЫЙ ФИКС: Сборка ссылки на аватарку через официальный cdn.discordapp.com
-                    avatar_hash = m["user"].get("avatar")
-                    if avatar_hash:
-                        avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png"
-                    else:
-                        avatar_url = "https://i.ibb.co/image.png"
+            # Подключаемся к локальной БД, чтобы вытащить средний рейтинг модераторов
+            async with aiosqlite.connect(DB_PATH) as db:
+                for m in members_data:
+                    if "user" in m and m["user"].get("bot"):
+                        continue
                         
-                    staff_list.append({
-                        "id": user_id,
-                        "name": display_name,
-                        "username": username,
-                        "avatar": avatar_url,
-                        "role": highest_role
-                    })
+                    user_id = m["user"]["id"]
+                    display_name = m.get("nick") or m["user"].get("global_name") or m["user"]["username"]
+                    username = m["user"]["username"]
                     
+                    member_role_ids = m.get("roles", [])
+                    member_role_names = [roles_map[rid] for rid in member_role_ids if rid in roles_map]
+                    
+                    matched_roles = [r for r in member_role_names if r in STAFF_HIERARCHY]
+                    
+                    if matched_roles:
+                        matched_roles.sort(key=lambda x: STAFF_HIERARCHY.index(x))
+                        highest_role = matched_roles[-1]
+                        
+                        avatar_hash = m["user"].get("avatar")
+                        if avatar_hash:
+                            avatar_url = f"https://cdn.discordapp.com/avatars/{user_id}/{avatar_hash}.png"
+                        else:
+                            avatar_url = "https://ibb.co"
+                            
+                        # 🎯 РАСЧЕТ РЕЙТИНГА: Считаем среднюю оценку модератора в базе данных
+                        avg_rating = 5.0
+                        review_count = 0
+                        async with db.execute("SELECT AVG(rating), COUNT(*) FROM forum_reviews WHERE target_id = ?", (user_id,)) as cur:
+                            row = await cur.fetchone()
+                            if row and row[0] is not None:
+                                avg_rating = round(row[0], 1)
+                                review_count = row[1]
+                        
+                        staff_list.append({
+                            "id": user_id,
+                            "name": display_name,
+                            "username": username,
+                            "avatar": avatar_url,
+                            "role": highest_role,
+                            "rating": avg_rating,        # Передаем оценку (например, 4.8)
+                            "reviews": review_count      # Передаем количество отзывов
+                        })
+                        
     except Exception as e:
         print(f"🛑 Ошибка шлюза Discord API в server.py: {e}")
         
     return staff_list
 
-# 4. РЕНДЕРИНГ САМОЙ СТРАНИЦЫ ФОРУМА (Убедись, что переменная BASE_DIR объявлена выше в коде)
-@app.get("/forum")
-async def serve_forum_page():
-    from fastapi.responses import FileResponse
-    return FileResponse(os.path.join(BASE_DIR, "forum.html"))
 
 # ==========================================
-# 🏛️ СИСТЕМА ОТЗЫВОВ ДЛЯ PINNOGRAM FORUM
+# 🔑 СИСТЕМА СВЕРХБЫСТРОЙ АВТОРИЗАЦИИ DISCORD OAUTH2
 # ==========================================
 
-# 1. ПРИЕМ И СОХРАНЕНИЕ ОТЗЫВОВ В БАЗУ ДАННЫХ
+# 1. Ссылка-перенаправление на форму авторизации Дискорда
+@app.get("/api/forum/auth/login")
+async def discord_login_redirect():
+    client_id = os.getenv("DISCORD_CLIENT_ID")
+    redirect_uri = os.getenv("DISCORD_REDIRECT_URI")
+    # Генерируем официальную ссылку авторизации Дискорда
+    url = f"https://discord.com/api/oauth2/authorize?client_id={client_id}&redirect_uri={encodeURIComponent(redirect_uri)}&response_type=code&scope=identify"
+    return RedirectResponse(url)
+
+# Легкий внутренний хелпер для кодирования URL-компонентов
+def encodeURIComponent(text: str) -> str:
+    import urllib.parse
+    return urllib.parse.quote(text, safe='')
+
+# 2. Коллбэк-приемник: ловит пользователя после успешного входа в Дискорд
+@app.get("/api/forum/auth/callback")
+async def discord_callback(code: str, response: Response):
+    client_id = os.getenv("DISCORD_CLIENT_ID")
+    client_secret = os.getenv("DISCORD_CLIENT_SECRET")
+    redirect_uri = os.getenv("DISCORD_REDIRECT_URI")
+    
+    try:
+        # Обмениваем временный код на постоянный токен доступа юзера
+        async with httpx.AsyncClient() as client:
+            token_data = {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri
+            }
+            token_res = await client.post("https://discord.com/api/v10/oauth2/token", data=token_data)
+            tokens = token_res.json()
+            access_token = tokens.get("access_token")
+            
+            if not access_token:
+                return RedirectResponse("/forum?auth=error")
+                
+            # Запрашиваем информацию о вошедшем пользователе (его имя и аватарку)
+            user_headers = {"Authorization": f"Bearer {access_token}"}
+            user_res = await client.get("https://discord.com/api/v10/users/@me", headers=user_headers)
+            user_info = user_res.json()
+            
+            u_id = user_info["id"]
+            u_name = user_info.get("global_name") or user_info["username"]
+            u_avatar = f"https://cdn.discordapp.com/avatars/{u_id}/{user_info['avatar']}.png" if user_info.get("avatar") else "https://ibb.co"
+            
+            # Сохраняем данные пользователя прямо в куки браузера, чтобы сессия не сбрасывалась
+            # Куки будут жить 30 дней
+            response = RedirectResponse("/forum?auth=success")
+            response.set_cookie(key="forum_user_name", value=u_name, max_age=2592000)
+            response.set_cookie(key="forum_user_avatar", value=u_avatar, max_age=2592000)
+            return response
+            
+    except Exception as e:
+        print(f"🛑 Ошибка OAuth2: {e}")
+        return RedirectResponse("/forum?auth=error")
+
+# 3. Выход из аккаунта (очистка кук)
+@app.get("/api/forum/auth/logout")
+async def discord_logout(response: Response):
+    response = RedirectResponse("/forum")
+    response.delete_cookie("forum_user_name")
+    response.delete_cookie("forum_user_avatar")
+    return response
+
+
+# ==========================================
+# 🏛️ ОБНОВЛЁННАЯ СИСТЕМА ОТЗЫВОВ И РЕЙТИНГА
+# ==========================================
+
 @app.post("/api/forum/review")
 async def add_staff_review(data: dict):
     try:
-        target_id = str(data.get("target_id", "")).strip() # ID дискорд-аккаунта модератора
-        author = data.get("author", "").strip()            # Ник того, кто оставляет отзыв
-        text = data.get("text", "").strip()                # Текст отзыва
-        rating = int(data.get("rating", 5))                # Оценка (по дефолту 5)
+        target_id = str(data.get("target_id", "")).strip() 
+        author = data.get("author", "").strip()            
+        text = data.get("text", "").strip()                
+        rating = int(data.get("rating", 5))                # Ловим оценку звездами (1-5)
         
-        # Получаем текущее время по МСК для фиксации отзыва
+        # Ограничиваем рамки рейтинга для защиты от накрутки
+        if rating < 1: rating = 1
+        if rating > 5: rating = 5
+        
         ts = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
         
         if not target_id or not author or not text:
             return {"status": "error", "message": "Заполните все поля отзыва!"}
             
-        # Записываем отзыв в твою локальную базу данных мессенджера (aiosqlite)
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute("""
                 INSERT INTO forum_reviews (target_id, author, review_text, rating, timestamp)
@@ -330,20 +408,17 @@ async def add_staff_review(data: dict):
             """, (target_id, author, text, rating, ts))
             await db.commit()
             
-        print(f"✅ [FORUM] Успешно сохранен отзыв для модератора {target_id} от {author}")
-        return {"status": "ok", "message": "Отзыв успешно опубликован!"}
+        return {"status": "ok", "message": "Ваш отзыв и оценка успешно зафиксированы!"}
         
     except Exception as e:
         print(f"🛑 Ошибка сохранения отзыва: {e}")
         return {"status": "error", "message": f"Ошибка СУБД: {str(e)}"}
 
 
-# 2. ПОЛУЧЕНИЕ И ВЫДАЧА ОТЗЫВОВ НА ЭКРАН ПРОФИЛЯ
 @app.get("/api/forum/reviews/{target_id}")
 async def get_staff_reviews(target_id: str):
     try:
         target_id_str = str(target_id).strip()
-        
         async with aiosqlite.connect(DB_PATH) as db:
             async with db.execute("""
                 SELECT author, review_text, rating, timestamp 
@@ -352,14 +427,16 @@ async def get_staff_reviews(target_id: str):
                 ORDER BY id DESC
             """, (target_id_str,)) as cursor:
                 rows = await cursor.fetchall()
-                
-                # Формируем чистый массив словарей, который JavaScript на фронтенде распарсит без ошибок
+                # Возвращаем массив, включая оценку rating каждого отзыва
                 return [{"author": r[0], "text": r[1], "rating": r[2], "time": r[3]} for r in rows]
-                
     except Exception as e:
-        print(f"🛑 Ошибка чтения отзывов для {target_id}: {e}")
         return []
 
+# 4. РЕНДЕРИНГ САМОЙ СТРАНИЦЫ ФОРУМА (Убедись, что переменная BASE_DIR объявлена выше в коде)
+@app.get("/forum")
+async def serve_forum_page():
+    from fastapi.responses import FileResponse
+    return FileResponse(os.path.join(BASE_DIR, "forum.html"))
 
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
@@ -1037,6 +1114,19 @@ async def startup():
                 timestamp TEXT
             )
         """)
+        # Убедись, что таблица создается с колонкой rating REAL
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS forum_reviews (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                target_id TEXT,
+                author TEXT,
+                author_avatar TEXT,
+                review_text TEXT,
+                rating REAL,
+                timestamp TEXT
+            )
+        """)
+        await db.commit()
 
         # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
         columns = [
