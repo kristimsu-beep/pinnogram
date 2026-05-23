@@ -614,7 +614,7 @@
                 // Мета-линия автора (Аватар, ник, время) строго по шаблону
                 metaBlock.innerHTML = `
                     <div class="ticket-header-line" style="margin-bottom:0;">
-                        <img src="${t.avatar || 'https://ibb.co'}">
+                        <img src="${t.avatar || 'https://i.ibb.co/4pSbxsh/user-avatar.png'}">
                         <div>
                             <span class="ticket-author-name" style="display:block;">${t.author}</span>
                             <span class="ticket-time-ago" style="font-size:11px;">${t.time || '1 час назад'} • Гражданские вопросы</span>
@@ -650,7 +650,6 @@
             } catch (e) { textBlock.textContent = "Ошибка получения данных из файлового хранилища."; }
         }
 
-        // --- ЗАГРУЗКА ПЕРЕПИСКИ ИЗ БАЗЫ ДАННЫХ ---
         async function loadTicketComments(ticketId) {
             const commentsZone = document.getElementById("view-comments-zone");
             if (!commentsZone) return;
@@ -699,7 +698,7 @@
                     inputElement.value = ""; // Очищаем поле ввода
                     loadTicketComments(activeTicketId); // Мгновенно обновляем чат на экране!
                 } else { alert("Ошибка: " + data.message); }
-            } catch (e) { alert("Не удалось отправить сообщение на сервер."); }
+            } catch (e) { alert("Не удалось отправить сообщение на server."); }
         }
 
 
@@ -718,10 +717,26 @@
             } catch (e) { alert("Сбой изменения статуса дела."); }
         }
 
-        // Автозапуск дефолтной страницы при загрузке
-        loadStaffForum();
-        updateAuthInterface();
+        // 🎯 УМНЫЙ АВТО-ПЕРЕХОД ПО ПРЯМЫМ ССЫЛКАМ НА ЖАЛОБЫ:
+        const currentUrlPath = window.location.pathname; // Читаем путь (например, "/forum/post_2")
+
+        if (currentUrlPath.includes("/post_")) {
+            // Вытаскиваем числовой ID обращения из ссылки
+            const urlTicketId = parseInt(currentUrlPath.split("/post_")[1]);
+            if (!isNaN(urlTicketId)) {
+                updateAuthInterface();
+                viewSpecificTicket(urlTicketId); // Мгновенно открываем жалобу в обход главного экрана!
+            } else {
+                loadStaffForum();
+                updateAuthInterface();
+            }
+        } else {
+            // Если ссылка обычная — открываем стандартный список модераторов
+            loadStaffForum();
+            updateAuthInterface();
+        }
     </script>
 </body>
 </html>
+
 
