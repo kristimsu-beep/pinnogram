@@ -17,6 +17,8 @@ import psutil
 from supabase import create_client, Client # Добавь в самый верх к импортам, если еще не добавил!
 import asyncpg
 from fastapi.responses import RedirectResponse
+from fastapi import Form, File, UploadFile
+from typing import List
 
 
 # Вечное облачное хранилище для видео и голосовых Pinnogram
@@ -329,10 +331,10 @@ def encodeURIComponent(text: str) -> str:
 
 # 2. Коллбэк-приемник: ловит пользователя после успешного входа в Дискорд
 @app.get("/api/forum/auth/callback")
-async def discord_callback(code: str, request: Request, response: Response):
+async def discord_callback(code: str, request: Request):
     client_id = os.getenv("DISCORD_CLIENT_ID")
     client_secret = os.getenv("DISCORD_CLIENT_SECRET")
-    redirect_uri = os.getenv("DISCORD_REDIRECT_URI") # или "REDIRECT_URI" в зависимости от того, как названо на Render
+    redirect_uri = os.getenv("DISCORD_REDIRECT_URI")
     
     try:
         # Обмениваем временный код на постоянный токен доступа юзера
@@ -358,7 +360,11 @@ async def discord_callback(code: str, request: Request, response: Response):
             user_info = user_res.json()
             
             u_id = str(user_info["id"])
+            
+            # 🎯 ФИКС ИМЕНИ: Берем только чистую строку глобального имени без дублирования
             u_name = user_info.get("global_name") or user_info["username"]
+            u_name = str(u_name).strip()
+            
             avatar_hash = user_info.get("avatar")
             
             # 1. Базовая сборка ссылки (стандарт Дискорда)
@@ -378,24 +384,20 @@ async def discord_callback(code: str, request: Request, response: Response):
 
             # 🎯 2. СУПЕР-ФИКС: Синхронизируем аватарку со списком STAFF-карточек (где она 100% рабочая)
             try:
-                # Вызываем асинхронную функцию получения состава проекта, объявленную у тебя в server.py
                 staff_members = await get_forum_staff()
-                # Ищем вошедшего пользователя среди модераторов по его ID
                 for staff_user in staff_members:
                     if str(staff_user.get("id")) == u_id:
-                        # Заменяем ссылку на ту, которая успешно отрендерилась на карточке!
                         u_avatar = staff_user.get("avatar")
                         print(f"🎯 [FORUM AUTH] Аватарка для {u_name} успешно скопирована из STAFF-карточки!")
                         break
             except Exception as e:
                 print(f"⚠️ Ошибка синхронизации аватарки со списком staff: {e}")
 
-            
-            # Сохраняем данные пользователя прямо в куки браузера, чтобы сессия не сбрасывалась
-            response = RedirectResponse("/forum?auth=success")
-            response.set_cookie(key="forum_user_name", value=u_name, max_age=2592000)
-            response.set_cookie(key="forum_user_avatar", value=u_avatar, max_age=2592000)
-            return response
+            # 🎯 ФИКС КУК: Создаем редирект и жестко привязываем куки к корню сайта path="/"
+            res = RedirectResponse("/forum?auth=success")
+            res.set_cookie(key="forum_user_name", value=u_name, max_age=2592000, path="/")
+            res.set_cookie(key="forum_user_avatar", value=u_avatar, max_age=2592000, path="/")
+            return res
             
     except Exception as e:
         print(f"🛑 Ошибка OAuth2: {e}")
@@ -581,6 +583,59 @@ async def action_forum_ticket(data: dict, request: Request):
 async def serve_single_ticket_page(ticket_id: int):
     # Страница тикета рендерится через тот же файл, фронтенд сам поймет ID из URL-адреса!
     return FileResponse(os.path.join(BASE_DIR, "forum.html"))
+
+
+@app.post("/api/forum/tickets/create")
+async def create_forum_ticket(
+    request: Request,
+    type: str = Form(...),            # Ловим поле type из FormData
+    text: str = Form(...),            # Ловим поле text из FormData
+    photos: List[UploadFile] = File(default=[]) # Ловим массив файлов скриншотов
+):
+    try:
+        # Читаем данные автора прямо из кук его авторизованной сессии Дискорда
+        author_name = request.cookies.get("forum_user_name", "Аноним")
+        author_avatar = request.cookies.get("forum_user_avatar", "https://ibb.co")
+        
+        # Папка на сервере Render, куда будут сохраняться скриншоты
+        upload_dir = os.path.join(BASE_DIR, "static", "uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        saved_photo_urls = []
+        
+        # Сохраняем прикрепленные файлы скриншотов на диск сервера
+        for photo in photos:
+            if not photo.filename:
+                continue
+            # Генерируем уникальное имя файла, чтобы скриншоты не перезаписывались
+            file_ext = os.path.splitext(photo.filename)[1]
+            unique_filename = f"ticket_{int(datetime.now().timestamp())}_{photo.filename}"
+            file_path = os.path.join(upload_dir, unique_filename)
+            
+            with open(file_path, "wb") as f:
+                f.write(await photo.read())
+            
+            # Формируем публичную ссылку на скриншот
+            saved_photo_urls.append(f"/static/uploads/{unique_filename}")
+            
+        # Объединяем ссылки на фото через запятую для хранения в одной текстовой колонке SQLite
+        photos_str = ",".join(saved_photo_urls)
+        ts = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
+        
+        # Записываем обращение в базу данных aiosqlite
+        async with aiosqlite.connect(DB_PATH) as db:
+            cursor = await db.execute("""
+                INSERT INTO forum_tickets (ticket_type, author_name, author_avatar, description, photos, status, moderator_name, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (type, author_name, author_avatar, text, photos_str, "open", "", ts))
+            await db.commit()
+            ticket_id = cursor.lastrowid
+            
+        return {"status": "ok", "message": "Обращение успешно зарегистрировано!", "ticket_id": ticket_id}
+        
+    except Exception as e:
+        print(f"🛑 Ошибка создания тикета: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 @app.get("/poll/{poll_id}")
