@@ -626,6 +626,53 @@ async def create_forum_ticket(
         print(f"🛑 Ошибка создания тикета: {e}")
         return {"status": "error", "message": str(e)}
 
+# 1. ОТПРАВКА НОВОГО СООБЩЕНИЯ В ЧАТ ТИКЕТА
+@app.post("/api/forum/tickets/comment/send")
+async def send_ticket_comment(data: dict, request: Request):
+    try:
+        author_name = request.cookies.get("forum_user_name")
+        author_avatar = request.cookies.get("forum_user_avatar", "https://i.ibb.co/4pSbxsh/user-avatar.png")
+        
+        if not author_name:
+            return {"status": "error", "message": "🔒 Вы не авторизованы через Discord!"}
+            
+        ticket_id = int(data.get("ticket_id"))
+        text = str(data.get("text", "")).strip()
+        
+        if not text:
+            return {"status": "error", "message": "Нельзя отправить пустое сообщение!"}
+            
+        ts = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
+        
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("""
+                INSERT INTO ticket_comments (ticket_id, author_name, author_avatar, message_text, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            """, (ticket_id, author_name, author_avatar, text, ts))
+            await db.commit()
+            
+        return {"status": "ok", "message": "Сообщение отправлено!"}
+    except Exception as e:
+        print(f"🛑 Ошибка отправки комментария: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+# 2. ПОЛУЧЕНИЕ ИСТОРИИ ПЕРЕПИСКИ ДЛЯ КОНКРЕТНОГО ТИКЕТА
+@app.get("/api/forum/tickets/comment/list/{ticket_id}")
+async def get_ticket_comments_list(ticket_id: int):
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute("""
+                SELECT author_name, author_avatar, message_text, timestamp 
+                FROM ticket_comments WHERE ticket_id = ? ORDER BY id ASC
+            """, (ticket_id,)) as cursor:
+                rows = await cursor.fetchall()
+                return [{
+                    "author": r[0], "avatar": r[1], "text": r[2], "time": r[3]
+                } for r in rows]
+    except Exception as e:
+        print(f"🛑 Ошибка получения комментариев: {e}")
+        return []
 
 
 
@@ -1336,6 +1383,20 @@ async def startup():
             )
         """)
         await db.commit()
+
+        # 3. Таблица для комментариев и переписки внутри обращений
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS ticket_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id INTEGER,
+                author_name TEXT,
+                author_avatar TEXT,
+                message_text TEXT,
+                timestamp TEXT
+            )
+        """)
+        await db.commit()
+
 
         # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
         columns = [
