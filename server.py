@@ -72,9 +72,15 @@ if not os.path.exists(UPLOAD_DIR):
 async def get_index():
     return FileResponse('index.html')
 
+# 🎯 СУПЕР-ФИКС: Заставляем Python принудительно создать папку static, если её нет на Render
+static_path = os.path.join(BASE_DIR, "static")
+if not os.path.exists(static_path):
+    os.makedirs(static_path, exist_ok=True)
+
+# Теперь FastAPI без ошибок смонтирует её для раздачи скриншотов обращений!
+app.mount("/static", StaticFiles(directory=static_path), name="static")
 app.mount("/files", StaticFiles(directory=UPLOAD_DIR), name="files")
 
-app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 # Раздача Service Worker (ОБЯЗАТЕЛЬНО для уведомлений)
 @app.get("/sw.js")
 async def get_sw():
