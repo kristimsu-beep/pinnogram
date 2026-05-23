@@ -199,28 +199,43 @@
         let currentSection = "staff"; // Режимы: "staff", "tickets", "ticket_view"
         let activeTicketId = null;
 
-        // Вспомогательная функция для чтения кук браузера (сессия Дискорда)
+        // 🎯 СУПЕР-ФИКС: Простой разбор кук без ломающих регулярных выражений
         function getCookie(name) {
-            let matches = document.cookie.match(new RegExp("(?:^|; )" + name.replace(/([\.$?*|{}\(\)\[\]\\\/\+^])/g, '\\$1') + "=([^;]*)"));
-            return matches ? decodeURIComponent(matches) : undefined;
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) {
+                return decodeURIComponent(parts.pop().split(';').shift()).trim();
+            }
+            return undefined;
         }
 
-        // Обновление шапки: показ кнопки Discord или профиля пользователя
+        // 🎯 СУПЕР-ФИКС ИНТЕРФЕЙСА: Полная очистка системного мусора из строк
         function updateAuthInterface() {
             const authZone = document.getElementById("auth-zone");
-            const userName = getCookie("forum_user_name");
-            const userAvatar = getCookie("forum_user_avatar");
+            if (!authZone) return;
+            
+            let userName = getCookie("forum_user_name");
+            let userAvatar = getCookie("forum_user_avatar");
 
-            if (userName) {
+            // Защита от системных склеек: если в куку пролез мусор через запятую, отсекаем его
+            if (userName && userName.includes(",")) {
+                userName = userName.split(",")[0].trim();
+            }
+            if (userAvatar && userAvatar.includes(",")) {
+                userAvatar = userAvatar.split(",")[0].trim();
+            }
+
+            if (userName && userAvatar && userAvatar !== "undefined") {
+                // Выводим кристально чистый ник и рабочую аватарку
                 authZone.innerHTML = `
-                    <div class="user-badge">
-                        <img src="${userAvatar}">
-                        <span style="font-size:12px; font-weight:bold;">${userName}</span>
-                        <a href="${API_URL}/api/forum/auth/logout" class="logout-btn">✕ Выйти</a>
+                    <div class="user-badge" style="display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); padding: 5px 12px; border-radius: 20px; border: 1px solid #333;">
+                        <img src="${userAvatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'" style="width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--neon-blue); object-fit: cover;">
+                        <span style="font-size:12px; font-weight:bold; color: var(--text);">${userName}</span>
+                        <a href="${API_URL}/api/forum/auth/logout" class="logout-btn" style="color: #ff3b30; text-decoration: none; font-size: 11px; margin-left: 5px; font-weight: bold;">✕ Выйти</a>
                     </div>
                 `;
             } else {
-                // НАЙДИ ЭТОТ КУСОК В ФУНКЦИИ updateAuthInterface() И ОБНОВИ ВНУТРИ ГУСЯ:
+                // Если гость — выводим кнопку с идеальной геометрией SVG
                 authZone.innerHTML = `
                     <a href="${API_URL}/api/forum/auth/login" class="discord-btn">
                         <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="display:inline-block; vertical-align:middle;">
@@ -231,6 +246,7 @@
                 `;
             }
         }
+
 
         // Переключение разделов меню (Вкладки сверху)
         function switchSection(sectionName) {
