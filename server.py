@@ -1,7 +1,7 @@
 import asyncio 
 import os, uuid, aiosqlite, uvicorn
 from datetime import datetime
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Request, Response, Depends
 from fastapi.responses import FileResponse 
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -329,10 +329,10 @@ def encodeURIComponent(text: str) -> str:
 
 # 2. Коллбэк-приемник: ловит пользователя после успешного входа в Дискорд
 @app.get("/api/forum/auth/callback")
-async def discord_callback(code: str, response: Response):
+async def discord_callback(code: str, request: Request, response: Response):
     client_id = os.getenv("DISCORD_CLIENT_ID")
     client_secret = os.getenv("DISCORD_CLIENT_SECRET")
-    redirect_uri = os.getenv("DISCORD_REDIRECT_URI")
+    redirect_uri = os.getenv("DISCORD_REDIRECT_URI") # или "REDIRECT_URI" в зависимости от того, как названо на Render
     
     try:
         # Обмениваем временный код на постоянный токен доступа юзера
