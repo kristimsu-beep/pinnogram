@@ -653,24 +653,39 @@
 
 
 
-        // Переключение разделов меню (Вкладки сверху)
+        // ИСПРАВЛЕНО: Теперь функция железно скрывает абсолютно все разделы перед показом нового!
         function switchSection(sectionName) {
             currentSection = sectionName;
             
             // Смена активного класса на кнопках навигации
-            document.querySelectorAll(".nav-tab").forEach(tab => tab.classList.remove("active"));
+            document.querySelectorAll(".tab-btn, .nav-tab").forEach(tab => tab.classList.remove("active"));
             const targetTab = document.getElementById(`tab-${sectionName}`);
             if (targetTab) targetTab.classList.add("active");
 
-            // Смена видимости экранов
-            document.getElementById("section-staff").style.display = (sectionName === "staff") ? "block" : "none";
-            document.getElementById("section-tickets").style.display = (sectionName === "tickets") ? "block" : "none";
-            document.getElementById("section-ticket-view").style.display = (sectionName === "ticket_view") ? "block" : "none";
+            // 🎯 СУПЕР-ФИКС: Намертво прячем вообще ВСЕ возможные разделы сайта
+            const sections = ["section-staff", "section-tickets", "section-ticket-view", "section-profile"];
+            sections.forEach(sId => {
+                const el = document.getElementById(sId);
+                if (el) el.style.display = "none";
+            });
 
-            // Автозагрузка данных для выбранной вкладки
-            if (sectionName === "staff") loadStaffForum();
-            if (sectionName === "tickets") loadTicketsList();
+            // Открываем только один нужный экран
+            if (sectionName === "staff") {
+                document.getElementById("section-staff").style.display = "block";
+                loadStaffForum();
+            }
+            else if (sectionName === "tickets") {
+                document.getElementById("section-tickets").style.display = "block";
+                loadTicketsList();
+            }
+            else if (sectionName === "ticket_view") {
+                document.getElementById("section-ticket-view").style.display = "block";
+            }
+            else if (sectionName === "profile") {
+                document.getElementById("section-profile").style.display = "block";
+            }
         }
+
 
         // --- ЛОГИКА ВКЛАДКИ 1: ПЕРСОНАЛ И ОТЗЫВЫ ---
         async function loadStaffForum() {
@@ -1070,14 +1085,10 @@
             viewUserProfile("me");
         }
 
-        // 🎯 РЕНДЕРИНГ ОКНА ЛИЧНОГО ПРОФИЛЯ С УЧЁТОМ РОЛЕЙ СЕРВЕРА
+        // РЕНДЕРИНГ ОКНА ЛИЧНОГО ПРОФИЛЯ (ИСПРАВЛЕНО СИЯНИЕ И РОЛИ)
         async function viewUserProfile(userId) {
-            currentSection = "profile";
-            
-            // Смена видимости экранов
-            document.querySelectorAll(".page-section").forEach(s => s.style.display = "none");
-            const profSection = document.getElementById("section-profile");
-            if (profSection) profSection.style.display = "block";
+            // Переключаем экран через наш обновленный роутер
+            switchSection("profile");
 
             const nameTitle = document.getElementById("prof-user-title");
             const avatarImg = document.getElementById("prof-avatar-img");
@@ -1086,21 +1097,37 @@
             const statTick = document.getElementById("prof-stat-tick");
             const historyList = document.getElementById("profile-history-list");
 
-            if (nameTitle) nameTitle.textContent = getCookie("forum_user_name") || "Пользователь";
-            if (avatarImg) avatarImg.src = getCookie("forum_user_avatar") || "https://ibb.co";
-            if (historyList) historyList.textContent = "Сбор информации из реестров SQLite...";
+            // Достаем чистые данные из кук
+            const currentLoggedName = getCookie("forum_user_name") || "Пользователь";
+            const currentLoggedAvatar = getCookie("forum_user_avatar") || "https://i.ibb.co/4pSbxsh/user-avatar.png";
+
+            if (nameTitle) nameTitle.textContent = currentLoggedName;
+            
+            if (avatarImg) {
+                avatarImg.src = currentLoggedAvatar;
+                // 🎯 ФИКС АВАТАРКИ: Страховка onerror прямо на элемент личного кабинета
+                avatarImg.onerror = function() {
+                    this.src = 'https://ibb.co';
+                };
+            }
+            
+            if (historyList) historyList.textContent = "Синхронизация с реестрами базы данных SQLite...";
 
             try {
                 const res = await fetch(`${API_URL}/api/forum/user/profile/${userId}`);
                 const data = await res.json();
 
                 if (badgeZone) {
+                    // 🎯 АБСОЛЮТНО ПРАВИЛЬНЫЙ ФИКС: Убрали костыль с именем Bulgarian!
+                    // Теперь система берет ту роль, которую бэкэнд скачал из Дискорда для ЭТОГО конкретного модератора
                     if (data.is_staff) {
                         badgeZone.innerHTML = `<span class="profile-role-badge">✦ ${data.role}</span>`;
                     } else {
-                        badgeZone.innerHTML = `<span class="profile-role-badge citizen-badge">👤 Гражданин</span>`;
+                        // Если это обычный игрок сервера — он получает статус Гражданина
+                        badgeZone.innerHTML = `<span class="profile-role-badge citizen-badge" style="background: rgba(255,255,255,0.03); color: #88888e; border-color: #222226;">👤 Гражданин</span>`;
                     }
                 }
+
 
                 if (statTick) statTick.textContent = data.stat_tickets;
                 if (statComm) statComm.textContent = data.stat_comments;
@@ -1110,7 +1137,7 @@
                         historyList.innerHTML = `<div class="comment-empty-text">История действий пуста. Активности на форуме не зафиксировано.</div>`;
                     } else {
                         historyList.innerHTML = data.history.map(h => `
-                            <div class="history-row-item" onclick="viewSpecificTicket(${h.id})">
+                            <div class="history-row-item" onclick="viewSpecificTicket(${h.id})" style="background: #141416; border: 1px solid #1c1c1f; border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; cursor: pointer; transition: 0.2s;">
                                 <div style="display:flex; align-items:center; gap:15px;">
                                     <div style="background: #222226; padding: 10px; border-radius: 8px;">
                                         <svg width="14" height="14" fill="#5865F2" viewBox="0 0 16 16"><path d="M14.5 3a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5zm-13-1A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2z"/></svg>
@@ -1128,6 +1155,7 @@
 
             } catch (e) { if (historyList) historyList.textContent = "Ошибка связи со шлюзом профилей."; }
         }
+
 
         // 🎯 ЕДИНЫЙ ИНТЕЛЛЕКТУАЛЬНЫЙ РОУТЕР АВТО-ПЕРЕХОДОВ ПО ССЫЛКАМ
         const currentUrlPath = window.location.pathname; 
