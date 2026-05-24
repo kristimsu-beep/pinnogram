@@ -1101,7 +1101,7 @@ async def submit_moderator_application(data: dict, request: Request):
         return {"status": "error", "message": str(e)}
 
 
-# 3. ПОЛУЧЕНИЕ СПИСКА СДАННЫХ АНКЕТ ДЛЯ КУРАТОРОВ (ЗАЩИЩЕНО)
+# 3. ПОЛУЧЕНИЕ СПИСКА СДАННЫХ АНКЕТ ДЛЯ КУРАТОРОВ (ЗАЩИЩЕНО + ЖИВЫЕ ОТВЕТЫ)
 @app.get("/api/forum/applications/list")
 async def get_moderators_applications_list(request: Request):
     try:
@@ -1109,7 +1109,6 @@ async def get_moderators_applications_list(request: Request):
         if not mod_name:
             return {"status": "error", "message": "🔒 Вы не авторизованы!"}
             
-        # Проверяем наличие кураторской должности
         staff_members = await get_forum_staff()
         is_hr_admin = False
         
@@ -1123,14 +1122,17 @@ async def get_moderators_applications_list(request: Request):
             return {"status": "error", "message": "🛑 Отказано в доступе! Вы не входите в Отдел по набору персонала."}
             
         async with aiosqlite.connect(DB_PATH) as db:
-            async with db.execute("SELECT id, author_name, author_avatar, status, timestamp FROM forum_applications ORDER BY id DESC") as cursor:
+            # 🎯 ИСПРАВЛЕНО: Добавили выборку answers_json в SQL-запрос
+            async with db.execute("SELECT id, author_name, author_avatar, status, timestamp, answers_json FROM forum_applications ORDER BY id DESC") as cursor:
                 rows = await cursor.fetchall()
                 return {
                     "status": "ok",
-                    "applications": [{"id": r[0], "author": r[1], "avatar": r[2], "status": r[3], "time": r[4]} for r in rows]
+                    # Передаем r[5] (наши ответы) под ключом "answers" во фронтенд
+                    "applications": [{"id": r[0], "author": r[1], "avatar": r[2], "status": r[3], "time": r[4], "answers": r[5]} for r in rows]
                 }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
 
 
 # 4. УПРАВЛЕНИЕ СТАТУСОМ АНКЕТЫ (Взять в работу / Одобрить / Отклонить)
