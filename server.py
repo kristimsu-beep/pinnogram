@@ -685,7 +685,7 @@ async def send_ticket_comment(data: dict, request: Request):
                                 break
                         
                         # Ссылка на конкретное обращение, по которой модератор перейдёт с телефона/ПК
-                        ticket_url = f"https://onrender.com_{ticket_id}"
+                        ticket_url = f"https://pinnogram-server.onrender.com/forum_{ticket_id}"
                         
                         # Красивый payload для отправки в Discord-канал
                         webhook_data = {
