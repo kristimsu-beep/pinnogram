@@ -1050,78 +1050,115 @@
             } catch (e) { alert("Сбой изменения статуса дела."); }
         }
 
-        // 🎯 УМНЫЙ АВТО-ПЕРЕХОД ПО ПРЯМЫМ ССЫЛКАМ (ЖАЛОБЫ + ПРОФИЛИ):
-        const currentUrlPath = window.location.pathname; // Читаем путь из адресной строки
+        // 🎯 ФУНКЦИИ УПРАВЛЕНИЯ ВЫПЛЫВАЮЩИМ МЕНЮ ПРОФИЛЯ
+        function toggleUserDropdown(event) {
+            event.stopPropagation();
+            const menu = document.getElementById("dropdown-user-zone");
+            if (menu) {
+                menu.style.display = (menu.style.display === "flex") ? "none" : "flex";
+            }
+        }
+
+        // Закрытие меню при клике в любое пустое место экрана
+        document.addEventListener("click", () => {
+            const menu = document.getElementById("dropdown-user-zone");
+            if (menu) menu.style.display = "none";
+        });
+
+        // Функция перехода в СВОЙ личный профиль из меню
+        function openMyPersonalProfile() {
+            viewUserProfile("me");
+        }
+
+        // 🎯 РЕНДЕРИНГ ОКНА ЛИЧНОГО ПРОФИЛЯ С УЧЁТОМ РОЛЕЙ СЕРВЕРА
+        async function viewUserProfile(userId) {
+            currentSection = "profile";
+            
+            // Смена видимости экранов
+            document.querySelectorAll(".page-section").forEach(s => s.style.display = "none");
+            const profSection = document.getElementById("section-profile");
+            if (profSection) profSection.style.display = "block";
+
+            const nameTitle = document.getElementById("prof-user-title");
+            const avatarImg = document.getElementById("prof-avatar-img");
+            const badgeZone = document.getElementById("prof-role-badge-zone");
+            const statComm = document.getElementById("prof-stat-comm");
+            const statTick = document.getElementById("prof-stat-tick");
+            const historyList = document.getElementById("profile-history-list");
+
+            if (nameTitle) nameTitle.textContent = getCookie("forum_user_name") || "Пользователь";
+            if (avatarImg) avatarImg.src = getCookie("forum_user_avatar") || "https://ibb.co";
+            if (historyList) historyList.textContent = "Сбор информации из реестров SQLite...";
+
+            try {
+                const res = await fetch(`${API_URL}/api/forum/user/profile/${userId}`);
+                const data = await res.json();
+
+                if (badgeZone) {
+                    if (data.is_staff) {
+                        badgeZone.innerHTML = `<span class="profile-role-badge">✦ ${data.role}</span>`;
+                    } else {
+                        badgeZone.innerHTML = `<span class="profile-role-badge citizen-badge">👤 Гражданин</span>`;
+                    }
+                }
+
+                if (statTick) statTick.textContent = data.stat_tickets;
+                if (statComm) statComm.textContent = data.stat_comments;
+
+                if (historyList) {
+                    if (!data.history || data.history.length === 0) {
+                        historyList.innerHTML = `<div class="comment-empty-text">История действий пуста. Активности на форуме не зафиксировано.</div>`;
+                    } else {
+                        historyList.innerHTML = data.history.map(h => `
+                            <div class="history-row-item" onclick="viewSpecificTicket(${h.id})">
+                                <div style="display:flex; align-items:center; gap:15px;">
+                                    <div style="background: #222226; padding: 10px; border-radius: 8px;">
+                                        <svg width="14" height="14" fill="#5865F2" viewBox="0 0 16 16"><path d="M14.5 3a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-13a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5zm-13-1A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 14.5 2z"/></svg>
+                                    </div>
+                                    <div>
+                                        <span style="font-size:14px; font-weight:bold; color:#fff; display:block;">${h.text}</span>
+                                        <span style="font-size:11px; color:#55555c;">${h.time} • Категория: ${h.ticket_type === 'user' ? 'Жалоба' : 'Администрация'}</span>
+                                    </div>
+                                </div>
+                                <span style="font-size:12px; font-weight:bold; color:var(--accent);">${h.status === 'open' ? '⏳ Ожидание' : '✅ Рассмотрено'}</span>
+                            </div>
+                        `).join("");
+                    }
+                }
+
+            } catch (e) { if (historyList) historyList.textContent = "Ошибка связи со шлюзом профилей."; }
+        }
+
+        // 🎯 ЕДИНЫЙ ИНТЕЛЛЕКТУАЛЬНЫЙ РОУТЕР АВТО-ПЕРЕХОДОВ ПО ССЫЛКАМ
+        const currentUrlPath = window.location.pathname; 
 
         if (currentUrlPath.includes("/post_")) {
-            // 1. ВЕТКА ЖАЛОБ: Вытаскиваем числовой ID обращения из ссылки
             const urlTicketId = parseInt(currentUrlPath.split("/post_")[1]);
             if (!isNaN(urlTicketId)) {
                 updateAuthInterface();
-                viewSpecificTicket(urlTicketId); // Мгновенно открываем жалобу
+                viewSpecificTicket(urlTicketId); 
             } else {
                 loadStaffForum();
                 updateAuthInterface();
             }
         } 
         else if (currentUrlPath.includes("/user_")) {
-            // 🎯 2. НОВАЯ ВЕТКА ПРОФИЛЕЙ: Вытаскиваем идентификатор пользователя
             const urlUserId = currentUrlPath.split("/user_")[1];
             if (urlUserId) {
                 updateAuthInterface();
-                viewUserProfile(urlUserId); // Мгновенно открываем профиль в обход главного экрана!
+                viewUserProfile(urlUserId); 
             } else {
                 loadStaffForum();
                 updateAuthInterface();
             }
         } 
         else {
-            // 3. СТАНДАРТНАЯ ВЕТКА: Если ссылка обычная — открываем главную страницу (персонал)
             loadStaffForum();
             updateAuthInterface();
         }
-
-            // 🎯 СУПЕР-ОБНОВЛЕНИЕ ШАПКИ: Поддержка кликабельного выпадающего меню профиля
-        function updateAuthInterface() {
-            const authZone = document.getElementById("auth-zone");
-            if (!authZone) return;
-            
-            let userName = getCookie("forum_user_name");
-            let userAvatar = getCookie("forum_user_avatar");
-
-            // Защита от системных склеек: если в куку пролез мусор через запятую, отсекаем его
-            if (userName && userName.includes(",")) {
-                userName = userName.split(",")[0].trim();
-            }
-            if (userAvatar && userAvatar.includes(",")) {
-                userAvatar = userAvatar.split(",")[0].trim();
-            }
-
-            if (userName && userAvatar && userAvatar !== "undefined") {
-                // 🛠️ ИСПРАВЛЕНО: Добавлен метод onclick="toggleUserDropdown(event)" для открытия выпадающего меню!
-                authZone.innerHTML = `
-                    <div class="user-badge" onclick="toggleUserDropdown(event)" style="display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); padding: 5px 12px; border-radius: 20px; border: 1px solid #333; cursor: pointer; user-select: none;">
-                        <!-- 🎯 ИСПРАВЛЕНО: Поставили вечный неоновый аватар-фикс в onerror на случай сбоев кэша Дискорда -->
-                        <img src="${userAvatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'" style="width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--neon-blue); object-fit: cover;">
-                        <span style="font-size:12px; font-weight:bold; color: var(--text);">${userName}</span>
-                        <span style="font-size:10px; opacity:0.4; color: var(--text);">▼</span>
-                    </div>
-                `;
-            } else {
-                // Если гость — выводим кнопку с идеальной геометрией SVG
-                authZone.innerHTML = `
-                    <a href="${API_URL}/api/forum/auth/login" class="discord-btn">
-                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="display:inline-block; vertical-align:middle;">
-                            <path d="M13.545 2.907a13.227 13.227 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.212 12.212 0 0 0-3.658 0 8.258 8.258 0 0 0-.412-.833.051.051 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.041.041 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032a.04.04 0 0 0 .016.028a13.283 13.283 0 0 0 3.995 2.02a.05.05 0 0 0 .056-.018c.308-.42.582-.863.818-1.322a.05.05 0 0 0-.028-.069a8.726 8.726 0 0 1-1.247-.594a.05.05 0 0 1-.005-.085a6.052 6.052 0 0 0 .322-.252a.051.051 0 0 1 .053-.007c2.442 1.115 5.088 1.115 7.502 0a.051.051 0 0 1 .053.007c.114.086.221.17.322.252a.05.05 0 0 1-.005.085c-.392.234-.81.433-1.247.594a.05.05 0 0 0-.028.07c.24.46.513.903.819 1.32a.05.05 0 0 0 .056.019a13.21 13.21 0 0 0 4.001-2.02a.049.049 0 0 0 .016-.027c.385-3.418-.635-6.417-2.399-9.117a.042.042 0 0 0-.02-.019ZM5.14 9.473c-.785 0-1.431-.722-1.431-1.607 0-.885.632-1.607 1.43-1.607.807 0 1.443.73 1.432 1.607 0 .885-.625 1.607-1.431 1.607Zm4.515 0c-.785 0-1.43-.722-1.43-1.607 0-.885.632-1.607 1.43-1.607.807 0 1.443.73 1.431 1.607 0 .885-.624 1.607-1.43 1.607Z"/>
-                        </svg>
-                        Войти через Discord
-                    </a>
-                `;
-            }
-        }
-
     </script>
 </body>
 </html>
+
 
 
