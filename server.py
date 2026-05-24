@@ -1926,6 +1926,20 @@ async def startup():
         """)
         await db.commit()
 
+        # 🎯 Должно быть внутри async def startup():
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS forum_applications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                author_name TEXT,
+                author_avatar TEXT,
+                answers_json TEXT,
+                status TEXT DEFAULT 'open',
+                moderator_name TEXT DEFAULT '',
+                timestamp TEXT
+            )
+        """)
+        await db.commit()
+
         # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
         columns = [
             ("messages", "avatar", "TEXT DEFAULT ''"),
