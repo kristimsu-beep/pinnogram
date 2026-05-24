@@ -305,7 +305,39 @@
             0% { background-position: 0% 50%; }
             100% { background-position: 200% 50%; }
         }
+         /* КРУГЛАЯ ВЕРХНЯЯ АВАТАРКА С ГЛУБОКИМ ФИОЛЕТОВО-ГОЛУБЫМ КОЛЬЦОМ */
+        .main-ticket-avatar-wrapper {
+            position: relative;
+            width: 48px; /* Оптимальный компактный размер по дизайну */
+            height: 48px;
+            border-radius: 50%;
+            /* Градиент: глубокий фиолетовый -> глубокий синий -> ярко-голубой */
+            background: linear-gradient(45deg, #4c1d95, #1e3a8a, #00f0ff, #4c1d95);
+            background-size: 300% 300%;
+            animation: mainAvatarGradientFlow 5s ease infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2.5px; /* Толщина неонового кольца */
+            box-sizing: border-box;
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.15); /* Мягкое внешнее свечение */
+        }
         
+        .main-ticket-avatar-wrapper img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            background: #18181c; /* Подложка под аватарку */
+        }
+        
+        /* Плавный перелив градиента для верхней панели */
+        @keyframes mainAvatarGradientFlow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+       
     </style>
 </head>
 <body>
@@ -779,16 +811,20 @@
                 if (t.status === "rejected") statusLabel = "❌ Отклонено";
                 if(badgeZone) badgeZone.innerHTML = `<span class="status-badge-forum">${statusLabel}</span>`;
 
-                // Мета-линия автора (Аватар, ник, время) строго по шаблону
+                // Мета-линия автора (Аватар в переливающемся фиолетово-голубом кольце, ник, время)
                 metaBlock.innerHTML = `
-                    <div class="ticket-header-line" style="margin-bottom:0;">
-                        <img src="${t.avatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'">
+                    <div class="ticket-header-line" style="margin-bottom:0; display: flex; align-items: center; gap: 14px;">
+                        <!-- ИСПРАВЛЕНО: Обернули верхнюю аватарку в неоновое кольцо по новому стилю -->
+                        <div class="main-ticket-avatar-wrapper">
+                            <img src="${t.avatar || 'https://ibb.co'}" onerror="this.src='https://ibb.co'">
+                        </div>
                         <div>
-                            <span class="ticket-author-name" style="display:block;">${t.author}</span>
-                            <span class="ticket-time-ago" style="font-size:11px;">${t.time || '1 час назад'} • Гражданские вопросы</span>
+                            <span class="ticket-author-name" style="display:block; font-size: 15px; font-weight: 600;">${t.author}</span>
+                            <span class="ticket-time-ago" style="font-size:11px; color: #55555c;">${t.time || '1 час назад'} • Гражданские вопросы</span>
                         </div>
                     </div>
                 `;
+
 
                 // Рендеринг галереи скриншотов
                 if (t.photos && t.photos.length > 0) {
