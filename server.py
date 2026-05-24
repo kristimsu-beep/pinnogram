@@ -16,7 +16,7 @@ import time
 import psutil
 from supabase import create_client, Client # Добавь в самый верх к импортам, если еще не добавил!
 import asyncpg
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponsee, FileResponse
 from fastapi import Form, File, UploadFile
 from typing import List
 from fastapi.staticfiles import StaticFiles
@@ -1053,8 +1053,133 @@ async def get_all_registered_users_registry(request: Request):
     except Exception as e:
         print(f"🛑 Критическая ошибка админ-панели СУБД: {e}")
         return {"status": "error", "message": str(e)}
+# Массив высших должностей, которым разрешено проверять анкеты кандидатов
+HR_ALLOWED_ROLES = [
+    "Отдел по набору", "Заместитель Куратора Администратора", 
+    "Куратор Администраторов", "Зам.Менеджера", "Менеджер", "Тех. Админ"
+]
+
+# ==========================================================
+# 💼 АВТОМАТИЗИРОВАННАЯ HR-СИСТЕМА И АРХИВ АНКЕТ КАНДИДАТОВ
+# ==========================================================
+
+# 1. РЕНДЕРИНГ СТРАНИЦЫ АНКЕТ И АРХИВА (УНИВЕРСАЛЬНЫЙ)
+@app.get("/moderators")
+async def serve_moderators_application_page():
+    import os
+    return FileResponse(os.path.join(BASE_DIR, "forum.html"))
 
 
+# 2. ПРИЁМ СДАННОЙ АНКЕТЫ ОТ КАНДИДАТА В БАЗУ ДАННЫХ
+@app.post("/api/forum/applications/submit")
+async def submit_moderator_application(data: dict, request: Request):
+    try:
+        author_name = request.cookies.get("forum_user_name")
+        author_avatar = request.cookies.get("forum_user_avatar", "https://ibb.co")
+        
+        if not author_name:
+            return {"status": "error", "message": "🔒 Вы не авторизованы через Discord!"}
+            
+        answers = data.get("answers") 
+        if not answers or not isinstance(answers, list):
+            return {"status": "error", "message": "Анкета не заполнена или передана неверно!"}
+            
+        # Упаковываем массив ответов в текстовую строку JSON для хранения в одной ячейке SQLite
+        answers_json_str = json.dumps(answers, ensure_ascii=False)
+        ts = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
+        
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("""
+                INSERT INTO forum_applications (author_name, author_avatar, answers_json, timestamp)
+                VALUES (?, ?, ?, ?)
+            """, (author_name, author_avatar, answers_json_str, ts))
+            await db.commit()
+            
+        return {"status": "ok", "message": "✨ Ваша анкета успешно сдана и передана Отделу Кадров!"}
+    except Exception as e:
+        print(f"🛑 Ошибка сдачи анкеты: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+# 3. ПОЛУЧЕНИЕ СПИСКА СДАННЫХ АНКЕТ ДЛЯ КУРАТОРОВ (ЗАЩИЩЕНО)
+@app.get("/api/forum/applications/list")
+async def get_moderators_applications_list(request: Request):
+    try:
+        mod_name = request.cookies.get("forum_user_name")
+        if not mod_name:
+            return {"status": "error", "message": "🔒 Вы не авторизованы!"}
+            
+        # Проверяем наличие кураторской должности
+        staff_members = await get_forum_staff()
+        is_hr_admin = False
+        
+        for u in staff_members:
+            if str(mod_name).strip().lower() in str(u.get("name", "")).strip().lower():
+                if u.get("role") in HR_ALLOWED_ROLES:
+                    is_hr_admin = True
+                    break
+                    
+        if not is_hr_admin:
+            return {"status": "error", "message": "🛑 Отказано в доступе! Вы не входите в Отдел по набору персонала."}
+            
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute("SELECT id, author_name, author_avatar, status, timestamp FROM forum_applications ORDER BY id DESC") as cursor:
+                rows = await cursor.fetchall()
+                return {
+                    "status": "ok",
+                    "applications": [{"id": r[0], "author": r[1], "avatar": r[2], "status": r[3], "time": r[4]} for r in rows]
+                }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+# 4. УПРАВЛЕНИЕ СТАТУСОМ АНКЕТЫ (Взять в работу / Одобрить / Отклонить)
+@app.post("/api/forum/applications/status")
+async def update_moderator_application_status(data: dict, request: Request):
+    try:
+        mod_name = request.cookies.get("forum_user_name")
+        if not mod_name:
+            return {"status": "error", "message": "🔒 Вы не авторизованы!"}
+            
+        staff_members = await get_forum_staff()
+        is_hr_admin = any(str(mod_name).strip().lower() in str(u.get("name", "")).strip().lower() and u.get("role") in HR_ALLOWED_ROLES for u in staff_members)
+        
+        if not is_hr_admin:
+            return {"status": "error", "message": "🛑 Отказано в доступе!"}
+            
+        app_id = int(data.get("app_id"))
+        new_status = data.get("status") 
+        
+        async with aiosqlite.connect(DB_PATH) as db:
+            # Читаем имя кандидата, чтобы закинуть ему алерт
+            async with db.execute("SELECT author_name FROM forum_applications WHERE id = ?", (app_id,)) as cur:
+                app_row = await cur.fetchone()
+                candidate_name = app_row[0] if app_row else None
+
+            ts_alert = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
+            alert_text = ""
+
+            if new_status == 'processing':
+                await db.execute("UPDATE forum_applications SET status = 'processing', moderator_name = ? WHERE id = ?", (mod_name, app_id))
+                alert_text = f"💼 Ваша анкета на должность Модератора взята на рассмотрение куратором {mod_name}"
+            elif new_status == 'approved':
+                await db.execute("UPDATE forum_applications SET status = 'approved' WHERE id = ?", (app_id,))
+                alert_text = f"✅ Поздравляем! Ваша анкета на должность Модератора была ОДОБРЕНА Отделом Кадров!"
+            elif new_status == 'rejected':
+                await db.execute("UPDATE forum_applications SET status = 'rejected' WHERE id = ?", (app_id,))
+                alert_text = f"❌ К сожалению, ваша анкета на должность Модератора была ОТКЛОНЕНА кураторами."
+
+            # Записываем системный алерт для кандидата в таблицу уведомлений форума
+            if alert_text and candidate_name:
+                await db.execute("""
+                    INSERT INTO forum_notifications (username, text, ticket_id, timestamp)
+                    VALUES (?, ?, 0, ?)
+                """, (candidate_name, alert_text, ts_alert))
+
+            await db.commit()
+        return {"status": "ok", "message": "Статус анкеты успешно обновлен!"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
