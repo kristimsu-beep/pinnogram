@@ -825,6 +825,97 @@ async def get_user_profile_data(target_id: str, request: Request):
         print(f"🛑 Ошибка сбора данных профиля: {e}")
         return {"status": "error", "message": str(e)}
 
+# 1. СТРАНИЦА НАСТРОЕК (РЕНДЕРИНГ HTML)
+@app.get("/settings")
+async def serve_settings_page():
+    return FileResponse(os.path.join(BASE_DIR, "forum.html"))
+
+
+# 2. СОХРАНЕНИЕ ТЕКСТОВЫХ НАСТРОЕК (ГРАДИЕНТ И СТАТУС)
+@app.post("/api/forum/user/settings/save")
+async def save_user_settings(data: dict, request: Request):
+    try:
+        username = request.cookies.get("forum_user_name")
+        if not username:
+            return {"status": "error", "message": "🔒 Вы не авторизованы через Discord!"}
+            
+        gradient = str(data.get("gradient", "")).strip()
+        status = str(data.get("status", "")).strip()
+        
+        async with aiosqlite.connect(DB_PATH) as db:
+            # Используем INSERT OR REPLACE, чтобы обновлять существующие настройки пользователя
+            await db.execute("""
+                INSERT INTO user_custom_settings (username, nickname_gradient, custom_status)
+                VALUES (?, ?, ?)
+                ON CONFLICT(username) DO UPDATE SET 
+                    nickname_gradient = excluded.nickname_gradient,
+                    custom_status = excluded.custom_status
+            """, (username, gradient, status))
+            await db.commit()
+            
+        return {"status": "ok", "message": "Настройки кастомизации успешно применены!"}
+    except Exception as e:
+        print(f"🛑 Ошибка сохранения настроек: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+# 3. ЗАГРУЗКА ИЗОБРАЖЕНИЯ БАННЕРА ПРОФИЛЯ
+@app.post("/api/forum/user/settings/upload-banner")
+async def upload_user_banner(request: Request, file: UploadFile = File(...)):
+    try:
+        username = request.cookies.get("forum_user_name")
+        if not username:
+            return {"status": "error", "message": "🔒 Вы не авторизованы через Discord!"}
+            
+        if not file.filename:
+            return {"status": "error", "message": "Файл изображения не выбран!"}
+            
+        # Папка сохранения баннеров на сервере Render
+        upload_dir = os.path.join(BASE_DIR, "static", "banners")
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Переводим имя в безопасный формат для файловой системы
+        safe_username = "".join([c for c in username if c.isalpha() or c.isdigit()]).substring(0, 15)
+        file_ext = os.path.splitext(file.filename)[1]
+        unique_filename = f"banner_{safe_username}_{int(datetime.now().timestamp())}{file_ext}"
+        file_path = os.path.join(upload_dir, unique_filename)
+        
+        # Записываем байты файла на диск
+        with open(file_path, "wb") as f:
+            f.write(await file.read())
+            
+        banner_public_url = f"/static/banners/{unique_filename}"
+        
+        # Сохраняем ссылку на баннер в базу данных SQLite
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("""
+                INSERT INTO user_custom_settings (username, banner_url)
+                VALUES (?, ?)
+                ON CONFLICT(username) DO UPDATE SET banner_url = excluded.banner_url
+            """, (username, banner_public_url))
+            await db.commit()
+            
+        return {"status": "ok", "banner_url": banner_public_url, "message": "Баннер успешно загружен!"}
+    except Exception as e:
+        print(f"🛑 Ошибка загрузки баннера: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+# 4. ПОЛУЧЕНИЕ КАСТОМНЫХ НАСТРОЕК ДЛЯ ОТРЕНДЕРИВАНИЯ НА САЙТЕ
+@app.get("/api/forum/user/settings/get/{username}")
+async def get_user_custom_settings(username: str):
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute("""
+                SELECT banner_url, nickname_gradient, custom_status 
+                FROM user_custom_settings WHERE username = ?
+            """, (username.strip(),)) as cursor:
+                row = await cursor.fetchone()
+                if row:
+                    return {"banner": row[0], "gradient": row[1], "status": row[2]}
+                return {"banner": "", "gradient": "", "status": ""}
+    except Exception as e:
+        return {"banner": "", "gradient": "", "status": ""}
 
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
@@ -1547,6 +1638,16 @@ async def startup():
         """)
         await db.commit()
 
+        # 4. Таблица кастомизации профилей (баннеры и градиенты никнеймов)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS user_custom_settings (
+                username TEXT PRIMARY KEY,
+                banner_url TEXT,
+                nickname_gradient TEXT,
+                custom_status TEXT
+            )
+        """)
+        await db.commit()
 
         # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
         columns = [
