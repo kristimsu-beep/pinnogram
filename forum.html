@@ -190,22 +190,58 @@
             border-color: #333339;
         }
         
-        /* ОБНОВЛЕННАЯ СУПЕР-КАРТОЧКА БЕЗ ЯРКИХ РАМОК */
+        /* КАРТОЧКА ОБРАЩЕНИЯ С СИНИМ НЕОНОВЫМ СВЕЧЕНИЕМ КОНТУРА */
         .ticket-row-box-flat {
-            background: #141416; /* Глубокий матовый фон */
+            background: #141416;
             border: 1px solid #1c1c1f;
             border-radius: 12px;
             padding: 24px;
             cursor: pointer;
-            transition: background 0.2s, border-color 0.2s;
+            transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
             display: flex;
             flex-direction: column;
             gap: 12px;
+            position: relative;
         }
+        
+        /* ЭФФЕКТ ПРИ НАВЕДЕНИИ: Контур сияет ярко-синим */
         .ticket-row-box-flat:hover {
-            background: #18181c;
-            border-color: #2d2d34;
+            transform: translateY(-2px);
+            border-color: #00f0ff; /* Ярко-синий неон */
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.25);
         }
+        
+        /* КРУГЛАЯ АВАТАРКА С ПЕРЕЛИВАЮЩИМСЯ КОЛЬЦОМ (ИЗ КРАСНОГО В СИНИЙ) */
+        .ticket-avatar-wrapper {
+            position: relative;
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #ff3b30, #5865F2, #00f0ff, #ff3b30);
+            background-size: 300% 300%;
+            animation: neonGradientFlow 4s ease infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px; /* Толщина кольца */
+            box-sizing: border-box;
+        }
+        
+        .ticket-avatar-wrapper img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            background: #141416; /* Подложка, чтобы кольцо не просвечивало */
+        }
+        
+        /* Анимация перелива градиента вокруг аватарки */
+        @keyframes neonGradientFlow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
         
         /* ПЛАШКА СТАТУСА РЯДОМ С НИКОМ */
         .status-dot-badge {
@@ -646,10 +682,14 @@
                     if (t.status === "approved") { statusText = "Одобрено"; badgeStyleClass = "status-dot-badge approved-badge"; }
                     if (t.status === "rejected") { statusText = "Отклонено"; badgeStyleClass = "status-dot-badge rejected-badge"; }
 
-                    // Сборка разметки карточки строго по предоставленному скриншоту
+                    // Сборка разметки карточки с уменьшенной круглой аватаркой в неоновом кольце
                     box.innerHTML = `
-                        <div class="ticket-header-line" style="margin-bottom: 0;">
-                            <img src="${t.avatar || 'https://ibb.co'}">
+                        <div class="ticket-header-line" style="margin-bottom: 0; display: flex; align-items: center; gap: 12px;">
+                            <!-- Аватарка внутри переливающегося кольца -->
+                            <div class="ticket-avatar-wrapper">
+                                <img src="${t.avatar || 'https://ibb.co'}">
+                            </div>
+                            
                             <span class="ticket-author-name">${t.author}</span>
                             
                             <!-- Серый силуэт пользователя рядом с ником -->
@@ -658,13 +698,13 @@
                             <!-- Аккуратный бэйдж статуса с точкой -->
                             <span class="${badgeStyleClass}">${statusText}</span>
                             
-                            <div class="ticket-right-meta">
-                                <span class="ticket-time-ago">${t.time || '1 час назад'}</span>
-                                <span class="ticket-category-label">${t.type === "user" ? "Жалоба на игрока" : "Жалоба на игрока"}</span>
+                            <div class="ticket-right-meta" style="margin-left: auto; display: flex; align-items: center; gap: 15px; font-size: 12px;">
+                                <span class="ticket-time-ago" style="color: #55555c;">${t.time || '1 час назад'}</span>
+                                <span class="ticket-category-label" style="color: ${t.type === 'user' ? '#ff3b30' : '#ffcc00'}; font-weight: 600;">${t.type === "user" ? "Жалоба на игрока" : "Жалоба на админа"}</span>
                             </div>
                         </div>
-                        <h3 class="ticket-body-title" style="margin: 4px 0 0 0; font-size: 18px;">${t.type === "user" ? "Жалоба на игрока" : "Жалоба на администратора"}</h3>
-                        <p class="ticket-body-desc" style="color: #66666e; font-size: 13px;">${t.text || 'Описание нарушения отсутствует'}</p>
+                        <h3 class="ticket-body-title" style="margin: 12px 0 0 0; font-size: 18px; font-weight: bold; color: #fff;">${t.type === "user" ? "Жалоба на игрока" : "Жалоба на администратора"}</h3>
+                        <p class="ticket-body-desc" style="color: #66666e; font-size: 13px; margin: 4px 0 0 0;">${t.text || 'Описание нарушения отсутствует'}</p>
                     `;
                     container.appendChild(box);
                 });
