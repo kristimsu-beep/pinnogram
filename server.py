@@ -367,7 +367,7 @@ async def discord_callback(code: str, request: Request):
             user_res = await client.get("https://discord.com/api/v10/users/@me", headers=user_headers)
             user_info = user_res.json()
             
-            u_id = str(user_info["id"])
+            u_id = str(user_info["id"]).strip()
             
             # 🎯 ФИКС ИМЕНИ: Берем только чистую строку глобального имени без дублирования
             u_name = user_info.get("global_name") or user_info["username"]
@@ -375,7 +375,7 @@ async def discord_callback(code: str, request: Request):
             
             avatar_hash = user_info.get("avatar")
             
-            # 1. Базовая сборка ссылки (стандарт Дискорда)
+            # 🎯 1. ПРИОРИТЕТ: Собираем настоящую личную аватарку из глобального профиля Discord
             if avatar_hash:
                 ext = "gif" if avatar_hash.startswith("a_") else "png"
                 u_avatar = f"https://cdn.discordapp.com/avatars/{u_id}/{avatar_hash}.{ext}"
@@ -390,16 +390,19 @@ async def discord_callback(code: str, request: Request):
                     def_avatar_index = 0
                 u_avatar = f"https://cdn.discordapp.com/embed/avatars/{def_avatar_index}.png"
 
-            # 🎯 2. СУПЕР-ФИКС: Синхронизируем аватарку со списком STAFF-карточек (где она 100% рабочая)
+            # 🎯 2. ЗАПАСНАЯ СТРАХОВКА: Если пользователь есть в STAFF, сверяем его ник без учёта регистра букв
             try:
                 staff_members = await get_forum_staff()
+                clean_my_name = u_name.lower().strip()
                 for staff_user in staff_members:
-                    if u_name in str(staff_user.get("name", "")):
+                    staff_display_name = str(staff_user.get("name", "")).lower().strip()
+                    if clean_my_name in staff_display_name:
+                        # Если для модератора на сервере задана кастомная аватарка, подтягиваем её
                         u_avatar = staff_user.get("avatar")
-                        print(f"🎯 [FORUM AUTH] Аватарка для {u_name} успешно скопирована из STAFF-карточки!")
+                        print(f"🎯 [FORUM AUTH] Аватарка синхронизирована со STAFF-карточкой!")
                         break
             except Exception as e:
-                print(f"⚠️ Ошибка синхронизации аватарки со списком staff: {e}")
+                print(f"⚠️ Ошибка запасной синхронизации аватарки: {e}")
 
             # 🎯 ФИКС КУК: Создаем редирект и жестко привязываем куки к корню сайта path="/"
             res = RedirectResponse("/forum?auth=success")
@@ -410,6 +413,7 @@ async def discord_callback(code: str, request: Request):
     except Exception as e:
         print(f"🛑 Ошибка OAuth2: {e}")
         return RedirectResponse("/forum?auth=error")
+
 
 
 # 3. Выход из аккаунта (Исправлена очистка корневых кук)
