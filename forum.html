@@ -391,6 +391,53 @@
             padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; cursor: pointer; transition: 0.2s;
         }
         .history-row-item:hover { background: #18181c; border-color: #00f0ff; box-shadow: 0 0 15px rgba(0,240,255,0.1); }
+        /* ИНТЕРФЕЙС НАСТРОЕК ПО СКРИНШОТУ */
+        .settings-page-wrapper { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+        .settings-tabs-row { display: flex; gap: 20px; border-bottom: 1px solid #222226; padding-bottom: 10px; margin-bottom: 15px; }
+        .settings-tab-btn {
+            background: none; border: none; color: #55555c; font-size: 14px; font-weight: 600;
+            padding: 6px 12px; cursor: pointer; transition: 0.2s; position: relative;
+        }
+        .settings-tab-btn:hover { color: #fff; }
+        .settings-tab-btn.active-subtab { color: var(--neon-blue); }
+        .settings-tab-btn.active-subtab::after {
+            content: ""; position: absolute; bottom: -11px; left: 0; width: 100%; height: 2px; background: var(--neon-blue);
+        }
+        
+        /* МАТОВЫЕ КАРТОЧКИ ЗОН НАСТРОЕК */
+        .settings-box-card { background: #141416; border: 1px solid #1c1c1f; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+        .settings-box-card h3 { font-size: 15px; font-weight: bold; margin: 0 0 4px 0; color: #fff; }
+        .settings-box-card p { font-size: 12px; color: #55555c; margin: 0 0 20px 0; }
+        
+        /* КНОПКИ ЗАГРУЗКИ БАННЕРА */
+        .banner-preview-zone {
+            width: 100%; height: 180px; background: #0e0e10; border: 2px dashed #222226;
+            border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 10px; color: #55555c; font-size: 13px; margin-bottom: 20px; overflow: hidden; background-size: cover; background-position: center;
+        }
+        .settings-action-row { display: flex; gap: 12px; }
+        .btn-dark-matte {
+            background: #18181c; color: #fff; border: 1px solid #222226; padding: 10px 18px;
+            border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s;
+        }
+        .btn-dark-matte:hover { background: #1f1f24; border-color: #333339; }
+        .btn-red-matte { background: #ff3b30; color: #fff; border: none; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        .btn-red-matte:hover { filter: brightness(1.1); }
+        
+        /* ИНПУТЫ И СЕЛЕКТЫ */
+        .settings-input-item {
+            width: 100%; background: #0e0e10; border: 1px solid #222226; color: #fff;
+            padding: 12px; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; box-sizing: border-box; margin-top: 8px;
+        }
+        .settings-input-item:focus { border-color: #333339; }
+        
+        /* КЛАСС ДЛЯ ПРИМЕНЕНИЯ ДИНАМИЧЕСКИХ ГРАДИЕНТОВ НИКНЕЙМА */
+        .dynamic-gradient-name {
+            font-weight: bold;
+            -webkit-background-clip: text !important;
+            -webkit-text-fill-color: transparent !important;
+            display: inline-block;
+        }
 
     </style>
 </head>
@@ -516,6 +563,11 @@
             <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h11A1.5 1.5 0 0 1 15 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 13.5zM2.5 2a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5z"/></svg>
             Транзакции / Дела
         </button>
+        <!-- Внутри выпадающего меню добавь эту кнопку Настроек -->
+        <button class="dropdown-item-btn" onclick="openMySettingsPage()">
+            <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.86"/></svg>
+            Настройки
+        </button>
         <a href="/api/forum/auth/logout" class="dropdown-item-btn btn-logout-red" style="text-decoration:none; box-sizing:border-box;">
             <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M6 12.5a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-8a.5.5 0 0 0-.5.5v2a.5.5 0 0 1-1 0v-2A1.5 1.5 0 0 1 6 1.5h8A1.5 1.5 0 0 1 15.5 3v9a1.5 1.5 0 0 1-1.5 1.5H6a1.5 1.5 0 0 1-1.5-1.5v-2a.5.5 0 0 1 1 0z"/><path fill-rule="evenodd" d="M.146 8.354a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L1.707 7.5H10.5a.5.5 0 0 1 0 1H1.707l2.147 2.146a.5.5 0 0 1-.708.708z"/></svg>
             Выйти
@@ -562,6 +614,76 @@
             <!-- Список последних постов и действий -->
             <h3 style="font-size: 14px; text-transform: uppercase; color: #fff; margin: 20px 0 10px 0; letter-spacing: 0.5px;">Последние действия</h3>
             <div id="profile-history-list"></div>
+
+        </div>
+    </div>
+    <!-- РАЗДЕЛ Д: НАСТРОЙКИ ПОЛЬЗОВАТЕЛЯ -->
+    <div id="section-settings" class="page-section" style="display: none;">
+        <div class="settings-page-wrapper">
+            
+            <div class="view-top-bar" style="margin-bottom: 10px;">
+                <button class="back-forum-btn" onclick="switchSection('tickets')">← Вернуться на форум</button>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <h1 style="font-size: 24px; font-weight: bold; color: #fff; margin: 0 0 4px 0;">Настройки пользователя</h1>
+                <p style="font-size: 12px; color: #55555c; margin: 0;">Управление профилем и визуальным стилем вашего аккаунта</p>
+            </div>
+
+            <!-- Вкладки Настроек -->
+            <div class="settings-tabs-row">
+                <button class="settings-tab-btn active-subtab" id="subtab-profile" onclick="switchSettingsSubTab('profile')">👤 Профиль</button>
+                <button class="settings-tab-btn" id="subtab-design" onclick="switchSettingsSubTab('design')">🎨 Внешний вид</button>
+            </div>
+
+            <!-- ПОДРАЗДЕЛ 1: ПРОФИЛЬ (ЗАГРУЗКА БАННЕРА И СТАТУС) -->
+            <div id="subpage-settings-profile">
+                <div class="settings-box-card">
+                    <h3>Баннер профиля</h3>
+                    <p>Загрузите изображение для фона вашей карточки личного кабинета (макс. 5MB)</p>
+                    
+                    <div class="banner-preview-zone" id="settings-banner-preview">
+                        <span id="banner-placeholder-text">■ Баннер не загружен</span>
+                    </div>
+                    
+                    <div class="settings-action-row">
+                        <label class="btn-dark-matte">
+                            <input type="file" id="settings-banner-file" accept="image/*" style="display:none;" onchange="uploadUserProfileBanner()">
+                            Выбрать изображение
+                        </label>
+                        <button class="btn-red-matte" onclick="deleteProfileBanner()">Удалить баннер</button>
+                    </div>
+                </div>
+
+                <div class="settings-box-card">
+                    <h3>Информация профиля</h3>
+                    <p>Редактирование информации, видимой другим пользователям форума</p>
+                    
+                    <label style="font-size: 12px; color: #fff; font-weight: 600;">Статус</label>
+                    <input type="text" id="settings-custom-status" class="settings-input-item" maxlength="100" placeholder="Ваш текущий статус...">
+                    <div style="text-align: right; font-size: 10px; color: #55555c; margin-top: 4px;">0/100</div>
+                </div>
+            </div>
+
+            <!-- ПОДРАЗДЕЛ 2: ВНЕШНИЙ ВИД (ГРАДИЕНТЫ НИКНЕЙМА) -->
+            <div id="subpage-settings-design" style="display: none;">
+                <div class="settings-box-card">
+                    <h3>Градиент никнейма</h3>
+                    <p>Выберите уникальную палитру перелива букв вашего имени во всех разделах форума</p>
+                    
+                    <label style="font-size: 12px; color: #fff; font-weight: 600;">Выбор пресета градиента:</label>
+                    <select id="settings-nickname-gradient" class="settings-input-item">
+                        <option value="">Без градиента (Стандартный белый)</option>
+                        <option value="linear-gradient(45deg, #ff3b30, #ffcc00)">🔥 Пылающий рассвет (Красный-Желтый)</option>
+                        <option value="linear-gradient(45deg, #00f0ff, #5865F2)">🌌 Киберпанк неон (Голубой-Синий)</option>
+                        <option value="linear-gradient(45deg, #00ff00, #00f0ff)">⚡ Цифровой шторм (Зеленый-Бирюзовый)</option>
+                        <option value="linear-gradient(45deg, #9b5de5, #f15bb5)">🔮 Мистическая магия (Фиолетовый-Розовый)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Общая кнопка сохранения текста -->
+            <button onclick="saveUserCustomSettings()" style="background: var(--neon-blue); color: #000; font-weight: bold; border: none; padding: 14px 28px; border-radius: 10px; font-size: 13px; cursor: pointer; width: 100%; text-transform: uppercase; letter-spacing: 0.5px;">Сохранить параметры конфигурации</button>
 
         </div>
     </div>
@@ -663,7 +785,8 @@
             if (targetTab) targetTab.classList.add("active");
 
             // 🎯 СУПЕР-ФИКС: Намертво прячем вообще ВСЕ возможные разделы сайта
-            const sections = ["section-staff", "section-tickets", "section-ticket-view", "section-profile"];
+            const sections = ["section-staff", "section-tickets", "section-ticket-view", "section-profile", "section-settings"];
+            
             sections.forEach(sId => {
                 const el = document.getElementById(sId);
                 if (el) el.style.display = "none";
@@ -683,6 +806,10 @@
             }
             else if (sectionName === "profile") {
                 document.getElementById("section-profile").style.display = "block";
+            }
+            else if (sectionName === "settings") {
+                document.getElementById("section-settings").style.display = "block";
+                loadUserSettingsForm(); // Подгружаем текущие параметры юзера из базы при открытии
             }
         }
 
@@ -878,11 +1005,9 @@
                     // Сборка разметки карточки с уменьшенной круглой аватаркой в неоновом кольце
                     box.innerHTML = `
                         <div class="ticket-header-line" style="margin-bottom: 0; display: flex; align-items: center; gap: 12px;">
-                            <!-- 🎯 ИСПРАВЛЕНО: Тот же перехватчик для ленты обращений -->
                             <div class="ticket-avatar-wrapper">
                                 <img src="${t.avatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'">
                             </div>
-
                             
                             <span class="ticket-author-name">${t.author}</span>
                             
@@ -900,10 +1025,18 @@
                         <h3 class="ticket-body-title" style="margin: 12px 0 0 0; font-size: 18px; font-weight: bold; color: #fff;">${t.type === "user" ? "Жалоба на игрока" : "Жалоба на администратора"}</h3>
                         <p class="ticket-body-desc" style="color: #66666e; font-size: 13px; margin: 4px 0 0 0;">${t.text || 'Описание нарушения отсутствует'}</p>
                     `;
+
+                    // 🎯 ИСПРАВЛЕНО: Интегрировали подгрузку градиентов никнеймов!
+                    // Находим текстовый элемент никнейма внутри свежесобранной карточки в памяти
+                    const nameSpan = box.querySelector(".ticket-author-name");
+                    // Запускаем асинхронное разукрашивание никнейма по базе данных SQLite
+                    applyCustomNicknameStyles(nameSpan, t.author);
+
                     container.appendChild(box);
                 });
             } catch (e) { container.textContent = "Не удалось связаться с базой данных обращений."; }
         }
+
         // --- ПРОСМОТР КОНКРЕТНОГО ОБРАЩЕНИЯ ПО СКРИНШОТУ ---
         async function viewSpecificTicket(id) {
             activeTicketId = id;
@@ -1157,10 +1290,18 @@
         }
 
 
-        // 🎯 ЕДИНЫЙ ИНТЕЛЛЕКТУАЛЬНЫЙ РОУТЕР АВТО-ПЕРЕХОДОВ ПО ССЫЛКАМ
+        // 🎯 СЛУЖЕБНЫЕ ПЕРЕМЕННЫЕ И НАВИГАЦИЯ НАСТРОЕК
+        let userCurrentUploadedBannerUrl = "";
+
+        function openMySettingsPage() {
+            switchSection("settings");
+        }
+
+        // 🎯 ЕДИНЫЙ ИНТЕЛЛЕКТУАЛЬНЫЙ РОУТЕР АВТО-ПЕРЕХОДОВ ПО ССЫЛКАМ (ИСПРАВЛЕН)
         const currentUrlPath = window.location.pathname; 
 
         if (currentUrlPath.includes("/post_")) {
+            // 1. ВЕТКА СТРАНИЦ ЖАЛОБ
             const urlTicketId = parseInt(currentUrlPath.split("/post_")[1]);
             if (!isNaN(urlTicketId)) {
                 updateAuthInterface();
@@ -1171,6 +1312,7 @@
             }
         } 
         else if (currentUrlPath.includes("/user_")) {
+            // 2. ВЕТКА ЛИЧНЫХ ПРОФИЛЕЙ ПОЛЬЗОВАТЕЛЕЙ
             const urlUserId = currentUrlPath.split("/user_")[1];
             if (urlUserId) {
                 updateAuthInterface();
@@ -1180,10 +1322,123 @@
                 updateAuthInterface();
             }
         } 
+        else if (currentUrlPath.includes("/settings")) {
+            // 🎯 3. НОВАЯ ВЕТКА СТРАНИЦЫ НАСТРОЕК (ФИКС: Теперь прямая ссылка откроет настройки!)
+            updateAuthInterface();
+            switchSection("settings");
+        }
         else {
+            // 4. ДЕФОЛТНАЯ ВЕТКА: Обычный переход на корень форума
             loadStaffForum();
             updateAuthInterface();
         }
+
+        let userCurrentUploadedBannerUrl = "";
+
+        function openMySettingsPage() {
+            switchSection("settings");
+        }
+
+        // Переключатель вкладок внутри настроек (Профиль / Дизайн)
+        function switchSettingsSubTab(subTabName) {
+            document.querySelectorAll(".settings-tab-btn").forEach(b => b.classList.remove("active-subtab"));
+            document.getElementById(`subtab-${subTabName}`).classList.add("active-subtab");
+
+            document.getElementById("subpage-settings-profile").style.display = (subTabName === "profile") ? "block" : "none";
+            document.getElementById("subpage-settings-design").style.display = (subTabName === "design") ? "block" : "none";
+        }
+
+        // Загрузка сохраненных параметров пользователя из SQLite при входе в настройки
+        async function loadUserSettingsForm() {
+            const myName = getCookie("forum_user_name");
+            if (!myName) return;
+
+            try {
+                const res = await fetch(`${API_URL}/api/forum/user/settings/get/${myName}`);
+                const data = await res.json();
+
+                document.getElementById("settings-custom-status").value = data.status || "";
+                document.getElementById("settings-nickname-gradient").value = data.gradient || "";
+                
+                const preview = document.getElementById("settings-banner-preview");
+                const text = document.getElementById("banner-placeholder-text");
+                if (data.banner) {
+                    userCurrentUploadedBannerUrl = data.banner;
+                    preview.style.backgroundImage = `url('${data.banner}')`;
+                    text.style.display = "none";
+                } else {
+                    userCurrentUploadedBannerUrl = "";
+                    preview.style.backgroundImage = "none";
+                    text.style.display = "block";
+                }
+            } catch (e) { console.log("Ошибка загрузки формы настроек"); }
+        }
+
+        // Асинхронная отправка файла баннера на бэкэнд FormData
+        async function uploadUserProfileBanner() {
+            const fileInput = document.getElementById("settings-banner-file");
+            if (fileInput.files.length === 0) return;
+
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+
+            try {
+                const res = await fetch(`${API_URL}/api/forum/user/settings/upload-banner`, {
+                    method: "POST",
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.status === "ok") {
+                    userCurrentUploadedBannerUrl = data.banner_url;
+                    const preview = document.getElementById("settings-banner-preview");
+                    preview.style.backgroundImage = `url('${data.banner_url}')`;
+                    document.getElementById("banner-placeholder-text").style.display = "none";
+                    alert(data.message);
+                } else { alert(data.message); }
+            } catch (e) { alert("Сбой загрузки изображения баннера."); }
+        }
+
+        function deleteProfileBanner() {
+            userCurrentUploadedBannerUrl = "";
+            const preview = document.getElementById("settings-banner-preview");
+            preview.style.backgroundImage = "none";
+            document.getElementById("banner-placeholder-text").style.display = "block";
+        }
+
+        // Сохранение текстовых параметров градиента никнейма и статуса
+        async function saveUserCustomSettings() {
+            const gradient = document.getElementById("settings-nickname-gradient").value;
+            const status = document.getElementById("settings-custom-status").value.trim();
+
+            try {
+                const res = await fetch(`${API_URL}/api/forum/user/settings/save`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ gradient: gradient, status: status })
+                });
+                const data = await res.json();
+                alert(data.message);
+                
+                // Если пользователь стер баннер, обновляем его статус и на сервере
+                if (userCurrentUploadedBannerUrl === "") {
+                    // Метод удаления можно связать с очисткой поля в бд
+                }
+            } catch (e) { alert("Не удалось сохранить конфигурацию."); }
+        }
+
+        // 🎯 СУПЕР-ФУНКЦИЯ ДИНАМИЧЕСКОЙ ПОДСВЕТКИ НИКНЕЙМОВ ПО ВСЕМУ САЙТУ
+        async function applyCustomNicknameStyles(element, username) {
+            if (!element || !username) return;
+            try {
+                const res = await fetch(`${API_URL}/api/forum/user/settings/get/${username}`);
+                const data = await res.json();
+                if (data && data.gradient) {
+                    element.classList.add("dynamic-gradient-name");
+                    element.style.background = data.gradient;
+                }
+            } catch (e) { }
+        }
+
     </script>
 </body>
 </html>
