@@ -630,7 +630,9 @@ async def create_forum_ticket(
         print(f"🛑 Ошибка создания тикета: {e}")
         return {"status": "error", "message": str(e)}
 
-# 1. ОТПРАВКА НОВОГО СООБЩЕНИЯ В ЧАТ ТИКЕТА
+import re
+
+# 1. ОТПРАВКА НОВОГО СООБЩЕНИЯ В ЧАТ ТИКЕТА С УМНЫМ ВЕБХУКОМ ДИСКОРДА
 @app.post("/api/forum/tickets/comment/send")
 async def send_ticket_comment(data: dict, request: Request):
     try:
@@ -648,12 +650,54 @@ async def send_ticket_comment(data: dict, request: Request):
             
         ts = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
         
+        # Записываем комментарий в базу данных aiosqlite
         async with aiosqlite.connect(DB_PATH) as db:
             await db.execute("""
                 INSERT INTO ticket_comments (ticket_id, author_name, author_avatar, message_text, timestamp)
                 VALUES (?, ?, ?, ?, ?)
             """, (ticket_id, author_name, author_avatar, text, ts))
             await db.commit()
+            
+        # 🎯 СИСТЕМА УМНЫХ МЕНШЕНОВ И УВЕДОМЛЕНИЙ ЧЕРЕЗ ВЕБХУК:
+        # Ищем в тексте все упоминания вида @Никнейм (поддерживает буквы, цифры и спецсимволы)
+        mentions = re.findall(r"@([a-zA-Z0-9_А-яёЁ\s\-]+)", text)
+        
+        if mentions:
+            # Сюда вставь URL вебхука из настроек твоего Discord-канала "форум"
+            DISCORD_WEBHOOK_URL = os.getenv("FORUM_WEBHOOK_URL", "ТУТ_ТВОЙ_URL_ВЕБХУКА_ЕСЛИ_НЕ_В_RENDER")
+            
+            if DISCORD_WEBHOOK_URL and DISCORD_WEBHOOK_URL != "ТУТ_ТВОЙ_URL_ВЕБХУКА_ЕСЛИ_НЕ_В_RENDER":
+                try:
+                    # Скачиваем список персонала, чтобы превратить текстовые ники в числовые ID Дискорда для пинга
+                    staff_members = await get_forum_staff()
+                    
+                    for mention_name in mentions:
+                        mention_name_clean = mention_name.strip().lower()
+                        discord_ping_str = f"**@{mention_name.strip()}**" # По дефолту просто жирный текст
+                        
+                        # Проверяем, есть ли упомянутый модератор в иерархии STAFF
+                        for staff_user in staff_members:
+                            staff_display_name = str(staff_user.get("name", "")).lower()
+                            # Если ник совпал (или содержится в серверном нике, например, "Менеджер | Bulgarian")
+                            if mention_name_clean in staff_display_name or staff_display_name in mention_name_clean:
+                                # Формируем официальный числовой пинг Дискорда <@ID>
+                                discord_ping_str = f"<@{staff_user.get('id')}>"
+                                break
+                        
+                        # Ссылка на конкретное обращение, по которой модератор перейдёт с телефона/ПК
+                        ticket_url = f"https://onrender.com_{ticket_id}"
+                        
+                        # Красивый payload для отправки в Discord-канал
+                        webhook_data = {
+                            "content": f"🚨 {discord_ping_str}, вас упомянули в обращении на форуме!\n💬 **Автор пинга:** {author_name}\n🔗 **Прямая ссылка на дело:** {ticket_url}"
+                        }
+                        
+                        # Пуляем POST-запрос напрямую на сервера Discord API
+                        async with httpx.AsyncClient() as client:
+                            await client.post(DISCORD_WEBHOOK_URL, json=webhook_data)
+                            
+                except Exception as webhook_err:
+                    print(f"⚠️ Не удалось отправить уведомление вебхука: {webhook_err}")
             
         return {"status": "ok", "message": "Сообщение отправлено!"}
     except Exception as e:
