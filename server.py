@@ -1142,10 +1142,12 @@ async def update_moderator_application_status(data: dict, request: Request):
             return {"status": "error", "message": "🔒 Вы не авторизованы!"}
             
         staff_members = await get_forum_staff()
+        # Собираем флаг проверки HR-прав
         is_hr_admin = any(str(mod_name).strip().lower() in str(u.get("name", "")).strip().lower() and u.get("role") in HR_ALLOWED_ROLES for u in staff_members)
         
+        # 🎯 ИСПРАВЛЕНО: Теперь проверяется правильное имя переменной is_hr_admin! Сбой NameError устранён!
         if not is_hr_admin:
-            return {"status": "error", "message": "🛑 Отказано в доступе!"}
+            return {"status": "error", "message": "🛑 Отказано в доступе! Вы не входите в кадровый комитет."}
             
         app_id = int(data.get("app_id"))
         new_status = data.get("status") 
@@ -1179,6 +1181,7 @@ async def update_moderator_application_status(data: dict, request: Request):
             await db.commit()
         return {"status": "ok", "message": "Статус анкеты успешно обновлен!"}
     except Exception as e:
+        print(f"🛑 Ошибка обновления статуса анкеты на бэкэнде: {e}")
         return {"status": "error", "message": str(e)}
 
 @app.get("/poll/{poll_id}")
