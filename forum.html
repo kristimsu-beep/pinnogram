@@ -583,6 +583,31 @@
         .reviews-feed-scroll {
             max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-top: 15px;
         }
+        /* КНОПКА КОРНЕВОГО ВХОДА В АДМИН-ПАНЕЛЬ (ЩИТ) */
+        .admin-shield-btn {
+            background: #18181c; border: 1px solid #222226; width: 40px; height: 40px;
+            border-radius: 10px; cursor: pointer; display: none; align-items: center; justify-content: center;
+            color: #aaaaaa; transition: 0.2s;
+        }
+        .admin-shield-btn:hover { background: #1f1f24; color: #ff3b30; border-color: rgba(255, 59, 48, 0.3); box-shadow: 0 0 15px rgba(255, 59, 48, 0.1); }
+        
+        /* ЭКРАН АДМИН-ПАНЕЛИ */
+        .admin-page-wrapper { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+        .admin-search-box {
+            width: 100%; background: #141416; border: 1px solid #1c1c1f; border-radius: 12px;
+            padding: 16px 20px; display: flex; align-items: center; gap: 12px; box-sizing: border-box;
+        }
+        
+        /* СЕТКА И КАРТОЧКИ СТРАНИЦЫ ПОЛЬЗОВАТЕЛЕЙ */
+        .admin-users-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; margin-top: 10px; }
+        .admin-user-card {
+            background: #141416; border: 1px solid #1c1c1f; border-radius: 12px; padding: 20px;
+            cursor: pointer; transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+            display: flex; align-items: center; gap: 14px; position: relative; overflow: hidden;
+        }
+        .admin-user-card:hover {
+            transform: translateY(-2px); border-color: var(--neon-blue); box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
+        }
 
     </style>
 </head>
@@ -894,6 +919,32 @@
 
         </div>
     </div>
+    <!-- РАЗДЕЛ Е: АДМИНИСТРАТИВНАЯ ПАНЕЛЬ С РЕЕСТРОМ УЧАСТНИКОВ -->
+    <div id="section-admin" class="page-section" style="display: none;">
+        <div class="admin-page-wrapper">
+            
+            <div class="view-top-bar" style="margin-bottom: 10px;">
+                <button class="back-forum-btn" onclick="switchSection('tickets')">← Вернуться на форум</button>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <h1 style="font-size: 24px; font-weight: bold; color: #fff; margin: 0 0 4px 0;">🛡️ Панель управления системой</h1>
+                <p style="font-size: 12px; color: #55555c; margin: 0;">Просмотр всех зарегистрированных пользователей и управление правами</p>
+            </div>
+
+            <!-- Живой поиск участников панели -->
+            <div class="admin-search-box">
+                <svg width="14" height="14" fill="#55555c" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/></svg>
+                <input type="text" id="admin-users-search-input" class="settings-input-item" style="margin-top:0; background:none; border:none; padding:0;" placeholder="Поиск активного пользователя по никнейму аккаунта..." oninput="filterAdminUsersRegistry()">
+            </div>
+
+            <!-- Сетка участников, куда JS выведет карточки -->
+            <div class="admin-users-grid" id="admin-users-cards-container">
+                <div class="comment-empty-text" style="grid-column: 1/-1;">Выполнение защищенного запроса данных...</div>
+            </div>
+
+        </div>
+    </div>
 
     <!-- ТВОЕ ОБНОВЛЕННОЕ ОКНО ПОДАЧИ ОБРАЩЕНИЯ ПО СКРИНШОТУ -->
     <div id="ticket-modal" class="modal">
@@ -981,10 +1032,14 @@
             }
 
             if (userName && userAvatar && userAvatar !== "undefined") {
-                // Выводим шапку с колокольчиком и выпадающим меню
                 authZone.innerHTML = `
                     <div style="display: flex; align-items: center; gap: 12px;">
                         
+                        <!-- 🎯 НАША СКРЫТАЯ КНОПКА АДМИН-ПАНЕЛИ (ЩИТ) -->
+                        <button class="admin-shield-btn" id="header-admin-shield-btn" onclick="switchSection('admin')" style="display: none;">
+                            <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M1 11.108V2.843c0-.138.1-.258.235-.283l7-1.325c.043-.008.087-.008.13 0l7 1.325c.135.025.235.145.235.283v8.265c0 .245-.156.467-.389.55l-7 2.5a.173.173 0 0 1-.13 0l-7-2.5A.582.582 0 0 1 1 11.108m7-.93c.1 0 .192-.042.256-.113l3-3.375a.375.375 0 1 0-.563-.496L8.125 9.247V3.531a.375.375 0 0 0-.75 0v5.716L4.837 6.328a.375.375 0 0 0-.563.496l3 3.375c.064.07.156.113.256.113"/></svg>
+                        </button>
+
                         <!-- Кнопка колокольчика системного центра уведомлений -->
                         <button class="notif-bell-btn" onclick="toggleNotifDropdown(event)">
                             <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="display:inline-block; vertical-align:middle;">
@@ -1002,12 +1057,13 @@
 
                     </div>
                 `;
-                
-                // 🎯 ВОТ ИДЕАЛЬНОЕ МЕСТО: Вызываем покраску и перелив градиента никнейма в шапке при каждом входе!
                 applyCustomNicknameStyles(authZone.querySelector(".user-badge span"), userName);
-                
-                // Запускаем фоновый сбор системных алертов
                 fetchNotificationsData();
+                
+                // 🎯 УМНЫЙ ПЕРЕХВАТ ПРАВ: проверяем, является ли зашедший админом, чтобы показать щит
+                checkAdminRightsForShield(userName);
+            }
+
             } else {
                 authZone.innerHTML = `
                     <a href="${API_URL}/api/forum/auth/login" class="discord-btn">
@@ -1060,6 +1116,11 @@
             else if (sectionName === "settings") {
                 document.getElementById("section-settings").style.display = "block";
                 loadUserSettingsForm(); // Подгружаем текущие параметры юзера из базы при открытии
+            }
+            // В низ условий добавь:
+            else if (sectionName === "admin") {
+                document.getElementById("section-admin").style.display = "block";
+                loadAdminUsersRegistry(); // Тянем список из SQLite
             }
         }
 
@@ -1830,6 +1891,86 @@
                 label.style.color = "#fff";
                 subtext.textContent = "Максимум 3 файла, до 10MB каждый";
             }
+        }
+                let adminCachedUsersArray = []; // Кэш списка пользователей для мгновенного поиска
+
+        // Функция фоновой проверки прав для отображения щита в шапке
+        async function checkAdminRightsForShield(myUsername) {
+            try {
+                const res = await fetch(`${API_URL}/api/forum/staff`);
+                const staff = await res.json();
+                const isStaffMember = staff.some(u => myUsername.toLowerCase().trim() in u.name.toLowerCase().trim() || u.name.toLowerCase().trim().includes(myUsername.toLowerCase().trim()));
+                
+                const shieldBtn = document.getElementById("header-admin-shield-btn");
+                if (shieldBtn && isStaffMember) {
+                    shieldBtn.style.display = "flex"; // Показываем щит только администрации!
+                }
+            } catch (e) { }
+        }
+
+        // АСИНХРОННЫЙ ВЫГРУЗЧИК РЕЕСТРА ИЗ SQLite
+        async function loadAdminUsersRegistry() {
+            const container = document.getElementById("admin-users-cards-container");
+            if (!container) return;
+            container.textContent = "Извлечение защищённой базы данных участников...";
+
+            try {
+                const res = await fetch(`${API_URL}/api/forum/admin/users-registry`);
+                const data = await res.json();
+
+                if (data.status !== "ok") {
+                    container.innerHTML = `<div class="comment-empty-text" style="grid-column: 1/-1; color:#ff3b30;">${data.message}</div>`;
+                    return;
+                }
+
+                adminCachedUsersArray = data.users; // Сохраняем в кэш
+                renderAdminUsersCards(adminCachedUsersArray); // Отрендериваем на экране
+
+            } catch (e) { container.innerHTML = `<div class="comment-empty-text" style="grid-column: 1/-1;">Ошибка соединения со шлюзом админ-панели.</div>`; }
+        }
+
+        // РЕНДЕРИНГ КАРТОЧЕК В СТИЛЕ КИБЕРПАНК
+        function renderAdminUsersCards(usersArray) {
+            const container = document.getElementById("admin-users-cards-container");
+            if (!container) return;
+            container.innerHTML = "";
+
+            if (usersArray.length === 0) {
+                container.innerHTML = `<div class="comment-empty-text" style="grid-column: 1/-1;">Совпадений по заданному фильтру поиска не обнаружено</div>`;
+                return;
+            }
+
+            usersArray.forEach(u => {
+                const card = document.createElement("div");
+                card.className = "admin-user-card";
+                // 🎯 СУПЕР-ФИКС: Клик по карточке мгновенно переносит в личный профиль этого участника!
+                card.onclick = () => viewUserProfile(u.username);
+
+                card.innerHTML = `
+                    <!-- Кольцо вокруг аватарки участника в списке -->
+                    <div class="ticket-avatar-wrapper" style="width:36px; height:36px; padding:2px;">
+                        <img src="${u.avatar}" onerror="this.src='https://ibb.co'">
+                    </div>
+                    <div>
+                        <span class="ticket-author-name" style="font-size:14px; display:block; margin-bottom:2px;">${u.username}</span>
+                        <span style="font-size:11px; color:#55555c; display:block; font-weight:500;">${u.status}</span>
+                    </div>
+                `;
+
+                // Применяем анимированный градиент на имя пользователя, если он настроен им
+                const nameSpan = card.querySelector(".ticket-author-name");
+                applyCustomNicknameStyles(nameSpan, u.username);
+
+                container.appendChild(card);
+            });
+        }
+
+        // ЖИВОЙ СВЕРХБЫСТРЫЙ ПОИСК БЕЗ ПЕРЕЗАГРУЗОК СТРАНИЦЫ
+        function filterAdminUsersRegistry() {
+            const query = document.getElementById("admin-users-search-input").value.trim().toLowerCase();
+            // Фильтруем массив из кэша по вхождению букв в никнейм
+            const filtered = adminCachedUsersArray.filter(u => u.username.toLowerCase().includes(query));
+            renderAdminUsersCards(filtered); // Моментально перерисовываем сетку
         }
 
     </script>
