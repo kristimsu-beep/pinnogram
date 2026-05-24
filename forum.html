@@ -1079,7 +1079,7 @@
 
 
 
-        // ИСПРАВЛЕНО: Теперь функция железно скрывает абсолютно все разделы перед показом нового!
+        // 🎯 ИСПРАВЛЕНО: Теперь функция намертво скрывает вообще ВСЕ разделы перед показом нового!
         function switchSection(sectionName) {
             currentSection = sectionName;
             
@@ -1088,15 +1088,15 @@
             const targetTab = document.getElementById(`tab-${sectionName}`);
             if (targetTab) targetTab.classList.add("active");
 
-            // 🎯 СУПЕР-ФИКС: Намертво прячем вообще ВСЕ возможные разделы сайта
-            const sections = ["section-staff", "section-tickets", "section-ticket-view", "section-profile", "section-settings"];
+            // 🎯 СУПЕР-ФИКС: В массив жестко добавлен "section-admin" для полной очистки окон
+            const sections = ["section-staff", "section-tickets", "section-ticket-view", "section-profile", "section-settings", "section-admin"];
             
             sections.forEach(sId => {
                 const el = document.getElementById(sId);
                 if (el) el.style.display = "none";
             });
 
-            // Открываем только один нужный экран
+            // Открываем строго один запрашиваемый экран
             if (sectionName === "staff") {
                 document.getElementById("section-staff").style.display = "block";
                 loadStaffForum();
@@ -1113,14 +1113,14 @@
             }
             else if (sectionName === "settings") {
                 document.getElementById("section-settings").style.display = "block";
-                loadUserSettingsForm(); // Подгружаем текущие параметры юзера из базы при открытии
+                loadUserSettingsForm(); 
             }
-            // В низ условий добавь:
             else if (sectionName === "admin") {
                 document.getElementById("section-admin").style.display = "block";
-                loadAdminUsersRegistry(); // Тянем список из SQLite
+                loadAdminUsersRegistry(); // Тянем список из SQLite без наслоений!
             }
         }
+
 
 
         // --- ЛОГИКА ВКЛАДКИ 1: ПЕРСОНАЛ И ОТЗЫВЫ ---
