@@ -555,14 +555,31 @@ async def action_forum_ticket(data: dict, request: Request):
         new_status = data.get("status") # 'processing', 'approved', 'rejected'
         
         async with aiosqlite.connect(DB_PATH) as db:
-            # 🎯 ИСПРАВЛЕНО: Условия SQL-запросов синхронизированы с логикой статусов на фронтенде
+            # Сначала вытащим имя автора тикета, чтобы знать, кому слать алерт
+            async with db.execute("SELECT author_name FROM forum_tickets WHERE id = ?", (ticket_id,)) as cur:
+                ticket_row = await cur.fetchone()
+                ticket_author = ticket_row[0] if ticket_row else None
+
+            ts_notif = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
+            notification_text = ""
+
             if new_status == 'processing':
                 await db.execute("UPDATE forum_tickets SET status = 'processing', moderator_name = ? WHERE id = ? AND status = 'open'", (mod_name, ticket_id))
+                notification_text = f"💼 Ваше обращение #POST_{ticket_id} взято в работу сотрудником {mod_name}"
             elif new_status == 'approved':
                 await db.execute("UPDATE forum_tickets SET status = 'approved' WHERE id = ? AND status = 'processing'", (ticket_id,))
+                notification_text = f"✅ Ваше обращение #POST_{ticket_id} было успешно ОДОБРЕНО!"
             elif new_status == 'rejected':
                 await db.execute("UPDATE forum_tickets SET status = 'rejected' WHERE id = ? AND status = 'processing'", (ticket_id,))
+                notification_text = f"❌ Ваше обращение #POST_{ticket_id} было ОТКЛОНЕНО модерацией."
                 
+            # Если текст сформирован и автор найден — записываем алерт в базу
+            if notification_text and ticket_author:
+                await db.execute("""
+                    INSERT INTO forum_notifications (username, text, ticket_id, timestamp)
+                    VALUES (?, ?, ?, ?)
+                """, (ticket_author, notification_text, ticket_id, ts_notif))
+
             await db.commit()
         return {"status": "ok", "message": "Статус обращения успешно обновлен!"}
     except Exception as e:
@@ -665,7 +682,16 @@ async def send_ticket_comment(data: dict, request: Request):
         if mentions:
             # Сюда вставь URL вебхука из настроек твоего Discord-канала "форум"
             DISCORD_WEBHOOK_URL = os.getenv("FORUM_WEBHOOK_URL", "ТУТ_ТВОЙ_URL_ВЕБХУКА_ЕСЛИ_НЕ_В_RENDER")
-            
+            async with aiosqlite.connect(DB_PATH) as db:
+                for mention_name in mentions:
+                    target_mention_name = mention_name.strip()
+                    # Записываем в СУБД уведомление для того, кого тегнули
+                    await db.execute("""
+                        INSERT INTO forum_notifications (username, text, ticket_id, timestamp)
+                        VALUES (?, ?, ?, ?)
+                    """, (target_mention_name, f"🚨 Пользователь {author_name} упомянул вас в чате обращения #POST_{ticket_id}", ticket_id, ts))
+                await db.commit()
+
             if DISCORD_WEBHOOK_URL and DISCORD_WEBHOOK_URL != "ТУТ_ТВОЙ_URL_ВЕБХУКА_ЕСЛИ_НЕ_В_RENDER":
                 try:
                     # Скачиваем список персонала, чтобы превратить текстовые ники в числовые ID Дискорда для пинга
@@ -916,6 +942,51 @@ async def get_user_custom_settings(username: str):
                 return {"banner": "", "gradient": "", "status": ""}
     except Exception as e:
         return {"banner": "", "gradient": "", "status": ""}
+
+# 1. ПОЛУЧЕНИЕ НЕПРОЧИТАННЫХ УВЕДОМЛЕНИЙ И ИХ КОЛИЧЕСТВА
+@app.get("/api/forum/notifications/list")
+async def get_user_notifications(request: Request):
+    try:
+        username = request.cookies.get("forum_user_name")
+        if not username:
+            return {"unread_count": 0, "list": []}
+            
+        async with aiosqlite.connect(DB_PATH) as db:
+            # Считаем количество непрочитанных
+            async with db.execute("SELECT COUNT(*) FROM forum_notifications WHERE username = ? AND is_read = 0", (username,)) as cursor:
+                unread_count = (await cursor.fetchone())[0]
+                
+            # Забираем последние 20 уведомлений
+            async with db.execute("""
+                SELECT id, text, ticket_id, is_read, timestamp 
+                FROM forum_notifications 
+                WHERE username = ? ORDER BY id DESC LIMIT 20
+            """, (username,)) as cursor:
+                rows = await cursor.fetchall()
+                
+            return {
+                "unread_count": unread_count,
+                "list": [{"id": r[0], "text": r[1], "ticket_id": r[2], "is_read": r[3], "time": r[4]} for r in rows]
+            }
+    except Exception as e:
+        return {"unread_count": 0, "list": []}
+
+
+# 2. ОТМЕТИТЬ ВСЕ УВЕДОМЛЕНИЯ КАК ПРОЧИТАННЫЕ
+@app.post("/api/forum/notifications/read-all")
+async def read_all_notifications(request: Request):
+    try:
+        username = request.cookies.get("forum_user_name")
+        if not username:
+            return {"status": "error", "message": "Не авторизован"}
+            
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("UPDATE forum_notifications SET is_read = 1 WHERE username = ?", (username,))
+            await db.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
@@ -1645,6 +1716,19 @@ async def startup():
                 banner_url TEXT,
                 nickname_gradient TEXT,
                 custom_status TEXT
+            )
+        """)
+        await db.commit()
+
+        # 5. Таблица системных уведомлений пользователей форума
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS forum_notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT,
+                text TEXT,
+                ticket_id INTEGER,
+                is_read INTEGER DEFAULT 0,
+                timestamp TEXT
             )
         """)
         await db.commit()
