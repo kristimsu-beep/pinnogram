@@ -337,7 +337,61 @@
             50% { background-position: 100% 50%; }
             100% { background-position: 0% 50%; }
         }
-       
+
+        /* ВЫПЛЫВАЮЩЕЕ МЕНЮ ПРОФИЛЯ */
+        .profile-dropdown-menu {
+            display: none; position: absolute; top: 55px; right: 40px;
+            background: #18181c; border: 1px solid #222226; border-radius: 12px;
+            padding: 10px; width: 200px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 10000;
+            flex-direction: column; gap: 4px;
+        }
+        .dropdown-item-btn {
+            background: none; border: none; color: #aaaaaa; width: 100%; text-align: left;
+            padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+            cursor: pointer; display: flex; align-items: center; gap: 10px; transition: 0.2s;
+        }
+        .dropdown-item-btn:hover { background: #222226; color: #fff; }
+        .dropdown-item-btn.btn-logout-red { color: #ff3b30; }
+        .dropdown-item-btn.btn-logout-red:hover { background: rgba(255,59,48,0.08); }
+        
+        .profile-page-wrapper { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+        .profile-banner-card {
+            background: linear-gradient(180deg, #16222f 0%, #141416 100%);
+            border: 1px solid #1c1c1f; border-radius: 16px; padding: 40px;
+            position: relative; display: flex; align-items: center; gap: 30px; overflow: hidden;
+        }
+        .profile-avatar-ring {
+            position: relative; width: 110px; height: 110px; border-radius: 50%;
+            background: linear-gradient(45deg, #4c1d95, #1e3a8a, #00f0ff, #4c1d95);
+            background-size: 300% 300%; animation: mainAvatarGradientFlow 5s ease infinite;
+            display: flex; align-items: center; justify-content: center; padding: 4px; box-sizing: border-box;
+            box-shadow: 0 0 30px rgba(0, 240, 255, 0.2);
+        }
+        .profile-avatar-ring img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #141416; }
+        
+        .profile-role-badge {
+            background: rgba(0, 255, 0, 0.08); color: #00ff00; border: 1px solid rgba(0, 255, 0, 0.2);
+            font-size: 12px; font-weight: bold; padding: 4px 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px;
+        }
+        .profile-role-badge.citizen-badge {
+            background: rgba(255,255,255,0.03); color: #88888e; border-color: #222226;
+        }
+        
+        /* СЕТКА СТАТИСТИКИ */
+        .profile-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
+        .stat-box-card {
+            background: #141416; border: 1px solid #1c1c1f; border-radius: 12px; padding: 20px; text-align: center;
+        }
+        .stat-box-number { font-size: 28px; font-weight: bold; color: #fff; font-family: monospace; margin-bottom: 4px; }
+        .stat-box-label { font-size: 11px; color: #55555c; text-transform: uppercase; letter-spacing: 1px; }
+        
+        /* ИСТОРИЯ ДЕЙСТВИЙ */
+        .history-row-item {
+            background: #141416; border: 1px solid #1c1c1f; border-radius: 12px;
+            padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; cursor: pointer; transition: 0.2s;
+        }
+        .history-row-item:hover { background: #18181c; border-color: #00f0ff; box-shadow: 0 0 15px rgba(0,240,255,0.1); }
+
     </style>
 </head>
 <body>
@@ -452,6 +506,65 @@
             </div>
         </div>
     </div>
+        <!-- ВЫПЛЫВАЮЩЕЕ МЕНЮ (ПОМЕСТИ СРАЗУ ПОСЛЕ ЗАКРЫТИЯ ДИВА HEADER) -->
+    <div class="profile-dropdown-menu" id="dropdown-user-zone">
+        <button class="dropdown-item-btn" onclick="openMyPersonalProfile()">
+            <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"/></svg>
+            Мой профиль
+        </button>
+        <button class="dropdown-item-btn" onclick="switchSection('tickets')">
+            <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h11A1.5 1.5 0 0 1 15 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 13.5zM2.5 2a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5z"/></svg>
+            Транзакции / Дела
+        </button>
+        <a href="/api/forum/auth/logout" class="dropdown-item-btn btn-logout-red" style="text-decoration:none; box-sizing:border-box;">
+            <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M6 12.5a.5.5 0 0 0 .5.5h8a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-8a.5.5 0 0 0-.5.5v2a.5.5 0 0 1-1 0v-2A1.5 1.5 0 0 1 6 1.5h8A1.5 1.5 0 0 1 15.5 3v9a1.5 1.5 0 0 1-1.5 1.5H6a1.5 1.5 0 0 1-1.5-1.5v-2a.5.5 0 0 1 1 0z"/><path fill-rule="evenodd" d="M.146 8.354a.5.5 0 0 1 0-.708l3-3a.5.5 0 1 1 .708.708L1.707 7.5H10.5a.5.5 0 0 1 0 1H1.707l2.147 2.146a.5.5 0 0 1-.708.708z"/></svg>
+            Выйти
+        </a>
+    </div>
+
+    <div id="section-profile" class="page-section" style="display: none;">
+        <div class="profile-page-wrapper">
+            
+            <div class="view-top-bar">
+                <button class="back-forum-btn" onclick="switchSection('tickets')">← Вернуться на форум</button>
+            </div>
+
+            <!-- Главный Баннер Профиля -->
+            <div class="profile-banner-card">
+                <div class="profile-avatar-ring">
+                    <img id="prof-avatar-img" src="">
+                </div>
+                <div>
+                    <h2 id="prof-user-title" style="margin: 0 0 6px 0; font-size: 26px; font-weight: bold;">Никнейм</h2>
+                    <div id="prof-role-badge-zone"></div>
+                </div>
+            </div>
+
+            <div class="profile-stats-grid">
+                <div class="stat-box-card">
+                    <div class="stat-box-number" id="prof-stat-comm">0</div>
+                    <div class="stat-box-label">Сообщений</div>
+                </div>
+                <div class="stat-box-card">
+                    <div class="stat-box-number" id="prof-stat-tick">0</div>
+                    <div class="stat-box-label">Обращений</div>
+                </div>
+                <div class="stat-box-card">
+                    <div class="stat-box-number">0</div>
+                    <div class="stat-box-label">Комментариев</div>
+                </div>
+                <div class="stat-box-card">
+                    <div class="stat-box-number">2026</div>
+                    <div class="stat-box-label">На форуме</div>
+                </div>
+            </div>
+
+            <!-- Список последних постов и действий -->
+            <h3 style="font-size: 14px; text-transform: uppercase; color: #fff; margin: 20px 0 10px 0; letter-spacing: 0.5px;">Последние действия</h3>
+            <div id="profile-history-list"></div>
+
+        </div>
+    </div>
 
     <!-- ТВОЕ ОКНО ПОДАЧИ ОБРАЩЕНИЯ (ОБНОВИ КНОПКИ ВНУТРИ) -->
     <div id="ticket-modal" class="modal">
@@ -480,7 +593,7 @@
             <button onclick="submitForumTicket()" style="background:var(--neon-blue); color:black;">ОТПРАВИТЬ ОБРАЩЕНИЕ МОДЕРАТОРАМ</button>
         </div>
     </div>
-
+    
     <script>
 
         const API_URL = window.location.origin;
@@ -499,7 +612,7 @@
             return undefined;
         }
 
-        // 🎯 СУПЕР-ФИКС ИНТЕРФЕЙСА: Полная очистка системного мусора из строк
+        // 🎯 СУПЕР-ОБНОВЛЕНИЕ ШАПКИ: Поддержка кликабельного выпадающего меню профиля
         function updateAuthInterface() {
             const authZone = document.getElementById("auth-zone");
             if (!authZone) return;
@@ -507,7 +620,7 @@
             let userName = getCookie("forum_user_name");
             let userAvatar = getCookie("forum_user_avatar");
 
-            // Защита от системных склеек: если в куку пролез мусор через запятую, отсекаем его
+            // 🎯 ИСПРАВЛЕНО: Индексы [0] расставлены перед вызовом .trim() для защиты от ошибок!
             if (userName && userName.includes(",")) {
                 userName = userName.split(",")[0].trim();
             }
@@ -516,12 +629,12 @@
             }
 
             if (userName && userAvatar && userAvatar !== "undefined") {
-                // 🎯 ИСПРАВЛЕНО: Если у юзера битый кэш в Дискорде, onerror плавно подменит картинку на твой красивый аватар!
+                // 🛠️ ИСПРАВЛЕНО: Интерактивный клик, стрелочка ▼ и вечный аватар-фикс в сборе!
                 authZone.innerHTML = `
-                    <div class="user-badge" style="display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); padding: 5px 12px; border-radius: 20px; border: 1px solid #333;">
-                        <img src="${userAvatar}" onerror="this.src='https://ibb.co'" style="width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--neon-blue); object-fit: cover;">
+                    <div class="user-badge" onclick="toggleUserDropdown(event)" style="display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); padding: 5px 12px; border-radius: 20px; border: 1px solid #333; cursor: pointer; user-select: none;">
+                        <img src="${userAvatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'" style="width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--neon-blue); object-fit: cover;">
                         <span style="font-size:12px; font-weight:bold; color: var(--text);">${userName}</span>
-                        <a href="${API_URL}/api/forum/auth/logout" class="logout-btn" style="color: #ff3b30; text-decoration: none; font-size: 11px; margin-left: 5px; font-weight: bold;">✕ Выйти</a>
+                        <span style="font-size:10px; opacity:0.4; color: var(--text);">▼</span>
                     </div>
                 `;
             } else {
@@ -536,6 +649,8 @@
                 `;
             }
         }
+
+
 
 
         // Переключение разделов меню (Вкладки сверху)
@@ -938,21 +1053,76 @@
         // 🎯 УМНЫЙ АВТО-ПЕРЕХОД ПО ПРЯМЫМ ССЫЛКАМ НА ЖАЛОБЫ:
         const currentUrlPath = window.location.pathname; // Читаем путь (например, "/forum/post_2")
 
+        // 🎯 УМНЫЙ АВТО-ПЕРЕХОД ПО ПРЯМЫМ ССЫЛКАМ (ЖАЛОБЫ + ПРОФИЛИ):
+        const currentUrlPath = window.location.pathname; // Читаем путь из адресной строки
+
         if (currentUrlPath.includes("/post_")) {
-            // Вытаскиваем числовой ID обращения из ссылки
+            // 1. ВЕТКА ЖАЛОБ: Вытаскиваем числовой ID обращения из ссылки
             const urlTicketId = parseInt(currentUrlPath.split("/post_")[1]);
             if (!isNaN(urlTicketId)) {
                 updateAuthInterface();
-                viewSpecificTicket(urlTicketId); // Мгновенно открываем жалобу в обход главного экрана!
+                viewSpecificTicket(urlTicketId); // Мгновенно открываем жалобу
             } else {
                 loadStaffForum();
                 updateAuthInterface();
             }
-        } else {
-            // Если ссылка обычная — открываем стандартный список модераторов
+        } 
+        else if (currentUrlPath.includes("/user_")) {
+            // 🎯 2. НОВАЯ ВЕТКА ПРОФИЛЕЙ: Вытаскиваем идентификатор пользователя
+            const urlUserId = currentUrlPath.split("/user_")[1];
+            if (urlUserId) {
+                updateAuthInterface();
+                viewUserProfile(urlUserId); // Мгновенно открываем профиль в обход главного экрана!
+            } else {
+                loadStaffForum();
+                updateAuthInterface();
+            }
+        } 
+        else {
+            // 3. СТАНДАРТНАЯ ВЕТКА: Если ссылка обычная — открываем главную страницу (персонал)
             loadStaffForum();
             updateAuthInterface();
         }
+
+            // 🎯 СУПЕР-ОБНОВЛЕНИЕ ШАПКИ: Поддержка кликабельного выпадающего меню профиля
+        function updateAuthInterface() {
+            const authZone = document.getElementById("auth-zone");
+            if (!authZone) return;
+            
+            let userName = getCookie("forum_user_name");
+            let userAvatar = getCookie("forum_user_avatar");
+
+            // Защита от системных склеек: если в куку пролез мусор через запятую, отсекаем его
+            if (userName && userName.includes(",")) {
+                userName = userName.split(",")[0].trim();
+            }
+            if (userAvatar && userAvatar.includes(",")) {
+                userAvatar = userAvatar.split(",")[0].trim();
+            }
+
+            if (userName && userAvatar && userAvatar !== "undefined") {
+                // 🛠️ ИСПРАВЛЕНО: Добавлен метод onclick="toggleUserDropdown(event)" для открытия выпадающего меню!
+                authZone.innerHTML = `
+                    <div class="user-badge" onclick="toggleUserDropdown(event)" style="display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); padding: 5px 12px; border-radius: 20px; border: 1px solid #333; cursor: pointer; user-select: none;">
+                        <!-- 🎯 ИСПРАВЛЕНО: Поставили вечный неоновый аватар-фикс в onerror на случай сбоев кэша Дискорда -->
+                        <img src="${userAvatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'" style="width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--neon-blue); object-fit: cover;">
+                        <span style="font-size:12px; font-weight:bold; color: var(--text);">${userName}</span>
+                        <span style="font-size:10px; opacity:0.4; color: var(--text);">▼</span>
+                    </div>
+                `;
+            } else {
+                // Если гость — выводим кнопку с идеальной геометрией SVG
+                authZone.innerHTML = `
+                    <a href="${API_URL}/api/forum/auth/login" class="discord-btn">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="display:inline-block; vertical-align:middle;">
+                            <path d="M13.545 2.907a13.227 13.227 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.212 12.212 0 0 0-3.658 0 8.258 8.258 0 0 0-.412-.833.051.051 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.041.041 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032a.04.04 0 0 0 .016.028a13.283 13.283 0 0 0 3.995 2.02a.05.05 0 0 0 .056-.018c.308-.42.582-.863.818-1.322a.05.05 0 0 0-.028-.069a8.726 8.726 0 0 1-1.247-.594a.05.05 0 0 1-.005-.085a6.052 6.052 0 0 0 .322-.252a.051.051 0 0 1 .053-.007c2.442 1.115 5.088 1.115 7.502 0a.051.051 0 0 1 .053.007c.114.086.221.17.322.252a.05.05 0 0 1-.005.085c-.392.234-.81.433-1.247.594a.05.05 0 0 0-.028.07c.24.46.513.903.819 1.32a.05.05 0 0 0 .056.019a13.21 13.21 0 0 0 4.001-2.02a.049.049 0 0 0 .016-.027c.385-3.418-.635-6.417-2.399-9.117a.042.042 0 0 0-.02-.019ZM5.14 9.473c-.785 0-1.431-.722-1.431-1.607 0-.885.632-1.607 1.43-1.607.807 0 1.443.73 1.432 1.607 0 .885-.625 1.607-1.431 1.607Zm4.515 0c-.785 0-1.43-.722-1.43-1.607 0-.885.632-1.607 1.43-1.607.807 0 1.443.73 1.431 1.607 0 .885-.624 1.607-1.43 1.607Z"/>
+                        </svg>
+                        Войти через Discord
+                    </a>
+                `;
+            }
+        }
+
     </script>
 </body>
 </html>
