@@ -1937,7 +1937,7 @@
             } catch (e) { container.innerHTML = `<div class="comment-empty-text" style="grid-column: 1/-1;">Ошибка соединения со шлюзом админ-панели.</div>`; }
         }
 
-        // РЕНДЕРИНГ КАРТОЧЕК В СТИЛЕ КИБЕРПАНК
+        // 🎯 ИСПРАВЛЕНО: Кристально чистый рендеринг карточек админ-панели
         function renderAdminUsersCards(usersArray) {
             const container = document.getElementById("admin-users-cards-container");
             if (!container) return;
@@ -1951,27 +1951,30 @@
             usersArray.forEach(u => {
                 const card = document.createElement("div");
                 card.className = "admin-user-card";
-                // 🎯 СУПЕР-ФИКС: Клик по карточке мгновенно переносит в личный профиль этого участника!
+                
+                // 🎯 ЖЕСТКИЙ ФИКС: Передаем u.username, чтобы открывался профиль именно этого человека!
                 card.onclick = () => viewUserProfile(u.username);
 
                 card.innerHTML = `
-                    <!-- Кольцо вокруг аватарки участника в списке -->
                     <div class="ticket-avatar-wrapper" style="width:36px; height:36px; padding:2px;">
-                        <img src="${u.avatar}" onerror="this.src='https://ibb.co'">
+                        <img src="${u.avatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'">
                     </div>
                     <div>
-                        <span class="ticket-author-name" style="font-size:14px; display:block; margin-bottom:2px;">${u.username}</span>
+                        <!-- Имя пользователя -->
+                        <span class="ticket-author-name" style="font-size:14px; display:block; margin-bottom:2px; font-weight: bold; color: #fff;">${u.username}</span>
+                        <!-- Его статус / роль -->
                         <span style="font-size:11px; color:#55555c; display:block; font-weight:500;">${u.status}</span>
                     </div>
                 `;
 
-                // Применяем анимированный градиент на имя пользователя, если он настроен им
+                // Применяем анимированный градиент на имя пользователя из базы настроек
                 const nameSpan = card.querySelector(".ticket-author-name");
                 applyCustomNicknameStyles(nameSpan, u.username);
 
                 container.appendChild(card);
             });
         }
+
 
         // ЖИВОЙ СВЕРХБЫСТРЫЙ ПОИСК БЕЗ ПЕРЕЗАГРУЗОК СТРАНИЦЫ
         function filterAdminUsersRegistry() {
