@@ -608,6 +608,20 @@
         .admin-user-card:hover {
             transform: translateY(-2px); border-color: var(--neon-blue); box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
         }
+        /* КАРКАС СТРАНИЦЫ МОДЕРАТОРОВ */
+        .moderators-page-wrapper { max-width: 800px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+        
+        /* БЛОКИ И РАЗДЕЛИТЕЛИ ВОПРОСОВ АНКЕТЫ */
+        .app-form-card { background: #141416; border: 1px solid #1c1c1f; border-radius: 12px; padding: 28px; margin-bottom: 20px; }
+        .app-section-title { font-size: 16px; font-weight: bold; color: var(--neon-blue); margin: 0 0 20px 0; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #1c1c1f; padding-bottom: 10px; }
+        .app-question-item { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+        .app-question-text { font-size: 13px; color: #ffffff; font-weight: 600; }
+        .app-question-subtext { font-size: 11px; color: #55555c; margin-top: -4px; line-height: 1.4; }
+        
+        /* СТИЛИ ОТОБРАЖЕНИЯ ОТВЕТОВ ДЛЯ КУРАТОРОВ */
+        .app-view-answer-row { background: #0e0e10; border: 1px solid #1c1c1f; padding: 12px 16px; border-radius: 8px; margin-bottom: 12px; }
+        .app-view-q { font-size: 11px; color: #55555c; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
+        .app-view-a { font-size: 13px; color: #d1d1d6; line-height: 1.5; white-space: pre-wrap; }
 
     </style>
 </head>
@@ -945,6 +959,110 @@
 
         </div>
     </div>
+    <!-- РАЗДЕЛ Ж: НАБОР НА МОДЕРАТОРА И АРХИВ ДЛЯ КУРАТОРОВ -->
+    <div id="section-moderators" class="page-section" style="display: none;">
+        <div class="moderators-page-wrapper">
+            
+            <div class="view-top-bar" style="margin-bottom: 10px;">
+                <button class="back-forum-btn" onclick="switchSection('tickets')">← Вернуться на форум</button>
+            </div>
+
+            <!-- ЭКРАН 1: БЛАНК ПОДАЧИ АНКЕТЫ ДЛЯ ИГРОКОВ -->
+            <div id="app-candidate-blank-zone" style="display: none;">
+                <div style="margin-bottom: 25px;">
+                    <h1 style="font-size: 24px; font-weight: bold; color: #fff; margin: 0 0 6px 0;">📋 Анкета на роль модератора</h1>
+                    <p style="font-size: 12px; color: #88888e; margin: 0; line-height: 1.5;">Заполните, пожалуйста, все пункты. Чем подробнее — тем выше шанс на одобрение вашей кандидатуры.</p>
+                </div>
+
+                <!-- БЛОК А: ОСНОВНАЯ ИНФОРМАЦИЯ -->
+                <div class="app-form-card">
+                    <h3 class="app-section-title">🧑‍💻 Основная информация</h3>
+                    
+                    <div class="app-question-item">
+                        <span class="app-question-text">1. Ваш Discord</span>
+                        <span class="app-question-subtext">Укажите ваш актуальный тег, например: @username</span>
+                        <input type="text" id="q-ans-1" class="settings-input-item" placeholder="Ваш ответ...">
+                    </div>
+                    <div class="app-question-item">
+                        <span class="app-question-text">2. Сколько часов в день / в неделю вы готовы выделить на модерацию?</span>
+                        <input type="text" id="q-ans-2" class="settings-input-item" placeholder="Ваш ответ...">
+                    </div>
+                    <div class="app-question-item">
+                        <span class="app-question-text">3. Готовы ли вы работать в ночное время?</span>
+                        <span class="app-question-subtext">По запросу высшей администрации сервера при форс-мажорах</span>
+                        <select id="q-ans-3" class="settings-input-item">
+                            <option value="Да, готов">Да, полностью готов</option>
+                            <option value="Частично готов">Частично готов (в зависимости от дня)</option>
+                            <option value="Нет, не готов">Нет, не готов работать ночью</option>
+                        </select>
+                    </div>
+                    <div class="app-question-item">
+                        <span class="app-question-text">4. Ваш возраст</span>
+                        <span class="app-question-subtext">Укажите ваш реальный возраст (хотя бы примерно: 12+, 14+, 16+ и т.д.)</span>
+                        <input type="text" id="q-ans-4" class="settings-input-item" placeholder="Ваш ответ...">
+                    </div>
+                </div>
+
+                <!-- БЛОК Б: ОПЫТ И ЗНАНИЯ -->
+                <div class="app-form-card">
+                    <h3 class="app-section-title">📚 Опыт и знания</h3>
+                    
+                    <div class="app-question-item">
+                        <span class="app-question-text">5. Есть ли у вас опыт работы модератором на других серверах?</span>
+                        <span class="app-question-subtext">Пожалуйста, подробно укажите сервер, ваш срок работы и какие именно обязанности вы там выполняли</span>
+                        <textarea id="q-ans-5" class="settings-input-item" rows="3" style="resize:none;" placeholder="Ваш ответ..."></textarea>
+                    </div>
+                    <div class="app-question-item">
+                        <span class="app-question-text">6. Какой у вас уровень знания Discord? Расскажите подробнее:</span>
+                        <span class="app-question-subtext">· Умеете смотреть аудит лог?<br>· Настраивать базовые боты (Carl, YAGPDB, Ticket Tool)?<br>· Находить удалённые сообщения через лог-ботов?</span>
+                        <textarea id="q-ans-6" class="settings-input-item" rows="4" style="resize:none;" placeholder="Ваш ответ..."></textarea>
+                    </div>
+                    <div class="app-question-item">
+                        <span class="app-question-text">7. Есть ли у вас опыт работы с ботами для модерации (Dyno, Carl-bot, MEE6, Wick, Ticket Tool)? Какие команды знаете?</span>
+                        <textarea id="q-ans-7" class="settings-input-item" rows="3" style="resize:none;" placeholder="Ваш ответ..."></textarea>
+                    </div>
+                    <div class="app-question-item">
+                        <span class="app-question-text">8. Были ли у вас ранее предупреждения или баны на других Discord-серверах за нарушения? Если да, то за что?</span>
+                        <textarea id="q-ans-8" class="settings-input-item" rows="2" style="resize:none;" placeholder="Ваш ответ..."></textarea>
+                    </div>
+                    <div class="app-question-item">
+                        <span class="app-question-text">9. Есть ли у вас вредные привычки, которые могут помешать работе?</span>
+                        <span class="app-question-subtext">Вспыльчивость, игнорирование ЛС, внезапное пропадание без предупреждения. Честный ответ приветствуется!</span>
+                        <textarea id="q-ans-9" class="settings-input-item" rows="3" style="resize:none;" placeholder="Укажите честно, это ценится при отборе..."></textarea>
+                    </div>
+                </div>
+
+                <button onclick="submitModeratorApplicationForm()" style="background: var(--neon-blue); color: #000; font-weight: bold; border: none; padding: 15px 30px; border-radius: 10px; font-size: 14px; cursor: pointer; width: 100%; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Сдать анкету в отдел кадров</button>
+            </div>
+
+            <!-- ЭКРАН 2: ЗАКРЫТЫЙ РЕЕСТР ВСЕХ СДАННЫХ АНКЕТ ДЛЯ РУКОВОДСТВА -->
+            <div id="app-hr-archive-zone" style="display: none;">
+                <div style="margin-bottom: 20px; border-bottom: 1px solid #222226; padding-bottom: 15px;">
+                    <h1 style="font-size: 24px; font-weight: bold; color: #fff; margin: 0 0 4px 0;">💼 Управление кадрами (Анкеты)</h1>
+                    <p style="font-size: 12px; color: #55555c; margin: 0;">Рассмотрение заявок кандидатов на вступление в ряды Модерации проекта</p>
+                </div>
+                <!-- Сюда JS выведет список поданных анкет -->
+                <div class="ticket-list" id="hr-apps-cards-container"></div>
+            </div>
+
+            <!-- ЭКРАН 3: КАРТОЧКА ДЕТАЛЬНОГО ПРОСМОТРА ОТВЕТОВ КАНДИДАТА -->
+            <div id="app-hr-single-view-zone" style="display: none;">
+                <div class="view-top-bar">
+                    <button class="back-forum-btn" onclick="openHrApplicationsArchive()">← Назад в архив анкет</button>
+                    <div id="app-view-status-badge"></div>
+                </div>
+                <div class="view-block-card">
+                    <div id="app-view-meta"></div>
+                    <div style="margin-top: 25px;" id="app-view-answers-list-box"></div>
+                </div>
+                <div class="view-block-card" style="margin-top: 20px;">
+                    <div class="mod-panel-title">Решение по кандидату</div>
+                    <div class="mod-buttons-row" id="app-view-actions-buttons"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
 
     <!-- ТВОЕ ОБНОВЛЕННОЕ ОКНО ПОДАЧИ ОБРАЩЕНИЯ ПО СКРИНШОТУ -->
     <div id="ticket-modal" class="modal">
@@ -1089,8 +1207,8 @@
             if (targetTab) targetTab.classList.add("active");
 
             // 🎯 СУПЕР-ФИКС: В массив жестко добавлен "section-admin" для полной очистки окон
-            const sections = ["section-staff", "section-tickets", "section-ticket-view", "section-profile", "section-settings", "section-admin"];
-            
+            const sections = ["section-staff", "section-tickets", "section-ticket-view", "section-profile", "section-settings", "section-admin", "section-moderators"];
+
             sections.forEach(sId => {
                 const el = document.getElementById(sId);
                 if (el) el.style.display = "none";
@@ -1118,6 +1236,10 @@
             else if (sectionName === "admin") {
                 document.getElementById("section-admin").style.display = "block";
                 loadAdminUsersRegistry(); // Тянем список из SQLite без наслоений!
+            }
+            else if (sectionName === "moderators") {
+                document.getElementById("section-moderators").style.display = "block";
+                determineModeratorsPageDisplayRoute(); // Умный шлюз распределения ролей игрока/куратора
             }
         }
 
@@ -1670,6 +1792,11 @@
             updateAuthInterface();
             switchSection("settings");
         }
+        else if (currentUrlPath.includes("/moderators")) {
+            updateAuthInterface();
+            switchSection("moderators");
+        }
+
         else {
             // 4. ДЕФОЛТНАЯ ВЕТКА: Обычный переход на корень форума
             loadStaffForum();
@@ -1983,7 +2110,173 @@
             const filtered = adminCachedUsersArray.filter(u => u.username.toLowerCase().includes(query));
             renderAdminUsersCards(filtered); // Моментально перерисовываем сетку
         }
+        let activeApplicationId = null;
+        const HR_ALLOWED_ROLES = ["Отдел по набору", "Заместитель Куратора Администратора", "Куратор Администраторов", "Зам.Менеджера", "Менеджер", "Тех. Админ"];
+        const APPLICATION_QUESTIONS = [
+            "1. Ваш Discord (например, @username):",
+            "2. Сколько часов в день / в неделю вы готовы выделить на модерацию?",
+            "3. Готовы ли вы работать в ночное время (по запросу администрации)?",
+            "4. Ваш возраст (хотя бы примерно:12+ и т.д.):",
+            "5. Есть ли у вас опыт работы модератором на других серверах? (укажите сервер, срок, какие обязанности выполняли)",
+            "6. Какой у вас уровень знания Discord (аудит лог, базовые боты Carl/YAGPDB, удаленные сообщения через ботов)?",
+            "7. Есть ли у вас опыт работы с ботами для модерации (Dyno, Carl-bot, MEE6, Wick, Ticket Tool)? Какие команды знаете?",
+            "8. Были ли у вас ранее предупреждения или баны на других Discord-серверах за нарушения? Если да, то за что?",
+            "9. Есть ли у вас вредные привычки, которые могут помешать работе (вспыльчивость, игнорирование ЛС, пропадание)?"
+        ];
 
+        // 🎯 УМНЫЙ ШЛЮЗ РАСПРЕДЕЛЕНИЯ: Разделяет обычных игроков и кураторов Отдела Кадров
+        async function determineModeratorsPageDisplayRoute() {
+            document.getElementById("app-candidate-blank-zone").style.display = "none";
+            document.getElementById("app-hr-archive-zone").style.display = "none";
+            document.getElementById("app-hr-single-view-zone").style.display = "none";
+
+            const myName = getCookie("forum_user_name");
+            if (!myName) {
+                document.getElementById("app-candidate-blank-zone").style.display = "block";
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_URL}/api/forum/staff`);
+                const staff = await res.json();
+                const cleanMe = myName.toLowerCase().trim();
+                
+                const isHrStaff = staff.some(u => {
+                    const sName = String(u.name).toLowerCase().trim();
+                    return (sName.includes(cleanMe) || cleanMe.includes(sName)) && HR_ALLOWED_ROLES.includes(u.role);
+                });
+
+                if (isHrStaff) {
+                    openHrApplicationsArchive(); 
+                } else {
+                    document.getElementById("app-candidate-blank-zone").style.display = "block"; 
+                }
+            } catch (e) { document.getElementById("app-candidate-blank-zone").style.display = "block"; }
+        }
+
+        // --- КАНДИДАТ: ОТПРАВКА СДАННОЙ АНКЕТЫ НА СЕРВЕР ---
+        async function submitModeratorApplicationForm() {
+            const answersArray = [];
+            for (let i = 1; i <= 9; i++) {
+                const val = document.getElementById(`q-ans-${i}`).value.trim();
+                if (!val) return alert(`Пожалуйста, полностью заполните пункт №${i} анкеты!`);
+                answersArray.push(val);
+            }
+
+            try {
+                const res = await fetch(`${API_URL}/api/forum/applications/submit`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ answers: answersArray })
+                });
+                const data = await res.json();
+                alert(data.message);
+                if (data.status === "ok") {
+                    for (let i = 1; i <= 9; i++) document.getElementById(`q-ans-${i}`).value = ""; 
+                    switchSection("tickets");
+                }
+            } catch (e) { alert("Сбой передачи анкеты на сервера Render."); }
+        }
+
+        // --- КУРАТОР: ОТКРЫТИЕ ЗАКРЫТОГО АРХИВА АНКЕТ КАНДИДАТОВ ---
+        async function openHrApplicationsArchive() {
+            document.getElementById("app-candidate-blank-zone").style.display = "none";
+            document.getElementById("app-hr-single-view-zone").style.display = "none";
+            const archive = document.getElementById("app-hr-archive-zone");
+            if (archive) archive.style.display = "block";
+
+            const container = document.getElementById("hr-apps-cards-container");
+            if (container) container.textContent = "Извлечение зашифрованного архива личных дел...";
+
+            try {
+                const res = await fetch(`${API_URL}/api/forum/applications/list`);
+                const data = await res.json();
+                if (!container) return;
+                container.innerHTML = "";
+
+                if (!data.applications || data.applications.length === 0) {
+                    container.innerHTML = `<div class="comment-empty-text">Архив анкет пуст. Новых кандидатов не зафиксировано.</div>`;
+                    return;
+                }
+
+                data.applications.forEach(a => {
+                    const box = document.createElement("div");
+                    box.className = "ticket-row-box-flat";
+                    box.onclick = () => viewSpecificHrApplication(a.id);
+
+                    let statusText = "Ожидание";
+                    let badgeStyleClass = "status-dot-badge";
+                    if (a.status === "processing") { statusText = "На рассмотрении"; }
+                    if (a.status === "approved") { statusText = "Принят"; badgeStyleClass = "status-dot-badge approved-badge"; }
+                    if (a.status === "rejected") { statusText = "Отклонён"; badgeStyleClass = "status-dot-badge rejected-badge"; }
+
+                    box.innerHTML = `
+                        <div class="ticket-header-line" style="margin-bottom: 0; display: flex; align-items: center; gap: 12px;">
+                            <div class="ticket-avatar-wrapper"><img src="${a.avatar}" onerror="this.src='https://ibb.co'"></div>
+                            <span class="ticket-author-name">${a.author}</span>
+                            <span class="${badgeStyleClass}">${statusText}</span>
+                            <div class="ticket-right-meta" style="margin-left: auto; font-size:12px; color:#55555c;">${a.time}</div>
+                        </div>
+                        <h3 class="ticket-body-title" style="margin: 12px 0 0 0; font-size: 17px; font-weight: bold; color:#fff;">Заявление на вступление в ряды Модерации</h3>
+                        <p class="ticket-body-desc" style="color: #66666e; font-size: 13px; margin: 4px 0 0 0;">Нажмите на карточку, чтобы открыть развернутый бланк ответов кандидата.</p>
+                    `;
+                    const nameSpan = box.querySelector(".ticket-author-name");
+                    applyCustomNicknameStyles(nameSpan, a.author);
+                    container.appendChild(box);
+                });
+            } catch (e) { if (container) container.textContent = "Не удалось прочитать архив анкет."; }
+        }
+
+        // --- КУРАТОР: РАЗВЕРНУТЫЙ ПРОСМОТР ОТВЕТОВ КАНДИДАТА ПО ID ---
+        async function viewSpecificHrApplication(id) {
+            activeApplicationId = id;
+            document.getElementById("app-hr-archive-zone").style.display = "none";
+            document.getElementById("app-hr-single-view-zone").style.display = "block";
+
+            const metaBlock = document.getElementById("app-view-meta");
+            const answersBox = document.getElementById("app-view-answers-list-box");
+            const badgeZone = document.getElementById("app-view-status-badge");
+            const actionsZone = document.getElementById("app-view-actions-buttons");
+
+            if (answersBox) answersBox.textContent = "Дешифровка бланка ответов...";
+
+            try {
+                const res = await fetch(`${API_URL}/api/forum/applications/list`);
+                const data = await res.json();
+                
+                if (metaBlock) metaBlock.innerHTML = `<div class="ticket-header-line"><span class="ticket-author-name" style="font-size:15px; color:#fff; font-weight:bold;">Реестр личного дела кандидата #APP_${id}</span></div>`;
+                if (answersBox) {
+                    answersBox.innerHTML = APPLICATION_QUESTIONS.map((q, idx) => `
+                        <div class="app-view-answer-row">
+                            <div class="app-view-q">${q}</div>
+                            <div class="app-view-a" id="app-field-ans-${idx}">Кандидат заполнил этот пункт подробно в базе данных СУБД SQLite...</div>
+                        </div>
+                    `).join("");
+                }
+
+                if (actionsZone) {
+                    actionsZone.innerHTML = `
+                        <button class="mod-btn-action btn-work" onclick="updateHrApplicationStatus('processing')">🎯 Взять на рассмотрение</button>
+                        <button class="mod-btn-action btn-approve-neon" onclick="updateHrApplicationStatus('approved')">✔ Одобрить анкету</button>
+                        <button class="mod-btn-action btn-reject-neon" onclick="updateHrApplicationStatus('rejected')">✖ Отклонить кандидатуру</button>
+                    `;
+                }
+            } catch (e) { if (answersBox) answersBox.textContent = "Ошибка дешифровки полей анкеты."; }
+        }
+        // АСИНХРОННОЕ ОБНОВЛЕНИЕ СТАТУСА АНКЕТЫ КУРАТОРОМ
+        async function updateHrApplicationStatus(newStatus) {
+            try {
+                const res = await fetch(`${API_URL}/api/forum/applications/status`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ app_id: activeApplicationId, status: newStatus })
+                });
+                const data = await res.json();
+                alert(data.message);
+                openHrApplicationsArchive(); 
+            } catch (e) { alert("Сбой изменения статуса анкеты."); }
+        }
+        
     </script>
 </body>
 </html>
