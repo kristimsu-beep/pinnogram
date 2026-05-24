@@ -859,7 +859,7 @@ async def save_user_settings(data: dict, request: Request):
         return {"status": "error", "message": str(e)}
 
 
-# 3. ЗАГРУЗКА ИЗОБРАЖЕНИЯ БАННЕРА ПРОФИЛЯ
+# 3. ЗАГРУЗКА ИЗОБРАЖЕНИЯ БАННЕРА ПРОФИЛЯ (ИСПРАВЛЕНО)
 @app.post("/api/forum/user/settings/upload-banner")
 async def upload_user_banner(request: Request, file: UploadFile = File(...)):
     try:
@@ -874,8 +874,8 @@ async def upload_user_banner(request: Request, file: UploadFile = File(...)):
         upload_dir = os.path.join(BASE_DIR, "static", "banners")
         os.makedirs(upload_dir, exist_ok=True)
         
-        # Переводим имя в безопасный формат для файловой системы
-        safe_username = "".join([c for c in username if c.isalpha() or c.isdigit()]).substring(0, 15)
+        # 🎯 СУПЕР-ФИКС: Обрезка строки через правильный синтаксис Python [:15] вместо JS .substring
+        safe_username = "".join([c for c in username if c.isalpha() or c.isdigit()])[:15]
         file_ext = os.path.splitext(file.filename)[1]
         unique_filename = f"banner_{safe_username}_{int(datetime.now().timestamp())}{file_ext}"
         file_path = os.path.join(upload_dir, unique_filename)
