@@ -722,6 +722,102 @@ async def get_ticket_comments_list(ticket_id: int):
         print(f"🛑 Ошибка получения комментариев: {e}")
         return []
 
+# 1. ДИНАМИЧЕСКИЙ РОУТ ДЛЯ СТРАНИЦЫ ПРОФИЛЯ ПО ССЫЛКЕ /forum/user_ID
+@app.get("/forum/user_{user_id}")
+async def serve_user_profile_page(user_id: str):
+    # Страница профиля работает через тот же файл, фронтенд сам поймет ID из URL-адреса!
+    return FileResponse(os.path.join(BASE_DIR, "forum.html"))
+
+
+# 2. ПОЛУЧЕНИЕ ПОЛНЫХ ДАННЫХ ПРОФИЛЯ ДЛЯ ЭКРАНА
+@app.get("/api/forum/user/profile/{target_id}")
+async def get_user_profile_data(target_id: str, request: Request):
+    try:
+        # Пытаемся определить, чей профиль запрашивают. 
+        # Если модератор, вычисляем его высшую роль по нашей системе
+        role_label = "Гражданин"
+        is_staff = False
+        
+        try:
+            staff_members = await get_forum_staff()
+            for staff_user in staff_members:
+                if str(staff_user.get("id")).strip() == str(target_id).strip():
+                    role_label = staff_user.get("role", "Модератор")
+                    is_staff = True
+                    break
+        except Exception as staff_err:
+            print(f"⚠️ Ошибка проверки роли в профиле: {staff_err}")
+
+        # Инициализируем счетчики статистики
+        tickets_created = 0
+        comments_count = 0
+        history_actions = []
+
+        async with aiosqlite.connect(DB_PATH) as db:
+            # Считаем количество созданных этим пользователем тикетов
+            # Для этого нам сначала нужно сопоставить ID. Чтобы не усложнять, выберем по имени из куки
+            # или по зафиксированному автору. 
+            # Давай найдем все посты, где имя автора или модератора связано с профилем
+            
+            # Получаем имя текущего юзера из куки, чтобы понять, смотрит ли он свой профиль
+            current_user_name = request.cookies.get("forum_user_name", "")
+
+            # Читаем созданные обращения (если это профиль автора)
+            async with db.execute("""
+                SELECT id, ticket_type, timestamp, status 
+                FROM forum_tickets 
+                WHERE author_name = ? ORDER BY id DESC
+            """, (current_user_name,)) as cursor:
+                rows = await cursor.fetchall()
+                tickets_created = len(rows)
+                for r in rows:
+                    history_actions.append({
+                        "id": r[0],
+                        "type": "create",
+                        "ticket_type": r[1],
+                        "time": r[2],
+                        "status": r[3],
+                        "text": f"Создано обращение #POST_{r[0]}"
+                    })
+
+            # Если это профиль модератора, добавляем в историю рассмотренные им дела
+            if is_staff:
+                async with db.execute("""
+                    SELECT id, ticket_type, timestamp, status 
+                    FROM forum_tickets 
+                    WHERE moderator_name = ? ORDER BY id DESC
+                """, (current_user_name,)) as cursor:
+                    mod_rows = await cursor.fetchall()
+                    for r in mod_rows:
+                        history_actions.append({
+                            "id": r[0],
+                            "type": "moderate",
+                            "ticket_type": r[1],
+                            "time": r[2],
+                            "status": r[3],
+                            "text": f"Взято в работу/Рассмотрено обращение #POST_{r[0]}"
+                        })
+
+            # Считаем количество оставленных комментариев в чатах
+            async with db.execute("SELECT COUNT(*) FROM ticket_comments WHERE author_name = ?", (current_user_name,)) as cursor:
+                row_comm = await cursor.fetchone()
+                comments_count = row_comm[0] if row_comm else 0
+
+        # Сортируем историю действий по ID (свежие сверху)
+        history_actions.sort(key=lambda x: x["id"], reverse=True)
+
+        return {
+            "status": "ok",
+            "role": role_label,
+            "is_staff": is_staff,
+            "stat_tickets": tickets_created,
+            "stat_comments": comments_count,
+            "history": history_actions
+        }
+        
+    except Exception as e:
+        print(f"🛑 Ошибка сбора данных профиля: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 @app.get("/poll/{poll_id}")
