@@ -2227,7 +2227,7 @@
             } catch (e) { if (container) container.textContent = "Не удалось прочитать архив анкет."; }
         }
 
-        // --- КУРАТОР: РАЗВЕРНУТЫЙ ПРОСМОТР ОТВЕТОВ КАНДИДАТА ПО ID ---
+        // --- КУРАТОР: РАЗВЕРНУТЫЙ ПРОСМОТР НАСТОЯЩИХ ОТВЕТОВ КАНДИДАТА ПО ID ---
         async function viewSpecificHrApplication(id) {
             activeApplicationId = id;
             document.getElementById("app-hr-archive-zone").style.display = "none";
@@ -2238,22 +2238,58 @@
             const badgeZone = document.getElementById("app-view-status-badge");
             const actionsZone = document.getElementById("app-view-actions-buttons");
 
-            if (answersBox) answersBox.textContent = "Дешифровка бланка ответов...";
+            if (answersBox) answersBox.textContent = "Дешифровка бланка ответов кандидата...";
 
             try {
                 const res = await fetch(`${API_URL}/api/forum/applications/list`);
                 const data = await res.json();
                 
-                if (metaBlock) metaBlock.innerHTML = `<div class="ticket-header-line"><span class="ticket-author-name" style="font-size:15px; color:#fff; font-weight:bold;">Реестр личного дела кандидата #APP_${id}</span></div>`;
-                if (answersBox) {
-                    answersBox.innerHTML = APPLICATION_QUESTIONS.map((q, idx) => `
-                        <div class="app-view-answer-row">
-                            <div class="app-view-q">${q}</div>
-                            <div class="app-view-a" id="app-field-ans-${idx}">Кандидат заполнил этот пункт подробно в базе данных СУБД SQLite...</div>
-                        </div>
-                    `).join("");
+                if (data.status !== "ok") {
+                    if (answersBox) answersBox.textContent = "🛑 Ошибка доступа к кадровым реестрам.";
+                    return;
                 }
 
+                // Ищем конкретное личное дело в выгруженном массиве по ID
+                const targetApp = data.applications.find(a => a.id === id);
+                if (!targetApp) {
+                    if (answersBox) answersBox.textContent = "🛑 Анкета кандидата не найдена.";
+                    return;
+                }
+
+                // Парсим сохранённую строку JSON обратно в читаемый массив JavaScript
+                let realAnswers = [];
+                try {
+                    realAnswers = JSON.parse(targetApp.answers);
+                } catch(parseErr) {
+                    realAnswers = [];
+                }
+
+                if (metaBlock) {
+                    metaBlock.innerHTML = `
+                        <div class="ticket-header-line" style="margin-bottom:0; display:flex; align-items:center; gap:12px;">
+                            <div class="ticket-avatar-wrapper"><img src="${targetApp.avatar}" onerror="this.src='https://ibb.co'"></div>
+                            <div>
+                                <span class="ticket-author-name" style="font-size:15px; color:#fff; font-weight:bold; display:block;">${targetApp.author}</span>
+                                <span style="font-size:11px; color:#55555c;">Личное дело #APP_${id} • Подано: ${targetApp.time}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // 🎯 СУПЕР-ФИКС: Маппим вопросы и подставляем НАСТОЯЩИЕ живые ответы из базы!
+                if (answersBox) {
+                    answersBox.innerHTML = APPLICATION_QUESTIONS.map((q, idx) => {
+                        const candidateAnswer = (realAnswers && realAnswers[idx]) ? realAnswers[idx] : "Ответ не зафиксирован в СУБД SQLite";
+                        return `
+                            <div class="app-view-answer-row" style="background: #0e0e10; border: 1px solid #1c1c1f; padding: 16px; border-radius: 8px; margin-bottom: 12px;">
+                                <div class="app-view-q" style="font-size: 11px; color: #55555c; font-weight: bold; text-transform: uppercase; margin-bottom: 6px;">${q}</div>
+                                <div class="app-view-a" style="font-size: 13px; color: #d1d1d6; line-height: 1.5; white-space: pre-wrap;">${candidateAnswer}</div>
+                            </div>
+                        `;
+                    }).join("");
+                }
+
+                // Динамические кнопки админ-решений куратора Отдела Кадров
                 if (actionsZone) {
                     actionsZone.innerHTML = `
                         <button class="mod-btn-action btn-work" onclick="updateHrApplicationStatus('processing')">🎯 Взять на рассмотрение</button>
@@ -2261,8 +2297,12 @@
                         <button class="mod-btn-action btn-reject-neon" onclick="updateHrApplicationStatus('rejected')">✖ Отклонить кандидатуру</button>
                     `;
                 }
-            } catch (e) { if (answersBox) answersBox.textContent = "Ошибка дешифровки полей анкеты."; }
+            } catch (e) { 
+                console.error(e);
+                if (answersBox) answersBox.textContent = "Ошибка дешифровки полей анкеты."; 
+            }
         }
+
         // АСИНХРОННОЕ ОБНОВЛЕНИЕ СТАТУСА АНКЕТЫ КУРАТОРОМ
         async function updateHrApplicationStatus(newStatus) {
             try {
