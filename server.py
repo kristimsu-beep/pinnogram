@@ -997,44 +997,48 @@ async def serve_admin_panel_page(request: Request):
     return FileResponse(os.path.join(BASE_DIR, "forum.html"))
 
 
-# 2. ЗАЩИЩЕННЫЙ API-ВЫГРУЗЧИК РЕЕСТРА ПОЛЬЗОВАТЕЛЕЙ ДЛЯ МОДЕРАТОРОВ
 @app.get("/api/forum/admin/users-registry")
 async def get_all_registered_users_registry(request: Request):
     try:
-        # 🔒 ПРОВЕРКА БЕЗОПАСНОСТИ НА КОРНЕ СЕРВЕРА
+        # 1. Проверка безопасности сессии
         mod_name = request.cookies.get("forum_user_name")
         if not mod_name:
             return {"status": "error", "message": "🔒 Вы не авторизованы!"}
             
-        # Сверяем никнейм с актуальным составом STAFF из Дискорда
         staff_members = await get_forum_staff()
         is_admin = any(str(mod_name).strip().lower() in str(u.get("name", "")).strip().lower() for u in staff_members)
         
         if not is_admin:
             return {"status": "error", "message": "🛑 Отказано в доступе! Раздел предназначен только для Администрации."}
 
-        users_registry = []
+        users_map = {}
 
         async with aiosqlite.connect(DB_PATH) as db:
-            # Умно собираем всех уникальных пользователей из таблицы кастомизации настроек (там 100% есть все авторизованные)
-            # Если пользователь там еще ничего не кастомизировал, подтягиваем уникальных авторов тикетов
-            async with db.execute("""
-                SELECT username, banner_url, nickname_gradient, custom_status 
-                FROM user_custom_settings ORDER BY username ASC
-            """) as cursor:
+            # 🎯 СУПЕР-СБОР: Объединяем авторов тикетов, комментариев и кастомизаций
+            # Собираем всех из тикетов
+            async with db.execute("SELECT DISTINCT author_name, author_avatar FROM forum_tickets") as cursor:
                 rows = await cursor.fetchall()
-                
-                # Дополнительно подгружаем аватарки из кук сессий или ставим заглушку (фронтенд сам обновит)
                 for r in rows:
-                    users_registry.append({
-                        "username": r[0],
-                        "banner": r[1] or "",
-                        "gradient": r[2] or "",
-                        "status": r[3] or "Участник мессенджера Pinnogram",
-                        "avatar": "https://i.ibb.co/4pSbxsh/user-avatar.png" # Дефолт-заглушка, перезапишется из STAFF если модератор
-                    })
+                    if r[0]: users_map[r[0]] = {"username": r[0], "avatar": r[1], "status": "Участник мессенджера Pinnogram"}
+
+            # Собираем всех из комментариев
+            async with db.execute("SELECT DISTINCT author_name, author_avatar FROM ticket_comments") as cursor:
+                rows = await cursor.fetchall()
+                for r in rows:
+                    if r[0] and r[0] not in users_map:
+                        users_map[r[0]] = {"username": r[0], "avatar": r[1], "status": "Участник мессенджера Pinnogram"}
+
+            # Собираем всех из кастомизаций
+            async with db.execute("SELECT DISTINCT username FROM user_custom_settings") as cursor:
+                rows = await cursor.fetchall()
+                for r in rows:
+                    if r[0] and r[0] not in users_map:
+                        users_map[r[0]] = {"username": r[0], "avatar": "https://i.ibb.co/4pSbxsh/user-avatar.png", "status": "Участник мессенджера Pinnogram"}
+
+            # Превращаем мапу в список для сортировки
+            users_registry = list(users_map.values())
                     
-            # Синхронизируем аватарки для модераторов в общем списке, чтобы они были живыми
+            # Синхронизируем аватарки и статусы для модераторов
             for user in users_registry:
                 for staff in staff_members:
                     if user["username"].lower().strip() in str(staff.get("name", "")).lower().strip():
@@ -1042,11 +1046,14 @@ async def get_all_registered_users_registry(request: Request):
                         user["status"] = f"Сотрудник проекта • {staff.get('role')}"
                         break
 
+        # Сортируем по алфавиту
+        users_registry.sort(key=lambda x: x["username"].lower())
         return {"status": "ok", "users": users_registry}
         
     except Exception as e:
         print(f"🛑 Критическая ошибка админ-панели СУБД: {e}")
         return {"status": "error", "message": str(e)}
+
 
 
 @app.get("/poll/{poll_id}")
