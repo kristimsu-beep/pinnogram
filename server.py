@@ -16,7 +16,7 @@ import time
 import psutil
 from supabase import create_client, Client # Добавь в самый верх к импортам, если еще не добавил!
 import asyncpg
-from fastapi.responses import RedirectResponsee, FileResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from fastapi import Form, File, UploadFile
 from typing import List
 from fastapi.staticfiles import StaticFiles
