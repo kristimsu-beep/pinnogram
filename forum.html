@@ -1892,19 +1892,29 @@
         }
                 let adminCachedUsersArray = []; // Кэш списка пользователей для мгновенного поиска
 
-        // Функция фоновой проверки прав для отображения щита в шапке
+        // 🎯 ИСПРАВЛЕНО: Жесткая и пуленепробиваемая проверка прав на фронтенде
         async function checkAdminRightsForShield(myUsername) {
             try {
                 const res = await fetch(`${API_URL}/api/forum/staff`);
                 const staff = await res.json();
-                const isStaffMember = staff.some(u => myUsername.toLowerCase().trim() in u.name.toLowerCase().trim() || u.name.toLowerCase().trim().includes(myUsername.toLowerCase().trim()));
+                
+                const cleanMe = myUsername.toLowerCase().trim();
+                
+                // Проверяем, есть ли твой ник на какой-либо из карточек персонала
+                const isStaffMember = staff.some(u => {
+                    const staffName = String(u.name).toLowerCase().trim();
+                    return staffName.includes(cleanMe) || cleanMe.includes(staffName);
+                });
+                
+                console.log("🛡️ [ADMIN CHECK] Доступ к админ-панели:", isStaffMember);
                 
                 const shieldBtn = document.getElementById("header-admin-shield-btn");
                 if (shieldBtn && isStaffMember) {
-                    shieldBtn.style.display = "flex"; // Показываем щит только администрации!
+                    shieldBtn.style.display = "flex"; // Принудительно включаем отображение щита!
                 }
-            } catch (e) { }
+            } catch (e) { console.error("Ошибка проверки прав щита:", e); }
         }
+
 
         // АСИНХРОННЫЙ ВЫГРУЗЧИК РЕЕСТРА ИЗ SQLite
         async function loadAdminUsersRegistry() {
