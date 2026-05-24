@@ -519,6 +519,70 @@
             display: flex; align-items: center; gap: 8px; transition: background 0.2s;
         }
         .btn-publish-discord:hover { background: #4752C4; }
+        
+        /* АНИМИРОВАННЫЙ ПЕРЕЛИВАЮЩИЙСЯ ГРАДИЕНТ ДЛЯ НИКНЕЙМОВ ВЕЗДЕ */
+        .dynamic-gradient-name {
+            font-weight: bold;
+            -webkit-background-clip: text !important;
+            -webkit-text-fill-color: transparent !important;
+            display: inline-block;
+            background-size: 200% auto !important;
+            animation: flowMentionGradient 3s linear infinite !important;
+        }
+        
+        /* НЕОНОВЫЙ ХАКЕРСКИЙ КОНТУР ДЛЯ ОКНА ОТЗЫВОВ О МОДЕРАТОРЕ */
+        .modal-content-reviews-premium {
+            background: #141416;
+            border-radius: 16px;
+            padding: 32px;
+            width: 100%;
+            max-width: 650px;
+            position: relative;
+            box-sizing: border-box;
+            border: 2px solid transparent;
+            background-image: linear-gradient(#141416, #141416), linear-gradient(45deg, #4c1d95, #1e3a8a, #00f0ff, #4c1d95);
+            background-origin: border-box;
+            background-clip: padding-box, border-box;
+            background-size: 100% 100%, 300% 300%;
+            animation: mainAvatarGradientFlow 5s ease infinite;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(0, 240, 255, 0.15);
+        }
+        
+        /* БЛОК НАПИСАНИЯ ОТЗЫВА ПО СКРИНШОТУ */
+        .review-write-container {
+            background: #0e0e10;
+            border: 1px solid #222226;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 15px;
+        }
+        
+        .review-textarea-premium {
+            width: 100%; background: none; border: none; color: #fff;
+            resize: none; font-family: inherit; font-size: 14px; outline: none;
+            margin-bottom: 15px;
+        }
+        
+        .review-footer-line {
+            display: flex; justify-content: space-between; align-items: center;
+            border-top: 1px solid #1c1c1f; padding-top: 15px;
+        }
+        
+        /* ЗВЕЗДЫ ПО СКРИНШОТУ (СЕРЫЕ В ДЕФОЛТЕ, ЧИСТЫЕ) */
+        .star-rating-input-premium {
+            display: flex; gap: 6px; font-size: 20px;
+        }
+        .star-btn-premium {
+            color: #222226; cursor: pointer; transition: color 0.2s, text-shadow 0.2s;
+        }
+        .star-btn-premium.active {
+            color: #ffcc00; text-shadow: 0 0 10px rgba(255, 204, 0, 0.3);
+        }
+        
+        /* СПИСОК ОТЗЫВОВ СНИЗУ */
+        .reviews-feed-scroll {
+            max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-top: 15px;
+        }
 
     </style>
 </head>
@@ -619,30 +683,61 @@
 
 
 
-    <!-- МОДАЛЬНОЕ ОКНО ОТЗЫВОВ О МОДЕРАТОРЕ -->
+    <!-- ОБНОВЛЕННОЕ ОКНО ОТЗЫВОВ О СОТРУДНИКЕ (ПО СКРИНШОТУ) -->
     <div class="modal" id="profile-modal">
-        <div class="modal-content">
-            <button class="close-btn" onclick="closeProfileModal()">✕</button>
-            <div class="profile-header">
-                <img id="modal-avatar" src="">
-                <h2 id="modal-name" style="margin: 5px 0 0;">Ник</h2>
-                <p id="modal-role"></p>
-            </div>
-            <h3 style="margin: 0 0 10px; font-size: 13px; opacity: 0.7; letter-spacing: 1px;">📋 ОТЗЫВЫ СОСТАВА:</h3>
-            <div class="reviews-section" id="reviews-container"></div>
-            <div class="review-form">
-                <h3 style="margin: 0 0 10px; font-size: 13px; opacity: 0.7; letter-spacing: 1px;">✍️ ВАША ОЦЕНКА РАБОТЫ:</h3>
-                <div class="star-rating-input" id="star-selector">
-                    <span class="star-btn active" data-value="1" onclick="setFormRating(1)">★</span>
-                    <span class="star-btn active" data-value="2" onclick="setFormRating(2)">★</span>
-                    <span class="star-btn active" data-value="3" onclick="setFormRating(3)">★</span>
-                    <span class="star-btn active" data-value="4" onclick="setFormRating(4)">★</span>
-                    <span class="star-btn active" data-value="5" onclick="setFormRating(5)">★</span>
+        <div class="modal-content-reviews-premium">
+            
+            <!-- Шапка окна -->
+            <div class="form-title-row" style="margin-bottom: 15px;">
+                <div>
+                    <h2 style="margin:0; font-size: 20px; font-weight: bold; color: #fff;">Оставить отзыв</h2>
+                    <p style="margin:4px 0 0 0; font-size: 12px; color: #55555c;">Поделитесь опытом работы с сотрудником проекта</p>
                 </div>
-                <textarea id="review-text" rows="3" placeholder="Напишите ваш подробный отзыв о качестве работы сотрудника..."></textarea>
-                <button class="form-btn" onclick="submitForumReview()">Опубликовать вердикт</button>
+                <button class="close-btn" onclick="closeProfileModal()" style="position:static; font-size:18px; color:#55555c;">✕</button>
             </div>
+
+            <!-- Карточка выбранного модератора -->
+            <div class="ticket-header-line" style="background: #141416; padding: 12px; border-radius: 10px; border: 1px solid #1c1c1f; margin-bottom: 15px;">
+                <div class="main-ticket-avatar-wrapper" style="width:40px; height:40px; padding:2px;">
+                    <img id="modal-avatar" src="">
+                </div>
+                <div>
+                    <span class="ticket-author-name" id="modal-name" style="display:block; font-size: 14px; font-weight: 600;">Никнейм</span>
+                    <span id="modal-role" style="font-size:11px; color: #55555c;">Модератор</span>
+                </div>
+            </div>
+
+            <!-- Блок написания отзыва (Центральная часть твоего скриншота) -->
+            <div class="review-write-container">
+                <textarea id="review-text" class="review-textarea-premium" rows="4" placeholder="Напишите ваш отзыв здесь..." oninput="updateReviewCharCount()"></textarea>
+                
+                <div class="review-footer-line">
+                    <!-- Селектор звезд -->
+                    <div class="star-rating-input-premium" id="star-selector">
+                        <span class="star-btn-premium active" data-value="1" onclick="setFormRating(1)">★</span>
+                        <span class="star-btn-premium active" data-value="2" onclick="setFormRating(2)">★</span>
+                        <span class="star-btn-premium active" data-value="3" onclick="setFormRating(3)">★</span>
+                        <span class="star-btn-premium active" data-value="4" onclick="setFormRating(4)">★</span>
+                        <span class="star-btn-premium active" data-value="5" onclick="setFormRating(5)">★</span>
+                    </div>
+                    
+                    <!-- Счётчик букв и Кнопка Отправить с самолётиком -->
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <span id="review-char-counter" style="font-size: 12px; color: #333339; font-family: monospace;">0/2000</span>
+                        <button class="btn-publish-discord" onclick="submitForumReview()" style="padding: 10px 20px; font-size: 13px;">
+                            <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16" style="transform: rotate(45deg); margin-top:-1px;"><path d="M15.964.686a.5.5 0 0 0-.65-.65L.767 5.855H.766l-.452.18a.5.5 0 0 0-.082.887l.41.26.001.002 4.995 3.178 3.178 4.995.002.002.26.41a.5.5 0 0 0 .886-.083zm-1.833 1.89L6.637 10.07l-.215-.338a.5.5 0 0 0-.154-.154l-.338-.215 7.494-7.494 1.178-.471z"/></svg>
+                            Отправить
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Секция существующих отзывов снизу -->
+            <h3 style="font-size: 13px; text-transform: uppercase; color: #fff; margin: 20px 0 10px 0; letter-spacing: 0.5px;">Отзывы</h3>
+            <div class="reviews-feed-scroll" id="reviews-container"></div>
+
         </div>
+    </div>
     </div>
         <!-- ВЫПЛЫВАЮЩЕЕ МЕНЮ (ПОМЕСТИ СРАЗУ ПОСЛЕ ЗАКРЫТИЯ ДИВА HEADER) -->
     <div class="profile-dropdown-menu" id="dropdown-user-zone">
@@ -869,7 +964,7 @@
             return undefined;
         }
 
-        // 🎯 СУПЕР-ОБНОВЛЕНИЕ ШАПКИ: Колокольчик уведомлений + меню профиля в сборе
+        // 🎯 СУПЕР-ОБНОВЛЕНИЕ ШАПКИ: Колокольчик уведомлений + анимированный градиент никнейма в сборе
         function updateAuthInterface() {
             const authZone = document.getElementById("auth-zone");
             if (!authZone) return;
@@ -886,11 +981,11 @@
             }
 
             if (userName && userAvatar && userAvatar !== "undefined") {
-                // 🛠️ ИСПРАВЛЕНО: Добавлен колокольчик слева от аватарки и запуск опроса алертов!
+                // Выводим шапку с колокольчиком и выпадающим меню
                 authZone.innerHTML = `
                     <div style="display: flex; align-items: center; gap: 12px;">
                         
-                        <!-- 🎯 НАША НОВАЯ КНОПКА КОЛОКОЛЬЧИКА С КРАСНЫМ КРУЖКОМ СЧЕТЧИКА -->
+                        <!-- Кнопка колокольчика системного центра уведомлений -->
                         <button class="notif-bell-btn" onclick="toggleNotifDropdown(event)">
                             <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="display:inline-block; vertical-align:middle;">
                                 <path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2M8 1.918l-.797.161A4 4 0 0 0 4 6c0 .628-.134 2.197-.459 3.742-.16.767-.376 1.566-.663 2.258h10.244c-.287-.692-.502-1.49-.663-2.258C12.134 8.197 12 6.628 12 6a4 4 0 0 0-3.203-3.92zM14.22 12c.223.447.481.801.78 1H1c.299-.199.557-.553.78-1C2.68 10.2 3 6.88 3 6c0-2.42 1.72-4.44 4.005-4.901a1 1 0 1 1 1.99 0A5 5 0 0 1 13 6c0 .88.32 4.2 1.22 6"/>
@@ -908,18 +1003,23 @@
                     </div>
                 `;
                 
-                // 🎯 ВАЖНО: Сразу запускаем опрос базы данных, чтобы мгновенно вывести количество алертов
+                // 🎯 ВОТ ИДЕАЛЬНОЕ МЕСТО: Вызываем покраску и перелив градиента никнейма в шапке при каждом входе!
+                applyCustomNicknameStyles(authZone.querySelector(".user-badge span"), userName);
+                
+                // Запускаем фоновый сбор системных алертов
                 fetchNotificationsData();
             } else {
-                // Если гость — выводим стандартную кнопку авторизации
                 authZone.innerHTML = `
                     <a href="${API_URL}/api/forum/auth/login" class="discord-btn">
-                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.545 2.907a13.227 13.227 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.212 12.212 0 0 0-3.658 0 8.258 8.258 0 0 0-.412-.833.051.051 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.041.041 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032a.04.04 0 0 0 .016.028a13.283 13.283 0 0 0 3.995 2.02a.05.05 0 0 0 .056-.018c.308-.42.582-.863.818-1.322a.05.05 0 0 0-.028-.069a8.726 8.726 0 0 1-1.247-.594a.05.05 0 0 1-.005-.085a6.052 6.052 0 0 0 .322-.252a.051.051 0 0 1 .053-.007c2.442 1.115 5.088 1.115 7.502 0a.051.051 0 0 1 .053.007c.114.086.221.17.322.252a.05.05 0 0 1-.005.085c-.392.234-.81.433-1.247.594a.05.05 0 0 0-.028.07c.24.46.513.903.819 1.32a.05.05 0 0 0 .056.019a13.21 13.21 0 0 0 4.001-2.02a.049.049 0 0 0 .016-.027c.385-3.418-.635-6.417-2.399-9.117a.042.042 0 0 0-.02-.019ZM5.14 9.473c-.785 0-1.431-.722-1.431-1.607 0-.885.632-1.607 1.43-1.607.807 0 1.443.73 1.432 1.607 0 .885-.625 1.607-1.431 1.607Zm4.515 0c-.785 0-1.43-.722-1.43-1.607 0-.885.632-1.607 1.43-1.607.807 0 1.443.73 1.431 1.607 0 .885-.624 1.607-1.43 1.607Z"/></svg>
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="display:inline-block; vertical-align:middle;">
+                            <path d="M13.545 2.907a13.227 13.227 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.212 12.212 0 0 0-3.658 0 8.258 8.258 0 0 0-.412-.833.051.051 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.041.041 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032a.04.04 0 0 0 .016.028a13.283 13.283 0 0 0 3.995 2.02a.05.05 0 0 0 .056-.018c.308-.42.582-.863.818-1.322a.05.05 0 0 0-.028-.069a8.726 8.726 0 0 1-1.247-.594a.05.05 0 0 1-.005-.085a6.052 6.052 0 0 0 .322-.252a.051.051 0 0 1 .053-.007c2.442 1.115 5.088 1.115 7.502 0a.051.051 0 0 1 .053.007c.114.086.221.17.322.252a.05.05 0 0 1-.005.085c-.392.234-.81.433-1.247.594a.05.05 0 0 0-.028.07c.24.46.513.903.819 1.32a.05.05 0 0 0 .056.019a13.21 13.21 0 0 0 4.001-2.02a.049.049 0 0 0 .016-.027c.385-3.418-.635-6.417-2.399-9.117a.042.042 0 0 0-.02-.019ZM5.14 9.473c-.785 0-1.431-.722-1.431-1.607 0-.885.632-1.607 1.43-1.607.807 0 1.443.73 1.432 1.607 0 .885-.625 1.607-1.431 1.607Zm4.515 0c-.785 0-1.43-.722-1.43-1.607 0-.885.632-1.607 1.43-1.607.807 0 1.443.73 1.431 1.607 0 .885-.624 1.607-1.43 1.607Z"/>
+                        </svg>
                         Войти через Discord
                     </a>
                 `;
             }
         }
+
 
 
 
@@ -1011,13 +1111,20 @@
 
         function setFormRating(val) {
             currentSelectedRating = val;
-            const stars = document.querySelectorAll("#star-selector .star-btn");
+            const stars = document.querySelectorAll("#star-selector .star-btn-premium");
             stars.forEach(s => {
                 const sVal = parseInt(s.getAttribute("data-value"));
                 if (sVal <= val) s.classList.add("active");
                 else s.classList.remove("active");
             });
         }
+
+        // Живой счетчик лимита букв отзыва
+        function updateReviewCharCount() {
+            const text = document.getElementById("review-text").value;
+            document.getElementById("review-char-counter").textContent = `${text.length}/2000`;
+        }
+
 
         async function openProfileModal(id, name, avatar, role) {
             selectedStaffId = id;
@@ -1059,7 +1166,10 @@
         function closeProfileModal() {
             document.getElementById("profile-modal").style.display = "none";
             document.getElementById("review-text").value = "";
+            updateReviewCharCount();
+            setFormRating(5);
         }
+
 
         async function submitForumReview() {
             const loggedName = getCookie("forum_user_name");
@@ -1279,6 +1389,7 @@
             } catch (e) { textBlock.textContent = "Ошибка получения данных из файлового хранилища."; }
         }
 
+        // --- ЗАГРУЗКА ПЕРЕПИСКИ ИЗ БАЗЫ ДАННЫХ С АНИМИРОВАННЫМИ ГРАДИЕНТАМИ ---
         async function loadTicketComments(ticketId) {
             const commentsZone = document.getElementById("view-comments-zone");
             if (!commentsZone) return;
@@ -1302,14 +1413,15 @@
                         extraClass = "has-mention-glow"; // Добавляем сине-фиолетовое свечение всей карточке
                         
                         // Регулярным выражением оборачиваем кусок @Никнейм в неоновый текстовый класс
-                        commentText = commentText.replace(/(#[^\s]+)/g, '<span class="mention-text-neon">$1</span>'); // На случай тегов
+                        commentText = commentText.replace(/(#[^\s]+)/g, '<span class="mention-text-neon">$1</span>'); 
                         commentText = commentText.replace(/(@[a-zA-Z0-9_А-яёЁ\s\-]+)/g, '<span class="mention-text-neon">$1</span>');
                     }
 
                     return `
                         <div class="review-item ${extraClass}" style="border-left: 2px solid #333; background: #141416; padding: 14px; margin-bottom: 8px; border-radius: 8px; transition: 0.3s;">
                             <div class="review-meta" style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
-                                <img src="${c.avatar || 'https://ibb.co'}" onerror="this.src='https://ibb.co'" style="width: 22px; height: 22px; border-radius: 50%;">
+                                <!-- 🎯 ИСПРАВЛЕНО: Поставили вечный неоновый аватар-фикс в src и onerror на случай сбоев кэша -->
+                                <img src="${c.avatar || 'https://i.ibb.co/4pSbxsh/user-avatar.png'}" onerror="this.src='https://ibb.co'" style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover;">
                                 <b style="font-size: 13px; color: #fff;">${c.author}</b>
                                 <span style="font-size: 10px; opacity: 0.3; margin-left: auto;">${c.time}</span>
                             </div>
@@ -1318,11 +1430,23 @@
                     `;
                 }).join("");
 
+                // 🎯 СУПЕР-ОБНОВЛЕНИЕ: Перебираем все свежие комментарии на экране и красим ники авторов в их анимированные градиенты!
+                document.querySelectorAll("#view-comments-zone .review-item").forEach(item => {
+                    const nameB = item.querySelector(".review-meta b");
+                    if (nameB) {
+                        applyCustomNicknameStyles(nameB, nameB.textContent.trim());
+                    }
+                });
+
                 // Автоматический скролл чата вниз к последнему сообщению
                 commentsZone.scrollTop = commentsZone.scrollHeight;
 
-            } catch (e) { commentsZone.innerHTML = `<div class='comment-empty-text'>Ошибка загрузки чата переписки.</div>`; }
+            } catch (e) { 
+                console.error("Ошибка в loadTicketComments:", e);
+                commentsZone.innerHTML = `<div class='comment-empty-text'>Ошибка загрузки чата переписки.</div>`; 
+            }
         }
+
 
         // --- ОТПРАВКА НОВОГО СООБЩЕНИЯ В БАЗУ ДАННЫХ ---
         async function submitTicketComment() {
