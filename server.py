@@ -738,15 +738,21 @@ async def get_user_profile_data(target_id: str, request: Request):
         role_label = "Гражданин"
         is_staff = False
         
+        # 🎯 УНИВЕРСАЛЬНЫЙ ФИКС РОЛЕЙ ДЛЯ ВСЕЙ АДМИНИСТРАЦИИ:
         try:
+            current_user_name = request.cookies.get("forum_user_name", "").strip().lower()
             staff_members = await get_forum_staff()
+            
             for staff_user in staff_members:
-                if str(staff_user.get("id")).strip() == str(target_id).strip():
+                staff_display_name = str(staff_user.get("name", "")).strip().lower()
+                # Ищем имя из куки внутри серверного имени модератора (работает для всех ролей!)
+                if current_user_name and (current_user_name in staff_display_name or staff_display_name in current_user_name):
                     role_label = staff_user.get("role", "Модератор")
                     is_staff = True
                     break
         except Exception as staff_err:
             print(f"⚠️ Ошибка проверки роли в профиле: {staff_err}")
+
 
         # Инициализируем счетчики статистики
         tickets_created = 0
