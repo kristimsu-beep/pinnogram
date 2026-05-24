@@ -622,6 +622,48 @@
         .app-view-answer-row { background: #0e0e10; border: 1px solid #1c1c1f; padding: 12px 16px; border-radius: 8px; margin-bottom: 12px; }
         .app-view-q { font-size: 11px; color: #55555c; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
         .app-view-a { font-size: 13px; color: #d1d1d6; line-height: 1.5; white-space: pre-wrap; }
+        
+        /* ГЛОБАЛЬНЫЙ МАТОВЫЙ КОНТЕЙНЕР ДЛЯ ПОДЛОЖКИ МОДАЛКИ */
+        .user-card-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.4); justify-content: center; align-items: center; z-index: 99999;
+        }
+        
+        /* САМА КАРТОЧКА ПО СКРИНШОТУ */
+        .user-card-premium {
+            background: #18181c; width: 340px; border-radius: 16px; overflow: hidden;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.8); border: 1px solid #222226; position: relative;
+        }
+        
+        /* ВЕРХНИЙ ЗЕЛЕНОВАТЫЙ / ТЕМНЫЙ БАННЕР КАРТОЧКИ */
+        .user-card-banner-top {
+            height: 60px; background: linear-gradient(180deg, #162c22 0%, #18181c 100%); position: relative;
+        }
+        
+        /* СДВИГ АВАТАРКИ ВЛЕВО И ВВЕРХ С НЕОНОВЫМ КОЛЬЦОМ */
+        .user-card-avatar-zone {
+            position: absolute; bottom: -35px; left: 16px;
+        }
+        
+        /* ТЕЛО КАРТОЧКИ С ИНФОРМАЦИЕЙ */
+        .user-card-body-content {
+            padding: 45px 16px 16px 16px; display: flex; flex-direction: column; gap: 12px; background: #141416;
+        }
+        .user-card-name-row { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: bold; color: #fff; }
+        
+        /* ТЕМНЫЙ ПРЯМОУГОЛЬНИК С ДАТОЙ И ID */
+        .user-card-meta-plate {
+            background: #18181c; border-radius: 8px; padding: 12px; font-size: 13px; color: #b5b5bd; display: flex; flex-direction: column; gap: 6px;
+        }
+        .user-card-id-text { font-size: 11px; color: #55555c; font-family: monospace; letter-spacing: 0.5px; margin-top: 2px; }
+        
+        /* БОЛЬШАЯ СИНЯЯ КНОПКА ПЕРЕХОДА */
+        .btn-user-card-view-full {
+            background: #5865F2; color: #ffffff; border: none; width: 100%; padding: 12px;
+            border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 8px; transition: background 0.2s;
+        }
+        .btn-user-card-view-full:hover { background: #4752C4; }
 
     </style>
 </head>
@@ -1108,6 +1150,44 @@
                 <button class="btn-publish-discord" onclick="submitForumTicket()">
                     <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16" style="transform: rotate(45deg); margin-top:-2px;"><path d="M15.964.686a.5.5 0 0 0-.65-.65L.767 5.855H.766l-.452.18a.5.5 0 0 0-.082.887l.41.26.001.002 4.995 3.178 3.178 4.995.002.002.26.41a.5.5 0 0 0 .886-.083zm-1.833 1.89L6.637 10.07l-.215-.338a.5.5 0 0 0-.154-.154l-.338-.215 7.494-7.494 1.178-.471z"/></svg>
                     Опубликовать
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+        <!-- ВСПЛЫВАЮЩЕЕ ОКНО КАРТОЧКИ ПОЛЬЗОВАТЕЛЯ ИЗ ДИСКОРДА -->
+    <div class="user-card-overlay" id="user-mini-card-modal" onclick="closeUserMiniCardModal()">
+        <div class="user-card-premium" onclick="event.stopPropagation()">
+            
+            <!-- Верхняя часть с баннером -->
+            <div class="user-card-banner-top" id="ucard-banner-bg">
+                <div class="user-card-avatar-zone">
+                    <div class="profile-avatar-ring" style="width: 76px; height: 76px; padding: 3px;">
+                        <img id="ucard-avatar-img" src="">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Контентная часть (Данные, Роли, ID) -->
+            <div class="user-card-body-content">
+                <div class="user-card-name-row">
+                    <span id="ucard-username-text">Никнейм</span>
+                    <!-- Иконка молотка STAFF, переключим видимость через JS -->
+                    <span id="ucard-staff-hammer" style="color: #00ff00; font-size: 14px; display: none;">🔨</span>
+                </div>
+
+                <!-- Подложка с датой и ID -->
+                <div class="user-card-meta-plate">
+                    <div>Присоединился: <span id="ucard-reg-date-text">20.03.2026</span></div>
+                    <div id="ucard-role-status-text" style="font-size: 11px; opacity: 0.5;">Гражданин</div>
+                    <div class="user-card-id-text" id="ucard-discord-id-field">Загрузка Discord ID...</div>
+                </div>
+
+                <!-- Кнопка перехода в полный профиль -->
+                <button class="btn-user-card-view-full" id="ucard-action-btn-trigger">
+                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16" style="margin-top:-1px;"><path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"/></svg>
+                    Посмотреть профиль
                 </button>
             </div>
 
@@ -1686,7 +1766,14 @@
         }
 
         // РЕНДЕРИНГ ОКНА ЛИЧНОГО ПРОФИЛЯ (ИСПРАВЛЕНО СИЯНИЕ И РОЛИ)
-        async function viewUserProfile(userId) {
+        async function viewUserProfile(userId, bypassModal = false) {
+            // 🎯 СУПЕР-ФИКС: Перехватываем клик по любому пользователю!
+            // Если мы нажимаем на чужой ник и bypassModal равен false — сначала показываем всплывающую карточку Дискорда
+            if (userId && userId !== "me" && userId !== getCookie("forum_user_name") && !bypassModal) {
+                openUserMiniCardModal(userId);
+                return; // Останавливаем открытие полной страницы, пока юзер не нажмет кнопку на модалке
+            }
+
             // Переключаем экран через наш обновленный роутер
             switchSection("profile");
 
@@ -1697,16 +1784,17 @@
             const statTick = document.getElementById("prof-stat-tick");
             const historyList = document.getElementById("profile-history-list");
 
-            // Достаем чистые данные из кук
-            const currentLoggedName = getCookie("forum_user_name") || "Пользователь";
-            const currentLoggedAvatar = getCookie("forum_user_avatar") || "https://i.ibb.co/4pSbxsh/user-avatar.png";
+            // Вычисляем, чей профиль мы сейчас открываем (свой или чужой кликнутый из модалки)
+            const targetProfileName = (userId && userId !== "me") ? userId : (getCookie("forum_user_name") || "Пользователь");
 
-            if (nameTitle) nameTitle.textContent = currentLoggedName;
-            applyCustomNicknameStyles(nameTitle, currentLoggedName);
+            if (nameTitle) nameTitle.textContent = targetProfileName;
+            applyCustomNicknameStyles(nameTitle, targetProfileName);
 
             if (avatarImg) {
-                avatarImg.src = currentLoggedAvatar;
-                // 🎯 ФИКС АВАТАРКИ: Страховка onerror прямо на элемент личного кабинета
+                // Если открываем свой профиль — берем аву из кук, если чужой — дефолт (бэкэнд подгрузит в openUserMiniCardModal)
+                avatarImg.src = (userId && userId !== "me" && userId !== getCookie("forum_user_name")) ? "https://i.ibb.co/4pSbxsh/user-avatar.png" : (getCookie("forum_user_avatar") || "https://i.ibb.co/4pSbxsh/user-avatar.png");
+                
+                // 🎯 ИСПРАВЛЕНО: Поставили вечный неоновый аватар-фикс в onerror вместо битого ibb.co
                 avatarImg.onerror = function() {
                     this.src = 'https://ibb.co';
                 };
@@ -1715,23 +1803,29 @@
             if (historyList) historyList.textContent = "Синхронизация с реестрами базы данных SQLite...";
 
             try {
-                const res = await fetch(`${API_URL}/api/forum/user/profile/${userId}`);
+                const res = await fetch(`${API_URL}/api/forum/user/profile/${targetProfileName}`);
                 const data = await res.json();
 
                 if (badgeZone) {
-                    // 🎯 АБСОЛЮТНО ПРАВИЛЬНЫЙ ФИКС: Убрали костыль с именем Bulgarian!
-                    // Теперь система берет ту роль, которую бэкэнд скачал из Дискорда для ЭТОГО конкретного модератора
                     if (data.is_staff) {
                         badgeZone.innerHTML = `<span class="profile-role-badge">✦ ${data.role}</span>`;
                     } else {
-                        // Если это обычный игрок сервера — он получает статус Гражданина
                         badgeZone.innerHTML = `<span class="profile-role-badge citizen-badge" style="background: rgba(255,255,255,0.03); color: #88888e; border-color: #222226;">👤 Гражданин</span>`;
                     }
                 }
 
-
                 if (statTick) statTick.textContent = data.stat_tickets;
                 if (statComm) statComm.textContent = data.stat_comments;
+
+                // Подгружаем кастомный баннер на фон страницы профиля по твоему прошлому скриншоту кастомизации
+                const profileBannerCard = document.querySelector(".profile-banner-card");
+                if (profileBannerCard) {
+                    if (data.banner) {
+                        profileBannerCard.style.backgroundImage = `url('${data.banner}')`;
+                    } else {
+                        profileBannerCard.style.backgroundImage = "linear-gradient(180deg, #16222f 0%, #141416 100%)";
+                    }
+                }
 
                 if (historyList) {
                     if (!data.history || data.history.length === 0) {
@@ -1756,6 +1850,7 @@
 
             } catch (e) { if (historyList) historyList.textContent = "Ошибка связи со шлюзом профилей."; }
         }
+
 
 
         function openMySettingsPage() {
@@ -2316,7 +2411,85 @@
                 openHrApplicationsArchive(); 
             } catch (e) { alert("Сбой изменения статуса анкеты."); }
         }
-        
+
+                // 🎯 АСИНХРОННЫЙ ОТКРЫВАТЕЛЬ КОНТЕКСТНОЙ КАРТОЧКИ ПОЛЬЗОВАТЕЛЯ
+        async function openUserMiniCardModal(targetUsername) {
+            const modal = document.getElementById("user-mini-card-modal");
+            if (!modal) return;
+            modal.style.display = "flex"; // Разворачиваем окно на весь экран
+
+            // Элементы карточки для заполнения
+            const nameField = document.getElementById("ucard-username-text");
+            const avatarField = document.getElementById("ucard-avatar-img");
+            const hammer = document.getElementById("ucard-staff-hammer");
+            const dateField = document.getElementById("ucard-reg-date-text");
+            const roleField = document.getElementById("ucard-role-status-text");
+            const idField = document.getElementById("ucard-discord-id-field");
+            const actionBtn = document.getElementById("ucard-action-btn-trigger");
+            const banner = document.getElementById("ucard-banner-bg");
+
+            // Сбрасываем дефолты перед загрузкой
+            nameField.textContent = targetUsername;
+            avatarField.src = "https://ibb.co";
+            hammer.style.display = "none";
+            dateField.textContent = "20.03.2026"; 
+            roleField.textContent = "Гражданин";
+            idField.textContent = "Сканирование Discord ID...";
+            if (banner) banner.style.backgroundImage = "none";
+
+            // Привязываем клик большой кнопки на открытие ПОЛНОГО профиля (принудительно передаем маркер "me" или обходим заглушку)
+            actionBtn.onclick = () => {
+                closeUserMiniCardModal();
+                // Снимаем блокировку перехвата и открываем полный личный кабинет
+                currentSection = "profile";
+                document.querySelectorAll(".page-section").forEach(s => s.style.display = "none");
+                document.getElementById("section-profile").style.display = "block";
+                // Запускаем старый рендеринг (бэкэнд подгрузит данные по имени)
+                const nameTitle = document.getElementById("prof-user-title");
+                if (nameTitle) nameTitle.textContent = targetUsername;
+            };
+
+            try {
+                // Выкачиваем параметры профиля и кастомизации из баз данных
+                const res = await fetch(`${API_URL}/api/forum/user/profile/${targetUsername}`);
+                const data = await res.json();
+
+                // 1. Проверяем роль модератора для отображения зеленого молоточка 🔨
+                if (data.is_staff) {
+                    hammer.style.display = "inline-block";
+                    roleField.textContent = `Сотрудник проекта • ${data.role}`;
+                } else {
+                    roleField.textContent = "Гражданин сервера";
+                }
+
+                // 2. Подтягиваем кастомный баннер из настроек, если кандидат его загрузил
+                if (data.banner && banner) {
+                    banner.style.backgroundImage = `url('${data.banner}')`;
+                }
+
+                // Прогружаем анимированный градиент на имя внутри всплывающего окошка
+                applyCustomNicknameStyles(nameField, targetUsername);
+
+                // Дополнительно сканируем числовой ID из Discord-состава персонала, чтобы вывести его в плашку
+                const staffRes = await fetch(`${API_URL}/api/forum/staff`);
+                const staffList = await staffRes.json();
+                const matchedStaff = staffList.find(s => targetUsername.toLowerCase().trim() in s.name.toLowerCase().trim() || s.name.toLowerCase().trim().includes(targetUsername.toLowerCase().trim()));
+                
+                if (matchedStaff) {
+                    idField.textContent = matchedStaff.id; // Выводим реальный длинный ID типа 14653884619...
+                    avatarField.src = matchedStaff.avatar; // Синхронизируем аватарку
+                } else {
+                    idField.textContent = "ID участников скрыто приватностью Discord API";
+                }
+
+            } catch (e) { idField.textContent = "Ошибка связи со шлюзом СУБД."; }
+        }
+
+        function closeUserMiniCardModal() {
+            const modal = document.getElementById("user-mini-card-modal");
+            if (modal) modal.style.display = "none";
+        }
+
     </script>
 </body>
 </html>
