@@ -438,6 +438,35 @@
             -webkit-text-fill-color: transparent !important;
             display: inline-block;
         }
+        /* КНОПКА КОЛОКОЛЬЧИКА С КРАСНЫМ КРУЖКОМ */
+        .notif-bell-btn {
+            background: #18181c; border: 1px solid #222226; width: 40px; height: 40px;
+            border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            color: #aaaaaa; position: relative; transition: 0.2s;
+        }
+        .notif-bell-btn:hover { background: #1f1f24; color: #fff; border-color: #333339; }
+        
+        .bell-badge-count {
+            position: absolute; top: -5px; right: -5px; background: #ff3b30; color: #fff;
+            font-size: 10px; font-weight: bold; min-width: 16px; height: 16px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; padding: 0 4px;
+            box-sizing: border-box; border: 2px solid #0e0e10;
+        }
+        
+        /* МАТОВАЯ ВЫПЛЫВАЮЩАЯ ПАНЕЛЬ УВЕДОМЛЕНИЙ */
+        .notif-dropdown-panel {
+            display: none; position: absolute; top: 55px; right: 260px;
+            background: #18181c; border: 1px solid #222226; border-radius: 12px;
+            padding: 16px; width: 320px; box-shadow: 0 10px 30px rgba(0,0,0,0.6); z-index: 9999;
+            flex-direction: column; gap: 12px;
+        }
+        .notif-feed-box { max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+        .notif-item-row {
+            background: #141416; border: 1px solid #1c1c1f; padding: 10px 12px; border-radius: 8px;
+            cursor: pointer; transition: 0.2s; font-size: 12px; line-height: 1.4; color: #cccccc;
+        }
+        .notif-item-row:hover { background: #1c1c21; border-color: #5865F2; }
+        .notif-item-row.unread-bg { border-left: 3px solid #ff3b30; background: rgba(255,59,48,0.02); }
 
     </style>
 </head>
@@ -452,6 +481,16 @@
             </div>
         </div>
         <div class="auth-block" id="auth-zone"></div>
+    </div>
+    <!-- ВЫПЛЫВАЮЩАЯ ПАНЕЛЬ ЦЕНТРА УВЕДОМЛЕНИЙ (ПОМЕСТИ РЯДОМ С МЕНЮ ПРОФИЛЯ) -->
+    <div class="notif-dropdown-panel" id="dropdown-notif-zone">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #222226; padding-bottom: 8px; margin-bottom: 4px;">
+            <b style="font-size: 13px; color: #fff;">Уведомления</b>
+            <span onclick="markAllNotificationsAsRead()" style="font-size: 11px; color: #5865F2; cursor: pointer; font-weight: 600;">Прочитать все</span>
+        </div>
+        <div class="notif-feed-box" id="notif-items-container">
+            <div class="comment-empty-text" style="padding: 15px 0;">Нет уведомлений</div>
+        </div>
     </div>
 
     <div class="container">
@@ -755,7 +794,7 @@
             return undefined;
         }
 
-        // 🎯 СУПЕР-ОБНОВЛЕНИЕ ШАПКИ: Поддержка кликабельного выпадающего меню профиля
+        // 🎯 СУПЕР-ОБНОВЛЕНИЕ ШАПКИ: Колокольчик уведомлений + меню профиля в сборе
         function updateAuthInterface() {
             const authZone = document.getElementById("auth-zone");
             if (!authZone) return;
@@ -763,7 +802,7 @@
             let userName = getCookie("forum_user_name");
             let userAvatar = getCookie("forum_user_avatar");
 
-            // 🎯 ИСПРАВЛЕНО: Индексы [0] расставлены перед вызовом .trim() для защиты от ошибок!
+            // Защита от системных склеек в куках
             if (userName && userName.includes(",")) {
                 userName = userName.split(",")[0].trim();
             }
@@ -772,26 +811,41 @@
             }
 
             if (userName && userAvatar && userAvatar !== "undefined") {
-                // 🛠️ ИСПРАВЛЕНО: Интерактивный клик, стрелочка ▼ и вечный аватар-фикс в сборе!
+                // 🛠️ ИСПРАВЛЕНО: Добавлен колокольчик слева от аватарки и запуск опроса алертов!
                 authZone.innerHTML = `
-                    <div class="user-badge" onclick="toggleUserDropdown(event)" style="display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); padding: 5px 12px; border-radius: 20px; border: 1px solid #333; cursor: pointer; user-select: none;">
-                        <img src="${userAvatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'" style="width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--neon-blue); object-fit: cover;">
-                        <span style="font-size:12px; font-weight:bold; color: var(--text);">${userName}</span>
-                        <span style="font-size:10px; opacity:0.4; color: var(--text);">▼</span>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        
+                        <!-- 🎯 НАША НОВАЯ КНОПКА КОЛОКОЛЬЧИКА С КРАСНЫМ КРУЖКОМ СЧЕТЧИКА -->
+                        <button class="notif-bell-btn" onclick="toggleNotifDropdown(event)">
+                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="display:inline-block; vertical-align:middle;">
+                                <path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2M8 1.918l-.797.161A4 4 0 0 0 4 6c0 .628-.134 2.197-.459 3.742-.16.767-.376 1.566-.663 2.258h10.244c-.287-.692-.502-1.49-.663-2.258C12.134 8.197 12 6.628 12 6a4 4 0 0 0-3.203-3.92zM14.22 12c.223.447.481.801.78 1H1c.299-.199.557-.553.78-1C2.68 10.2 3 6.88 3 6c0-2.42 1.72-4.44 4.005-4.901a1 1 0 1 1 1.99 0A5 5 0 0 1 13 6c0 .88.32 4.2 1.22 6"/>
+                            </svg>
+                            <div id="bell-unread-count-badge"></div>
+                        </button>
+
+                        <!-- Кликабельный бадж профиля (открывает выпадающее меню) -->
+                        <div class="user-badge" onclick="toggleUserDropdown(event)" style="display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.03); padding: 5px 12px; border-radius: 20px; border: 1px solid #333; cursor: pointer; user-select: none;">
+                            <img src="${userAvatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'" style="width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--neon-blue); object-fit: cover;">
+                            <span style="font-size:12px; font-weight:bold; color: var(--text);">${userName}</span>
+                            <span style="font-size:10px; opacity:0.4; color: var(--text);">▼</span>
+                        </div>
+
                     </div>
                 `;
+                
+                // 🎯 ВАЖНО: Сразу запускаем опрос базы данных, чтобы мгновенно вывести количество алертов
+                fetchNotificationsData();
             } else {
-                // Если гость — выводим кнопку с идеальной геометрией SVG
+                // Если гость — выводим стандартную кнопку авторизации
                 authZone.innerHTML = `
                     <a href="${API_URL}/api/forum/auth/login" class="discord-btn">
-                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="display:inline-block; vertical-align:middle;">
-                            <path d="M13.545 2.907a13.227 13.227 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.212 12.212 0 0 0-3.658 0 8.258 8.258 0 0 0-.412-.833.051.051 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.041.041 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032a.04.04 0 0 0 .016.028a13.283 13.283 0 0 0 3.995 2.02a.05.05 0 0 0 .056-.018c.308-.42.582-.863.818-1.322a.05.05 0 0 0-.028-.069a8.726 8.726 0 0 1-1.247-.594a.05.05 0 0 1-.005-.085a6.052 6.052 0 0 0 .322-.252a.051.051 0 0 1 .053-.007c2.442 1.115 5.088 1.115 7.502 0a.051.051 0 0 1 .053.007c.114.086.221.17.322.252a.05.05 0 0 1-.005.085c-.392.234-.81.433-1.247.594a.05.05 0 0 0-.028.07c.24.46.513.903.819 1.32a.05.05 0 0 0 .056.019a13.21 13.21 0 0 0 4.001-2.02a.049.049 0 0 0 .016-.027c.385-3.418-.635-6.417-2.399-9.117a.042.042 0 0 0-.02-.019ZM5.14 9.473c-.785 0-1.431-.722-1.431-1.607 0-.885.632-1.607 1.43-1.607.807 0 1.443.73 1.432 1.607 0 .885-.625 1.607-1.431 1.607Zm4.515 0c-.785 0-1.43-.722-1.43-1.607 0-.885.632-1.607 1.43-1.607.807 0 1.443.73 1.431 1.607 0 .885-.624 1.607-1.43 1.607Z"/>
-                        </svg>
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M13.545 2.907a13.227 13.227 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.212 12.212 0 0 0-3.658 0 8.258 8.258 0 0 0-.412-.833.051.051 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.041.041 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032a.04.04 0 0 0 .016.028a13.283 13.283 0 0 0 3.995 2.02a.05.05 0 0 0 .056-.018c.308-.42.582-.863.818-1.322a.05.05 0 0 0-.028-.069a8.726 8.726 0 0 1-1.247-.594a.05.05 0 0 1-.005-.085a6.052 6.052 0 0 0 .322-.252a.051.051 0 0 1 .053-.007c2.442 1.115 5.088 1.115 7.502 0a.051.051 0 0 1 .053.007c.114.086.221.17.322.252a.05.05 0 0 1-.005.085c-.392.234-.81.433-1.247.594a.05.05 0 0 0-.028.07c.24.46.513.903.819 1.32a.05.05 0 0 0 .056.019a13.21 13.21 0 0 0 4.001-2.02a.049.049 0 0 0 .016-.027c.385-3.418-.635-6.417-2.399-9.117a.042.042 0 0 0-.02-.019ZM5.14 9.473c-.785 0-1.431-.722-1.431-1.607 0-.885.632-1.607 1.43-1.607.807 0 1.443.73 1.432 1.607 0 .885-.625 1.607-1.431 1.607Zm4.515 0c-.785 0-1.43-.722-1.43-1.607 0-.885.632-1.607 1.43-1.607.807 0 1.443.73 1.431 1.607 0 .885-.624 1.607-1.43 1.607Z"/></svg>
                         Войти через Discord
                     </a>
                 `;
             }
         }
+
 
 
 
@@ -1490,7 +1544,67 @@
                 previewText.style.webkitTextFillColor = "transparent";
             }
         }
-        
+                function toggleNotifDropdown(event) {
+            event.stopPropagation();
+            document.getElementById("dropdown-user-zone").style.display = "none"; // Прячем меню профиля
+            const panel = document.getElementById("dropdown-notif-zone");
+            panel.style.display = (panel.style.display === "flex") ? "none" : "flex";
+            if (panel.style.display === "flex") fetchNotificationsData(); // Обновляем список при открытии
+        }
+
+        // Добавляем закрытие колокольчика в глобальный клик по пустому месту
+        document.addEventListener("click", () => {
+            const panel = document.getElementById("dropdown-notif-zone");
+            if (panel) panel.style.display = "none";
+        });
+
+        // ФОНОВЫЙ ЗАПРОС СВЕДЕНИЙ ИЗ БАЗЫ ДАННЫХ SQLITE
+        async function fetchNotificationsData() {
+            const badge = document.getElementById("bell-unread-count-badge");
+            const container = document.getElementById("notif-items-container");
+            if (!badge || !container) return;
+
+            try {
+                const res = await fetch(`${API_URL}/api/forum/notifications/list`);
+                const data = await res.json();
+
+                // 🎯 Обновляем красный кружок счетчика непрочитанных
+                if (data.unread_count > 0) {
+                    badge.innerHTML = `<div class="bell-badge-count">${data.unread_count}</div>`;
+                } else {
+                    badge.innerHTML = "";
+                }
+
+                // Рендерим ленту алертов строго по твоему скриншоту
+                if (!data.list || data.list.length === 0) {
+                    container.innerHTML = `<div class="comment-empty-text" style="padding: 15px 0;">Нет уведомлений</div>`;
+                } else {
+                    container.innerHTML = data.list.map(n => `
+                        <div class="notif-item-row ${n.is_read === 0 ? 'unread-bg' : ''}" onclick="viewSpecificTicket(${n.ticket_id})">
+                            <div style="font-weight: 500; color: #fff; margin-bottom: 3px;">${n.text}</div>
+                            <div style="font-size: 10px; opacity: 0.3; text-align: right;">${n.time}</div>
+                        </div>
+                    `).join("");
+                }
+            } catch (e) { }
+        }
+
+        // СБРОС СЧЕТЧИКА ПРИ НАЖАТИИ «ПРОЧИТАТЬ ВСЕ»
+        async function markAllNotificationsAsRead() {
+            try {
+                const res = await fetch(`${API_URL}/api/forum/notifications/read-all`, { method: "POST" });
+                const data = await res.json();
+                if (data.status === "ok") {
+                    fetchNotificationsData(); // Мгновенно перерисовываем панель
+                }
+            } catch (e) { }
+        }
+
+        // Настраиваем автоматический опрос новых уведомлений каждые 30 секунд, чтобы кружок загорался сам
+        setInterval(() => {
+            if (getCookie("forum_user_name")) fetchNotificationsData();
+        }, 30000);
+
     </script>
 </body>
 </html>
