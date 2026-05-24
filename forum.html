@@ -665,22 +665,43 @@
                 </div>
             </div>
 
-            <!-- ПОДРАЗДЕЛ 2: ВНЕШНИЙ ВИД (ГРАДИЕНТЫ НИКНЕЙМА) -->
+            <!-- ПОДРАЗДЕЛ 2: ВНЕШНИЙ ВИД (ИНТЕРАКТИВНАЯ НАСТРОЙКА ПАЛИТРЫ САМОСТОЯТЕЛЬНО) -->
             <div id="subpage-settings-design" style="display: none;">
                 <div class="settings-box-card">
-                    <h3>Градиент никнейма</h3>
-                    <p>Выберите уникальную палитру перелива букв вашего имени во всех разделах форума</p>
+                    <h3>Конструктор градиента никнейма</h3>
+                    <p>Настройте индивидуальный перелив вашего имени, выбирая любые цвета на палитре</p>
                     
-                    <label style="font-size: 12px; color: #fff; font-weight: 600;">Выбор пресета градиента:</label>
-                    <select id="settings-nickname-gradient" class="settings-input-item">
-                        <option value="">Без градиента (Стандартный белый)</option>
-                        <option value="linear-gradient(45deg, #ff3b30, #ffcc00)">🔥 Пылающий рассвет (Красный-Желтый)</option>
-                        <option value="linear-gradient(45deg, #00f0ff, #5865F2)">🌌 Киберпанк неон (Голубой-Синий)</option>
-                        <option value="linear-gradient(45deg, #00ff00, #00f0ff)">⚡ Цифровой шторм (Зеленый-Бирюзовый)</option>
-                        <option value="linear-gradient(45deg, #9b5de5, #f15bb5)">🔮 Мистическая магия (Фиолетовый-Розовый)</option>
-                    </select>
+                    <div style="display: flex; flex-direction: column; gap: 15px;">
+                        <!-- Живой предпросмотр результата -->
+                        <div style="background: #0e0e10; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #222226;">
+                            <span style="font-size: 11px; color: #55555c; display: block; margin-bottom: 5px; text-transform: uppercase;">Предпросмотр вашего никнейма:</span>
+                            <span id="settings-gradient-preview-text" style="font-size: 20px; font-weight: bold; letter-spacing: 0.5px;">Никнейм</span>
+                        </div>
+
+                        <!-- Выбор цветов -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <label style="font-size: 12px; color: #88888e; display: block; margin-bottom: 6px;">Начальный цвет:</label>
+                                <input type="color" id="gradient-color-1" value="#00f0ff" style="width: 100%; height: 40px; background: none; border: 1px solid #222226; border-radius: 8px; cursor: pointer;" oninput="updateLiveGradientPreview()">
+                            </div>
+                            <div>
+                                <label style="font-size: 12px; color: #88888e; display: block; margin-bottom: 6px;">Конечный цвет:</label>
+                                <input type="color" id="gradient-color-2" value="#5865F2" style="width: 100%; height: 40px; background: none; border: 1px solid #222226; border-radius: 8px; cursor: pointer;" oninput="updateLiveGradientPreview()">
+                            </div>
+                        </div>
+
+                        <!-- Угол наклона -->
+                        <div>
+                            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #88888e; margin-bottom: 6px;">
+                                <span>Угол наклона градиента:</span>
+                                <span id="gradient-angle-val">45°</span>
+                            </div>
+                            <input type="range" id="gradient-angle-range" min="0" max="360" value="45" style="width: 100%; accent-color: var(--neon-blue);" oninput="updateLiveGradientPreview()">
+                        </div>
+                    </div>
                 </div>
             </div>
+
 
             <!-- Общая кнопка сохранения текста -->
             <button onclick="saveUserCustomSettings()" style="background: var(--neon-blue); color: #000; font-weight: bold; border: none; padding: 14px 28px; border-radius: 10px; font-size: 13px; cursor: pointer; width: 100%; text-transform: uppercase; letter-spacing: 0.5px;">Сохранить параметры конфигурации</button>
@@ -1087,6 +1108,7 @@
                         </div>
                     </div>
                 `;
+                applyCustomNicknameStyles(metaBlock.querySelector(".ticket-author-name"), t.author);
 
 
                 // Рендеринг галереи скриншотов
@@ -1235,7 +1257,8 @@
             const currentLoggedAvatar = getCookie("forum_user_avatar") || "https://i.ibb.co/4pSbxsh/user-avatar.png";
 
             if (nameTitle) nameTitle.textContent = currentLoggedName;
-            
+            applyCustomNicknameStyles(nameTitle, currentLoggedName);
+
             if (avatarImg) {
                 avatarImg.src = currentLoggedAvatar;
                 // 🎯 ФИКС АВАТАРКИ: Страховка onerror прямо на элемент личного кабинета
@@ -1345,7 +1368,7 @@
             document.getElementById("subpage-settings-design").style.display = (subTabName === "design") ? "block" : "none";
         }
 
-        // Загрузка сохраненных параметров пользователя из SQLite при входе в настройки
+        // Обновляем метод загрузки формы, чтобы он умел разбирать CSS градиент обратно на цвета
         async function loadUserSettingsForm() {
             const myName = getCookie("forum_user_name");
             if (!myName) return;
@@ -1355,7 +1378,20 @@
                 const data = await res.json();
 
                 document.getElementById("settings-custom-status").value = data.status || "";
-                document.getElementById("settings-nickname-gradient").value = data.gradient || "";
+                
+                // Распаковываем цвета, если градиент уже сохранен в базе
+                if (data.gradient && data.gradient.includes("linear-gradient")) {
+                    const matchColors = data.gradient.match(/#[a-fA-F0-9]{6}/g);
+                    const matchAngle = data.gradient.match(/\d+deg/);
+                    if (matchColors && matchColors.length >= 2) {
+                        document.getElementById("gradient-color-1").value = matchColors[0];
+                        document.getElementById("gradient-color-2").value = matchColors[1];
+                    }
+                    if (matchAngle) {
+                        document.getElementById("gradient-angle-range").value = parseInt(matchAngle[0]);
+                    }
+                }
+                updateLiveGradientPreview();
                 
                 const preview = document.getElementById("settings-banner-preview");
                 const text = document.getElementById("banner-placeholder-text");
@@ -1377,6 +1413,7 @@
             if (fileInput.files.length === 0) return;
 
             const formData = new FormData();
+            // 🎯 ИСПРАВЛЕНО: Явно передаем [0] элемент файлового потока
             formData.append("file", fileInput.files[0]);
 
             try {
@@ -1395,6 +1432,7 @@
             } catch (e) { alert("Сбой загрузки изображения баннера."); }
         }
 
+
         function deleteProfileBanner() {
             userCurrentUploadedBannerUrl = "";
             const preview = document.getElementById("settings-banner-preview");
@@ -1402,24 +1440,25 @@
             document.getElementById("banner-placeholder-text").style.display = "block";
         }
 
-        // Сохранение текстовых параметров градиента никнейма и статуса
+        // Изменяем сохранение: собираем кастомную CSS-строку
         async function saveUserCustomSettings() {
-            const gradient = document.getElementById("settings-nickname-gradient").value;
+            const c1 = document.getElementById("gradient-color-1").value;
+            const c2 = document.getElementById("gradient-color-2").value;
+            const angle = document.getElementById("gradient-angle-range").value;
             const status = document.getElementById("settings-custom-status").value.trim();
+            
+            // Собираем полноценную CSS-инструкцию градиента
+            const fullGradientString = `linear-gradient(${angle}deg, ${c1}, ${c2})`;
 
             try {
                 const res = await fetch(`${API_URL}/api/forum/user/settings/save`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ gradient: gradient, status: status })
+                    body: JSON.stringify({ gradient: fullGradientString, status: status })
                 });
                 const data = await res.json();
                 alert(data.message);
-                
-                // Если пользователь стер баннер, обновляем его статус и на сервере
-                if (userCurrentUploadedBannerUrl === "") {
-                    // Метод удаления можно связать с очисткой поля в бд
-                }
+                location.reload(); // Перезагружаем страницу, чтобы градиент мгновенно применился везде!
             } catch (e) { alert("Не удалось сохранить конфигурацию."); }
         }
 
@@ -1435,7 +1474,23 @@
                 }
             } catch (e) { }
         }
-
+        // Функция живой сборки градиента на лету при движении ползунков
+        function updateLiveGradientPreview() {
+            const c1 = document.getElementById("gradient-color-1").value;
+            const c2 = document.getElementById("gradient-color-2").value;
+            const angle = document.getElementById("gradient-angle-range").value;
+            
+            document.getElementById("gradient-angle-val").textContent = `${angle}°`;
+            
+            const previewText = document.getElementById("settings-gradient-preview-text");
+            if (previewText) {
+                previewText.textContent = getCookie("forum_user_name") || "Никнейм";
+                previewText.style.background = `linear-gradient(${angle}deg, ${c1}, ${c2})`;
+                previewText.style.webkitBackgroundClip = "text";
+                previewText.style.webkitTextFillColor = "transparent";
+            }
+        }
+        
     </script>
 </body>
 </html>
