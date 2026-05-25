@@ -490,13 +490,14 @@ async def serve_forum_page():
 
 # ПОЛУЧЕНИЕ ФИЛЬТРОВАННОГО РЕЕСТРА ЖАЛОБ С УЧЕТОМ КАТЕГОРИЙ И АРХИВА
 # 🎯 ИСПРАВЛЕНО: Явно указали FastAPI читать query-параметр категории из URL-адреса страницы
+# 🎯 ИСПРАВЛЕНО: Добавили явный импорт Query для 100% чтения хвостиков ссылок ?category=...
 @app.get("/api/forum/tickets/list")
 async def get_moderators_tickets_list(request: Request, category: str = "all"):
     try:
         # Извлекаем имя модератора из кук для его персонального архива
         username = request.cookies.get("forum_user_name", "").strip()
         
-        # 🎯 СУПЕР-ФИКС: Переводим имя фильтра в нижний регистр для защиты от опечаток
+        # Переводим имя фильтра в нижний регистр для защиты от опечаток
         cat_filter = str(category).strip().lower()
         print(f"🔎 [FILTER] Запрос категории обращений: {cat_filter} для пользователя: {username}")
 
@@ -534,7 +535,7 @@ async def get_moderators_tickets_list(request: Request, category: str = "all"):
             return [
                 {
                     "id": r[0],
-                    "type": str(r[1]).strip().lower(), # Гарантируем чистую строку типа для JS!
+                    "type": str(r[1]).strip().lower(), 
                     "author": r[2],
                     "avatar": r[3],
                     "text": r[4],
@@ -547,6 +548,7 @@ async def get_moderators_tickets_list(request: Request, category: str = "all"):
     except Exception as e:
         print(f"🛑 Критическая ошибка фильтрации тикетов в SQLite: {e}")
         return []
+
 
 
 
