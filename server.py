@@ -489,44 +489,52 @@ async def serve_forum_page():
 # ==========================================
 
 # ПОЛУЧЕНИЕ ФИЛЬТРОВАННОГО РЕЕСТРА ЖАЛОБ С УЧЕТОМ КАТЕГОРИЙ И АРХИВА
+# 🎯 ИСПРАВЛЕНО: Явно указали FastAPI читать query-параметр категории из URL-адреса страницы
 @app.get("/api/forum/tickets/list")
-async def get_moderators_tickets_list(category: str = "all", request: Request = None):
+async def get_moderators_tickets_list(request: Request, category: str = "all"):
     try:
-        username = request.cookies.get("forum_user_name", "") if request else ""
+        # Извлекаем имя модератора из кук для его персонального архива
+        username = request.cookies.get("forum_user_name", "").strip()
         
+        # 🎯 СУПЕР-ФИКС: Переводим имя фильтра в нижний регистр для защиты от опечаток
+        cat_filter = str(category).strip().lower()
+        print(f"🔎 [FILTER] Запрос категории обращений: {cat_filter} для пользователя: {username}")
+
+        rows = []
         async with aiosqlite.connect(DB_PATH) as db:
-            # 🎯 ВЕТКА №1: Личный архив модератора (все взятые в работу или закрытые им дела)
-            if category == "mod_archive":
-                if not username:
-                    return []
+            
+            if cat_filter == "mod_archive":
+                # 1. Личный архив: вытаскиваем только те дела, где вписан ник этого модератора
+                if username:
+                    async with db.execute("""
+                        SELECT id, ticket_type, author_name, author_avatar, message_text, status, timestamp, moderator_name 
+                        FROM forum_tickets 
+                        WHERE LOWER(moderator_name) = ? ORDER BY id DESC
+                    """, (username.lower(),)) as cursor:
+                        rows = await cursor.fetchall()
+            
+            elif cat_filter in ["user", "staff", "appeal"]:
+                # 2. Фильтрация по типам: user, staff или appeal
                 async with db.execute("""
                     SELECT id, ticket_type, author_name, author_avatar, message_text, status, timestamp, moderator_name 
                     FROM forum_tickets 
-                    WHERE moderator_name = ? ORDER BY id DESC
-                """, (username,)) as cursor:
+                    WHERE LOWER(ticket_type) = ? ORDER BY id DESC
+                """, (cat_filter,)) as cursor:
                     rows = await cursor.fetchall()
             
-            # 🎯 ВЕТКА №2: Фильтрация по конкретным типам обращений
-            elif category in ["user", "staff", "appeal"]:
-                async with db.execute("""
-                    SELECT id, ticket_type, author_name, author_avatar, message_text, status, timestamp, moderator_name 
-                    FROM forum_tickets 
-                    WHERE ticket_type = ? ORDER BY id DESC
-                """, (category,)) as cursor:
-                    rows = await cursor.fetchall()
-            
-            # 🎯 ВЕТКА №3: Выгрузка абсолютно всех обращений
             else:
+                # 3. Дефолт (all): выгружаем абсолютно все обращения из базы данных SQLite
                 async with db.execute("""
                     SELECT id, ticket_type, author_name, author_avatar, message_text, status, timestamp, moderator_name 
                     FROM forum_tickets ORDER BY id DESC
                 """) as cursor:
                     rows = await cursor.fetchall()
 
+            # Превращаем кортежи СУБД в массив объектов JSON для фронтенда
             return [
                 {
                     "id": r[0],
-                    "type": r[1],
+                    "type": str(r[1]).strip().lower(), # Гарантируем чистую строку типа для JS!
                     "author": r[2],
                     "avatar": r[3],
                     "text": r[4],
@@ -535,9 +543,11 @@ async def get_moderators_tickets_list(category: str = "all", request: Request = 
                     "moderator": r[7]
                 } for r in rows
             ]
+            
     except Exception as e:
-        print(f"🛑 Ошибка фильтрации тикетов: {e}")
+        print(f"🛑 Критическая ошибка фильтрации тикетов в SQLite: {e}")
         return []
+
 
 
 
