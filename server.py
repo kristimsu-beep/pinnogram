@@ -573,29 +573,26 @@ async def get_single_forum_ticket(ticket_id: int):
         print(f"🛑 Ошибка получения тикета {ticket_id}: {e}")
         return {"status": "error", "message": str(e)}
 
-# 4. УПРАВЛЕНИЕ СТАТУСОМ ТИКЕТА (Взять в работу / Одобрить / Отклонить)
-# 🎯 ИСПРАВЛЕНО: Изменен адрес роута на /status, чтобы он на 100% совпал с fetch на фронтенде!
+# 🎯 ИСПРАВЛЕНО: Теперь модератор может одобрить/отклонить тикет из ЛЮБОГО статуса, 
+# и его ник автоматически привязывается к делу для вывода в архив!
 @app.post("/api/forum/tickets/status")
-async def action_forum_ticket(data: dict, request: Request):
+async def update_forum_ticket_status(data: dict, request: Request):
     try:
-        # 1. Проверяем, что голосующий вообще авторизован
-        mod_name = request.cookies.get("forum_user_name")
+        mod_name = request.cookies.get("forum_user_name", "").strip()
         if not mod_name:
             return {"status": "error", "message": "🔒 Вы не авторизованы!"}
             
-        # 2. ПРОВЕРКА ПРАВ: Запрашиваем актуальный состав STAFF из Дискорда
         staff_members = await get_forum_staff()
-        is_admin = any(mod_name in str(u.get("name", "")) for u in staff_members)
+        is_staff = any(str(mod_name).strip().lower() in str(u.get("name", "")).strip().lower() for u in staff_members)
         
-        if not is_admin:
-            return {"status": "error", "message": "🛑 Отказано в доступе! Вы не являетесь членом Администрации."}
+        if not is_staff:
+            return {"status": "error", "message": "🛑 Отказано в доступе! Вы не являетесь модератором."}
             
         ticket_id = int(data.get("ticket_id"))
-        # 🎯 ИСПРАВЛЕНО: Ловим параметр "status", отправляемый из JavaScript-скрипта
-        new_status = data.get("status") # 'processing', 'approved', 'rejected'
+        new_status = str(data.get("status")).strip().lower() # 'processing', 'approved', 'rejected'
         
         async with aiosqlite.connect(DB_PATH) as db:
-            # Сначала вытащим имя автора тикета, чтобы знать, кому слать алерт
+            # Сначала вытащим имя автора тикета, чтобы закинуть ему алерт в центр уведомлений
             async with db.execute("SELECT author_name FROM forum_tickets WHERE id = ?", (ticket_id,)) as cur:
                 ticket_row = await cur.fetchone()
                 ticket_author = ticket_row[0] if ticket_row else None
@@ -603,17 +600,22 @@ async def action_forum_ticket(data: dict, request: Request):
             ts_notif = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
             notification_text = ""
 
+            # 🎯 СУПЕР-ФИКС: Убрали жесткое ограничение AND status = 'processing'
             if new_status == 'processing':
-                await db.execute("UPDATE forum_tickets SET status = 'processing', moderator_name = ? WHERE id = ? AND status = 'open'", (mod_name, ticket_id))
+                await db.execute("UPDATE forum_tickets SET status = 'processing', moderator_name = ? WHERE id = ?", (mod_name, ticket_id))
                 notification_text = f"💼 Ваше обращение #POST_{ticket_id} взято в работу сотрудником {mod_name}"
+            
             elif new_status == 'approved':
-                await db.execute("UPDATE forum_tickets SET status = 'approved' WHERE id = ? AND status = 'processing'", (ticket_id,))
+                # Принудительно вписываем модератора, даже если он одобрил тикет сразу из ожидания
+                await db.execute("UPDATE forum_tickets SET status = 'approved', moderator_name = ? WHERE id = ?", (mod_name, ticket_id))
                 notification_text = f"✅ Ваше обращение #POST_{ticket_id} было успешно ОДОБРЕНО!"
+            
             elif new_status == 'rejected':
-                await db.execute("UPDATE forum_tickets SET status = 'rejected' WHERE id = ? AND status = 'processing'", (ticket_id,))
+                # Принудительно вписываем модератора при отклонении тикета сразу из ожидания
+                await db.execute("UPDATE forum_tickets SET status = 'rejected', moderator_name = ? WHERE id = ?", (mod_name, ticket_id))
                 notification_text = f"❌ Ваше обращение #POST_{ticket_id} было ОТКЛОНЕНО модерацией."
                 
-            # Если текст сформирован и автор найден — записываем алерт в базу
+            # Записываем системный алерт для колокольчика кандидата
             if notification_text and ticket_author:
                 await db.execute("""
                     INSERT INTO forum_notifications (username, text, ticket_id, timestamp)
@@ -621,10 +623,14 @@ async def action_forum_ticket(data: dict, request: Request):
                 """, (ticket_author, notification_text, ticket_id, ts_notif))
 
             await db.commit()
-        return {"status": "ok", "message": "Статус обращения успешно обновлен!"}
+            
+        print(f"✅ [STATUS CHANGED] Тикет #POST_{ticket_id} получил статус: {new_status} от {mod_name}")
+        return {"status": "ok", "message": f"Статус дела успешно изменен на: {new_status}"}
+        
     except Exception as e:
-        print(f"🛑 Ошибка обновления статуса тикета: {e}")
+        print(f"🛑 Ошибка изменения статуса тикета: {e}")
         return {"status": "error", "message": str(e)}
+
 
 # 5. ДИНАМИЧЕСКИЙ РОУТ ДЛЯ СТРАНИЦ ТИКЕТОВ ПО ССЫЛКЕ /forum/post_1, /forum/post_2
 @app.get("/forum/post_{ticket_id}")
