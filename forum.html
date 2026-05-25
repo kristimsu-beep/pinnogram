@@ -1692,8 +1692,8 @@
 
                     // 3. Сборка разметки карточки (Все поля обернуты в безопасные фолбеки)
                     const authorName = t.author || "Гражданин Pinnogram";
-                    const authorAvatar = t.avatar || "https://ibb.co";
-                    const ticketTime = t.time || "1 час назад";
+                    const authorAvatar = t.avatar || "https://i.ibb.co/4pSbxsh/user-avatar.png";
+                    const ticketTime = getForumTimeAgo(t.time);
                     const ticketText = t.text || "Описание обращения обрабатывается...";
 
                     box.innerHTML = `
@@ -1758,36 +1758,55 @@
                 titleType.textContent = t.type === "user" ? "Жалоба на игрока" : "Жалоба на администратора";
                 textBlock.textContent = t.text;
 
-                // Красивый бэйдж статуса сверху справа
+                // Заголовок и текст тикета с защитой от пустых полей
+                const cleanTicketType = t.type ? String(t.type).trim().toLowerCase() : "user";
+                
+                if (cleanTicketType === "staff" || cleanTicketType === "администратор") {
+                    titleType.textContent = "Жалоба на администратора";
+                } else if (cleanTicketType === "appeal" || cleanType === "апелляция") {
+                    titleType.textContent = "Апелляция наказания";
+                } else {
+                    titleType.textContent = "Жалоба на игрока";
+                }
+                
+                textBlock.textContent = t.text || "Описание нарушения отсутствует";
+
+                // 🎯 ИСПРАВЛЕНО: Пуленепробиваемый и точный расчет статусов (убран баг сброса в Ожидание)
                 let statusLabel = "● Ожидание";
-                if (t.status === "processing") statusLabel = "⚙️ В работе";
-                if (t.status === "approved") statusLabel = "✅ Одобрено";
-                if (t.status === "rejected") statusLabel = "❌ Отклонено";
-                if(badgeZone) badgeZone.innerHTML = `<span class="status-badge-forum">${statusLabel}</span>`;
+                const cleanStatus = t.status ? String(t.status).trim().toLowerCase() : "open";
+                
+                if (cleanStatus === "processing" || cleanStatus === "в работе") { 
+                    statusLabel = "⚙️ В работе"; 
+                }
+                else if (cleanStatus === "approved" || cleanStatus === "одобрено") { 
+                    statusLabel = "✅ Одобрено"; 
+                }
+                else if (cleanStatus === "rejected" || cleanStatus === "отклонено") { 
+                    statusLabel = "❌ Отклонено"; 
+                }
+                
+                if (badgeZone) {
+                    badgeZone.innerHTML = `<span class="status-badge-forum">${statusLabel}</span>`;
+                }
 
                 // 🎯 ИСПРАВЛЕНО: Уникальный класс main-author-title изолирует имя и намертво убирает баг подмены ника!
+                // Также сюда встроен живой отсчет времени создания тикета через getForumTimeAgo(t.time)
                 metaBlock.innerHTML = `
                     <div class="ticket-header-line" style="margin-bottom:0; display: flex; align-items: center; gap: 14px;">
-                        
-                        <!-- 🎯 ИСПРАВЛЕНО: Теперь в вызов четко передается event для живого отслеживания мышки -->
                         <div class="main-ticket-avatar-wrapper" onclick="event.stopPropagation(); viewUserProfile(event, '${t.author}')" style="cursor: pointer;">
                             <img src="${t.avatar || 'https://i.ibb.co/4pSbxsh/user-avatar.png'}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'">
                         </div>
-                        
                         <div>
-                            <!-- 🎯 ИСПРАВЛЕНО: Тот же изолированный вызов по клику на имя автора -->
                             <span class="main-author-title" onclick="event.stopPropagation(); viewUserProfile(event, '${t.author}')" style="display:block; font-size: 15px; font-weight: 600; cursor: pointer; color: #fff;">${t.author}</span>
-                            <span class="ticket-time-ago" style="font-size:11px; color: #55555c;">${t.time || '1 час назад'} • Гражданиские вопросы</span>
+                            <span class="ticket-time-ago" style="font-size:11px; color: #55555c;">${getForumTimeAgo(t.time)} • Вопросы и обращения</span>
                         </div>
                     </div>
                 `;
                 
-                // 🎯 ИСПРАВЛЕНО: Накладываем градиент строго на изолированный класс заголовка анкеты
+                // Накладываем кастомный переливающийся градиент на имя автора в шапке открытого дела
                 applyCustomNicknameStyles(metaBlock.querySelector(".main-author-title"), t.author);
 
-
-
-
+                
                 // Рендеринг галереи скриншотов
                 if (t.photos && t.photos.length > 0) {
                     gallery.innerHTML = t.photos.map(pUrl => `
@@ -2777,6 +2796,37 @@
                     modZone.style.display = "flex"; // Активируем админ-раздел!
                 }
             } catch (e) { }
+        }
+
+                // 🎯 СУПЕР-ХЕЛПЕР: Вычисление реального живого времени с момента создания тикета
+        function getForumTimeAgo(timestampStr) {
+            if (!timestampStr) return "1 час назад";
+            try {
+                // Парсим дату формата ДД.ММ.ГГГГ ХХ:ММ
+                const parts = timestampStr.split(" ");
+                if (parts.length < 2) return timestampStr;
+                
+                const dateParts = parts[0].split(".");
+                const timeParts = parts[1].split(":");
+                
+                // Создаем объект даты (месяцы в JS идут от 0 до 11, поэтому -1)
+                const ticketDate = new Date(dateParts[2], dateParts[1] - 1, dateParts[0], timeParts[0], timeParts[1]);
+                const now = new Date();
+                
+                const diffMs = now - ticketDate;
+                const diffMins = Math.floor(diffMs / 60000);
+                
+                if (diffMins < 1) return "Только что";
+                if (diffMins < 60) return `${diffMins} мин. назад`;
+                
+                const diffHours = Math.floor(diffMins / 60);
+                if (diffHours < 24) return `${diffHours} час. назад`;
+                
+                const diffDays = Math.floor(diffHours / 24);
+                return `${diffDays} дн. назад`;
+            } catch(e) {
+                return timestampStr; // Если сбой парсинга, просто вернем исходную дату
+            }
         }
 
     </script>
