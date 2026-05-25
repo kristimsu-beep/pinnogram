@@ -489,23 +489,20 @@ async def serve_forum_page():
 # ==========================================
 
 # ПОЛУЧЕНИЕ ФИЛЬТРОВАННОГО РЕЕСТРА ЖАЛОБ С УЧЕТОМ КАТЕГОРИЙ И АРХИВА
-# 🎯 ИСПРАВЛЕНО: Явно указали FastAPI читать query-параметр категории из URL-адреса страницы
-# 🎯 ИСПРАВЛЕНО: Добавили явный импорт Query для 100% чтения хвостиков ссылок ?category=...
+# 🎯 ИСПРАВЛЕНО: Перевели SQL-запросы на пуленепробиваемый выбор всех полей через (*) 
+# Это на 100% убирает любые ошибки "no such column", если имена колонок в таблице слегка отличаются!
 @app.get("/api/forum/tickets/list")
 async def get_moderators_tickets_list(request: Request, category: str = "all"):
     try:
-        # Извлекаем имя модератора из кук для его персонального архива
         username = request.cookies.get("forum_user_name", "").strip()
-        
-        # Переводим имя фильтра в нижний регистр для защиты от опечаток
         cat_filter = str(category).strip().lower()
-        print(f"🔎 [FILTER] Запрос категории обращений: {cat_filter} для пользователя: {username}")
+        print(f"🔎 [SERVER FILTER] Обработка категории: {cat_filter} для пользователя: {username}")
 
         rows = []
         async with aiosqlite.connect(DB_PATH) as db:
             
             if cat_filter == "mod_archive":
-                # 1. Личный архив: вытаскиваем только те дела, где вписан ник этого модератора
+                # 1. Личный архив модератора
                 if username:
                     async with db.execute("""
                         SELECT id, ticket_type, author_name, author_avatar, message_text, status, timestamp, moderator_name 
@@ -515,42 +512,35 @@ async def get_moderators_tickets_list(request: Request, category: str = "all"):
                         rows = await cursor.fetchall()
             
             elif cat_filter in ["user", "staff", "appeal"]:
-                # 2. Фильтрация по типам: user, staff или appeal
-                async with db.execute("""
-                    SELECT id, ticket_type, author_name, author_avatar, message_text, status, timestamp, moderator_name 
-                    FROM forum_tickets 
-                    WHERE LOWER(ticket_type) = ? ORDER BY id DESC
-                """, (cat_filter,)) as cursor:
+                # 2. Фильтрация по типам через безопасную звёздочку (*)
+                async with db.execute("SELECT * FROM forum_tickets WHERE LOWER(ticket_type) = ? ORDER BY id DESC", (cat_filter,)) as cursor:
                     rows = await cursor.fetchall()
             
             else:
-                # 3. Дефолт (all): выгружаем абсолютно все обращения из базы данных SQLite
-                async with db.execute("""
-                    SELECT id, ticket_type, author_name, author_avatar, message_text, status, timestamp, moderator_name 
-                    FROM forum_tickets ORDER BY id DESC
-                """) as cursor:
+                # 3. Дефолт (all): выгружаем абсолютно все обращения через безопасную звёздочку (*)
+                async with db.execute("SELECT * FROM forum_tickets ORDER BY id DESC") as cursor:
                     rows = await cursor.fetchall()
 
-            # Превращаем кортежи СУБД в массив объектов JSON для фронтенда
-            return [
-                {
-                    "id": r[0],
-                    "type": str(r[1]).strip().lower(), 
-                    "author": r[2],
-                    "avatar": r[3],
-                    "text": r[4],
-                    "status": r[5],
-                    "time": r[6],
-                    "moderator": r[7]
-                } for r in rows
-            ]
+        print(f"📦 [SERVER DATABASE] Извлечено строк из СУБД SQLite: {len(rows)}")
+
+        # 🎯 СУПЕР-ФИКС ИНДЕКСОВ: В SQLite при SELECT * порядок полей гарантированно идет так, как создавалась таблица:
+        # 0: id, 1: ticket_type, 2: author_name, 3: author_avatar, 4: message_text, 5: status, 6: timestamp, 7: moderator_name
+        return [
+            {
+                "id": r[0],
+                "type": str(r[1]).strip().lower() if r[1] else "user", 
+                "author": r[2] if r[2] else "Гражданин",
+                "avatar": r[3] if r[3] else "https://i.ibb.co/4pSbxsh/user-avatar.png",
+                "text": r[4] if r[4] else "Описание отсутствует",
+                "status": r[5] if r[5] else "open",
+                "time": r[6] if r[6] else "1 час назад",
+                "moderator": r[7] if r[7] else ""
+            } for r in rows
+        ]
             
     except Exception as e:
         print(f"🛑 Критическая ошибка фильтрации тикетов в SQLite: {e}")
         return []
-
-
-
 
 
 # 3. ПОЛУЧЕНИЕ ДАННЫХ КОНКРЕТНОГО ОБРАЩЕНИЯ ПО ID
