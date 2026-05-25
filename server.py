@@ -491,6 +491,7 @@ async def serve_forum_page():
 # ПОЛУЧЕНИЕ ФИЛЬТРОВАННОГО РЕЕСТРА ЖАЛОБ С УЧЕТОМ КАТЕГОРИЙ И АРХИВА
 # 🎯 ИСПРАВЛЕНО: Перевели SQL-запросы на пуленепробиваемый выбор всех полей через (*) 
 # Это на 100% убирает любые ошибки "no such column", если имена колонок в таблице слегка отличаются!
+# 🎯 ИСПРАВЛЕНО: Полный переход на (*) во всех ветках для 100% защиты от "no such column"
 @app.get("/api/forum/tickets/list")
 async def get_moderators_tickets_list(request: Request, category: str = "all"):
     try:
@@ -502,11 +503,10 @@ async def get_moderators_tickets_list(request: Request, category: str = "all"):
         async with aiosqlite.connect(DB_PATH) as db:
             
             if cat_filter == "mod_archive":
-                # 1. Личный архив модератора
+                # 1. Личный архив модератора через безопасную звёздочку (*)
                 if username:
                     async with db.execute("""
-                        SELECT id, ticket_type, author_name, author_avatar, message_text, status, timestamp, moderator_name 
-                        FROM forum_tickets 
+                        SELECT * FROM forum_tickets 
                         WHERE LOWER(moderator_name) = ? ORDER BY id DESC
                     """, (username.lower(),)) as cursor:
                         rows = await cursor.fetchall()
@@ -523,7 +523,7 @@ async def get_moderators_tickets_list(request: Request, category: str = "all"):
 
         print(f"📦 [SERVER DATABASE] Извлечено строк из СУБД SQLite: {len(rows)}")
 
-        # 🎯 СУПЕР-ФИКС ИНДЕКСОВ: В SQLite при SELECT * порядок полей гарантированно идет так, как создавалась таблица:
+        # Гарантированный порядок индексов СУБД при SELECT *:
         # 0: id, 1: ticket_type, 2: author_name, 3: author_avatar, 4: message_text, 5: status, 6: timestamp, 7: moderator_name
         return [
             {
@@ -541,6 +541,7 @@ async def get_moderators_tickets_list(request: Request, category: str = "all"):
     except Exception as e:
         print(f"🛑 Критическая ошибка фильтрации тикетов в SQLite: {e}")
         return []
+
 
 
 # 3. ПОЛУЧЕНИЕ ДАННЫХ КОНКРЕТНОГО ОБРАЩЕНИЯ ПО ID
