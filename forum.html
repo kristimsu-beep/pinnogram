@@ -757,6 +757,80 @@
             background: #5865F2 !important; color: #fff !important; box-shadow: 0 0 15px rgba(88, 101, 242, 0.25);
         }
 
+        /* КЛИКАБЕЛЬНЫЕ ССЫЛКИ В ТЕКСТЕ */
+        .forum-clickable-link {
+            color: #5865F2;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s, text-shadow 0.2s;
+            cursor: pointer;
+        }
+        .forum-clickable-link:hover {
+            color: #00f0ff;
+            text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+            text-decoration: underline;
+        }
+        
+        /* МАТОВОЕ ОКНО ПРЕДУПРЕЖДЕНИЯ С СИНЕЙ ОКАНТОВКОЙ */
+        .link-warn-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(4, 4, 5, 0.7);
+            backdrop-filter: blur(5px);
+            justify-content: center;
+            align-items: center;
+            z-index: 100000;
+        }
+        .link-warn-card {
+            background: #141416;
+            width: 440px;
+            border-radius: 14px;
+            padding: 24px;
+            border: 1px solid #5865F2; /* Синяя неоновая окантовка */
+            box-shadow: 0 15px 40px rgba(0,0,0,0.8), 0 0 25px rgba(88, 101, 242, 0.2);
+            box-sizing: border-box;
+            animation: linkWarnFade 0.2s ease-out;
+        }
+        @keyframes linkWarnFade {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .link-warn-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ff3b30; /* Красный заголовок опасности */
+            margin: 0 0 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .link-warn-text {
+            font-size: 13px;
+            color: #b5b5bd;
+            line-height: 1.5;
+            margin-bottom: 20px;
+            word-break: break-all;
+        }
+        .link-warn-url-display {
+            background: #18181c;
+            border: 1px solid #222226;
+            padding: 10px;
+            border-radius: 8px;
+            color: #00f0ff;
+            font-family: monospace;
+            font-size: 12px;
+            margin-bottom: 20px;
+            max-height: 60px;
+            overflow-y: auto;
+            word-break: break-all;
+        }
+        .link-warn-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
     </style>
 </head>
 <body>
@@ -1316,8 +1390,84 @@
         </div>
     </div>
 
+    <!-- ТЕМНО-МАТОВОЕ ОКНО ПРЕДУПРЕЖДЕНИЯ О СТОРОННИХ ССЫЛКАХ -->
+    <div class="link-warn-overlay" id="link-warn-modal" onclick="closeLinkWarningModal()">
+        <div class="link-warn-card" onclick="event.stopPropagation()">
+            <div class="link-warn-title">
+                ⚠️ Осторожно, внешняя ссылка!
+            </div>
+            <div class="link-warn-text">
+                Вы покидаете форум STAFF-портал Pinnogram. Эта ссылка ведёт на сторонний ресурс, который не связан с нашей базой данных и сервером:
+            </div>
+            <div class="link-warn-url-display" id="link-warn-target-url">https://example.com</div>
+            <div class="link-warn-buttons">
+                <button class="btn-dark-matte" style="border:none; padding:10px 18px;" onclick="closeLinkWarningModal()">Отмена</button>
+                <button class="btn-user-card-view-full" id="link-warn-redirect-btn" style="width:auto; padding:10px 24px; background:#5865F2;">Перейти</button>
+            </div>
+        </div>
+    </div>
+
     
     <script>
+        
+        let globalTargetExternalUrl = ""; // Хранилище кликнутой внешней ссылки
+
+        // 🎯 ИНТЕЛЛЕКТУАЛЬНЫЙ ПАРСЕР: Находит ссылки в тексте и делает их синими неоновыми
+        function formatTextWithClickableLinks(rawText) {
+            if (!rawText) return "";
+            
+            // Экранируем HTML-теги, чтобы никто не сломал верстку через сообщения (Защита от XSS)
+            let cleanHtml = rawText
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+
+            // Регулярное выражение для поиска любых URL (http/https)
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+
+            // Заменяем ссылки на специальные теги с вызовом функции проверки при клике
+            return cleanHtml.replace(urlRegex, function(matchedUrl) {
+                // Убираем возможные знаки препинания на конце ссылки, если они прилипли
+                let cleanUrl = matchedUrl.replace(/[.,;:!?)]$/, '');
+                return `<span class="forum-clickable-link" onclick="handleForumLinkClick(event, '${cleanUrl}')">${cleanUrl}</span>`;
+            });
+        }
+
+        // 🎯 ПЕРЕХВАТЧИК КЛИКА ПО ССЫЛКЕ
+        function handleForumLinkClick(event, clickedUrl) {
+            if (event) event.stopPropagation(); // Защита от открытия карточки тикета насквозь
+            
+            const internalPrefix = "https://pinnogram-server.onrender.com";
+            
+            // Если ссылка НАША (начинается с нашего домена) — открываем её сразу в новой вкладке
+            if (clickedUrl.startsWith(internalPrefix)) {
+                window.open(clickedUrl, '_blank');
+            } else {
+                // Если ссылка СТОРОННЯЯ — перехватываем переход и выводим матовую модалку защиты!
+                globalTargetExternalUrl = clickedUrl;
+                
+                const modal = document.getElementById("link-warn-modal");
+                const urlDisplay = document.getElementById("link-warn-target-url");
+                const redirectBtn = document.getElementById("link-warn-redirect-btn");
+                
+                if (modal && urlDisplay && redirectBtn) {
+                    urlDisplay.textContent = clickedUrl;
+                    
+                    // Вешаем клик на кнопку "Перейти"
+                    redirectBtn.onclick = () => {
+                        window.open(globalTargetExternalUrl, '_blank');
+                        closeLinkWarningModal();
+                    };
+                    
+                    modal.style.display = "flex"; // Разворачиваем матовое окно защиты
+                }
+            }
+        }
+
+        function closeLinkWarningModal() {
+            const modal = document.getElementById("link-warn-modal");
+            if (modal) modal.style.display = "none";
+        }
 
         const API_URL = window.location.origin;
         let selectedStaffId = null;
@@ -1696,22 +1846,35 @@
                     const ticketTime = t.time || "1 час назад";
                     const ticketText = t.text || "Описание обращения обрабатывается...";
 
+                    // Сборка разметки карточки с интеграцией подсветки ссылок и защитой аватарок
                     box.innerHTML = `
                         <div class="ticket-header-line" style="margin-bottom: 0; display: flex; align-items: center; gap: 12px;">
+                            
+                            <!-- Клик по аватарке вызывает карточку Дискорда, блокируя сквозное открытие дела -->
                             <div class="ticket-avatar-wrapper" onclick="event.stopPropagation(); viewUserProfile(event, '${authorName}')" style="cursor: pointer;">
-                                <img src="${authorAvatar}" onerror="this.src='https://ibb.co'">
+                                <img src="${authorAvatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'">
                             </div>
+                            
+                            <!-- Клик по имени автора также вызывает карточку Дискорда -->
                             <span class="ticket-author-name" onclick="event.stopPropagation(); viewUserProfile(event, '${authorName}')" style="cursor: pointer;">${authorName}</span>
+                            
+                            <!-- Серый силуэт пользователя рядом с ником -->
                             <svg width="12" height="12" fill="#55555c" viewBox="0 0 16 16" style="margin-left:-4px;"><path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"/></svg>
+                            
+                            <!-- Аккуратный бэйдж статуса с точкой -->
                             <span class="${badgeStyleClass}">${statusText}</span>
+                            
                             <div class="ticket-right-meta" style="margin-left: auto; display: flex; align-items: center; gap: 15px; font-size: 12px;">
                                 <span class="ticket-time-ago" style="color: #55555c;">${ticketTime}</span>
                                 <span class="ticket-category-label" style="color: ${catColor}; font-weight: 600;">${categoryLabelText}</span>
                             </div>
                         </div>
                         <h3 class="ticket-body-title" style="margin: 12px 0 0 0; font-size: 18px; font-weight: bold; color: #fff;">${categoryLabelText}</h3>
-                        <p class="ticket-body-desc" style="color: #66666e; font-size: 13px; margin: 4px 0 0 0;">${ticketText}</p>
+                        
+                        <!-- 🎯 ИСПРАВЛЕНО: Текст в превью карточек теперь тоже парсит синие неоновые ссылки! -->
+                        <p class="ticket-body-desc" style="color: #66666e; font-size: 13px; margin: 4px 0 0 0;">${formatTextWithClickableLinks(ticketText)}</p>
                     `;
+
 
                     // Накладываем кастомные переливы никнеймов на имя автора
                     const nameSpan = box.querySelector(".ticket-author-name");
@@ -1756,7 +1919,8 @@
 
                 // Заголовок и текст тикета
                 titleType.textContent = t.type === "user" ? "Жалоба на игрока" : "Жалоба на администратора";
-                textBlock.textContent = t.text;
+                textBlock.innerHTML = formatTextWithClickableLinks(t.text);
+
 
                 // Красивый бэйдж статуса сверху справа
                 let statusLabel = "● Ожидание";
@@ -1832,7 +1996,8 @@
 
                 // Рендерим сообщения в стиле красивого чата с умным распознаванием пингов @
                 commentsZone.innerHTML = comments.map(c => {
-                    let commentText = c.text;
+                    let commentText = formatTextWithClickableLinks(c.text);
+
                     let extraClass = "";
 
                     // Проверяем, есть ли в сообщении знак меншена @
