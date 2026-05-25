@@ -1675,21 +1675,26 @@
                 if (t.status === "rejected") statusLabel = "❌ Отклонено";
                 if(badgeZone) badgeZone.innerHTML = `<span class="status-badge-forum">${statusLabel}</span>`;
 
-                // Мета-линия автора (Аватар в переливающемся фиолетово-голубом кольце, ник, время)
+                // 🎯 ИСПРАВЛЕНО: Уникальный класс main-author-title изолирует имя и намертво убирает баг подмены ника!
                 metaBlock.innerHTML = `
                     <div class="ticket-header-line" style="margin-bottom:0; display: flex; align-items: center; gap: 14px;">
-                        <!-- 🎯 ИСПРАВЛЕНО: Клик по переливающемуся кольцу аватарки вызывает карточку Дискорда -->
-                        <div class="main-ticket-avatar-wrapper" onclick="event.stopPropagation(); viewUserProfile('${t.author}')" style="cursor: pointer;">
-                            <img src="${t.avatar || 'https://i.ibb.co/4pSbxsh/user-avatar.png'}" onerror="this.src='https://ibb.co'">
+                        
+                        <!-- 🎯 ИСПРАВЛЕНО: Теперь в вызов четко передается event для живого отслеживания мышки -->
+                        <div class="main-ticket-avatar-wrapper" onclick="event.stopPropagation(); viewUserProfile(event, '${t.author}')" style="cursor: pointer;">
+                            <img src="${t.avatar || 'https://i.ibb.co/4pSbxsh/user-avatar.png'}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'">
                         </div>
+                        
                         <div>
-                            <!-- 🎯 ИСПРАВЛЕНО: Клик по никнейму автора также вызывает карточку Дискорда -->
-                            <span class="ticket-author-name" onclick="event.stopPropagation(); viewUserProfile('${t.author}')" style="display:block; font-size: 15px; font-weight: 600; cursor: pointer;">${t.author}</span>
-                            <span class="ticket-time-ago" style="font-size:11px; color: #55555c;">${t.time || '1 час назад'} • Гражданские вопросы</span>
+                            <!-- 🎯 ИСПРАВЛЕНО: Тот же изолированный вызов по клику на имя автора -->
+                            <span class="main-author-title" onclick="event.stopPropagation(); viewUserProfile(event, '${t.author}')" style="display:block; font-size: 15px; font-weight: 600; cursor: pointer; color: #fff;">${t.author}</span>
+                            <span class="ticket-time-ago" style="font-size:11px; color: #55555c;">${t.time || '1 час назад'} • Гражданиские вопросы</span>
                         </div>
                     </div>
                 `;
-                applyCustomNicknameStyles(metaBlock.querySelector(".ticket-author-name"), t.author);
+                
+                // 🎯 ИСПРАВЛЕНО: Накладываем градиент строго на изолированный класс заголовка анкеты
+                applyCustomNicknameStyles(metaBlock.querySelector(".main-author-title"), t.author);
+
 
 
 
