@@ -1692,8 +1692,8 @@
 
                     // 3. Сборка разметки карточки (Все поля обернуты в безопасные фолбеки)
                     const authorName = t.author || "Гражданин Pinnogram";
-                    const authorAvatar = t.avatar || "https://i.ibb.co/4pSbxsh/user-avatar.png";
-                    const ticketTime = getForumTimeAgo(t.time);
+                    const authorAvatar = t.avatar || "https://ibb.co";
+                    const ticketTime = t.time || "1 час назад";
                     const ticketText = t.text || "Описание обращения обрабатывается...";
 
                     box.innerHTML = `
@@ -1758,63 +1758,36 @@
                 titleType.textContent = t.type === "user" ? "Жалоба на игрока" : "Жалоба на администратора";
                 textBlock.textContent = t.text;
 
-                // Заголовок и текст тикета с защитой от пустых полей
-                const cleanTicketType = t.type ? String(t.type).trim().toLowerCase() : "user";
-                
-                if (cleanTicketType === "staff" || cleanTicketType === "администратор") {
-                    titleType.textContent = "Жалоба на администратора";
-                } else if (cleanTicketType === "appeal" || cleanType === "апелляция") {
-                    titleType.textContent = "Апелляция наказания";
-                } else {
-                    titleType.textContent = "Жалоба на игрока";
-                }
-                
-                textBlock.textContent = t.text || "Описание нарушения отсутствует";
-
-                // 🎯 ИСПРАВЛЕНО: Пуленепробиваемый и точный расчет статусов (убран баг сброса в Ожидание)
+                // Красивый бэйдж статуса сверху справа
                 let statusLabel = "● Ожидание";
-                const cleanStatus = t.status ? String(t.status).trim().toLowerCase() : "open";
-                
-                if (cleanStatus === "processing" || cleanStatus === "в работе") { 
-                    statusLabel = "⚙️ В работе"; 
-                }
-                else if (cleanStatus === "approved" || cleanStatus === "одобрено") { 
-                    statusLabel = "✅ Одобрено"; 
-                }
-                else if (cleanStatus === "rejected" || cleanStatus === "отклонено") { 
-                    statusLabel = "❌ Отклонено"; 
-                }
-                
-                if (badgeZone) {
-                    badgeZone.innerHTML = `<span class="status-badge-forum">${statusLabel}</span>`;
-                }
+                if (t.status === "processing") statusLabel = "⚙️ В работе";
+                if (t.status === "approved") statusLabel = "✅ Одобрено";
+                if (t.status === "rejected") statusLabel = "❌ Отклонено";
+                if(badgeZone) badgeZone.innerHTML = `<span class="status-badge-forum">${statusLabel}</span>`;
 
-                // Вычисляем живое время с безопасным перехватом сбоев
-                let displayTimeAgo = "1 час назад";
-                try {
-                    displayTimeAgo = getForumTimeAgo(t.time);
-                } catch(timeErr) {
-                    displayTimeAgo = t.time || "1 час назад";
-                }
-
-                // Пересобираем мета-линию автора (Вставляем готовую строчку displayTimeAgo)
+                // 🎯 ИСПРАВЛЕНО: Уникальный класс main-author-title изолирует имя и намертво убирает баг подмены ника!
                 metaBlock.innerHTML = `
                     <div class="ticket-header-line" style="margin-bottom:0; display: flex; align-items: center; gap: 14px;">
+                        
+                        <!-- 🎯 ИСПРАВЛЕНО: Теперь в вызов четко передается event для живого отслеживания мышки -->
                         <div class="main-ticket-avatar-wrapper" onclick="event.stopPropagation(); viewUserProfile(event, '${t.author}')" style="cursor: pointer;">
                             <img src="${t.avatar || 'https://i.ibb.co/4pSbxsh/user-avatar.png'}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'">
                         </div>
+                        
                         <div>
+                            <!-- 🎯 ИСПРАВЛЕНО: Тот же изолированный вызов по клику на имя автора -->
                             <span class="main-author-title" onclick="event.stopPropagation(); viewUserProfile(event, '${t.author}')" style="display:block; font-size: 15px; font-weight: 600; cursor: pointer; color: #fff;">${t.author}</span>
-                            <span class="ticket-time-ago" style="font-size:11px; color: #55555c;">${displayTimeAgo} • Вопросы и обращения</span>
+                            <span class="ticket-time-ago" style="font-size:11px; color: #55555c;">${t.time || '1 час назад'} • Гражданиские вопросы</span>
                         </div>
                     </div>
                 `;
-
                 
-                // Накладываем кастомный переливающийся градиент на имя автора в шапке открытого дела
+                // 🎯 ИСПРАВЛЕНО: Накладываем градиент строго на изолированный класс заголовка анкеты
                 applyCustomNicknameStyles(metaBlock.querySelector(".main-author-title"), t.author);
 
-                
+
+
+
                 // Рендеринг галереи скриншотов
                 if (t.photos && t.photos.length > 0) {
                     gallery.innerHTML = t.photos.map(pUrl => `
@@ -2806,51 +2779,6 @@
             } catch (e) { }
         }
 
-        // 🎯 ИСПРАВЛЕНО: Кристально чистый парсинг времени ДД.ММ.ГГГГ ХХ:ММ без краша массивов строк
-        function getForumTimeAgo(timestampStr) {
-            if (!timestampStr) return "1 час назад";
-            try {
-                // Разделяем дату и время по пробелу: ["ДД.ММ.ГГГГ", "ХХ:ММ"]
-                const parts = timestampStr.split(" ");
-                if (parts.length < 2) return timestampStr;
-                
-                // Сплитим строго строки внутри элементов массива через индексы [0] и [1]!
-                const dateParts = parts[0].split(".");
-                const timeParts = parts[1].split("."); // На случай если на бэкенде секунды через точку, или двоеточие:
-                const cleanTimeParts = parts[1].includes(":") ? parts[1].split(":") : timeParts;
-                
-                if (dateParts.length < 3 || cleanTimeParts.length < 2) return timestampStr;
-
-                // В JavaScript месяцы идут от 0 до 11, поэтому делаем (месяц - 1)
-                const day = parseInt(dateParts[0], 10);
-                const month = parseInt(dateParts[1], 10) - 1;
-                const year = parseInt(dateParts[2], 10);
-                const hours = parseInt(cleanTimeParts[0], 10);
-                const minutes = parseInt(cleanTimeParts[1], 10);
-
-                const ticketDate = new Date(year, month, day, hours, minutes);
-                const now = new Date();
-                
-                const diffMs = now - ticketDate;
-                const diffMins = Math.floor(diffMs / 60000);
-                
-                if (diffMins < 1) return "Только что";
-                if (diffMins < 60) return `${diffMins} мин. назад`;
-                
-                const diffHours = Math.floor(diffMins / 60);
-                if (diffHours < 24) return `${diffHours} час. назад`;
-                
-                const diffDays = Math.floor(diffHours / 24);
-                return `${diffDays} дн. назад`;
-            } catch(e) {
-                console.error("Ошибка парсинга времени:", e);
-                return timestampStr; // В случае любой непредвиденной строки просто отдаем её без краша сайта!
-            }
-        }
-
     </script>
 </body>
 </html>
-
-
-
