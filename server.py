@@ -488,20 +488,57 @@ async def serve_forum_page():
 # 🎫 СИСТЕМА ОБРАЩЕНИЙ И ЖАЛОБ (ТИКЕТЫ)
 # ==========================================
 
-# 2. ПОЛУЧЕНИЕ СПИСКА ВСЕХ ОБРАЩЕНИЙ
+# ПОЛУЧЕНИЕ ФИЛЬТРОВАННОГО РЕЕСТРА ЖАЛОБ С УЧЕТОМ КАТЕГОРИЙ И АРХИВА
 @app.get("/api/forum/tickets/list")
-async def get_forum_tickets_list():
+async def get_moderators_tickets_list(category: str = "all", request: Request = None):
     try:
+        username = request.cookies.get("forum_user_name", "") if request else ""
+        
         async with aiosqlite.connect(DB_PATH) as db:
-            async with db.execute("SELECT id, ticket_type, author_name, author_avatar, status, timestamp, description FROM forum_tickets ORDER BY id DESC") as cursor:
-                rows = await cursor.fetchall()
-                return [{
-                    "id": r[0], "type": r[1], "author": r[2], 
-                    "avatar": r[3], "status": r[4], "time": r[5], "text": r[6]
-                } for r in rows]
+            # 🎯 ВЕТКА №1: Личный архив модератора (все взятые в работу или закрытые им дела)
+            if category == "mod_archive":
+                if not username:
+                    return []
+                async with db.execute("""
+                    SELECT id, ticket_type, author_name, author_avatar, message_text, status, timestamp, moderator_name 
+                    FROM forum_tickets 
+                    WHERE moderator_name = ? ORDER BY id DESC
+                """, (username,)) as cursor:
+                    rows = await cursor.fetchall()
+            
+            # 🎯 ВЕТКА №2: Фильтрация по конкретным типам обращений
+            elif category in ["user", "staff", "appeal"]:
+                async with db.execute("""
+                    SELECT id, ticket_type, author_name, author_avatar, message_text, status, timestamp, moderator_name 
+                    FROM forum_tickets 
+                    WHERE ticket_type = ? ORDER BY id DESC
+                """, (category,)) as cursor:
+                    rows = await cursor.fetchall()
+            
+            # 🎯 ВЕТКА №3: Выгрузка абсолютно всех обращений
+            else:
+                async with db.execute("""
+                    SELECT id, ticket_type, author_name, author_avatar, message_text, status, timestamp, moderator_name 
+                    FROM forum_tickets ORDER BY id DESC
+                """) as cursor:
+                    rows = await cursor.fetchall()
+
+            return [
+                {
+                    "id": r[0],
+                    "type": r[1],
+                    "author": r[2],
+                    "avatar": r[3],
+                    "text": r[4],
+                    "status": r[5],
+                    "time": r[6],
+                    "moderator": r[7]
+                } for r in rows
+            ]
     except Exception as e:
-        print(f"🛑 Ошибка получения списка тикетов: {e}")
+        print(f"🛑 Ошибка фильтрации тикетов: {e}")
         return []
+
 
 
 # 3. ПОЛУЧЕНИЕ ДАННЫХ КОНКРЕТНОГО ОБРАЩЕНИЯ ПО ID
