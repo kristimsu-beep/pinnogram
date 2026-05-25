@@ -1765,16 +1765,26 @@
             viewUserProfile("me");
         }
 
-        // РЕНДЕРИНГ ОКНА ЛИЧНОГО ПРОФИЛЯ (ИСПРАВЛЕНО СИЯНИЕ И РОЛИ)
+        // 🎯 СУПЕР-ИСПРАВЛЕНИЕ: Функция просмотра профилей и перехвата мини-карточек Дискорда
         async function viewUserProfile(userId, bypassModal = false) {
-            // 🎯 СУПЕР-ФИКС: Перехватываем клик по любому пользователю!
-            // Если мы нажимаем на чужой ник и bypassModal равен false — сначала показываем всплывающую карточку Дискорда
-            if (userId && userId !== "me" && userId !== getCookie("forum_user_name") && !bypassModal) {
-                openUserMiniCardModal(userId);
-                return; // Останавливаем открытие полной страницы, пока юзер не нажмет кнопку на модалке
+            console.log("🖱️ [CLICK PROFILE] Нажат ID пользователя:", userId, "Обход модалки:", bypassModal);
+
+            // Получаем имя текущего авторизованного пользователя из кук
+            const myCurrentName = getCookie("forum_user_name") || "";
+
+            // Превращаем userId в безопасную строку для сравнения
+            const targetNameStr = userId ? String(userId).trim() : "";
+
+            // 🎯 КРИТИЧЕСКИЙ ПЕРЕХВАТЧИК: Если кликнули НЕ на себя и bypassModal равен false — открываем всплывающую карточку!
+            if (targetNameStr && targetNameStr !== "me" && targetNameStr.toLowerCase() !== myCurrentName.toLowerCase() && !bypassModal) {
+                console.log("🚀 [ROUTER] Активируем всплывающее окно Дискорда для:", targetNameStr);
+                openUserMiniCardModal(targetNameStr);
+                return; // Останавливаем выполнение, чтобы не переключать главный экран форума!
             }
 
-            // Переключаем экран через наш обновленный роутер
+            console.log("🏛️ [ROUTER] Открываем полноценную страницу личного кабинета...");
+            
+            // Переключаем главный экран форума на раздел профилей
             switchSection("profile");
 
             const nameTitle = document.getElementById("prof-user-title");
@@ -1784,17 +1794,21 @@
             const statTick = document.getElementById("prof-stat-tick");
             const historyList = document.getElementById("profile-history-list");
 
-            // Вычисляем, чей профиль мы сейчас открываем (свой или чужой кликнутый из модалки)
-            const targetProfileName = (userId && userId !== "me") ? userId : (getCookie("forum_user_name") || "Пользователь");
+            // Вычисляем финальное имя для рендеринга (если пришло "me" — берем из куки, иначе имя кандидата)
+            const finalProfileName = (targetNameStr && targetNameStr !== "me") ? targetNameStr : myCurrentName;
 
-            if (nameTitle) nameTitle.textContent = targetProfileName;
-            applyCustomNicknameStyles(nameTitle, targetProfileName);
+            if (nameTitle) nameTitle.textContent = finalProfileName;
+            applyCustomNicknameStyles(nameTitle, finalProfileName);
 
             if (avatarImg) {
-                // Если открываем свой профиль — берем аву из кук, если чужой — дефолт (бэкэнд подгрузит в openUserMiniCardModal)
-                avatarImg.src = (userId && userId !== "me" && userId !== getCookie("forum_user_name")) ? "https://i.ibb.co/4pSbxsh/user-avatar.png" : (getCookie("forum_user_avatar") || "https://i.ibb.co/4pSbxsh/user-avatar.png");
+                // Задаем аватарку: если это чужой профиль — ставим временный фикс, если свой — берем из кук
+                if (targetNameStr && targetNameStr !== "me" && targetNameStr.toLowerCase() !== myCurrentName.toLowerCase()) {
+                    avatarImg.src = "https://ibb.co";
+                } else {
+                    avatarImg.src = getCookie("forum_user_avatar") || "https://ibb.co";
+                }
                 
-                // 🎯 ИСПРАВЛЕНО: Поставили вечный неоновый аватар-фикс в onerror вместо битого ibb.co
+                // Страховка от поломки картинок из-за битого кэша Дискорда
                 avatarImg.onerror = function() {
                     this.src = 'https://ibb.co';
                 };
@@ -1803,7 +1817,8 @@
             if (historyList) historyList.textContent = "Синхронизация с реестрами базы данных SQLite...";
 
             try {
-                const res = await fetch(`${API_URL}/api/forum/user/profile/${targetProfileName}`);
+                // Тянем статистику, кастомный баннер и историю действий участника с бэкэнда Render
+                const res = await fetch(`${API_URL}/api/forum/user/profile/${finalProfileName}`);
                 const data = await res.json();
 
                 if (badgeZone) {
@@ -1817,7 +1832,7 @@
                 if (statTick) statTick.textContent = data.stat_tickets;
                 if (statComm) statComm.textContent = data.stat_comments;
 
-                // Подгружаем кастомный баннер на фон страницы профиля по твоему прошлому скриншоту кастомизации
+                // Подгружаем кастомный баннер на фон страницы, если он настроен пользователем
                 const profileBannerCard = document.querySelector(".profile-banner-card");
                 if (profileBannerCard) {
                     if (data.banner) {
@@ -1848,8 +1863,12 @@
                     }
                 }
 
-            } catch (e) { if (historyList) historyList.textContent = "Ошибка связи со шлюзом профилей."; }
+            } catch (e) { 
+                console.error("Ошибка в viewUserProfile:", e);
+                if (historyList) historyList.textContent = "Ошибка связи со шлюзом профилей."; 
+            }
         }
+
 
 
 
