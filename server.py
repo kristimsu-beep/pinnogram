@@ -323,14 +323,22 @@ async def get_forum_staff():
 # 🔑 СИСТЕМА СВЕРХБЫСТРОЙ АВТОРИЗАЦИИ DISCORD OAUTH2
 # ==========================================
 
-# 1. Ссылка-перенаправление на форму авторизации Дискорда
+# 1. Ссылка-перенаправление на форму авторизации Дискорда (ИСПРАВЛЕНО)
 @app.get("/api/forum/auth/login")
 async def discord_login_redirect():
+    from urllib.parse import quote # Импортируем родной кодировщик Python
+    import os
+    
     client_id = os.getenv("DISCORD_CLIENT_ID")
-    redirect_uri = os.getenv("DISCORD_REDIRECT_URI")
-    # Генерируем официальную ссылку авторизации Дискорда
-    url = f"https://discord.com/api/oauth2/authorize?client_id={client_id}&redirect_uri={encodeURIComponent(redirect_uri)}&response_type=code&scope=identify"
+    redirect_uri = os.getenv("DISCORD_REDIRECT_URI", "")
+    
+    # Кодируем redirect_uri стандартным методом Python quote() вместо JavaScript
+    encoded_redirect = quote(redirect_uri, safe="")
+    
+    # 🎯 ИСПРАВЛЕНО: Добавлены %20guilds и правильное Python-кодирование ссылки!
+    url = f"https://discord.com/api/oauth2/authorize?client_id={client_id}&redirect_uri={encoded_redirect}&response_type=code&scope=identify%20guilds"
     return RedirectResponse(url)
+
 
 # Легкий внутренний хелпер для кодирования URL-компонентов
 def encodeURIComponent(text: str) -> str:
