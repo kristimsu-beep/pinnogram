@@ -1633,51 +1633,78 @@
         // ХРАНИЛИЩЕ ТЕКУЩЕГО ФИЛЬТРА КАТЕГОРИИ ИЗ САЙДБАРА
         let currentSelectedCategoryFilter = "all"; 
 
+         // 🎯 ФИНАЛЬНЫЙ ПУЛЕНЕПРОБИВАЕМЫЙ ВЫГРУЗЧИК РЕЕСТРА ОБРАЩЕНИЙ ДЛЯ САЙДБАРА
         async function loadTicketsList() {
             const container = document.getElementById("tickets-container");
             if (!container) return;
             container.textContent = "Синхронизация с реестрами базы данных SQLite...";
 
+            // Извлекаем чистую строку текущего фильтра сайдбара
+            const activeFilter = String(currentSelectedCategoryFilter).trim().toLowerCase();
+            console.log("🔎 [FRONTEND FILTER] Запрашиваем с сервера категорию:", activeFilter);
+
             try {
-                // 🎯 ИСПРАВЛЕНО: Передаем в строку запроса к FastAPI выбранную категорию (?category=...)
-                const res = await fetch(`${API_URL}/api/forum/tickets/list?category=${currentSelectedCategoryFilter}`);
+                // Пуляем запрос на бэкэнд FastAPI с явной передачей параметра
+                const res = await fetch(`${API_URL}/api/forum/tickets/list?category=${activeFilter}`);
                 const tickets = await res.json();
+                
+                console.log("📦 [DATABASE RESPONSE] Получено тикетов из базы данных SQLite:", tickets);
                 container.textContent = "";
 
-                if (tickets.length === 0) {
-                    container.innerHTML = "<div style='grid-column:1/-1; text-align:center; opacity:0.4; padding:40px 0;'>В выбранном разделе обращений пока нет записей.</div>";
+                if (!tickets || tickets.length === 0) {
+                    container.innerHTML = `<div style='grid-column:1/-1; text-align:center; opacity:0.4; padding:40px 0;'>В разделе "${currentSelectedCategoryFilter}" обращений пока нет.</div>`;
                     return;
                 }
 
                 tickets.forEach(t => {
+                    // Защита: если объект битый или пустой, пропускаем его
+                    if (!t || !t.id) return;
+
                     const box = document.createElement("div");
                     box.className = "ticket-row-box-flat";
                     box.onclick = () => viewSpecificTicket(t.id);
 
-                    // Рассчитываем точечный статус по скриншоту
+                    // Расчет статусов обращений
                     let statusText = "Ожидание";
                     let badgeStyleClass = "status-dot-badge";
-                    if (t.status === "processing") { statusText = "В работе"; badgeStyleClass = "status-dot-badge"; }
-                    if (t.status === "approved") { statusText = "Одобрено"; badgeStyleClass = "status-dot-badge approved-badge"; }
-                    if (t.status === "rejected") { statusText = "Отклонено"; badgeStyleClass = "status-dot-badge rejected-badge"; }
+                    
+                    const cleanStatus = t.status ? String(t.status).trim().toLowerCase() : "open";
+                    if (cleanStatus === "processing") { statusText = "В работе"; badgeStyleClass = "status-dot-badge"; }
+                    if (cleanStatus === "approved") { statusText = "Одобрено"; badgeStyleClass = "status-dot-badge approved-badge"; }
+                    if (cleanStatus === "rejected") { statusText = "Отклонено"; badgeStyleClass = "status-dot-badge rejected-badge"; }
 
-                    // 🎯 ИСПРАВЛЕНО: Умный расчет цветов и названий категорий с учетом Апелляций
+                    // 🎯 СУПЕР-ФИКС: Переводим тип в нижний регистр для 100% совпадения!
+                    const cleanType = t.type ? String(t.type).trim().toLowerCase() : "user";
+                    
                     let categoryLabelText = "Жалоба на игрока";
                     let catColor = "#ff3b30";
-                    if (t.type === "staff") { categoryLabelText = "Жалоба на админа"; catColor = "#ffcc00"; }
-                    if (t.type === "appeal") { categoryLabelText = "Апелляция"; catColor = "#5865F2"; }
+                    
+                    if (cleanType === "staff" || cleanType === "администратор") { 
+                        categoryLabelText = "Жалоба на админа"; 
+                        catColor = "#ffcc00"; 
+                    }
+                    else if (cleanType === "appeal" || cleanType === "апелляция") { 
+                        categoryLabelText = "Апелляция"; 
+                        catColor = "#5865F2"; 
+                    }
 
-                    // Сборка разметки карточки с перехватчиками кликов на аватарку и имя автора
+                    // Безопасные фолбеки для аватарок и текстов
+                    const authorAvatar = t.avatar || "https://ibb.co";
+                    const authorName = t.author || "Анонимный гражданин";
+                    const ticketTime = t.time || "1 час назад";
+                    const ticketText = t.text || "Описание нарушения отсутствует";
+
+                    // Сборка верстки карточки тикета
                     box.innerHTML = `
                         <div class="ticket-header-line" style="margin-bottom: 0; display: flex; align-items: center; gap: 12px;">
                             
-                            <!-- Клик по аватарке вызывает всплывающую карточку Дискорда, блокируя открытие дела -->
-                            <div class="ticket-avatar-wrapper" onclick="event.stopPropagation(); viewUserProfile(event, '${t.author}')" style="cursor: pointer;">
-                                <img src="${t.avatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'">
+                            <!-- Клик по аватарке вызывает карточку Дискорда, блокируя сквозное открытие дела -->
+                            <div class="ticket-avatar-wrapper" onclick="event.stopPropagation(); viewUserProfile(event, '${authorName}')" style="cursor: pointer;">
+                                <img src="${authorAvatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'">
                             </div>
                             
-                            <!-- 🎯 ИСПРАВЛЕНО: В вызов четко прописан event для живого отслеживания координат клика по имени -->
-                            <span class="ticket-author-name" onclick="event.stopPropagation(); viewUserProfile(event, '${t.author}')" style="cursor: pointer;">${t.author}</span>
+                            <!-- Клик по имени автора также вызывает карточку Дискорда -->
+                            <span class="ticket-author-name" onclick="event.stopPropagation(); viewUserProfile(event, '${authorName}')" style="cursor: pointer;">${authorName}</span>
                             
                             <!-- Серый силуэт пользователя рядом с ником -->
                             <svg width="12" height="12" fill="#55555c" viewBox="0 0 16 16" style="margin-left:-4px;"><path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"/></svg>
@@ -1686,22 +1713,26 @@
                             <span class="${badgeStyleClass}">${statusText}</span>
                             
                             <div class="ticket-right-meta" style="margin-left: auto; display: flex; align-items: center; gap: 15px; font-size: 12px;">
-                                <span class="ticket-time-ago" style="color: #55555c;">${t.time || '1 час назад'}</span>
+                                <span class="ticket-time-ago" style="color: #55555c;">${ticketTime}</span>
                                 <span class="ticket-category-label" style="color: ${catColor}; font-weight: 600;">${categoryLabelText}</span>
                             </div>
                         </div>
                         <h3 class="ticket-body-title" style="margin: 12px 0 0 0; font-size: 18px; font-weight: bold; color: #fff;">${categoryLabelText}</h3>
-                        <p class="ticket-body-desc" style="color: #66666e; font-size: 13px; margin: 4px 0 0 0;">${t.text || 'Описание нарушения отсутствует'}</p>
+                        <p class="ticket-body-desc" style="color: #66666e; font-size: 13px; margin: 4px 0 0 0;">${ticketText}</p>
                     `;
 
-                    // Находим текстовый элемент никнейма внутри свежесобранной карточки в памяти
+                    // Накладываем кастомные анимированные градиенты никнеймов на имя автора карточки
                     const nameSpan = box.querySelector(".ticket-author-name");
-                    // Запускаем асинхронное разукрашивание никнейма по базе данных SQLite
-                    applyCustomNicknameStyles(nameSpan, t.author);
+                    if (nameSpan) applyCustomNicknameStyles(nameSpan, authorName);
 
+                    // 🎯 КРИТИЧЕСКИЙ ШАГ: Финальное прикрепление карточки к контейнеру на экране
                     container.appendChild(box);
                 });
-            } catch (e) { container.textContent = "Не удалось связаться с базой данных обращений."; }
+                
+            } catch (e) { 
+                console.error("🛑 Критическая ошибка loadTicketsList во фронтенде:", e);
+                container.textContent = "Не удалось связаться с базой данных обращений."; 
+            }
         }
 
         // --- ПРОСМОТР КОНКРЕТНОГО ОБРАЩЕНИЯ ПО СКРИНШОТУ ---
