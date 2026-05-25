@@ -2412,7 +2412,7 @@
             } catch (e) { alert("Сбой изменения статуса анкеты."); }
         }
 
-                // 🎯 АСИНХРОННЫЙ ОТКРЫВАТЕЛЬ КОНТЕКСТНОЙ КАРТОЧКИ ПОЛЬЗОВАТЕЛЯ
+        // 🎯 АСИНХРОННЫЙ ОТКРЫВАТЕЛЬ КОНТЕКСТНОЙ КАРТОЧКИ ПОЛЬЗОВАТЕЛЯ С РЕАЛЬНОЙ ДАТОЙ
         async function openUserMiniCardModal(targetUsername) {
             const modal = document.getElementById("user-mini-card-modal");
             if (!modal) return;
@@ -2430,23 +2430,18 @@
 
             // Сбрасываем дефолты перед загрузкой
             nameField.textContent = targetUsername;
-            avatarField.src = "https://ibb.co";
+            // 🎯 ИСПРАВЛЕНО: Поставили вечный рабочий аватар вместо ibb.co
+            avatarField.src = "https://i.ibb.co/4pSbxsh/user-avatar.png";
             hammer.style.display = "none";
-            dateField.textContent = "20.03.2026"; 
+            dateField.textContent = "Загрузка даты..."; 
             roleField.textContent = "Гражданин";
             idField.textContent = "Сканирование Discord ID...";
             if (banner) banner.style.backgroundImage = "none";
 
-            // Привязываем клик большой кнопки на открытие ПОЛНОГО профиля (принудительно передаем маркер "me" или обходим заглушку)
+            // 🎯 ИСПРАВЛЕНО: Теперь кнопка вызывает полноценный рендеринг чужого профиля с bypassModal = true!
             actionBtn.onclick = () => {
                 closeUserMiniCardModal();
-                // Снимаем блокировку перехвата и открываем полный личный кабинет
-                currentSection = "profile";
-                document.querySelectorAll(".page-section").forEach(s => s.style.display = "none");
-                document.getElementById("section-profile").style.display = "block";
-                // Запускаем старый рендеринг (бэкэнд подгрузит данные по имени)
-                const nameTitle = document.getElementById("prof-user-title");
-                if (nameTitle) nameTitle.textContent = targetUsername;
+                viewUserProfile(targetUsername, true); 
             };
 
             try {
@@ -2462,7 +2457,14 @@
                     roleField.textContent = "Гражданин сервера";
                 }
 
-                // 2. Подтягиваем кастомный баннер из настроек, если кандидат его загрузил
+                // 🎯 2. ИСПРАВЛЕНО: Подставляем действительную дату регистрации (авторизации) из SQLite!
+                if (data.reg_date) {
+                    dateField.textContent = data.reg_date;
+                } else {
+                    dateField.textContent = "25.05.2026"; // Фолбек на сегодняшнюю дату
+                }
+
+                // 3. Подтягиваем кастомный баннер из настроек, если кандидат его загрузил
                 if (data.banner && banner) {
                     banner.style.backgroundImage = `url('${data.banner}')`;
                 }
@@ -2473,17 +2475,27 @@
                 // Дополнительно сканируем числовой ID из Discord-состава персонала, чтобы вывести его в плашку
                 const staffRes = await fetch(`${API_URL}/api/forum/staff`);
                 const staffList = await staffRes.json();
-                const matchedStaff = staffList.find(s => targetUsername.toLowerCase().trim() in s.name.toLowerCase().trim() || s.name.toLowerCase().trim().includes(targetUsername.toLowerCase().trim()));
+                
+                // В JS оператор 'in' проверяет ключи, заменяем на правильный метод .includes()
+                const matchedStaff = staffList.find(s => {
+                    const sName = String(s.name).toLowerCase().trim();
+                    const tName = targetUsername.toLowerCase().trim();
+                    return sName.includes(tName) || tName.includes(sName);
+                });
                 
                 if (matchedStaff) {
-                    idField.textContent = matchedStaff.id; // Выводим реальный длинный ID типа 14653884619...
-                    avatarField.src = matchedStaff.avatar; // Синхронизируем аватарку
+                    idField.textContent = matchedStaff.id; // Выводим реальный длинный Discord ID типа 1465388...
+                    avatarField.src = matchedStaff.avatar; // Синхронизируем официальную аватарку из Дискорда
                 } else {
-                    idField.textContent = "ID участников скрыто приватностью Discord API";
+                    idField.textContent = "ID скрыто приватностью Discord API";
                 }
 
-            } catch (e) { idField.textContent = "Ошибка связи со шлюзом СУБД."; }
+            } catch (e) { 
+                console.error("Ошибка в openUserMiniCardModal:", e);
+                idField.textContent = "Ошибка связи со шлюзом СУБД."; 
+            }
         }
+
 
         function closeUserMiniCardModal() {
             const modal = document.getElementById("user-mini-card-modal");
