@@ -1611,17 +1611,19 @@
                 // Мета-линия автора (Аватар в переливающемся фиолетово-голубом кольце, ник, время)
                 metaBlock.innerHTML = `
                     <div class="ticket-header-line" style="margin-bottom:0; display: flex; align-items: center; gap: 14px;">
-                        <!-- ИСПРАВЛЕНО: Обернули верхнюю аватарку в неоновое кольцо по новому стилю -->
-                        <div class="main-ticket-avatar-wrapper">
-                            <img src="${t.avatar || 'https://i.ibb.co/4pSbxsh/user-avatar.png'}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'">
+                        <!-- 🎯 ИСПРАВЛЕНО: Клик по переливающемуся кольцу аватарки вызывает карточку Дискорда -->
+                        <div class="main-ticket-avatar-wrapper" onclick="event.stopPropagation(); viewUserProfile('${t.author}')" style="cursor: pointer;">
+                            <img src="${t.avatar || 'https://i.ibb.co/4pSbxsh/user-avatar.png'}" onerror="this.src='https://ibb.co'">
                         </div>
                         <div>
-                            <span class="ticket-author-name" style="display:block; font-size: 15px; font-weight: 600;">${t.author}</span>
+                            <!-- 🎯 ИСПРАВЛЕНО: Клик по никнейму автора также вызывает карточку Дискорда -->
+                            <span class="ticket-author-name" onclick="event.stopPropagation(); viewUserProfile('${t.author}')" style="display:block; font-size: 15px; font-weight: 600; cursor: pointer;">${t.author}</span>
                             <span class="ticket-time-ago" style="font-size:11px; color: #55555c;">${t.time || '1 час назад'} • Гражданские вопросы</span>
                         </div>
                     </div>
                 `;
                 applyCustomNicknameStyles(metaBlock.querySelector(".ticket-author-name"), t.author);
+
 
 
                 // Рендеринг галереи скриншотов
@@ -1683,9 +1685,13 @@
                     return `
                         <div class="review-item ${extraClass}" style="border-left: 2px solid #333; background: #141416; padding: 14px; margin-bottom: 8px; border-radius: 8px; transition: 0.3s;">
                             <div class="review-meta" style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
-                                <!-- 🎯 ИСПРАВЛЕНО: Поставили вечный неоновый аватар-фикс в src и onerror на случай сбоев кэша -->
-                                <img src="${c.avatar || 'https://i.ibb.co/4pSbxsh/user-avatar.png'}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'" style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover;">
-                                <b style="font-size: 13px; color: #fff;">${c.author}</b>
+                                
+                                <!-- 🎯 ИСПРАВЛЕНО: Клик по аватарке в чате переписки теперь красиво вызывает карточку Дискорда -->
+                                <img src="${c.avatar || 'https://i.ibb.co/4pSbxsh/user-avatar.png'}" onclick="viewUserProfile('${c.author}')" onerror="this.src='https://ibb.co'" style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover; cursor: pointer;">
+                                
+                                <!-- 🎯 ИСПРАВЛЕНО: Клик по никнейму автора комментария также вызывает карточку Дискорда -->
+                                <b onclick="viewUserProfile('${c.author}')" style="font-size: 13px; color: #fff; cursor: pointer;">${c.author}</b>
+                                
                                 <span style="font-size: 10px; opacity: 0.3; margin-left: auto;">${c.time}</span>
                             </div>
                             <div style="font-size: 13px; color: #d1d1d6; line-height: 1.5; white-space: pre-wrap;">${commentText}</div>
@@ -1762,9 +1768,10 @@
             if (menu) menu.style.display = "none";
         });
 
-        // Функция перехода в СВОЙ личный профиль из меню
+        // 🎯 ИСПРАВЛЕНО: Клик по кнопке «Мой профиль» в меню шапки уводит сразу на страницу, без мини-модалки!
         function openMyPersonalProfile() {
-            viewUserProfile("me");
+            // Передаем true во второй параметр (bypassModal = true)
+            viewUserProfile("me", true);
         }
 
         // 🎯 СУПЕР-ФИКС: Карточка Дискорда теперь гарантированно открывается при клике НА СЕБЯ И НА ВСЕХ УЧАСТНИКОВ
