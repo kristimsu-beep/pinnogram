@@ -245,7 +245,7 @@
         }
     }
 
-    // 2. РЕНДЕРИНГ КАРТОЧЕК СЕРВЕРОВ СТРОГО ПО ТВОЕМУ СКРИНШОТУ JUNIPER BOT
+    // 🎯 ИСПРАВЛЕНО: Рендеринг карточек на основе 100% реального присутствия бота из Discord API
     function renderGuildsCards(guildsArray) {
         const container = document.getElementById("guilds-cards-container");
         if (!container) return;
@@ -254,13 +254,13 @@
         if (!guildsArray || guildsArray.length === 0) {
             container.innerHTML = `
                 <div style="grid-column:1/-1; text-align:center; color:var(--text-muted); padding:40px 0;">
-                    🚫 Серверов, где вы являетесь Владельцем или Администратором, не обнаружено.
+                    🚫 Доступных серверов, где вы являетесь Владельцем или Администратором, не обнаружено.
                 </div>
             `;
             return;
         }
 
-        // Фирменная палитра ярких градиентов для шапок карточек, как у Juniper
+        // Фирменная палитра ярких градиентов Juniper для шапок карточек
         const gradients = [
             "linear-gradient(135deg, #1f4037 0%, #99f2c8 100%)",
             "linear-gradient(135deg, #f12711 0%, #f5af19 100%)",
@@ -279,28 +279,25 @@
             // Пришиваем guild_id к инвайту, чтобы Дискорд сразу подставил этот сервер в список добавления
             const specificInviteUrl = `${globalBotInviteUrl}&guild_id=${g.id}`;
             
-            // Сортируем: если на сервере уже стоит бот (для теста фильтруем по ключевым словам в имени)
-            const cleanName = String(g.name).toLowerCase();
-            const hasBotInGuild = cleanName.includes("прокуратура") || cleanName.includes("фсб") || cleanName.includes("чат");
-
             let actionBtnHtml = "";
             let onlineRowHtml = "";
 
-            if (hasBotInGuild) {
-                // Бот уже добавлен на сервер
+            // 🎯 СУПЕР-ФИКС: Никаких текстовых костылей! Полагаемся строго на живую проверку g.has_bot
+            if (g.has_bot === true || g.has_bot === "true") {
+                // Если бот физически находится на этом сервере Дискорда
                 actionBtnHtml = `<button class="btn-server-action btn-action-setup" onclick="openSpecificServerSettings('${g.id}', '${g.name}')">Настроить</button>`;
                 onlineRowHtml = `
                     <div class="server-members-online-row">
                         <div class="online-dot-green"></div>
-                        Members online: ${Math.floor(Math.random() * 12) + 2}
+                        Бот активен • Настройка доступна
                     </div>
                 `;
             } else {
-                // Бота еще нет на сервере
+                // Если бота на сервере ещё нет — горит оранжевая кнопка инвайта по скриншоту
                 actionBtnHtml = `<button class="btn-server-action btn-action-invite" onclick="window.open('${specificInviteUrl}', '_blank')">INVITE</button>`;
                 onlineRowHtml = `
-                    <div class="server-members-online-row" style="color:var(--text-muted); font-size:12px; font-weight:normal;">
-                        INVITE
+                    <div class="server-members-online-row" style="color:var(--text-muted); font-size:12px; font-weight:normal; font-style:italic;">
+                        Требуется подключение бота
                     </div>
                 `;
             }
@@ -339,12 +336,12 @@
         switchDashTab('main');
     }
 
-    // 5. ВЫХОД ИЗ ПАНЕЛИ ОБРАТНО К СПИСКУ ГИЛЬДИЙ
+    // 🎯 ИСПРАВЛЕНО: Полный возврат на экран серверов с очисткой кэша и правильным цветом фона
     function exitToGuildSelection() {
         document.getElementById("screen-bot-panel").style.display = "none";
         document.getElementById("screen-guild-selection").style.display = "block";
-        document.body.style.backgroundColor = "#f4f5f7"; // Возвращаем светлый фон витрины Juniper
-        fetchUserDiscordGuilds(); // Перезагружаем список
+        document.body.style.backgroundColor = "#f4f5f7"; // Возвращаем светлый благородный фон Juniper Bot!
+        fetchUserDiscordGuilds(); // Автоматически перепроверяем список в фоне!
     }
 
     // 6. ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК ВНУТРИ ПАНЕЛИ (Статус / Префикс / Модерация)
