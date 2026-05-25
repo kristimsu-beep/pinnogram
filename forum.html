@@ -1534,14 +1534,17 @@
                     if (t.status === "approved") { statusText = "Одобрено"; badgeStyleClass = "status-dot-badge approved-badge"; }
                     if (t.status === "rejected") { statusText = "Отклонено"; badgeStyleClass = "status-dot-badge rejected-badge"; }
 
-                    // Сборка разметки карточки с уменьшенной круглой аватаркой в неоновом кольце
+                    // Сборка разметки карточки с перехватчиками кликов на аватарку и имя автора
                     box.innerHTML = `
                         <div class="ticket-header-line" style="margin-bottom: 0; display: flex; align-items: center; gap: 12px;">
-                            <div class="ticket-avatar-wrapper">
+                            
+                            <!-- 🎯 ИСПРАВЛЕНО: Клик по аватарке вызывает всплывающую карточку Дискорда, блокируя открытие тикета -->
+                            <div class="ticket-avatar-wrapper" onclick="event.stopPropagation(); viewUserProfile('${t.author}')" style="cursor: pointer;">
                                 <img src="${t.avatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'">
                             </div>
                             
-                            <span class="ticket-author-name">${t.author}</span>
+                            <!-- 🎯 ИСПРАВЛЕНО: Клик по имени автора также вызывает всплывающую карточку Дискорда -->
+                            <span class="ticket-author-name" onclick="event.stopPropagation(); viewUserProfile('${t.author}')" style="cursor: pointer;">${t.author}</span>
                             
                             <!-- Серый силуэт пользователя рядом с ником -->
                             <svg width="12" height="12" fill="#55555c" viewBox="0 0 16 16" style="margin-left:-4px;"><path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"/></svg>
@@ -1558,7 +1561,6 @@
                         <p class="ticket-body-desc" style="color: #66666e; font-size: 13px; margin: 4px 0 0 0;">${t.text || 'Описание нарушения отсутствует'}</p>
                     `;
 
-                    // 🎯 ИСПРАВЛЕНО: Интегрировали подгрузку градиентов никнеймов!
                     // Находим текстовый элемент никнейма внутри свежесобранной карточки в памяти
                     const nameSpan = box.querySelector(".ticket-author-name");
                     // Запускаем асинхронное разукрашивание никнейма по базе данных SQLite
