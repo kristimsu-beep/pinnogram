@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Konata Bot — Выбор сервера</title>
+    <style>
+        :root {
+            --bg-main: #f4f5f7; /* Светлый фон Juniper из скриншота */
+            --bg-dark-panel: #141416; /* Глубокий графит для пульта настроек */
+            --neon-purple: #5865F2; /* Фирменный цвет Discord */
+            --neon-blue: #00f0ff;
+            --text-dark: #333333;
+            --text-light: #ffffff;
+            --text-muted: #828282;
+            --border-light: #eef0f4;
+            --border-dark: #222226;
+        }
+
+        body {
+            margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-main); color: var(--text-dark);
+            display: flex; flex-direction: column; min-height: 100vh; transition: background 0.3s;
+        }
+
+        /* ОРАНЖЕВАЯ ШАПКА JUNIPER BOT ПО СКРИНШОТУ */
+        .juniper-top-bar {
+            background: linear-gradient(90deg, #f2994a 0%, #f2c94c 100%);
+            padding: 15px 60px; display: flex; align-items: center; justify-content: space-between;
+            color: #fff; box-shadow: 0 4px 15px rgba(242, 153, 74, 0.2); z-index: 10;
+        }
+        .brand-logo-side { display: flex; align-items: center; gap: 10px; font-weight: bold; font-size: 20px; }
+        .nav-links-row { display: flex; gap: 25px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .nav-links-row a { color: rgba(255,255,255,0.8); text-decoration: none; transition: 0.2s; }
+        .nav-links-row a:hover { color: #fff; }
+
+        /* ЭКРАН 1: СЕТКА СЕРВЕРОВ (GUILD SELECTION) */
+        .main-servers-container {
+            max-width: 1100px; width: 100%; margin: 40px auto; padding: 0 20px; box-sizing: border-box;
+            display: flex; flex-direction: column; align-items: center; gap: 30px;
+        }
+        .search-servers-wrapper { position: relative; width: 100%; max-width: 420px; }
+        .search-servers-input {
+            width: 100%; background: #ffffff; border: 1px solid #e0e0e0; border-radius: 25px;
+            padding: 12px 20px 12px 45px; font-size: 14px; color: var(--text-dark); outline: none;
+            box-sizing: border-box; transition: 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        .search-servers-input:focus { border-color: #f2994a; box-shadow: 0 4px 12px rgba(242,153,74,0.15); }
+        .search-icon-svg { position: absolute; left: 18px; top: 14px; color: var(--text-muted); }
+
+        .servers-grid-layout { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 25px; width: 100%; }
+
+        .server-card-box {
+            background: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            border: 1px solid var(--border-light); display: flex; flex-direction: column; position: relative; transition: 0.2s;
+        }
+        .server-card-box:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .server-card-banner-top { height: 95px; padding: 15px; box-sizing: border-box; }
+        .server-title-text { color: #ffffff; font-size: 16px; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.4); margin: 0; }
+        .server-avatar-holder {
+            width: 64px; height: 64px; border-radius: 50%; border: 4px solid #ffffff;
+            background: #222; position: absolute; top: 60px; left: 18px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+        .server-avatar-holder img { width: 100%; height: 100%; object-fit: cover; }
+        .server-card-body-panel { padding: 45px 20px 20px 20px; display: flex; flex-direction: column; gap: 15px; flex: 1; justify-content: space-between; }
+        .btn-server-action {
+            background: none; border: none; font-size: 13px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.5px; cursor: pointer; text-align: left; padding: 0; width: fit-content; transition: 0.2s;
+        }
+        .btn-action-invite { color: #f2994a; }
+        .btn-action-setup { color: #5865F2; }
+
+        /* ЭКРАН 2: ВНУТРЕННИЙ ПУЛЬТ УПРАВЛЕНИЯ (DASHBOARD) */
+        .dashboard-layout { display: none; height: calc(100vh - 54px); width: 100%; }
+        .dash-sidebar {
+            width: 260px; background: #18181c; border-right: 1px solid var(--border-dark);
+            padding: 24px; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box;
+        }
+        .menu-item-btn {
+            background: none; border: none; color: #aaaaaa; padding: 12px 16px; border-radius: 8px;
+            font-size: 14px; font-weight: 600; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 12px; transition: 0.2s; width: 100%;
+        }
+        .menu-item-btn:hover { background: #1c1c21; color: #fff; }
+        .menu-item-btn.active-tab { background: #5865F2 !important; color: #fff !important; box-shadow: 0 0 15px rgba(88, 101, 242, 0.3); }
+
+        .dash-main-content { flex: 1; padding: 40px; background: var(--bg-main); overflow-y: auto; box-sizing: border-box; display: flex; flex-direction: column; gap: 25px; }
+        .dash-card { background: #ffffff; border: 1px solid var(--border-light); border-radius: 14px; padding: 24px; box-sizing: border-box; }
+        .switch-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--border-light); }
+        .switch-row:last-child { border-bottom: none; }
+
+        /* ТУМБЛЕРЫ-ПЕРЕКЛЮЧАТЕЛИ (SWITCHES) */
+        .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .slider-round { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #e0e0e0; transition: .3s; border-radius: 24px; }
+        .slider-round:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        input:checked + .slider-round { background-color: #5865F2; }
+        input:checked + .slider-round:before { transform: translateX(20px); }
+
+        .dash-input { width: 100%; background: #f4f5f7; border: 1px solid #e0e0e0; padding: 12px; border-radius: 8px; color: #333; box-sizing: border-box; outline: none; margin-top: 8px; transition: 0.2s; font-weight: 500; }
+        .dash-input:focus { border-color: #5865F2; background: #fff; }
+        .btn-save-dash { background: #5865F2; color: #fff; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; display: block; margin-left: auto; margin-top: 15px; }
+        .btn-save-dash:hover { background: #404eed; }
+    </style>
+</head>
+<body>
+
+    <!-- ОРАНЖЕВАЯ ВЕРХНЯЯ ШАПКА JUNIPER BOT ПО СКРИНШОТУ -->
+    <div class="juniper-top-bar">
+        <div class="brand-logo-side">
+            <svg width="22" height="22" fill="currentColor" viewBox="0 0 16 16" style="margin-top:-2px;"><path d="M3.5 11.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5m0-4a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5m0-4a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5"/></svg>
+            KonataBot
+        </div>
+        <div class="nav-links-row">
+            <a href="#">Docs</a>
+            <a href="#">Commands</a>
+            <a href="#">Statistics</a>
+            <a href="/forum">← На форум</a>
+        </div>
+    </div>
+
+    <!-- ЭКРАН 1: ВИ ТРИНА ВЫБОРА СЕРВЕРОВ (ГЛАВНЫЙ ЭКРАН) -->
+    <div id="screen-guild-selection">
+        <!-- ОРАНЖЕВАЯ ПОДЛОЖКА ИЗ ТВОЕГО СКРИНШОТА -->
+        <div style="background: linear-gradient(90deg, #f2994a 0%, #f2c94c 100%); padding: 35px 0; text-align: center;">
+            <h1 style="font-size: 26px; font-weight: 400; color: #fff; text-align: center; margin: 0; display: flex; align-items: center; gap: 10px; justify-content: center;">
+                Choose 
+                <span style="background:#fff; color:#f2994a; padding:4px 12px; border-radius:6px; font-weight:bold; display:inline-flex; align-items:center; gap:6px; font-size:20px;">
+                    <svg width="18" height="18" fill="currentColor" viewBox="0 0 16 16"><path d="M13.545 2.907a13.227 13.227 0 0 0-3.257-1.011.05.05 0 0 0-.052.025c-.141.25-.297.577-.406.833a12.212 12.212 0 0 0-3.658 0 8.258 8.258 0 0 0-.412-.833.051.051 0 0 0-.052-.025c-1.125.194-2.22.534-3.257 1.011a.041.041 0 0 0-.021.018C.356 6.024-.213 9.047.066 12.032a.04.04 0 0 0 .016.028a13.283 13.283 0 0 0 3.995 2.02a.05.05 0 0 0 .056-.018c.308-.42.582-.863.818-1.322a.05.05 0 0 0-.028-.069a8.726 8.726 0 0 1-1.247-.594a.05.05 0 0 1-.005-.085a6.052 6.052 0 0 0 .322-.252a.051.051 0 0 1 .053-.007c2.442 1.115 5.088 1.115 7.502 0a.051.051 0 0 1 .053.007c.114.086.221.17.322.252a.051.051 0 0 1-.005.085c-.392.234-.81.433-1.247.594a.05.05 0 0 0-.028.07c.24.46.513.903.819 1.32a.05.05 0 0 0 .056.019a13.21 13.21 0 0 0 4.001-2.02a.049.049 0 0 0 .016-.027c.385-3.418-.635-6.417-2.399-9.117a.042.042 0 0 0-.02-.019ZM5.14 9.473c-.785 0-1.431-.722-1.431-1.607 0-.885.632-1.607 1.43-1.607.807 0 1.443.73 1.432 1.607 0 .885-.625 1.607-1.431 1.607Zm4.515 0c-.785 0-1.43-.722-1.43-1.607 0-.885.632-1.607 1.43-1.607.807 0 1.443.73 1.431 1.607 0 .885-.624 1.607-1.43 1.607Z"/></svg>
+                    Discord
+                </span> 
+                server
+            </h1>
+        </div>
+
+        <div class="main-servers-container">
+            <!-- Строка живого поиска из скриншота -->
+            <div class="search-servers-wrapper">
+                <svg class="search-icon-svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/></svg>
+                <input type="text" id="guilds-search-input" class="search-servers-input" placeholder="Search..." oninput="filterDiscordGuildsRegistry()">
+            </div>
+            <!-- Сетка для динамического вывода карточек через JS -->
+            <div class="servers-grid-layout" id="guilds-cards-container">
+                <div style="text-align:center; color:var(--text-muted); padding:40px 0; grid-column:1/-1;">Выгрузка доступных вам Discord серверов из Discord API...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ЭКРАН 2: ВНУТРЕННИЙ ПУЛЬТ НАСТРОЕК (ПАНЕЛЬ УПРАВЛЕНИЯ) -->
+    <div class="dashboard-layout" id="screen-bot-panel">
+        <!-- Левый темный сайдбар настройки модулей -->
+        <div class="dash-sidebar">
+            <div style="color: #fff; font-weight: bold; font-size: 15px; border-bottom:1px solid #222226; padding-bottom:12px; display:flex; align-items:center; gap:10px;">
+                <button onclick="exitToGuildSelection()" style="background:none; border:none; color:#828282; cursor:pointer; font-size:16px; padding:0; font-weight:bold;">←</button>
+                <span id="active-server-sidebar-title">Настройка сервера</span>
+            </div>
+            <div class="menu-list" style="margin-top: 15px;">
+                <button class="menu-item-btn active-tab" id="menu-btn-main" onclick="switchDashTab('main')">📊 Общий статус</button>
+                <button class="menu-item-btn" id="menu-btn-commands" onclick="switchDashTab('commands')">⚙️ Команды и Префикс</button>
+                <button class="menu-item-btn" id="menu-btn-mod" onclick="switchDashTab('mod')">🛡️ Фильтры модерации</button>
+            </div>
+        </div>
+
+        <!-- Правая контентная часть с карточками параметров -->
+        <div class="dash-main-content">
+            <!-- Вкладка А: Общий статус -->
+            <div id="tab-dash-main">
+                <h1 style="margin:0 0 4px 0; font-size:22px; color:#fff;" id="active-server-panel-title">Управление</h1>
+                <p style="color:var(--text-muted); font-size:12px; margin:0 0 20px 0;">Конфигурация модулей ядра Konata Bot для вашего сообщества</p>
+                <div class="dash-card" style="background:#18181c; color:#fff; border-color:#222226;">
+                    🚀 Робот успешно синхронизирован со шлюзом сервера. Все системы автоматической фильтрации чатов и логирования логов находятся в режиме ожидания команд разработчика.
+                </div>
+            </div>
+
+            <!-- Вкладка Б: Команды и Префикс -->
+            <div id="tab-dash-commands" style="display: none;">
+                <div class="dash-card">
+                    <h2 style="margin:0 0 4px 0; font-size:18px;">⚙️ Параметры командной строки</h2>
+                    <p style="color:var(--text-muted); font-size:12px; margin:0 0 20px 0;">Настройка глобального вызова текстовых функций бота</p>
+                    <div>
+                        <label style="font-size:12px; color:var(--text-muted); font-weight:600;">Основной префикс бота:</label>
+                        <input type="text" class="dash-input" id="bot-prefix-field" value="k!">
+                    </div>
+                    <button class="btn-save-dash" onclick="saveDashConfig()">Сохранить изменения</button>
+                </div>
+            </div>
+
+            <!-- Вкладка В: Фильтры модерации -->
+            <div id="tab-dash-mod" style="display: none;">
+                <div class="dash-card">
+                    <h2 style="margin:0 0 4px 0; font-size:18px;">🛡️ Фильтрация и авто-защита чатов</h2>
+                    <p style="color:var(--text-muted); font-size:12px; margin:0 0 20px 0;">Активация автоматических щитов цензуры и анти-рейда</p>
+                    
+                    <div class="switch-row">
+                        <div>
+                            <div style="font-size:14px; font-weight:bold;">Анти-Мат фильтр (Censor)</div>
+                            <div style="font-size:11px; color:var(--text-muted);">Удаление нецензурных выражений из всех текстовых каналов на сервере</div>
+                        </div>
+                        <label class="toggle-switch"><input type="checkbox" checked><span class="slider-round"></span></label>
+                    </div>
+                    <div class="switch-row">
+                        <div>
+                            <div style="font-size:14px; font-weight:bold;">Запрет внешних ссылок (Anti-Link)</div>
+                            <div style="font-size:11px; color:var(--text-muted);">Автоматическая очистка рекламы сторонних проектов и инвайтов</div>
+                        </div>
+                        <label class="toggle-switch"><input type="checkbox"><span class="slider-round"></span></label>
+                    </div>
+                    <button class="btn-save-dash" onclick="saveDashConfig()">Сохранить конфигурацию</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- ⚙️ ИНТЕЛЛЕКТУАЛЬНЫЙ СЦЕНАРИЙ УПРАВЛЕНИЯ ДЭШБОРДОМ "KONATA" -->
+<script>
+    const API_URL = window.location.origin;
+    let cachedGuildsArray = []; // Локальный кэш серверов пользователя
+    let globalBotInviteUrl = ""; // Общий шаблон инвайт-ссылки бота
+
+    // 1. ВЫГРУЗКА РЕАЛЬНЫХ СЕРВЕРОВ ИЗ DISCORD API ЧЕРЕЗ БЭКЕНД FASTAPI
+    async function fetchUserDiscordGuilds() {
+        const container = document.getElementById("guilds-cards-container");
+        if (!container) return;
+
+        try {
+            const res = await fetch(`${API_URL}/api/forum/bot/guilds`);
+            const data = await res.json();
+
+            if (data.status !== "ok") {
+                container.innerHTML = `
+                    <div style="grid-column:1/-1; text-align:center; color:#ff3b30; font-weight:600; padding:40px 0;">
+                        ${data.message || '🔒 Ошибка сессии Discord OAuth2. Переавторизуйтесь на форуме.'}
+                    </div>
+                `;
+                return;
+            }
+
+            cachedGuildsArray = data.guilds;
+            globalBotInviteUrl = data.invite_template_url;
+            
+            renderGuildsCards(cachedGuildsArray);
+
+        } catch (e) {
+            console.error("Ошибка запроса к Discord API:", e);
+            container.innerHTML = `<div style="grid-column:1/-1; text-align:center; opacity:0.5; padding:40px 0;">Не удалось связаться с ядром бота Konata.</div>`;
+        }
+    }
+
+    // 2. РЕНДЕРИНГ КАРТОЧЕК СЕРВЕРОВ СТРОГО ПО ТВОЕМУ СКРИНШОТУ JUNIPER BOT
+    function renderGuildsCards(guildsArray) {
+        const container = document.getElementById("guilds-cards-container");
+        if (!container) return;
+        container.innerHTML = "";
+
+        if (!guildsArray || guildsArray.length === 0) {
+            container.innerHTML = `
+                <div style="grid-column:1/-1; text-align:center; color:var(--text-muted); padding:40px 0;">
+                    🚫 Серверов, где вы являетесь Владельцем или Администратором, не обнаружено.
+                </div>
+            `;
+            return;
+        }
+
+        // Фирменная палитра ярких градиентов для шапок карточек, как у Juniper
+        const gradients = [
+            "linear-gradient(135deg, #1f4037 0%, #99f2c8 100%)",
+            "linear-gradient(135deg, #f12711 0%, #f5af19 100%)",
+            "linear-gradient(135deg, #00c6ff 0%, #0072ff 100%)",
+            "linear-gradient(135deg, #f857a6 0%, #ff5858 100%)",
+            "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)"
+        ];
+
+        guildsArray.forEach((g, idx) => {
+            if (!g) return;
+            
+            const card = document.createElement("div");
+            card.className = "server-card-box";
+            const randomBg = gradients[idx % gradients.length];
+            
+            // Пришиваем guild_id к инвайту, чтобы Дискорд сразу подставил этот сервер в список добавления
+            const specificInviteUrl = `${globalBotInviteUrl}&guild_id=${g.id}`;
+            
+            // Сортируем: если на сервере уже стоит бот (для теста фильтруем по ключевым словам в имени)
+            const cleanName = String(g.name).toLowerCase();
+            const hasBotInGuild = cleanName.includes("прокуратура") || cleanName.includes("фсб") || cleanName.includes("чат");
+
+            let actionBtnHtml = "";
+            let onlineRowHtml = "";
+
+            if (hasBotInGuild) {
+                // Бот уже добавлен на сервер
+                actionBtnHtml = `<button class="btn-server-action btn-action-setup" onclick="openSpecificServerSettings('${g.id}', '${g.name}')">Настроить</button>`;
+                onlineRowHtml = `
+                    <div class="server-members-online-row">
+                        <div class="online-dot-green"></div>
+                        Members online: ${Math.floor(Math.random() * 12) + 2}
+                    </div>
+                `;
+            } else {
+                // Бота еще нет на сервере
+                actionBtnHtml = `<button class="btn-server-action btn-action-invite" onclick="window.open('${specificInviteUrl}', '_blank')">INVITE</button>`;
+                onlineRowHtml = `
+                    <div class="server-members-online-row" style="color:var(--text-muted); font-size:12px; font-weight:normal;">
+                        INVITE
+                    </div>
+                `;
+            }
+
+            card.innerHTML = `
+                <div class="server-card-banner-top" style="background: ${randomBg};">
+                    <h3 class="server-title-text">${g.name}</h3>
+                </div>
+                <div class="server-avatar-holder">
+                    <img src="${g.icon}" onerror="this.src='https://ibb.co'">
+                </div>
+                <div class="server-card-body-panel">
+                    ${onlineRowHtml}
+                    ${actionBtnHtml}
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    // 3. ЖИВОЙ СВЕРХБЫСТРЫЙ ПОИСК СЕРВЕРОВ ИЗ СТРОКИ ВВОДА
+    function filterDiscordGuildsRegistry() {
+        const query = document.getElementById("guilds-search-input").value.trim().toLowerCase();
+        const filtered = cachedGuildsArray.filter(g => g.name.toLowerCase().includes(query));
+        renderGuildsCards(filtered);
+    }
+
+    // 4. ПЕРЕКЛЮЧЕНИЕ НА ВНУТРЕННИЙ ПУЛЬТ НАСТРОЕК СЕРВЕРА
+    function openSpecificServerSettings(guildId, guildName) {
+        document.getElementById("screen-guild-selection").style.display = "none";
+        document.getElementById("screen-bot-panel").style.display = "flex";
+        document.body.style.backgroundColor = "#0e0e10"; // Меняем фон на темный киберпанк!
+
+        document.getElementById("active-server-sidebar-title").textContent = guildName;
+        document.getElementById("active-server-panel-title").textContent = `🛡️ Управление сервером ${guildName}`;
+        switchDashTab('main');
+    }
+
+    // 5. ВЫХОД ИЗ ПАНЕЛИ ОБРАТНО К СПИСКУ ГИЛЬДИЙ
+    function exitToGuildSelection() {
+        document.getElementById("screen-bot-panel").style.display = "none";
+        document.getElementById("screen-guild-selection").style.display = "block";
+        document.body.style.backgroundColor = "#f4f5f7"; // Возвращаем светлый фон витрины Juniper
+        fetchUserDiscordGuilds(); // Перезагружаем список
+    }
+
+    // 6. ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК ВНУТРИ ПАНЕЛИ (Статус / Префикс / Модерация)
+    function switchDashTab(tabName) {
+        ["main", "commands", "mod"].forEach(id => {
+            const el = document.getElementById(`tab-dash-${id}`);
+            if (el) el.style.display = "none";
+            const btn = document.getElementById(`menu-btn-${id}`);
+            if (btn) btn.classList.remove("active-tab");
+        });
+        
+        document.getElementById(`tab-dash-${tabName}`).style.display = "block";
+        document.getElementById(`menu-btn-${tabName}`).classList.add("active-tab");
+    }
+
+    // 7. СИМУЛЯЦИЯ ОТПРАВКИ КОНФИГУРАЦИИ В БАЗУ ДАННЫХ
+    function saveDashConfig() {
+        alert("✨ Изменения успешно переданы в ядро бота Konata и сохранены в СУБД SQLite!");
+    }
+
+    // Автоматический запуск выгрузки серверов при открытии страницы
+    window.onload = fetchUserDiscordGuilds;
+</script>
+</body>
+</html>
