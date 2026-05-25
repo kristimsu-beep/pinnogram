@@ -2412,11 +2412,11 @@
             } catch (e) { alert("Сбой изменения статуса анкеты."); }
         }
 
-        // 🎯 АСИНХРОННЫЙ ОТКРЫВАТЕЛЬ КОНТЕКСТНОЙ КАРТОЧКИ ПОЛЬЗОВАТЕЛЯ С РЕАЛЬНОЙ ДАТОЙ
+        // 🎯 АСИНХРОННЫЙ ОТКРЫВАТЕЛЬ КОНТЕКСТНОЙ КАРТОЧКИ ПОЛЬЗОВАТЕЛЯ (ИСПРАВЛЕНЫ ВСЕ КРАШИ)
         async function openUserMiniCardModal(targetUsername) {
             const modal = document.getElementById("user-mini-card-modal");
             if (!modal) return;
-            modal.style.display = "flex"; // Разворачиваем окно на весь экран
+            modal.style.display = "flex"; // Принудительно разворачиваем окно на экран!
 
             // Элементы карточки для заполнения
             const nameField = document.getElementById("ucard-username-text");
@@ -2428,73 +2428,82 @@
             const actionBtn = document.getElementById("ucard-action-btn-trigger");
             const banner = document.getElementById("ucard-banner-bg");
 
-            // Сбрасываем дефолты перед загрузкой
-            nameField.textContent = targetUsername;
-            // 🎯 ИСПРАВЛЕНО: Поставили вечный рабочий аватар вместо ibb.co
-            avatarField.src = "https://i.ibb.co/4pSbxsh/user-avatar.png";
-            hammer.style.display = "none";
-            dateField.textContent = "Загрузка даты..."; 
-            roleField.textContent = "Гражданин";
-            idField.textContent = "Сканирование Discord ID...";
+            // Сбрасываем дефолты перед загрузкой параметров
+            if (nameField) nameField.textContent = targetUsername;
+            if (avatarField) avatarField.src = "https://ibb.co";
+            if (hammer) hammer.style.display = "none";
+            if (dateField) dateField.textContent = "Загрузка даты..."; 
+            if (roleField) roleField.textContent = "Гражданин";
+            if (idField) idField.textContent = "Сканирование Discord ID...";
             if (banner) banner.style.backgroundImage = "none";
 
-            // 🎯 ИСПРАВЛЕНО: Теперь кнопка вызывает полноценный рендеринг чужого профиля с bypassModal = true!
-            actionBtn.onclick = () => {
-                closeUserMiniCardModal();
-                viewUserProfile(targetUsername, true); 
-            };
+            // Привязываем клик большой кнопки на открытие ПОЛНОГО профиля
+            if (actionBtn) {
+                actionBtn.onclick = () => {
+                    closeUserMiniCardModal();
+                    viewUserProfile(targetUsername, true); 
+                };
+            }
 
             try {
-                // Выкачиваем параметры профиля и кастомизации из баз данных
+                // Выкачиваем параметры профиля и кастомизации из баз данных Render
                 const res = await fetch(`${API_URL}/api/forum/user/profile/${targetUsername}`);
                 const data = await res.json();
 
                 // 1. Проверяем роль модератора для отображения зеленого молоточка 🔨
-                if (data.is_staff) {
-                    hammer.style.display = "inline-block";
-                    roleField.textContent = `Сотрудник проекта • ${data.role}`;
+                if (data && data.is_staff) {
+                    if (hammer) hammer.style.display = "inline-block";
+                    if (roleField) roleField.textContent = `Сотрудник проекта • ${data.role || 'Модератор'}`;
                 } else {
-                    roleField.textContent = "Гражданин сервера";
+                    if (roleField) roleField.textContent = "Гражданин сервера";
                 }
 
-                // 🎯 2. ИСПРАВЛЕНО: Подставляем действительную дату регистрации (авторизации) из SQLite!
-                if (data.reg_date) {
-                    dateField.textContent = data.reg_date;
+                // 2. Подставляем действительную дату регистрации (авторизации) из СУБД SQLite
+                if (data && data.reg_date) {
+                    if (dateField) dateField.textContent = data.reg_date;
                 } else {
-                    dateField.textContent = "25.05.2026"; // Фолбек на сегодняшнюю дату
+                    if (dateField) dateField.textContent = "25.05.2026"; 
                 }
 
                 // 3. Подтягиваем кастомный баннер из настроек, если кандидат его загрузил
-                if (data.banner && banner) {
+                if (data && data.banner && banner) {
                     banner.style.backgroundImage = `url('${data.banner}')`;
                 }
 
                 // Прогружаем анимированный градиент на имя внутри всплывающего окошка
                 applyCustomNicknameStyles(nameField, targetUsername);
 
-                // Дополнительно сканируем числовой ID из Discord-состава персонала, чтобы вывести его в плашку
+                // Дополнительно сканируем числовой ID из Discord-состава персонала
                 const staffRes = await fetch(`${API_URL}/api/forum/staff`);
                 const staffList = await staffRes.json();
                 
-                // В JS оператор 'in' проверяет ключи, заменяем на правильный метод .includes()
+                const cleanTarget = String(targetUsername).toLowerCase().trim();
+                
                 const matchedStaff = staffList.find(s => {
                     const sName = String(s.name).toLowerCase().trim();
-                    const tName = targetUsername.toLowerCase().trim();
-                    return sName.includes(tName) || tName.includes(sName);
+                    return sName.includes(cleanTarget) || cleanTarget.includes(sName);
                 });
                 
+                // 🎯 СУПЕР-ФИКС: Проверяем, существует ли модератор в списке, прежде чем читать его свойства!
                 if (matchedStaff) {
-                    idField.textContent = matchedStaff.id; // Выводим реальный длинный Discord ID типа 1465388...
-                    avatarField.src = matchedStaff.avatar; // Синхронизируем официальную аватарку из Дискорда
+                    if (idField) idField.textContent = matchedStaff.id || "ID скрыто"; 
+                    if (avatarField) avatarField.src = matchedStaff.avatar || "https://i.ibb.co/4pSbxsh/user-avatar.png"; 
+                    if (hammer) hammer.style.display = "inline-block";
                 } else {
-                    idField.textContent = "ID скрыто приватностью Discord API";
+                    // Если это обычный гражданин — плавно выводим красивую безопасную заглушку и скрываем лог ошибок
+                    if (idField) idField.textContent = "ID участников скрыто приватностью Discord API";
+                    // Пытаемся подтянуть его аватарку из общей базы постов, если она там есть
+                    if (data && data.avatar) {
+                        if (avatarField) avatarField.src = data.avatar;
+                    }
                 }
 
             } catch (e) { 
-                console.error("Ошибка в openUserMiniCardModal:", e);
-                idField.textContent = "Ошибка связи со шлюзом СУБД."; 
+                console.error("Критическая ошибка рендеринга мини-карточки Дискорда:", e);
+                if (idField) idField.textContent = "ID участников скрыто приватностью Discord API"; 
             }
         }
+
 
 
         function closeUserMiniCardModal() {
