@@ -1900,6 +1900,7 @@
         }
 
 
+        // 🎯 ИСПРАВЛЕНО: Теперь статус меняется мгновенно на экране, а фоновый сайдбар сразу прячет закрытое дело!
         async function updateTicketStatus(newStatus) {
             try {
                 const res = await fetch(`${API_URL}/api/forum/tickets/status`, {
@@ -1910,9 +1911,18 @@
                 const data = await res.json();
                 if (data.status === "ok") {
                     alert(data.message);
+                    
+                    // 1. Мгновенно перерисовываем бадж статуса внутри открытого дела
                     viewSpecificTicket(activeTicketId);
-                } else { alert("Отказ в доступе: " + data.message); }
-            } catch (e) { alert("Сбой изменения статуса дела."); }
+                    
+                    // 🎯 2. СУПЕР-ФИКС: Перезагружаем фоновый список, чтобы сайдбар моментально убрал решенное дело из активных разделов!
+                    loadTicketsList();
+                } else { 
+                    alert("Отказ в доступе: " + data.message); 
+                }
+            } catch (e) { 
+                alert("Сбой изменения статуса дела."); 
+            }
         }
 
         // 🎯 ФУНКЦИИ УПРАВЛЕНИЯ ВЫПЛЫВАЮЩИМ МЕНЮ ПРОФИЛЯ
