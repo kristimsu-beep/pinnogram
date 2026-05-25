@@ -755,30 +755,36 @@ async def serve_user_profile_page(user_id: str):
     return FileResponse(os.path.join(BASE_DIR, "forum.html"))
 
 
-# 2. ПОЛУЧЕНИЕ ПОЛНЫХ ДАННЫХ ПРОФИЛЯ ДЛЯ ЭКРАНА
+# 2. ПОЛУЧЕНИЕ ПОЛНЫХ ДАННЫХ ПРОФИЛЯ ДЛЯ ЭКРАНА И МИНИ-КАРТОЧЕК (ИСПРАВЛЕНО)
 @app.get("/api/forum/user/profile/{target_id}")
 async def get_user_profile_data(target_id: str, request: Request):
     try:
-        # Пытаемся определить, чей профиль запрашивают. 
-        # Если модератор, вычисляем его высшую роль по нашей системе
+        # 🎯 СУПЕР-ФИКС: Определяем, чьё имя запрашивают
+        # Если пришел маркер "me" — берем имя из куки текущей сессии, иначе берем имя выбранного юзера
+        if target_id == "me":
+            profile_username = request.cookies.get("forum_user_name", "")
+        else:
+            profile_username = target_id.strip()
+
+        if not profile_username:
+            return {"status": "error", "message": "Пользователь не указан"}
+
         role_label = "Гражданин"
         is_staff = False
         
-        # 🎯 УНИВЕРСАЛЬНЫЙ ФИКС РОЛЕЙ ДЛЯ ВСЕЙ АДМИНИСТРАЦИИ:
+        # Вычисляем высшую роль конкретно для запрашиваемого профиля
         try:
-            current_user_name = request.cookies.get("forum_user_name", "").strip().lower()
             staff_members = await get_forum_staff()
+            clean_profile_name = profile_username.lower().strip()
             
             for staff_user in staff_members:
                 staff_display_name = str(staff_user.get("name", "")).strip().lower()
-                # Ищем имя из куки внутри серверного имени модератора (работает для всех ролей!)
-                if current_user_name and (current_user_name in staff_display_name or staff_display_name in current_user_name):
+                if clean_profile_name in staff_display_name or staff_display_name in clean_profile_name:
                     role_label = staff_user.get("role", "Модератор")
                     is_staff = True
                     break
         except Exception as staff_err:
             print(f"⚠️ Ошибка проверки роли в профиле: {staff_err}")
-
 
         # Инициализируем счетчики статистики
         tickets_created = 0
@@ -786,20 +792,12 @@ async def get_user_profile_data(target_id: str, request: Request):
         history_actions = []
 
         async with aiosqlite.connect(DB_PATH) as db:
-            # Считаем количество созданных этим пользователем тикетов
-            # Для этого нам сначала нужно сопоставить ID. Чтобы не усложнять, выберем по имени из куки
-            # или по зафиксированному автору. 
-            # Давай найдем все посты, где имя автора или модератора связано с профилем
-            
-            # Получаем имя текущего юзера из куки, чтобы понять, смотрит ли он свой профиль
-            current_user_name = request.cookies.get("forum_user_name", "")
-
-            # Читаем созданные обращения (если это профиль автора)
+            # Читаем созданные обращения автора профиля
             async with db.execute("""
                 SELECT id, ticket_type, timestamp, status 
                 FROM forum_tickets 
                 WHERE author_name = ? ORDER BY id DESC
-            """, (current_user_name,)) as cursor:
+            """, (profile_username,)) as cursor:
                 rows = await cursor.fetchall()
                 tickets_created = len(rows)
                 for r in rows:
@@ -818,7 +816,7 @@ async def get_user_profile_data(target_id: str, request: Request):
                     SELECT id, ticket_type, timestamp, status 
                     FROM forum_tickets 
                     WHERE moderator_name = ? ORDER BY id DESC
-                """, (current_user_name,)) as cursor:
+                """, (profile_username,)) as cursor:
                     mod_rows = await cursor.fetchall()
                     for r in mod_rows:
                         history_actions.append({
@@ -831,25 +829,47 @@ async def get_user_profile_data(target_id: str, request: Request):
                         })
 
             # Считаем количество оставленных комментариев в чатах
-            async with db.execute("SELECT COUNT(*) FROM ticket_comments WHERE author_name = ?", (current_user_name,)) as cursor:
+            async with db.execute("SELECT COUNT(*) FROM ticket_comments WHERE author_name = ?", (profile_username,)) as cursor:
                 row_comm = await cursor.fetchone()
                 comments_count = row_comm[0] if row_comm else 0
+
+            # 🎯 ВЫЕМКА ДАТЫ РЕГИСТРАЦИИ, БАННЕРА И ГРАДИЕНТА ИЗ SQLite
+            db_banner = ""
+            db_gradient = ""
+            db_reg_date = "25.05.2026"  # Запасной дефолт
+
+            async with db.execute("""
+                SELECT banner_url, nickname_gradient, custom_status 
+                FROM user_custom_settings WHERE username = ?
+            """, (profile_username,)) as cursor:
+                row = await cursor.fetchone()
+                if row:
+                    db_banner = row[0] or ""
+                    db_gradient = row[1] or ""
+                    # Если в поле статуса лежит строка с датой, аккуратно вырезаем её наружу
+                    if row[2] and "Присоединился:" in str(row[2]):
+                        db_reg_date = str(row[2]).replace("Присоединился: ", "").strip()
 
         # Сортируем историю действий по ID (свежие сверху)
         history_actions.sort(key=lambda x: x["id"], reverse=True)
 
         return {
             "status": "ok",
+            "username": profile_username,
             "role": role_label,
             "is_staff": is_staff,
             "stat_tickets": tickets_created,
             "stat_comments": comments_count,
+            "banner": db_banner,
+            "gradient": db_gradient,
+            "reg_date": db_reg_date,
             "history": history_actions
         }
         
     except Exception as e:
         print(f"🛑 Ошибка сбора данных профиля: {e}")
         return {"status": "error", "message": str(e)}
+
 
 # 1. СТРАНИЦА НАСТРОЕК (РЕНДЕРИНГ HTML)
 @app.get("/settings")
