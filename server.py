@@ -337,7 +337,7 @@ def encodeURIComponent(text: str) -> str:
     import urllib.parse
     return urllib.parse.quote(text, safe='')
 
-# 2. Коллбэк-приемник: ловит пользователя после успешного входа в Дискорд
+# 2. Коллбэк-приемник: ловит пользователя после успешного входа в Дискорд (ОБНОВЛЕНО ДЛЯ ДЭШБОРДА)
 @app.get("/api/forum/auth/callback")
 async def discord_callback(code: str, request: Request):
     client_id = os.getenv("DISCORD_CLIENT_ID")
@@ -404,15 +404,36 @@ async def discord_callback(code: str, request: Request):
             except Exception as e:
                 print(f"⚠️ Ошибка запасной синхронизации аватарки: {e}")
 
-            # 🎯 ФИКС КУК: Создаем редирект и жестко привязываем куки к корню сайта path="/"
+            # 🎯 3. ФИКС: Фиксируем реальную дату первой авторизации аккаунта в СУБД SQLite для профилей и модалок
+            reg_date = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y")
+            async with aiosqlite.connect(DB_PATH) as db:
+                await db.execute("""
+                    INSERT INTO user_custom_settings (username, custom_status) 
+                    VALUES (?, ?) 
+                    ON CONFLICT(username) DO NOTHING
+                """, (u_name, f"Присоединился: {reg_date}"))
+                await db.commit()
+
+            # 🎯 ФИКС КУК: Создаем редирект и жестко привязываем куки авторизации к корню сайта path="/"
             res = RedirectResponse("/forum?auth=success")
             res.set_cookie(key="forum_user_name", value=u_name, max_age=2592000, path="/")
             res.set_cookie(key="forum_user_avatar", value=u_avatar, max_age=2592000, path="/")
+            
+            # 🎯 СУПЕР-ОБНОВЛЕНИЕ ДЛЯ ДЭШБОРДА: Сохраняем access_token в куку для живых запросов серверов к Discord API
+            res.set_cookie(
+                key="forum_discord_token",
+                value=str(access_token),
+                max_age=2592000, # 30 дней аптайма
+                path="/",
+                httponly=True,   # Жесткая защита токена от XSS скриптов на фронтенде
+                samesite="lax"
+            )
             return res
             
     except Exception as e:
         print(f"🛑 Ошибка OAuth2: {e}")
         return RedirectResponse("/forum?auth=error")
+
 
 
 
@@ -1251,6 +1272,72 @@ async def update_moderator_application_status(data: dict, request: Request):
     except Exception as e:
         print(f"🛑 Ошибка обновления статуса анкеты на бэкэнде: {e}")
         return {"status": "error", "message": str(e)}
+
+# 🎯 УКАЖИ ТУТ CLIENT ID СВОЕГО БОТА ИЗ DISCORD DEVELOPER PORTAL
+KONATA_CLIENT_ID = "1508496508528365668"
+
+@app.get("/api/forum/bot/guilds")
+async def get_user_discord_guilds(request: Request):
+    try:
+        # 1. Достаем токен доступа пользователя из защищенных кук
+        token = request.cookies.get("forum_discord_token")
+        if not token:
+            return {"status": "error", "message": "🔒 Вы не авторизованы через Discord!", "guilds": []}
+
+        # 2. Делаем официальный живой запрос к серверам Discord API
+        headers = {"Authorization": f"Bearer {token}"}
+        async with httpx.AsyncClient() as client:
+            res = await client.get("https://discord.com/api/v10/users/@me/guilds", headers=headers)
+            
+            if res.status_code != 200:
+                print(f"🛑 Ошибка Discord API: {res.text}")
+                return {"status": "error", "message": "Не удалось выгрузить сервера из Discord API", "guilds": []}
+                
+            all_guilds = res.json()
+
+        filtered_guilds = []
+        invite_url_template = f"https://discord.com/oauth2/authorize?client_id={KONATA_CLIENT_ID}&permissions=8&scope=bot%20applications.commands"
+
+        # 3. Фильтруем сервера по битовой маске прав пользователя
+        for g in all_guilds:
+            # Проверяем, является ли пользователь создателем (owner) 
+            # или имеет ли он права Администратора (0x8) или Управления сервером (0x20)
+            is_owner = g.get("owner", False)
+            permissions = int(g.get("permissions", 0))
+            
+            is_admin = (permissions & 0x8) == 0x8
+            is_manager = (permissions & 0x20) == 0x20
+
+            if is_owner or is_admin or is_manager:
+                # Собираем красивую ссылку на круглую аватарку сервера Дискорда
+                icon_hash = g.get("icon")
+                guild_id = g.get("id")
+                if icon_hash:
+                    icon_url = f"https://cdn.discordapp.com/icons/{guild_id}/{icon_hash}.png"
+                else:
+                    # 🎯 ИСПРАВЛЕНО: Закрывающая кавычка добавлена! Синтаксис СУБД восстановлен на 100%
+                    icon_url = "https://i.ibb.co/4pSbxsh/user-avatar.png"
+
+                # НА ЗАМЕТКУ: Пока мы не подключили токен самого бота, 
+                # мы временно ставим has_bot = False, чтобы у всех серверов горела рабочая кнопка INVITE!
+                filtered_guilds.append({
+                    "id": guild_id,
+                    "name": g.get("name", "Неизвестный server"),
+                    "icon": icon_url,
+                    "online": 0,
+                    "has_bot": False 
+                })
+
+        return {
+            "status": "ok",
+            "invite_template_url": invite_url_template,
+            "guilds": filtered_guilds
+        }
+        
+    except Exception as e:
+        print(f"🛑 Критическая ошибка парсинга Discord Guilds: {e}")
+        return {"status": "error", "message": str(e), "guilds": []}
+
 
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
