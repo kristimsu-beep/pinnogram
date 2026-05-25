@@ -1789,8 +1789,15 @@
                     badgeZone.innerHTML = `<span class="status-badge-forum">${statusLabel}</span>`;
                 }
 
-                // 🎯 ИСПРАВЛЕНО: Уникальный класс main-author-title изолирует имя и намертво убирает баг подмены ника!
-                // Также сюда встроен живой отсчет времени создания тикета через getForumTimeAgo(t.time)
+                // Вычисляем живое время с безопасным перехватом сбоев
+                let displayTimeAgo = "1 час назад";
+                try {
+                    displayTimeAgo = getForumTimeAgo(t.time);
+                } catch(timeErr) {
+                    displayTimeAgo = t.time || "1 час назад";
+                }
+
+                // Пересобираем мета-линию автора (Вставляем готовую строчку displayTimeAgo)
                 metaBlock.innerHTML = `
                     <div class="ticket-header-line" style="margin-bottom:0; display: flex; align-items: center; gap: 14px;">
                         <div class="main-ticket-avatar-wrapper" onclick="event.stopPropagation(); viewUserProfile(event, '${t.author}')" style="cursor: pointer;">
@@ -1798,10 +1805,11 @@
                         </div>
                         <div>
                             <span class="main-author-title" onclick="event.stopPropagation(); viewUserProfile(event, '${t.author}')" style="display:block; font-size: 15px; font-weight: 600; cursor: pointer; color: #fff;">${t.author}</span>
-                            <span class="ticket-time-ago" style="font-size:11px; color: #55555c;">${getForumTimeAgo(t.time)} • Вопросы и обращения</span>
+                            <span class="ticket-time-ago" style="font-size:11px; color: #55555c;">${displayTimeAgo} • Вопросы и обращения</span>
                         </div>
                     </div>
                 `;
+
                 
                 // Накладываем кастомный переливающийся градиент на имя автора в шапке открытого дела
                 applyCustomNicknameStyles(metaBlock.querySelector(".main-author-title"), t.author);
@@ -2798,19 +2806,29 @@
             } catch (e) { }
         }
 
-                // 🎯 СУПЕР-ХЕЛПЕР: Вычисление реального живого времени с момента создания тикета
+        // 🎯 ИСПРАВЛЕНО: Кристально чистый парсинг времени ДД.ММ.ГГГГ ХХ:ММ без краша массивов строк
         function getForumTimeAgo(timestampStr) {
             if (!timestampStr) return "1 час назад";
             try {
-                // Парсим дату формата ДД.ММ.ГГГГ ХХ:ММ
+                // Разделяем дату и время по пробелу: ["ДД.ММ.ГГГГ", "ХХ:ММ"]
                 const parts = timestampStr.split(" ");
                 if (parts.length < 2) return timestampStr;
                 
+                // Сплитим строго строки внутри элементов массива через индексы [0] и [1]!
                 const dateParts = parts[0].split(".");
-                const timeParts = parts[1].split(":");
+                const timeParts = parts[1].split("."); // На случай если на бэкенде секунды через точку, или двоеточие:
+                const cleanTimeParts = parts[1].includes(":") ? parts[1].split(":") : timeParts;
                 
-                // Создаем объект даты (месяцы в JS идут от 0 до 11, поэтому -1)
-                const ticketDate = new Date(dateParts[2], dateParts[1] - 1, dateParts[0], timeParts[0], timeParts[1]);
+                if (dateParts.length < 3 || cleanTimeParts.length < 2) return timestampStr;
+
+                // В JavaScript месяцы идут от 0 до 11, поэтому делаем (месяц - 1)
+                const day = parseInt(dateParts[0], 10);
+                const month = parseInt(dateParts[1], 10) - 1;
+                const year = parseInt(dateParts[2], 10);
+                const hours = parseInt(cleanTimeParts[0], 10);
+                const minutes = parseInt(cleanTimeParts[1], 10);
+
+                const ticketDate = new Date(year, month, day, hours, minutes);
                 const now = new Date();
                 
                 const diffMs = now - ticketDate;
@@ -2825,7 +2843,8 @@
                 const diffDays = Math.floor(diffHours / 24);
                 return `${diffDays} дн. назад`;
             } catch(e) {
-                return timestampStr; // Если сбой парсинга, просто вернем исходную дату
+                console.error("Ошибка парсинга времени:", e);
+                return timestampStr; // В случае любой непредвиденной строки просто отдаем её без краша сайта!
             }
         }
 
