@@ -1611,7 +1611,7 @@
                     <div class="ticket-header-line" style="margin-bottom:0; display: flex; align-items: center; gap: 14px;">
                         <!-- ИСПРАВЛЕНО: Обернули верхнюю аватарку в неоновое кольцо по новому стилю -->
                         <div class="main-ticket-avatar-wrapper">
-                            <img src="${t.avatar || 'https://ibb.co'}" onerror="this.src='https://ibb.co'">
+                            <img src="${t.avatar || 'https://i.ibb.co/4pSbxsh/user-avatar.png'}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'">
                         </div>
                         <div>
                             <span class="ticket-author-name" style="display:block; font-size: 15px; font-weight: 600;">${t.author}</span>
@@ -1682,7 +1682,7 @@
                         <div class="review-item ${extraClass}" style="border-left: 2px solid #333; background: #141416; padding: 14px; margin-bottom: 8px; border-radius: 8px; transition: 0.3s;">
                             <div class="review-meta" style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
                                 <!-- 🎯 ИСПРАВЛЕНО: Поставили вечный неоновый аватар-фикс в src и onerror на случай сбоев кэша -->
-                                <img src="${c.avatar || 'https://i.ibb.co/4pSbxsh/user-avatar.png'}" onerror="this.src='https://ibb.co'" style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover;">
+                                <img src="${c.avatar || 'https://i.ibb.co/4pSbxsh/user-avatar.png'}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'" style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover;">
                                 <b style="font-size: 13px; color: #fff;">${c.author}</b>
                                 <span style="font-size: 10px; opacity: 0.3; margin-left: auto;">${c.time}</span>
                             </div>
@@ -1765,24 +1765,24 @@
             viewUserProfile("me");
         }
 
-        // 🎯 СУПЕР-ИСПРАВЛЕНИЕ: Функция просмотра профилей и перехвата мини-карточек Дискорда
+        // 🎯 СУПЕР-ФИКС: Карточка Дискорда теперь гарантированно открывается при клике НА СЕБЯ И НА ВСЕХ УЧАСТНИКОВ
         async function viewUserProfile(userId, bypassModal = false) {
             console.log("🖱️ [CLICK PROFILE] Нажат ID пользователя:", userId, "Обход модалки:", bypassModal);
 
-            // Получаем имя текущего авторизованного пользователя из кук
             const myCurrentName = getCookie("forum_user_name") || "";
-
-            // Превращаем userId в безопасную строку для сравнения
             const targetNameStr = userId ? String(userId).trim() : "";
 
-            // 🎯 КРИТИЧЕСКИЙ ПЕРЕХВАТЧИК: Если кликнули НЕ на себя и bypassModal равен false — открываем всплывающую карточку!
-            if (targetNameStr && targetNameStr !== "me" && targetNameStr.toLowerCase() !== myCurrentName.toLowerCase() && !bypassModal) {
-                console.log("🚀 [ROUTER] Активируем всплывающее окно Дискорда для:", targetNameStr);
-                openUserMiniCardModal(targetNameStr);
-                return; // Останавливаем выполнение, чтобы не переключать главный экран форума!
+            // 🎯 ЖЕСТКИЙ ПЕРЕХВАТЧИК: Если bypassModal равен false — ВСЕГДА принудительно выкидываем мини-карточку Дискорда!
+            if (!bypassModal) {
+                // Если пришел маркер "me" или твой собственный ник — открываем карточку для твоего аккаунта
+                const nameForMiniCard = (targetNameStr === "me" || targetNameStr.toLowerCase() === myCurrentName.toLowerCase()) ? myCurrentName : targetNameStr;
+                
+                console.log("🚀 [ROUTER] Принудительный вызов модалки Дискорда для:", nameForMiniCard);
+                openUserMiniCardModal(nameForMiniCard);
+                return; // МГНОВЕННЫЙ СТОП: Блокируем наслоение и переключение больших разделов сайта!
             }
 
-            console.log("🏛️ [ROUTER] Открываем полноценную страницу личного кабинета...");
+            console.log("🏛️ [ROUTER] Флаг bypassModal = true. Переключаем на полный профиль...");
             
             // Переключаем главный экран форума на раздел профилей
             switchSection("profile");
@@ -1794,31 +1794,27 @@
             const statTick = document.getElementById("prof-stat-tick");
             const historyList = document.getElementById("profile-history-list");
 
-            // Вычисляем финальное имя для рендеринга (если пришло "me" — берем из куки, иначе имя кандидата)
-            const finalProfileName = (targetNameStr && targetNameStr !== "me") ? targetNameStr : myCurrentName;
+            // Для полной страницы: если маркер "me" — шлем "me" на бэкэнд, иначе имя чужого игрока
+            const finalParamForBackend = (targetNameStr === "me" || targetNameStr.toLowerCase() === myCurrentName.toLowerCase()) ? "me" : targetNameStr;
+            const finalDisplayName = (targetNameStr === "me") ? myCurrentName : targetNameStr;
 
-            if (nameTitle) nameTitle.textContent = finalProfileName;
-            applyCustomNicknameStyles(nameTitle, finalProfileName);
+            if (nameTitle) nameTitle.textContent = finalDisplayName;
+            applyCustomNicknameStyles(nameTitle, finalDisplayName);
 
             if (avatarImg) {
-                // Задаем аватарку: если это чужой профиль — ставим временный фикс, если свой — берем из кук
-                if (targetNameStr && targetNameStr !== "me" && targetNameStr.toLowerCase() !== myCurrentName.toLowerCase()) {
-                    avatarImg.src = "https://ibb.co";
+                if (finalDisplayName.toLowerCase() !== myCurrentName.toLowerCase()) {
+                    avatarImg.src = "https://i.ibb.co/4pSbxsh/user-avatar.png";
                 } else {
-                    avatarImg.src = getCookie("forum_user_avatar") || "https://ibb.co";
+                    avatarImg.src = getCookie("forum_user_avatar") || "https://i.ibb.co/4pSbxsh/user-avatar.png";
                 }
-                
-                // Страховка от поломки картинок из-за битого кэша Дискорда
-                avatarImg.onerror = function() {
-                    this.src = 'https://ibb.co';
-                };
+                avatarImg.onerror = function() { this.src = 'https://i.ibb.co/4pSbxsh/user-avatar.png'; };
             }
             
             if (historyList) historyList.textContent = "Синхронизация с реестрами базы данных SQLite...";
 
             try {
-                // Тянем статистику, кастомный баннер и историю действий участника с бэкэнда Render
-                const res = await fetch(`${API_URL}/api/forum/user/profile/${finalProfileName}`);
+                // Передаем правильный параметр на сервер FastAPI
+                const res = await fetch(`${API_URL}/api/forum/user/profile/${finalParamForBackend}`);
                 const data = await res.json();
 
                 if (badgeZone) {
@@ -1832,7 +1828,6 @@
                 if (statTick) statTick.textContent = data.stat_tickets;
                 if (statComm) statComm.textContent = data.stat_comments;
 
-                // Подгружаем кастомный баннер на фон страницы, если он настроен пользователем
                 const profileBannerCard = document.querySelector(".profile-banner-card");
                 if (profileBannerCard) {
                     if (data.banner) {
@@ -1844,7 +1839,7 @@
 
                 if (historyList) {
                     if (!data.history || data.history.length === 0) {
-                        historyList.innerHTML = `<div class="comment-empty-text">История действий пуста. Активности на форуме не зафиксировано.</div>`;
+                        historyList.innerHTML = `<div class="comment-empty-text">История действий пуста.</div>`;
                     } else {
                         historyList.innerHTML = data.history.map(h => `
                             <div class="history-row-item" onclick="viewSpecificTicket(${h.id})" style="background: #141416; border: 1px solid #1c1c1f; border-radius: 12px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; cursor: pointer; transition: 0.2s;">
@@ -1854,7 +1849,7 @@
                                     </div>
                                     <div>
                                         <span style="font-size:14px; font-weight:bold; color:#fff; display:block;">${h.text}</span>
-                                        <span style="font-size:11px; color:#55555c;">${h.time} • Категория: ${h.ticket_type === 'user' ? 'Жалоба' : 'Администрация'}</span>
+                                        <span style="font-size:11px; color:#55555c;">${h.time}</span>
                                     </div>
                                 </div>
                                 <span style="font-size:12px; font-weight:bold; color:var(--accent);">${h.status === 'open' ? '⏳ Ожидание' : '✅ Рассмотрено'}</span>
@@ -2326,7 +2321,7 @@
 
                     box.innerHTML = `
                         <div class="ticket-header-line" style="margin-bottom: 0; display: flex; align-items: center; gap: 12px;">
-                            <div class="ticket-avatar-wrapper"><img src="${a.avatar}" onerror="this.src='https://ibb.co'"></div>
+                            <div class="ticket-avatar-wrapper"><img src="${a.avatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'"></div>
                             <span class="ticket-author-name">${a.author}</span>
                             <span class="${badgeStyleClass}">${statusText}</span>
                             <div class="ticket-right-meta" style="margin-left: auto; font-size:12px; color:#55555c;">${a.time}</div>
@@ -2381,7 +2376,7 @@
                 if (metaBlock) {
                     metaBlock.innerHTML = `
                         <div class="ticket-header-line" style="margin-bottom:0; display:flex; align-items:center; gap:12px;">
-                            <div class="ticket-avatar-wrapper"><img src="${targetApp.avatar}" onerror="this.src='https://ibb.co'"></div>
+                            <div class="ticket-avatar-wrapper"><img src="${targetApp.avatar}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'"></div>
                             <div>
                                 <span class="ticket-author-name" style="font-size:15px; color:#fff; font-weight:bold; display:block;">${targetApp.author}</span>
                                 <span style="font-size:11px; color:#55555c;">Личное дело #APP_${id} • Подано: ${targetApp.time}</span>
@@ -2449,7 +2444,7 @@
 
             // Сбрасываем дефолты перед загрузкой параметров
             if (nameField) nameField.textContent = targetUsername;
-            if (avatarField) avatarField.src = "https://ibb.co";
+            if (avatarField) avatarField.src = "https://i.ibb.co/4pSbxsh/user-avatar.png";
             if (hammer) hammer.style.display = "none";
             if (dateField) dateField.textContent = "Загрузка даты..."; 
             if (roleField) roleField.textContent = "Гражданин";
