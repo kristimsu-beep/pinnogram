@@ -1297,32 +1297,47 @@ async def serve_bot_dashboard_page(request: Request):
 # 🎯 УКАЖИ ТУТ CLIENT ID СВОЕГО БОТА ИЗ DISCORD DEVELOPER PORTAL
 KONATA_CLIENT_ID = "1508496508528365668"
 
+# 2. ЖИВОЙ СИНХРОННЫЙ ШЛЮЗ ВЫБОРКИ СЕРВЕРОВ ИЗ DISCORD API С ПРОВЕРКОЙ БОТА
 @app.get("/api/forum/bot/guilds")
 async def get_user_discord_guilds(request: Request):
     try:
         # 1. Достаем токен доступа пользователя из защищенных кук
-        token = request.cookies.get("forum_discord_token")
-        if not token:
+        user_token = request.cookies.get("forum_discord_token")
+        if not user_token:
             return {"status": "error", "message": "🔒 Вы не авторизованы через Discord!", "guilds": []}
 
-        # 2. Делаем официальный живой запрос к серверам Discord API
-        headers = {"Authorization": f"Bearer {token}"}
+        # 🎯 СУПЕР-ЗАЩИТА: Вытаскиваем секретный токен самого бота из переменных среды Render!
+        konata_bot_token = os.getenv("KONATA_BOT_TOKEN", "").strip()
+
+        # Формируем заголовки для параллельных запросов
+        headers_user = {"Authorization": f"Bearer {user_token}"}
+        headers_bot = {"Authorization": f"Bot {konata_bot_token}"}
+        
+        bot_guilds_ids = set()
+
         async with httpx.AsyncClient() as client:
-            res = await client.get("https://discord.com/api/v10/users/@me/guilds", headers=headers)
-            
-            if res.status_code != 200:
-                print(f"🛑 Ошибка Discord API: {res.text}")
-                return {"status": "error", "message": "Не удалось выгрузить сервера из Discord API", "guilds": []}
-                
-            all_guilds = res.json()
+            # Запрос А: Скачиваем серверы залогиненного пользователя
+            res_user = await client.get("https://discord.com/api/v10/users/@me/guilds", headers=headers_user)
+            if res_user.status_code != 200:
+                print(f"🛑 Ошибка User Discord API: {res_user.text}")
+                return {"status": "error", "message": "Не удалось выгрузить ваши сервера из Discord API", "guilds": []}
+            user_guilds = res_user.json()
+
+            # Запрос Б: Если токен бота прописан в Render, скачиваем серверы самого бота Konata
+            if konata_bot_token:
+                res_bot = await client.get("https://discord.com/api/v10/users/@me/guilds", headers=headers_bot)
+                if res_bot.status_code == 200:
+                    bot_guilds_data = res_bot.json()
+                    # Собираем ID серверов бота в быстрый Set строк для моментального поиска
+                    bot_guilds_ids = {str(bg.get("id")) for bg in bot_guilds_data}
+                else:
+                    print(f"⚠️ Бот Konata не смог выгрузить свои серверы: {res_bot.text}")
 
         filtered_guilds = []
         invite_url_template = f"https://discord.com/oauth2/authorize?client_id={KONATA_CLIENT_ID}&permissions=8&scope=bot%20applications.commands"
 
         # 3. Фильтруем сервера по битовой маске прав пользователя
-        for g in all_guilds:
-            # Проверяем, является ли пользователь создателем (owner) 
-            # или имеет ли он права Администратора (0x8) или Управления сервером (0x20)
+        for g in user_guilds:
             is_owner = g.get("owner", False)
             permissions = int(g.get("permissions", 0))
             
@@ -1330,23 +1345,24 @@ async def get_user_discord_guilds(request: Request):
             is_manager = (permissions & 0x20) == 0x20
 
             if is_owner or is_admin or is_manager:
-                # Собираем красивую ссылку на круглую аватарку сервера Дискорда
+                guild_id = str(g.get("id"))
                 icon_hash = g.get("icon")
-                guild_id = g.get("id")
+                
+                # Собираем красивую ссылку на круглую аватарку сервера Дискорда через официальный CDN
                 if icon_hash:
                     icon_url = f"https://cdn.discordapp.com/icons/{guild_id}/{icon_hash}.png"
                 else:
-                    # 🎯 ИСПРАВЛЕНО: Закрывающая кавычка добавлена! Синтаксис СУБД восстановлен на 100%
                     icon_url = "https://i.ibb.co/4pSbxsh/user-avatar.png"
 
-                # НА ЗАМЕТКУ: Пока мы не подключили токен самого бота, 
-                # мы временно ставим has_bot = False, чтобы у всех серверов горела рабочая кнопка INVITE!
+                # 🎯 НАСТОЯЩАЯ ЖИВАЯ СИНХРОНИЗАЦИЯ: Проверяем, находится ли бот на этом сервере
+                has_bot_present = guild_id in bot_guilds_ids
+
                 filtered_guilds.append({
                     "id": guild_id,
-                    "name": g.get("name", "Неизвестный server"),
+                    "name": g.get("name", "Неизвестный сервер"),
                     "icon": icon_url,
                     "online": 0,
-                    "has_bot": False 
+                    "has_bot": has_bot_present # 100% живой статус для фронтенда!
                 })
 
         return {
