@@ -1273,6 +1273,19 @@ async def update_moderator_application_status(data: dict, request: Request):
         print(f"🛑 Ошибка обновления статуса анкеты на бэкэнде: {e}")
         return {"status": "error", "message": str(e)}
 
+# 1. РЕНДЕРИНГ ГЛАВНОЙ СТРАНИЦЫ ДЭШБОРДА ПО ССЫЛКЕ /bot-dashboard
+@app.get("/bot-dashboard")
+async def serve_bot_dashboard_page(request: Request):
+    from fastapi.responses import FileResponse, RedirectResponse
+    import os
+    
+    # Проверяем авторизацию
+    username = request.cookies.get("forum_user_name")
+    if not username:
+        return RedirectResponse("/forum?auth=login_required")
+        
+    return FileResponse(os.path.join(BASE_DIR, "dashboard.html"))
+    
 # 🎯 УКАЖИ ТУТ CLIENT ID СВОЕГО БОТА ИЗ DISCORD DEVELOPER PORTAL
 KONATA_CLIENT_ID = "1508496508528365668"
 
