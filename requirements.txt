@@ -12,4 +12,4 @@ psutil
 supabase
 gotrue
 asyncpg
-discord.py==2.4.0
+disnake==2.7.0
