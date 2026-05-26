@@ -2136,6 +2136,17 @@ async def startup():
         """)
         await db.commit()
 
+        # 🎯 СУПЕР-ФИКС: Принудительно создаем таблицу настроек бота Konata прямо при старте сайта!
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS bot_guild_settings (
+                guild_id TEXT PRIMARY KEY,
+                prefix TEXT DEFAULT 'k!',
+                censor_enabled INTEGER DEFAULT 1,
+                antilink_enabled INTEGER DEFAULT 0
+            )
+        """)
+        await db.commit()
+
         # 2. БЕЗОПАСНЫЕ ФИКСЫ (Добавляем колонки в старую базу, если их там нет)
         columns = [
             ("messages", "avatar", "TEXT DEFAULT ''"),
