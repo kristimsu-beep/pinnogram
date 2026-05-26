@@ -180,7 +180,7 @@ async def on_ready():
 
 
 # --- СПИСОК МАТЕРНЫХ СЛОВ ДЛЯ ЦЕНЗУРЫ (БАЗОВЫЙ КОРЕНЬ ДЛЯ ФИЛЬТРА) ---
-CENSOR_BAD_WORDS = ["хуй", "пизд", "ебл", "гандон", "чмо", "уеб"]
+CENSOR_BAD_WORDS = ["вшжопдитыякваплиотклушзщпиовкшпашпшвокыешпаиоткушвапокша0пашоеку0щпошу0щпотипувалиопкузшяплоыхвезшщпощшэчащлчвшкплщикзп"]
 
 
 @bot.event
@@ -207,18 +207,6 @@ async def on_message(message):
 
     # Очищаем текст сообщения для точечной проверки фильтров
     clean_content = message.content.lower().strip()
-
-    # 🛑 1. МОДУЛЬ АНТИ-ЛИНК (БЛОКИРОВКА ССЫЛОК И РЕКЛАМЫ)
-    if antilink_on:
-        if not message.author.guild_permissions.administrator:
-            if "http://" in clean_content or "https://" in clean_content or "discord.gg/" in clean_content:
-                try:
-                    await message.delete()
-                    await message.channel.send(
-                        f"❌ {message.author.mention}, на этом сервере **запрещена** публикация внешних ссылок и рекламы модерацией панели Konata!")
-                    return
-                except:
-                    pass
 
     # 🚷 2. МОДУЛЬ АНТИ-МАТ (ЦЕНЗУРА ЧАТОВ)
     if censor_on:
