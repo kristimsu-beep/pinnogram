@@ -792,6 +792,5 @@ async def on_slash_command_error(inter: disnake.ApplicationCommandInteraction, e
     else:
         raise error
 
-
 # Запуск бота на основе настроек токена
-bot.run(TOKEN)
+# bot.run(TOKEN)
