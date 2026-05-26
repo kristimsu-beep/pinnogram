@@ -1922,6 +1922,7 @@ async def keep_alive_bot(manager):
             
 @app.on_event("startup")
 async def startup():
+    from bot import bot, TOKEN
     async with aiosqlite.connect(DB_PATH) as db:
         # 1. Создаем основные таблицы (с учетом новых полей)
         await db.execute("""
@@ -2152,7 +2153,14 @@ async def startup():
         await db.commit()
         asyncio.create_task(keep_alive_bot(manager))
         print("🚀 Pinnogram Engine: База готова, бот-будильник запущен!")
-
+        TOKEN = os.getenv("KONATA_BOT_TOKEN", "").strip()
+        
+        if TOKEN and "СКРЫЛ" not in TOKEN and "ТВОЙ_" not in TOKEN:
+            try:
+                asyncio.create_task(bot.start(TOKEN))
+                print("🦊 [KONATA] Фоновый процесс бота успешно инициализирован в СУБД!")
+            except Exception as e:
+                print(f"🛑 [KONATA START ERROR] Ошибка запуска бота: {e}")
 
 # Вставь свой ключ тут
 IMGBB_API_KEY = "140359baf01acef6aa27e35c55b32f99"
