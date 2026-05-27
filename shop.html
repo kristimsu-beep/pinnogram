@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pinnogram Shop — Магазин кастомных фонов</title>
+    <style>
+        :root {
+            --bg-dark: #0e0e10;      /* Глубокий черный фон страницы */
+            --bg-card: #18181c;      /* Матовые графитовые карточки */
+            --bg-sidebar: #141416;   /* Боковая панель навигации */
+            --border-color: #222226; /* Тонкие технологичные границы */
+            --text-main: #ffffff;
+            --text-muted: #828282;
+            --rarity-common: #828282;
+            --rarity-rare: #00c6ff;
+            --rarity-epic: #9d4edd;
+            --rarity-legend: #f2994a;
+            --rarity-mythic: #ff003c;
+        }
+
+        body {
+            margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-dark); color: var(--text-main);
+            display: flex; height: 100vh; overflow: hidden;
+        }
+
+        /* ЛЕВАЯ КОЛОНКА: СИДБАР МАГАЗИНА С БАЛАНСОМ */
+        .shop-sidebar {
+            width: 280px; background-color: var(--bg-sidebar);
+            border-right: 1px solid var(--border-color);
+            padding: 30px 24px; box-sizing: border-box;
+            display: flex; flex-direction: column; gap: 30px;
+        }
+
+        /* БЛОК ОТОБРАЖЕНИЯ БАЛАНСА МОНЕТ */
+        .balance-card-box {
+            background-color: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px;
+        }
+        .balance-title-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
+        .balance-value-text { font-size: 24px; font-weight: 800; color: var(--text-main); display: flex; align-items: center; gap: 8px; }
+
+        /* ФИЛЬТРЫ ПО РЕДКОСТИ ПО СКРИНШОТУ */
+        .filter-section-title { font-size: 12px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: -10px; }
+        .filter-menu-list { display: flex; flex-direction: column; gap: 8px; }
+        .filter-item-btn {
+            background: none; border: none; color: var(--text-muted);
+            padding: 12px 16px; border-radius: 8px; font-size: 14px; font-weight: 600;
+            cursor: pointer; text-align: left; display: flex; align-items: center; gap: 12px; transition: 0.2s; width: 100%;
+        }
+        .filter-item-btn:hover { background-color: rgba(255,255,255,0.03); color: #fff; }
+        .filter-item-btn.active-filter-tab { background-color: #5865F2; color: #fff; box-shadow: 0 0 15px rgba(88, 101, 242, 0.25); }
+        
+        .rarity-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+        /* ПРАВАЯ ОБЛАСТЬ: СЕТКА ВИ ТРИНЫ ТОВАРОВ */
+        .shop-main-showcase {
+            flex: 1; padding: 40px; overflow-y: auto; box-sizing: border-box;
+            display: flex; flex-direction: column; gap: 30px;
+        }
+        .shop-grid-layout { display: grid; grid-template-columns: 1fr; gap: 25px; max-width: 900px; width: 100%; margin: 0 auto; }
+    </style>
+</head>
+<body>
+
+    <!-- ЛЕВАЯ КОЛОНКА: СИДБАР С БАЛАНСОМ И ФИЛЬТРАМИ -->
+    <div class="shop-sidebar">
+        <div class="balance-card-box">
+            <span class="balance-title-label">Ваш баланс</span>
+            <span class="balance-value-text" id="user-coins-display">0 🪙</span>
+        </div>
+
+        <div class="filter-section-title">Категории редкости</div>
+        <div class="filter-menu-list">
+            <button class="filter-item-btn active-filter-tab" id="filter-all" onclick="filterShopItems('all')">
+                <span class="rarity-dot" style="background-color: #fff;"></span> Все товары
+            </button>
+            <button class="filter-item-btn" id="filter-rare" onclick="filterShopItems('rare')">
+                <span class="rarity-dot" style="background-color: var(--rarity-rare);"></span> Редкие (0 🪙)
+            </button>
+            <button class="filter-item-btn" id="filter-epic" onclick="filterShopItems('epic')">
+                <span class="rarity-dot" style="background-color: var(--rarity-epic);"></span> Эпические (0 🪙)
+            </button>
+            <button class="filter-item-btn" id="filter-mythic" onclick="filterShopItems('mythic')">
+                <span class="rarity-dot" style="background-color: var(--rarity-mythic);"></span> Мифические (0 🪙)
+            </button>
+        </div>
+        
+        <button class="filter-item-btn" onclick="location.href='/forum'" style="margin-top: auto; color: var(--text-muted);">← На форум</button>
+    </div>
+
+    <!-- ПРАВАЯ ЧАСТЬ: СЕНСАЦИОННАЯ ВИТРИНА КАРТОЧЕК -->
+    <div class="shop-main-showcase">
+        <div style="border-bottom: 1px solid var(--border-color); padding-bottom: 20px;">
+            <h1 style="margin: 0 0 6px 0; font-size: 28px; font-weight: 800; background: linear-gradient(90deg, #f2994a, #f2c94c); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🛒 Магазин кастомизации постов</h1>
+            <p style="margin: 0; color: var(--text-muted); font-size: 14px;">Покупайте эксклюзивные переливающиеся неоновые фоны. Купленный фон украсит все ваши обращения в ленте!</p>
+        </div>
+
+        <!-- Контейнер, куда JavaScript будет выводить карточки товаров -->
+        <div class="shop-grid-layout" id="shop-cards-container">
+            <div style="text-align: center; color: var(--text-muted); padding: 50px 0;">Загрузка витрины товаров и вашего инвентаря...</div>
+        </div>
+    </div>
+    <!-- ⚙️ УПРАВЛЯЮЩИЙ СЦЕНАРИЙ МАГАЗИНА КАСТОМИЗАЦИИ ПОСТОВ -->
+    <script>
+        const API_URL = window.location.origin;
+        let userBalanceCoins = 0;
+        let userActiveBackground = "none";
+        let userOwnedBgsArray = [];
+        let currentFilterCategory = "all";
+    
+        // Официальная база данных доступных товаров магазина (РЕДКОСТИ ПО СКРИНШОТУ)
+        const SHOP_DATABASE_ITEMS = [
+            { id: "bg_blue", name: "Неоновый Кибер-Бриз", rarity: "rare", rarityLabel: "Редкий", price: 0, gradient: "linear-gradient(135deg, #090e14 0%, #00d2ff 100%)" },
+            { id: "bg_purple", name: "Фиолетовая Аномалия", rarity: "epic", rarityLabel: "Эпический", price: 0, gradient: "linear-gradient(135deg, #0d0914 0%, #9d4edd 100%)" },
+            { id: "bg_red", name: "Импульс Багрового Заката", rarity: "mythic", rarityLabel: "Мифический", price: 0, gradient: "linear-gradient(135deg, #11090d 0%, #ff003c 100%)" },
+            { id: "bg_green", name: "Изумрудная Матрица", rarity: "rare", rarityLabel: "Редкий", price: 0, gradient: "linear-gradient(135deg, #091411 0%, #2ec4b6 100%)" }
+        ];
+    
+        // 1. ЗАГРУЗКА ДАННЫХ ЮЗЕРА (БАЛАНС И КУПЛЕННЫЕ ТОВАРЫ)
+        async function fetchShopUserProfileData() {
+            try {
+                const res = await fetch(`${API_URL}/api/forum/shop/profile`);
+                const data = await res.json();
+    
+                if (data.status !== "ok") {
+                    document.getElementById("shop-cards-container").innerHTML = `
+                        <div style="grid-column:1/-1; text-align:center; color:#ff003c; padding:40px 0; font-weight:bold;">
+                            ${data.message || "🔒 Ошибка сессии. Пожалуйста, авторизуйтесь на форуме!"}
+                        </div>
+                    `;
+                    return;
+                }
+    
+                // Записываем данные в глобальный кэш
+                userBalanceCoins = data.coins || 0;
+                userActiveBackground = data.active_background || "none";
+                userOwnedBgsArray = data.owned_backgrounds || [];
+    
+                // Обновляем баланс в боковом меню
+                document.getElementById("user-coins-display").textContent = `${userBalanceCoins} 🪙`;
+    
+                // Отрисовываем карточки товаров
+                renderShopShowcaseCards();
+    
+            } catch (e) {
+                console.error("Ошибка загрузки профиля магазина:", e);
+            }
+        }
+    
+        // 2. ДИНАМИЧЕСКИЙ РЕНДЕРИНГ КАРТОЧЕК ВИТРИНЫ ПО СКРИНШОТУ
+        function renderShopShowcaseCards() {
+            const container = document.getElementById("shop-cards-container");
+            if (!container) return;
+            container.innerHTML = "";
+    
+            // Фильтруем массив товаров по выбранной редкости
+            const filteredItems = SHOP_DATABASE_ITEMS.filter(item => {
+                if (currentFilterCategory === "all") return true;
+                return item.rarity === currentFilterCategory;
+            });
+    
+            if (filteredItems.length === 0) {
+                container.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:var(--text-muted); padding:40px 0;">🚫 В данной категории редкости сейчас нет доступных товаров.</div>`;
+                return;
+            }
+    
+            filteredItems.forEach(item => {
+                const card = document.createElement("div");
+                card.style.cssText = `
+                    background-color: var(--bg-card); border: 1px solid var(--border-color);
+                    border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; gap: 0;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: 0.2s; position: relative;
+                `;
+    
+                // Определяем состояние товара и текст на кнопке
+                const isOwned = userOwnedBgsArray.includes(item.id);
+                const isActive = (userActiveBackground === item.id);
+    
+                let actionBtnHtml = "";
+                if (isActive) {
+                    actionBtnHtml = `<button style="background:#2ec4b6; color:#fff; border:none; padding:10px 20px; border-radius:6px; font-weight:bold; font-size:12px; cursor:default; width:100%; text-transform:uppercase;">АКТИВЕН ✨</button>`;
+                } else if (isOwned) {
+                    actionBtnHtml = `<button onclick="triggerShopItemAction('${item.id}', 'equip')" style="background:#5865F2; color:#fff; border:none; padding:10px 20px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer; width:100%; transition:0.2s; text-transform:uppercase;">НАДЕТЬ 🎭</button>`;
+                } else {
+                    actionBtnHtml = `<button onclick="triggerShopItemAction('${item.id}', 'buy')" style="background:linear-gradient(90deg, #f2994a, #f2c94c); color:#fff; border:none; padding:10px 20px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer; width:100%; transition:0.2s; text-transform:uppercase;">КУПИТЬ (${item.price} 🪙)</button>`;
+                }
+    
+                card.innerHTML = `
+                    <!-- Градиентное превью того, как будет выглядеть пост -->
+                    <div style="${item.gradient}; height: 110px; padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div style="display:flex; justify-content:between; width:100%; align-items:center;">
+                            <span style="font-size:11px; font-weight:bold; background:rgba(0,0,0,0.4); padding:3px 8px; border-radius:4px; color:var(--rarity-${item.rarity});">${item.rarityLabel}</span>
+                        </div>
+                        <h4 style="margin:0; color:#fff; font-size:16px; font-weight:bold; text-shadow:0 2px 4px rgba(0,0,0,0.5);">${item.name}</h4>
+                    </div>
+                    <!-- Нижняя панель управления карточкой -->
+                    <div style="padding: 16px; display: flex; align-items: center; justify-content: space-between; gap: 15px;">
+                        <span style="font-size: 13px; color: var(--text-muted); font-weight: 500;">Фон для ленты обращений</span>
+                        <div style="width: 160px;">${actionBtnHtml}</div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+    
+        // 3. ОТПРАВКА ДЕЙСТВИЯ НА БЭКЕНД (ПОКУПКА / СМЕНА ФОНА)
+        async function triggerShopItemAction(bgId, actionType) {
+            try {
+                const res = await fetch(`${API_URL}/api/forum/shop/action`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ bg_id: bgId, action: actionType })
+                });
+                const data = await res.json();
+    
+                if (data.status === "ok") {
+                    alert(data.message);
+                    fetchShopUserProfileData(); // Перезагружаем балансы и инвентарь в реальном времени!
+                } else {
+                    alert("⚠️ Ошибка: " + data.message);
+                }
+            } catch (e) {
+                alert("🛑 Сбой соединения с бэкендом Pinnogram.");
+            }
+        }
+    
+        // 4. ТАБ-ФИЛЬТРАЦИЯ ПО РЕДКОСТЯМ ИЗ СКРИНШОТА СИДБАРА
+        function filterShopItems(categoryName) {
+            currentFilterCategory = categoryName;
+    
+            // Сбрасываем и вешаем активные стили на кнопки категорий
+            ["all", "rare", "epic", "mythic"].forEach(id => {
+                const btn = document.getElementById(`filter-${id}`);
+                if (btn) btn.classList.remove("active-filter-tab");
+            });
+    
+            document.getElementById(`filter-${categoryName}`).classList.add("active-filter-tab");
+            renderShopShowcaseCards(); // Перерисовываем витрину с фильтром
+        }
+    
+        // Автозапуск при загрузке страницы магазина
+        window.onload = fetchShopUserProfileData;
+    </script>
+</body>
+</html>
