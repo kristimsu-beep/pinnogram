@@ -841,6 +841,8 @@
             <div class="nav-tabs">
                 <button class="tab-btn active" id="tab-staff" onclick="switchSection('staff')">🏛️ Администрация и отзывы</button>
                 <button class="tab-btn" id="tab-tickets" onclick="switchSection('tickets')">🎫 Раздел Обращений</button>
+                <button class="nav-menu-item-btn item-shop-active" onclick="location.href='/shop'" style="border-left-color: #f2994a; color: #f2994a;">🛒 Магазин фонов</button>
+
             </div>
         </div>
         <div class="auth-block" id="auth-zone"></div>
@@ -1845,6 +1847,22 @@
                     const authorAvatar = t.avatar || "https://ibb.co";
                     const ticketTime = t.time || "1 час назад";
                     const ticketText = t.text || "Описание обращения обрабатывается...";
+                                        // 🎯 ИНТЕГРАЦИЯ МАГАЗИНА: Карта соответствия ID фонов и киберпанк-градиентов
+                    const backgroundStyles = {
+                        'bg_red': 'background: linear-gradient(135deg, #11090d 0%, #ff003c 100%) !important; border-color: #ff003c !important; box-shadow: 0 0 15px rgba(255, 0, 60, 0.2) !important;',
+                        'bg_blue': 'background: linear-gradient(135deg, #090e14 0%, #00d2ff 100%) !important; border-color: #00d2ff !important; box-shadow: 0 0 15px rgba(0, 210, 255, 0.2) !important;',
+                        'bg_purple': 'background: linear-gradient(135deg, #0d0914 0%, #9d4edd 100%) !important; border-color: #9d4edd !important; box-shadow: 0 0 15px rgba(157, 78, 221, 0.2) !important;',
+                        'bg_green': 'background: linear-gradient(135deg, #091411 0%, #2ec4b6 100%) !important; border-color: #2ec4b6 !important; box-shadow: 0 0 15px rgba(46, 196, 182, 0.2) !important;',
+                        'none': '' // Если фона нет, остается стандартный стиль из твоего CSS-файла
+                    };
+
+                    // Достаем активный фон автора (бэкенд передаст его в поле author_bg)
+                    const userActiveBg = t.author_bg || 'none'; // Измени 't.author_bg' на то, как у тебя называется объект тикета (например app.author_bg или item.author_bg)
+                    
+                    if (backgroundStyles[userActiveBg]) {
+                        // Принудительно красим карточку в купленный градиент
+                        box.style.cssText = backgroundStyles[userActiveBg];
+                    }
 
                     // Сборка разметки карточки с интеграцией подсветки ссылок и защитой аватарок
                     box.innerHTML = `
