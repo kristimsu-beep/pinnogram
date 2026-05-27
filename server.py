@@ -1375,6 +1375,110 @@ async def get_user_discord_guilds(request: Request):
         print(f"🛑 Критическая ошибка парсинга Discord Guilds: {e}")
         return {"status": "error", "message": str(e), "guilds": []}
 
+# 1. РЕНДЕРИНГ СТРАНИЦЫ МАГАЗИНА /shop
+@app.get("/shop")
+async def serve_shop_page(request: Request):
+    from fastapi.responses import FileResponse, RedirectResponse
+    import os
+    
+    username = request.cookies.get("forum_user_name")
+    if not username:
+        return RedirectResponse("/forum?auth=login_required")
+        
+    return FileResponse(os.path.join(BASE_DIR, "shop.html"))
+
+
+# 2. API: ПОЛУЧЕНИЕ ИНФОРМАЦИИ О БАЛАНСЕ И КУПЛЕННЫХ ФОНАХ ЮЗЕРА
+@app.get("/api/forum/shop/profile")
+async def get_shop_user_profile(request: Request):
+    username = request.cookies.get("forum_user_name")
+    if not username:
+        return {"status": "error", "message": "🔒 Вы не авторизованы"}
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Получаем баланс и активный фон
+        async with db.execute("SELECT coins, active_background FROM user_shop_profile WHERE username = ?", (username,)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                coins, active_bg = row[0], row[1]
+            else:
+                # Если зашел впервые: баланс 0 монет по твоему ТЗ
+                await db.execute("INSERT INTO user_shop_profile (username, coins, active_background) VALUES (?, 0, 'none')", (username,))
+                await db.commit()
+                coins, active_bg = 0, "none"
+
+        # Получаем список всех уже купленных фонов
+        async with db.execute("SELECT bg_id FROM user_owned_backgrounds WHERE username = ?", (username,)) as cursor:
+            rows = await cursor.fetchall()
+            owned_bgs = [r[0] for r in rows]
+
+        return {
+            "status": "ok",
+            "username": username,
+            "coins": coins,
+            "active_background": active_bg,
+            "owned_backgrounds": owned_bgs
+        }
+
+
+# 3. API: ОБРАБОТКА ПОКУПКИ ИЛИ СМЕНЫ ФОНА
+@app.post("/api/forum/shop/action")
+async def handle_shop_action(data: dict, request: Request):
+    username = request.cookies.get("forum_user_name")
+    if not username:
+        return {"status": "error", "message": "🔒 Сессия истекла"}
+
+    bg_id = data.get("bg_id")
+    action = data.get("action")  # Могут быть действия: "buy" или "equip"
+    
+    # Конфигурация цен фонов (По ТЗ сейчас все фоны стоят 0 монет)
+    SHOP_ITEMS_PRICES = {
+        "bg_red": 0,
+        "bg_blue": 0,
+        "bg_purple": 0,
+        "bg_green": 0
+    }
+
+    if bg_id not in SHOP_ITEMS_PRICES:
+        return {"status": "error", "message": "Товар не найден в базе данных магазина"}
+
+    price = SHOP_ITEMS_PRICES[bg_id]
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Проверяем текущий баланс монет пользователя
+        async with db.execute("SELECT coins FROM user_shop_profile WHERE username = ?", (username,)) as cursor:
+            row = await cursor.fetchone()
+            user_coins = row[0] if row else 0
+
+        # ДЕЙСТВИЕ 1: ПОКУПКА ФОНА
+        if action == "buy":
+            # Проверяем, не куплен ли он уже
+            async with db.execute("SELECT 1 FROM user_owned_backgrounds WHERE username = ? AND bg_id = ?", (username, bg_id)) as cursor:
+                if await cursor.fetchone():
+                    return {"status": "error", "message": "Этот фон уже есть в вашем инвентаре!"}
+
+            if user_coins < price:
+                return {"status": "error", "message": "❌ Недостаточно монет на балансе!"}
+
+            # Списываем монеты и добавляем в инвентарь купленных
+            await db.execute("UPDATE user_shop_profile SET coins = coins - ? WHERE username = ?", (price, username))
+            await db.execute("INSERT INTO user_owned_backgrounds (username, bg_id) VALUES (?, ?)", (username, bg_id))
+            await db.commit()
+            return {"status": "ok", "message": "🎉 Успешная покупка! Теперь вы можете применить этот фон в инвентаре."}
+
+        # ДЕЙСТВИЕ 2: АКТИВАЦИЯ (НАДЕТЬ) ФОНА СЕРВЕРОМ НА ВСЕ ПОСТЫ
+        elif action == "equip":
+            # Проверяем, куплен ли товар
+            async with db.execute("SELECT 1 FROM user_owned_backgrounds WHERE username = ? AND bg_id = ?", (username, bg_id)) as cursor:
+                if not await cursor.fetchone() and price > 0:
+                    return {"status": "error", "message": "Сначала необходимо купить этот фон в магазине!"}
+
+            # Назначаем фон активным для всех обращений пользователя на форуме
+            await db.execute("UPDATE user_shop_profile SET active_background = ? WHERE username = ?", (bg_id, username))
+            await db.commit()
+            return {"status": "ok", "message": "✨ Кастомный фон успешно активирован для всех ваших будущих и старых обращений!"}
+
+    return {"status": "error", "message": "Неизвестное системное действие"}
 
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
@@ -2163,6 +2267,9 @@ async def startup():
         
         await db.commit()
         asyncio.create_task(keep_alive_bot(manager))
+
+        asyncio.create_task(init_shop_db_tables())
+        
         print("🚀 Pinnogram Engine: База готова, бот-будильник запущен!")
         TOKEN = os.getenv("KONATA_BOT_TOKEN", "").strip()
         
@@ -2172,6 +2279,30 @@ async def startup():
                 print("🦊 [KONATA] Фоновый процесс бота успешно инициализирован в СУБД!")
             except Exception as e:
                 print(f"🛑 [KONATA START ERROR] Ошибка запуска бота: {e}")
+
+# ==========================================================
+# СУБД: ИНИЦИАЛИЗАЦИЯ ТАБЛИЦ ИНВЕНТАРЯ И МАГАЗИНА ФОНОВ
+# ==========================================================
+async def init_shop_db_tables():
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Улучшаем таблицу настроек пользователя: добавляем баланс монет и активный фон
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS user_shop_profile (
+                username TEXT PRIMARY KEY,
+                coins INTEGER DEFAULT 0,
+                active_background TEXT DEFAULT 'none'
+            )
+        """)
+        # Таблица купленных фонов (чтобы пользователь не покупал один фон дважды)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS user_owned_backgrounds (
+                username TEXT,
+                bg_id TEXT,
+                PRIMARY KEY (username, bg_id)
+            )
+        """)
+        await db.commit()
+
 
 # Вставь свой ключ тут
 IMGBB_API_KEY = "140359baf01acef6aa27e35c55b32f99"
