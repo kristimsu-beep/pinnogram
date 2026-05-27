@@ -2271,14 +2271,6 @@ async def startup():
         asyncio.create_task(init_shop_db_tables())
         
         print("🚀 Pinnogram Engine: База готова, бот-будильник запущен!")
-        TOKEN = os.getenv("KONATA_BOT_TOKEN", "").strip()
-        
-        if TOKEN and "СКРЫЛ" not in TOKEN and "ТВОЙ_" not in TOKEN:
-            try:
-                asyncio.create_task(bot.start(TOKEN))
-                print("🦊 [KONATA] Фоновый процесс бота успешно инициализирован в СУБД!")
-            except Exception as e:
-                print(f"🛑 [KONATA START ERROR] Ошибка запуска бота: {e}")
 
 # ==========================================================
 # СУБД: ИНИЦИАЛИЗАЦИЯ ТАБЛИЦ ИНВЕНТАРЯ И МАГАЗИНА ФОНОВ
