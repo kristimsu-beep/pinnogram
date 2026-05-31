@@ -427,6 +427,11 @@ async def discord_callback(code: str, request: Request):
             res.set_cookie(key="forum_user_name", value=u_name, max_age=2592000, path="/")
             res.set_cookie(key="forum_user_avatar", value=u_avatar, max_age=2592000, path="/")
             
+            # 🎯 КРИТИЧЕСКИЙ ФИКС: Зашиваем Discord ID в куки при авторизации на форуме!
+            # (Если твоя переменная с ID называется иначе, например u_id, просто подставь её вместо u_id)
+            res.set_cookie(key="forum_user_id", value=str(u_id), max_age=2592000, path="/")
+
+            
             # 🎯 СУПЕР-ОБНОВЛЕНИЕ ДЛЯ ДЭШБОРДА: Сохраняем access_token в куку для живых запросов серверов к Discord API
             res.set_cookie(
                 key="forum_discord_token",
