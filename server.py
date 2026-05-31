@@ -234,7 +234,7 @@ STAFF_HIERARCHY = [
     "Зам.Менеджера", "Менеджер", "Тех. Админ"
 ]
 
-# 1. ПОЛУЧЕНИЕ STAFF-СОСТАВА С РАСЧЕТОМ СРЕДНЕГО ЗВЕЗДНОГО РЕЙТИНГА
+# 1. ПОЛУЧЕНИЕ STAFF-СОСТАВА С РАСЧЕТОМ СРЕДНЕГО ЗВЕЗДНОГО РЕЙТИНГА + ПАСПОРТ РОЛЕЙ ДЛЯ ЧАТА
 @app.get("/api/forum/staff")
 async def get_forum_staff():
     BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
@@ -280,6 +280,7 @@ async def get_forum_staff():
                     username = m["user"]["username"]
                     
                     member_role_ids = m.get("roles", [])
+                    # Получаем ПОЛНЫЙ массив текстовых ролей по ID
                     member_role_names = [roles_map[rid] for rid in member_role_ids if rid in roles_map]
                     
                     matched_roles = [r for r in member_role_names if r in STAFF_HIERARCHY]
@@ -303,20 +304,26 @@ async def get_forum_staff():
                                 avg_rating = round(row[0], 1)
                                 review_count = row[1]
                         
+                        # Проверяем, является ли пользователь создателем/владельцем
+                        is_server_owner = m.get("owner", False) or "Владелец" in "".join(member_role_names)
+                        
                         staff_list.append({
                             "id": user_id,
                             "name": display_name,
                             "username": username,
                             "avatar": avatar_url,
                             "role": highest_role,
-                            "rating": avg_rating,        # Передаем оценку (например, 4.8)
-                            "reviews": review_count      # Передаем количество отзывов
+                            "roles": member_role_names,  # 🎯 ИСПРАВЛЕНО: Передаем весь список ролей (Python комментарий)
+                            "is_owner": is_server_owner,  # 🎯 ИСПРАВЛЕНО: Флаг для золотого свечения (Python комментарий)
+                            "rating": avg_rating,        
+                            "reviews": review_count      
                         })
                         
     except Exception as e:
         print(f"🛑 Ошибка шлюза Discord API в server.py: {e}")
         
     return staff_list
+
 
 
 # ==========================================
@@ -1555,10 +1562,12 @@ async def get_admin_chat_history(request: Request):
 # 2. WEBSOCKET ШЛЮЗ ДЛЯ ОБМЕНА СООБЩЕНИЯМИ В РЕАЛЬНОМ ВРЕМЕНИ (СИНХРОННЫЙ ФИКС ПО ID)
 @app.websocket("/ws/admins_chat")
 async def websocket_admins_chat_endpoint(websocket: WebSocket):
+    # Принимаем соединение
     await websocket.accept()
     
+    # Достаем имя, аватарку и уникальный ID пользователя из кук при подключении сокета
     username = websocket.cookies.get("forum_user_name", "Анонимный Админ")
-    avatar = websocket.cookies.get("forum_user_avatar", "https://ibb.co")
+    avatar = websocket.cookies.get("forum_user_avatar", "https://i.ibb.co/4pSbxsh/user-avatar.png")
     user_discord_id = websocket.cookies.get("forum_user_id")
     
     is_owner = False
@@ -1572,8 +1581,12 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
             
             # СВЕРХ-ТОЧНАЯ СВЕРКА: Если совпал либо ID, либо никнейм — выдаем роли модалки!
             if (user_discord_id and m_id == str(user_discord_id).strip()) or (m_name == username.lower().strip()):
+                # Передаем полный массив реальных текстовых ролей из Дискорда
                 user_roles = member.get("roles", [])
-                is_owner = member.get("is_owner", False) or "Создатель" in user_roles or "Владелец" in user_roles
+                
+                # 🎯 СУПЕР-ФИКС: Склеиваем роли в строку, чтобы гарантированно поймать «Владелец 👑» с любыми эмодзи!
+                roles_str = "".join(user_roles)
+                is_owner = member.get("is_owner", False) or "Владелец" in roles_str or "Создатель" in roles_str
                 break
                 
         # Если роли всё еще пусты, выдадим дефолтную роль STAFF-команды
@@ -1590,6 +1603,7 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
 
     try:
         while True:
+            # Слушаем входящие сообщения от клиента
             data = await websocket.receive_text()
             if not data.strip(): continue
             
