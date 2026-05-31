@@ -329,8 +329,30 @@
             get: function() { return this.trim(); }
         });
 
-        // Запуск сокета при открытии страницы
-        window.onload = connectAdminWebSocket;
+        // 🎯 ИСПРАВЛЕНО: При загрузке страницы сначала скачиваем историю из SQLite, а потом включаем сокет!
+        async function initAdminChatSystem() {
+            // 1. Скачиваем последние сохраненные сообщения
+            try {
+                const res = await fetch(`${API_URL}/api/forum/admins_chat/history`);
+                const data = await res.json();
+                if (data.status === "ok" && data.messages) {
+                    const container = document.getElementById("chat-flow-container");
+                    if (container && data.messages.length > 0) {
+                        container.innerHTML = ""; // Очищаем заглушку загрузки
+                        data.messages.forEach(msg => appendNewAdminMessageBubble(msg));
+                    }
+                }
+            } catch (e) {
+                console.error("Не удалось подгрузить историю чата из SQLite:", e);
+            }
+
+            // 2. Включаем WebSocket для живого общения
+            connectAdminWebSocket();
+        }
+
+        // Переназначаем автозапуск страницы
+        window.onload = initAdminChatSystem;
+
     </script>
 </body>
 </html>
