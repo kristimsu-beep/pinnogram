@@ -1484,50 +1484,70 @@ async def handle_shop_action(data: dict, request: Request):
 # 🤫 МОДУЛЬ ЗАКРЫТОГО ЧАТА ДЛЯ АДМИНИСТРАЦИИ (CHAT GPT STYLE)
 # ==========================================================
 
-# 1. РЕНДЕРИНГ СТРАНИЦЫ /admins_chat
+# 1. РЕНДЕРИНГ СТРАНИЦЫ /admins_chat (АБСОЛЮТНАЯ ВЕРИФИКАЦИЯ ПО DISCORD ID)
 @app.get("/admins_chat")
 async def serve_admins_chat_page(request: Request):
     from fastapi.responses import FileResponse, RedirectResponse
     import os
     
+    # 1. Проверяем базовую авторизацию на форуме
     username = request.cookies.get("forum_user_name")
-    if not username:
+    # Достаем Discord ID пользователя, который намертво привязан к его кукам при OAuth2 логине
+    user_discord_id = request.cookies.get("forum_user_id") 
+    
+    if not username or not user_discord_id:
         return RedirectResponse("/forum?auth=login_required")
         
-    # Проверяем роли пользователя через нашу иерархию (из функции get_forum_staff)
     try:
+        # 2. Получаем живой список администрации из Discord-сервера через бота
         staff_members = await get_forum_staff()
-        is_staff = any(str(u.get("name", "")).lower().strip() == username.lower().strip() for u in staff_members)
+        
+        # 3. Настоящая верификация: Ищем совпадение строго по уникальному Discord ID
+        # Это исключает ошибки регистра букв, пробелов и смены ников
+        is_staff = False
+        for member in staff_members:
+            # Принудительно приводим оба ID к строкам для безопасного сравнения
+            if str(member.get("id", "")).strip() == str(user_discord_id).strip():
+                is_staff = True
+                break
+                
         if not is_staff:
-            return RedirectResponse("/forum?error=access_denied") # Обычных юзеров не пускаем
-    except:
+            print(f"🔒 [ACCESS DENIED] Пользователь {username} (ID: {user_discord_id}) пытался зайти в админ-чат, но не имеет STAFF-ролей в Discord.")
+            return RedirectResponse("/forum?error=access_denied") # От ворот поворот
+            
+    except Exception as e:
+        print(f"🛑 [ADMIN CHAT VERIFY ERROR] Критическая ошибка проверки прав: {e}")
         return RedirectResponse("/forum?error=db_error")
 
     return FileResponse(os.path.join(BASE_DIR, "admins_chat.html"))
 
-
-# 2. WEBSOCKET ШЛЮЗ ДЛЯ ОБМЕНА СООБЩЕНИЯМИ В РЕАЛЬНОМ ВРЕМЕНИ
+# 2. WEBSOCKET ШЛЮЗ ДЛЯ ОБМЕНА СООБЩЕНИЯМИ В РЕАЛЬНОМ ВРЕМЕНИ (СИНХРОННЫЙ ФИКС ПО ID)
 @app.websocket("/ws/admins_chat")
 async def websocket_admins_chat_endpoint(websocket: WebSocket):
     # Принимаем соединение
     await websocket.accept()
     
-    # Достаем имя пользователя из кук при подключении сокета
+    # Достаем имя, аватарку и уникальный ID пользователя из кук при подключении сокета
     username = websocket.cookies.get("forum_user_name", "Анонимный Админ")
     avatar = websocket.cookies.get("forum_user_avatar", "https://ibb.co")
+    user_discord_id = websocket.cookies.get("forum_user_id") # Достаем ID для точной проверки ролей
     
-    # Подтягиваем информацию о ролях и статусе владельца из Discord-иерархии
     is_owner = False
     user_roles = []
+    
     try:
-        staff_members = await get_forum_staff()
-        for u in staff_members:
-            if str(u.get("name", "")).lower().strip() == username.lower().strip():
-                user_roles = u.get("roles", [])
-                # Проверяем, есть ли у пользователя флаг создателя на сервере
-                is_owner = u.get("is_owner", False) or "Создатель" in user_roles
-                break
-    except: pass
+        if user_discord_id:
+            # Получаем живой список STAFF из Дискорда
+            staff_members = await get_forum_staff()
+            for member in staff_members:
+                # 🎯 ИСПРАВЛЕНО: Ищем профиль строго по уникальному ID, а не по никнейму!
+                if str(member.get("id", "")).strip() == str(user_discord_id).strip():
+                    user_roles = member.get("roles", [])
+                    # Проверяем, является ли пользователь Создателем сервера
+                    is_owner = member.get("is_owner", False) or "Создатель" in user_roles
+                    break
+    except Exception as e:
+        print(f"⚠️ [WS ADMIN ROLES ERROR] Ошибка сбора ролей сокета: {e}")
 
     # Регистрируем подключение в нашей комнате админов
     room_id = "admin_general_room"
@@ -1540,7 +1560,6 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
             # Слушаем входящие сообщения от клиента
             data = await websocket.receive_text()
             
-            # Если это обычное текстовое сообщение, рассылаем его всем админам в сети
             import json
             payload = {
                 "sender": username,
@@ -1561,7 +1580,6 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
         # Удаляем сокет при отключении
         if room_id in manager.rooms and username in manager.rooms[room_id]:
             del manager.rooms[room_id][username]
-
 
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
