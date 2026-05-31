@@ -1526,35 +1526,63 @@ async def serve_admins_chat_page(request: Request):
 
     return FileResponse(os.path.join(BASE_DIR, "admins_chat.html"))
 
+# API: ПОЛУЧЕНИЕ ИСТОРИИ СООБЩЕНИЙ ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+@app.get("/api/forum/admins_chat/history")
+async def get_admin_chat_history(request: Request):
+    username = request.cookies.get("forum_user_name")
+    if not username:
+        return {"status": "error", "message": "🔒 Доступ запрещен"}
+        
+    import json
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute("SELECT sender, avatar, message_text, is_owner, roles_json, timestamp FROM admin_chat_history ORDER BY id ASC LIMIT 50") as cursor:
+                rows = await cursor.fetchall()
+                history = []
+                for r in rows:
+                    history.append({
+                        "sender": r[0],
+                        "avatar": r[1],
+                        "text": r[2],
+                        "is_owner": bool(r[3]),
+                        "roles": json.loads(r[4] if r[4] else "[]"),
+                        "time": r[5]
+                    })
+                return {"status": "ok", "messages": history}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 # 2. WEBSOCKET ШЛЮЗ ДЛЯ ОБМЕНА СООБЩЕНИЯМИ В РЕАЛЬНОМ ВРЕМЕНИ (СИНХРОННЫЙ ФИКС ПО ID)
 @app.websocket("/ws/admins_chat")
 async def websocket_admins_chat_endpoint(websocket: WebSocket):
-    # Принимаем соединение
     await websocket.accept()
     
-    # Достаем имя, аватарку и уникальный ID пользователя из кук при подключении сокета
     username = websocket.cookies.get("forum_user_name", "Анонимный Админ")
     avatar = websocket.cookies.get("forum_user_avatar", "https://ibb.co")
-    user_discord_id = websocket.cookies.get("forum_user_id") # Достаем ID для точной проверки ролей
+    user_discord_id = websocket.cookies.get("forum_user_id")
     
     is_owner = False
     user_roles = []
     
     try:
-        if user_discord_id:
-            # Получаем живой список STAFF из Дискорда
-            staff_members = await get_forum_staff()
-            for member in staff_members:
-                # 🎯 ИСПРАВЛЕНО: Ищем профиль строго по уникальному ID, а не по никнейму!
-                if str(member.get("id", "")).strip() == str(user_discord_id).strip():
-                    user_roles = member.get("roles", [])
-                    # Проверяем, является ли пользователь Создателем сервера
-                    is_owner = member.get("is_owner", False) or "Создатель" in user_roles
-                    break
+        staff_members = await get_forum_staff()
+        for member in staff_members:
+            m_id = str(member.get("id", "")).strip()
+            m_name = str(member.get("name", "")).lower().strip()
+            
+            # СВЕРХ-ТОЧНАЯ СВЕРКА: Если совпал либо ID, либо никнейм — выдаем роли модалки!
+            if (user_discord_id and m_id == str(user_discord_id).strip()) or (m_name == username.lower().strip()):
+                user_roles = member.get("roles", [])
+                is_owner = member.get("is_owner", False) or "Создатель" in user_roles or "Владелец" in user_roles
+                break
+                
+        # Если роли всё еще пусты, выдадим дефолтную роль STAFF-команды
+        if not user_roles:
+            user_roles = ["⚡ Администрация форума"]
     except Exception as e:
-        print(f"⚠️ [WS ADMIN ROLES ERROR] Ошибка сбора ролей сокета: {e}")
+        print(f"⚠️ [WS ADMIN ROLES ERROR] {e}")
+        user_roles = ["⚡ Модератор штата"]
 
-    # Регистрируем подключение в нашей комнате админов
     room_id = "admin_general_room"
     if room_id not in manager.rooms:
         manager.rooms[room_id] = {}
@@ -1562,27 +1590,39 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
 
     try:
         while True:
-            # Слушаем входящие сообщения от клиента
             data = await websocket.receive_text()
+            if not data.strip(): continue
             
+            msg_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
             import json
+            
             payload = {
                 "sender": username,
                 "avatar": avatar,
                 "text": data,
                 "is_owner": is_owner,
                 "roles": user_roles,
-                "time": datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
+                "time": msg_time
             }
             
-            # Рассылаем широковещательно (broadcast) по комнате админов
+            # 🎯 СОХРАНЯЕМ В БАЗУ ДАННЫХ СУБД SQLITE ДЛЯ ИСТОРИИ ЧАТА!
+            try:
+                async with aiosqlite.connect(DB_PATH) as db:
+                    await db.execute("""
+                        INSERT INTO admin_chat_history (sender, avatar, message_text, is_owner, roles_json, timestamp)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (username, avatar, data, 1 if is_owner else 0, json.dumps(user_roles), msg_time))
+                    await db.commit()
+            except Exception as db_err:
+                print(f"🛑 Ошибка записи сообщения в базу чата: {db_err}")
+            
+            # Рассылаем широковещательно всем админам в онлайне
             for user, ws in list(manager.rooms[room_id].items()):
                 try:
                     await ws.send_text(json.dumps(payload))
                 except: pass
 
     except WebSocketDisconnect:
-        # Удаляем сокет при отключении
         if room_id in manager.rooms and username in manager.rooms[room_id]:
             del manager.rooms[room_id][username]
 
@@ -2373,6 +2413,7 @@ async def startup():
         
         await db.commit()
         asyncio.create_task(keep_alive_bot(manager))
+        asyncio.create_task(init_admin_chat_db())
         print("🚀 Pinnogram Engine: База готова, бот-будильник запущен!")
         TOKEN = os.getenv("KONATA_BOT_TOKEN", "").strip()
         
@@ -2406,6 +2447,21 @@ async def init_shop_db_tables():
         """)
         await db.commit()
 
+# Добавь этот кусок кода для создания таблицы истории сообщений
+async def init_admin_chat_db():
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS admin_chat_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender TEXT,
+                avatar TEXT,
+                message_text TEXT,
+                is_owner INTEGER DEFAULT 0,
+                roles_json TEXT,
+                timestamp TEXT
+            )
+        """)
+        await db.commit()
 
 # Вставь свой ключ тут
 IMGBB_API_KEY = "140359baf01acef6aa27e35c55b32f99"
