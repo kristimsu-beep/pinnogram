@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pinnogram STAFF — Чат Администрации</title>
+    <style>
+        :root {
+            --bg-chat-light: #ffffff;    /* Белоснежный фон ChatGPT */
+            --bg-bubble-other: #f4f4f7;  /* Темно-белый/светло-серый пузырь чужих сообщений */
+            --text-main: #1d1d1f;
+            --text-muted: #86868b;
+            --border-color: #e5e5ea;
+        }
+
+        body {
+            margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-chat-light); color: var(--text-main);
+            display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+        }
+
+        /* ГЛАВНЫЙ КОНТЕЙНЕР ЧАТА */
+        .chat-app-wrapper {
+            display: flex; flex-direction: column; height: 100%; width: 100%;
+            max-width: 1000px; margin: 0 auto; border-left: 1px solid var(--border-color); border-right: 1px solid var(--border-color);
+            background-color: var(--bg-chat-light); box-sizing: border-box;
+        }
+
+        /* ШАПКА ЧАТА */
+        .chat-header-bar {
+            padding: 16px 24px; border-bottom: 1px solid var(--border-color);
+            display: flex; align-items: center; justify-content: space-between; background: #fff;
+        }
+        .chat-title-info { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; }
+        .online-status-pulse { width: 8px; height: 8px; background-color: #34c759; border-radius: 50%; display: inline-block; }
+
+        /* ОБЛАСТЬ СООБЩЕНИЙ */
+        .chat-messages-timeline {
+            flex: 1; padding: 24px; overflow-y: auto;
+            display: flex; flex-direction: column; gap: 20px; box-sizing: border-box;
+        }
+
+        /* СТРУКТУРА ПУЗЫРЯ СООБЩЕНИЯ */
+        .msg-row-layout { display: flex; gap: 12px; max-width: 85%; width: fit-content; align-items: flex-end; }
+        .msg-row-layout.my-msg-row { margin-left: auto; flex-direction: row-reverse; }
+
+        /* АВАТАРКА ВОЗЛЕ ПУЗЫРЯ */
+        .msg-user-avatar {
+            width: 36px; height: 36px; border-radius: 50%; overflow: hidden; cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); flex-shrink: 0; transition: transform 0.2s;
+        }
+        .msg-user-avatar:hover { transform: scale(1.05); }
+        .msg-user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+        .msg-content-container { display: flex; flex-direction: column; gap: 4px; }
+
+        /* ПУЗЫРИ СООБЩЕНИЙ */
+        .msg-bubble-card {
+            padding: 12px 18px; border-radius: 18px; font-size: 15px; line-height: 1.4;
+            word-break: break-word; box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+        }
+
+        /* 🔵 МОИ СООБЩЕНИЯ: СИНИЕ И ПЕРЕЛИВАЮТСЯ */
+        .my-msg-row .msg-bubble-card {
+            background: linear-gradient(135deg, #007aff 0%, #00c6ff 100%);
+            color: #ffffff; border-bottom-right-radius: 4px;
+            animation: textGlowFlow 6s ease infinite; background-size: 200% 200%;
+        }
+
+        /* ⚪ ЧУЖИЕ СООБЩЕНИЯ: ТЕМНО-БЕЛЫЕ */
+        .other-msg-row .msg-bubble-card {
+            background-color: var(--bg-bubble-other); color: var(--text-main);
+            border-bottom-left-radius: 4px;
+        }
+
+        /* 👑 ЗОЛОТИСТАЯ СВЕТЯЩАЯСЯ ОКАНТОВКА СООБЩЕНИЙ ВЛАДЕЛЬЦА СЕРВЕРА */
+        .owner-gold-shield {
+            border: 2px solid #ffd700 !important;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.4) !important;
+            animation: goldGlowFlow 3s linear infinite !important;
+        }
+
+        /* НИЖНЯЯ ПАНЕЛЬ ВВОДА СТРОГО КАК У CHAT GPT */
+        .chat-input-footer {
+            padding: 16px 24px 24px 24px; border-top: 1px solid var(--border-color); background: #fff;
+        }
+        .chat-input-container {
+            display: flex; align-items: center; background-color: #f4f4f7;
+            border: 1px solid var(--border-color); border-radius: 24px; padding: 6px 12px 6px 20px;
+        }
+        .chat-text-field {
+            flex: 1; background: none; border: none; outline: none; padding: 8px 0;
+            font-size: 15px; color: var(--text-main); font-family: inherit;
+        }
+        .chat-send-btn {
+            background-color: #007aff; color: #fff; border: none; width: 34px; height: 34px;
+            border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: 0.2s; flex-shrink: 0;
+        }
+        .chat-send-btn:hover { background-color: #0063cc; transform: scale(1.05); }
+
+        /* МОДАЛЬНОЕ ОКНО ПРОФИЛЯ С РОЛЯМИ DISCORD */
+        .profile-modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4); backdrop-filter: blur(4px);
+            display: none; align-items: center; justify-content: center; z-index: 100;
+        }
+        .profile-modal-card {
+            background: #fff; border-radius: 20px; width: 100%; max-width: 340px;
+            padding: 24px; box-sizing: border-box; box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            text-align: center; border: 1px solid var(--border-color);
+        }
+        .modal-role-tag {
+            display: inline-block; background-color: #f4f4f7; color: #55555c;
+            padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; margin: 4px;
+        }
+
+        /* АНИМАЦИИ ПЕРЕЛИВОВ ДЛЯ СИНЕГО И ЗОЛОТОГО НЕОНА */
+        @keyframes textGlowFlow {
+            0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; }
+        }
+        @keyframes goldGlowFlow {
+            0% { border-color: #ffd700; box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
+            50% { border-color: #ffb700; box-shadow: 0 0 20px rgba(255, 183, 0, 0.6); }
+            100% { border-color: #ffd700; box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
+        }
+
+        /* 📱 МОБИЛЬНАЯ АДАПТАЦИЯ (МЕНЕЕ 768px ЭКРАНА) */
+        @media (max-width: 768px) {
+            .chat-app-wrapper { border: none; }
+            .chat-header-bar { padding: 12px 16px; }
+            .chat-messages-timeline { padding: 16px; gap: 15px; }
+            .msg-bubble-card { padding: 10px 14px; font-size: 14px; }
+            .chat-input-footer { padding: 12px 16px 16px 16px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ГЛАВНЫЙ АДАПТИВНЫЙ КОНТЕЙНЕР ДЛЯ ВСЕХ УСТРОЙСТВ -->
+    <div class="chat-app-wrapper">
+        
+        <!-- ШАПКА АДМИН-ЧАТА -->
+        <div class="chat-header-bar">
+            <div class="chat-title-info">
+                <span class="online-status-pulse"></span>
+                <span>STAFF — Общий чат администрации</span>
+            </div>
+            <button onclick="location.href='/forum'" style="background:none; border:1px solid var(--border-color); padding:6px 14px; border-radius:14px; cursor:pointer; font-size:13px; font-weight:600; color:var(--text-muted); transition:0.2s;">Назад на форум</button>
+        </div>
+
+        <!-- ЛЕНТА СООБЩЕНИЙ ЧАТА (ОБНОВЛЯЕТСЯ ЧЕРЕЗ WEBSOCKET) -->
+        <div class="chat-messages-timeline" id="chat-flow-container">
+            <div style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 40px 0;">
+                🔒 Безопасное сквозное соединение установлено. Сообщения видны только верифицированной администрации.
+            </div>
+        </div>
+
+        <!-- НИЖНЯЯ СТРОКА ВВОДА В СТИЛЕ CHAT GPT -->
+        <div class="chat-input-footer">
+            <div class="chat-input-container">
+                <input type="text" id="admin-message-input" class="chat-text-field" placeholder="Сообщение администрации..." onkeydown="if(event.key === 'Enter') sendAdminWSMessage()">
+                <button class="chat-send-btn" onclick="sendAdminWSMessage()">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576zm6.787-8.201L1.591 6.602l4.339 2.76z"/></svg>
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО ПРОФИЛЯ С РОЛЯМИ DISCORD -->
+    <div class="profile-modal-overlay" id="user-profile-modal" onclick="closeAdminProfileModal()">
+        <!-- Клик внутри карточки не должен закрывать окно -->
+        <div class="profile-modal-card" onclick="event.stopPropagation()">
+            <div style="width: 80px; height: 80px; border-radius: 50%; overflow: hidden; margin: 0 auto 12px auto; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                <img id="modal-user-avatar" src="" style="width:100%; height:100%; object-fit:cover;">
+            </div>
+            <h3 id="modal-user-name" style="margin: 0 0 4px 0; font-size: 18px; font-weight: 700; color: var(--text-main);">Никнейм</h3>
+            <p style="margin: 0 0 16px 0; font-size: 12px; color: var(--text-muted); font-weight: 500;">Участник команды STAFF</p>
+            
+            <div style="border-top: 1px solid var(--border-color); padding-top: 14px; text-align: left;">
+                <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 8px;">Роли на сервере</div>
+                <div id="modal-roles-container">
+                    <!-- Сюда JS вставит теги ролей -->
+                </div>
+            </div>
+            
+            <button onclick="closeAdminProfileModal()" style="margin-top: 20px; width: 100%; background-color: var(--bg-bubble-other); border: none; padding: 10px; border-radius: 10px; font-weight: 600; color: var(--text-main); cursor: pointer; transition: 0.2s;">Закрыть профиль</button>
+        </div>
+    </div>
+    <!-- ⚙️ ИНТЕЛЛЕКТУАЛЬНЫЙ СЦЕНАРИЙ УПРАВЛЕНИЯ АДМИН-ЧАТОМ И РОЛЯМИ -->
+    <script>
+        const API_URL = window.location.origin;
+        // Автоматически переключаем протокол сокета: ws:// для локального ПК и wss:// для безопасного Render
+        const WS_PROTOCOL = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const WS_URL = `${WS_PROTOCOL}//${window.location.host}/ws/admins_chat`;
+
+        let socket = null;
+        // Достаем ник текущего пользователя из кук браузера, чтобы разделять свои/чужие сообщения
+        const currentUserNameFromCookie = getCookieValueByName("forum_user_name") || "Анонимный Админ";
+
+        // 1. ПОДКЛЮЧЕНИЕ К WEBSOCKET ШЛЮЗУ НА RENDER
+        function connectAdminWebSocket() {
+            socket = new WebSocket(WS_URL);
+
+            socket.onopen = () => {
+                console.log("📡 Успешное WebSocket-соединение с комнатой админов установлено.");
+            };
+
+            socket.onmessage = (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    appendNewAdminMessageBubble(payload);
+                } catch (e) {
+                    console.error("Ошибка парсинга входящего сообщения:", e);
+                }
+            };
+
+            socket.onclose = () => {
+                console.warn("⚠️ Соединение потеряно. Попытка реконнекта через 3 секунды...");
+                setTimeout(connectAdminWebSocket, 3000);
+            };
+        }
+
+        // 2. ДИНАМИЧЕСКАЯ ОТРИСОВКА ПУЗЫРЕЙ СООБЩЕНИЙ С УЧЕТОМ РОЛЕЙ
+        function appendNewAdminMessageBubble(msg) {
+            const container = document.getElementById("chat-flow-container");
+            if (!container) return;
+
+            const isItMe = (msg.sender.toLowerCase().strip === currentUserNameFromCookie.toLowerCase().strip);
+            
+            const row = document.createElement("div");
+            row.className = `msg-row-layout ${isItMe ? 'my-msg-row' : 'other-msg-row'}`;
+
+            // Сериализуем массив ролей и данные для модального окна в JSON-строку
+            const safeRolesJson = encodeURIComponent(JSON.stringify(msg.roles || []));
+
+            // Проверяем, является ли автор сообщения Создателем
+            const isOwnerClass = msg.is_owner ? 'owner-gold-shield' : '';
+
+            row.innerHTML = `
+                <!-- Аватарка. Клик по ней открывает модалку профиля и передает роли -->
+                <div class="msg-user-avatar" onclick="openAdminProfileModal('${msg.sender}', '${msg.avatar}', '${safeRolesJson}')">
+                    <img src="${msg.avatar}" onerror="this.src='https://ibb.co'">
+                </div>
+                <div class="msg-content-container">
+                    <!-- Ник автора выводим только для чужих сообщений, как в ChatGPT -->
+                    ${!isItMe ? `<span style="font-size:11px; font-weight:600; color:var(--text-muted); margin-left: 6px;">${msg.sender}</span>` : ''}
+                    
+                    <div class="msg-bubble-card ${isOwnerClass}">
+                        ${msg.text}
+                        <div style="font-size: 9px; text-align: right; opacity: 0.6; margin-top: 4px; font-weight: 500;">
+                            ${msg.time}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            container.appendChild(row);
+            // Плавный авто-скролл вниз при получении новых сообщений
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // 3. ОТПРАВКА СООБЩЕНИЯ В СОКЕТ
+        function sendAdminWSMessage() {
+            const input = document.getElementById("admin-message-input");
+            if (!input) return;
+            const text = input.value.trim();
+            
+            if (text && socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(text);
+                input.value = ""; // Очищаем поле ввода
+            }
+        }
+
+        // 4. УПРАВЛЕНИЕ МОДАЛЬНЫМ ОКНОМ ПРОФИЛЯ С РОЛЯМИ DISCORD
+        function openAdminProfileModal(name, avatarUrl, encodedRoles) {
+            const modal = document.getElementById("user-profile-modal");
+            const modalName = document.getElementById("modal-user-name");
+            const modalAvatar = document.getElementById("modal-user-avatar");
+            const rolesContainer = document.getElementById("modal-roles-container");
+
+            if (!modal || !modalName || !modalAvatar || !rolesContainer) return;
+
+            modalName.textContent = name;
+            modalAvatar.src = avatarUrl;
+            rolesContainer.innerHTML = "";
+
+            try {
+                const rolesArray = JSON.parse(decodeURIComponent(encodedRoles));
+                if (rolesArray.length === 0) {
+                    rolesContainer.innerHTML = `<span style="font-size:12px; color:var(--text-muted);">Нет назначенных ролей</span>`;
+                } else {
+                    rolesArray.forEach(role => {
+                        const tag = document.createElement("span");
+                        tag.className = "modal-role-tag";
+                        
+                        // Если это роль создателя/высшей администрации — подсвечиваем её золотом
+                        if (role.includes("Создатель") || role.includes("ГА") || role.includes("ЗГА")) {
+                            tag.style.cssText = "background: #fff8db; color: #b78103; border: 1px solid #ffd700;";
+                        }
+                        
+                        tag.textContent = role;
+                        rolesContainer.appendChild(tag);
+                    });
+                }
+            } catch (e) {
+                rolesContainer.innerHTML = `<span style="font-size:12px; color:var(--text-muted);">Ошибка декодирования ролей</span>`;
+            }
+
+            modal.style.display = "flex";
+        }
+
+        function closeAdminProfileModal() {
+            const modal = document.getElementById("user-profile-modal");
+            if (modal) modal.style.display = "none";
+        }
+
+        // ХЕЛПЕР: Быстрое чтение кук браузера по ключу
+        function getCookieValueByName(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+
+        // Расширение прототипа строк для безопасного удаления пробелов (полифилл тримминга строк)
+        Object.defineProperty(String.prototype, 'strip', {
+            get: function() { return this.trim(); }
+        });
+
+        // Запуск сокета при открытии страницы
+        window.onload = connectAdminWebSocket;
+    </script>
+</body>
+</html>
