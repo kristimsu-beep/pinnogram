@@ -1480,6 +1480,89 @@ async def handle_shop_action(data: dict, request: Request):
 
     return {"status": "error", "message": "Неизвестное системное действие"}
 
+# ==========================================================
+# 🤫 МОДУЛЬ ЗАКРЫТОГО ЧАТА ДЛЯ АДМИНИСТРАЦИИ (CHAT GPT STYLE)
+# ==========================================================
+
+# 1. РЕНДЕРИНГ СТРАНИЦЫ /admins_chat
+@app.get("/admins_chat")
+async def serve_admins_chat_page(request: Request):
+    from fastapi.responses import FileResponse, RedirectResponse
+    import os
+    
+    username = request.cookies.get("forum_user_name")
+    if not username:
+        return RedirectResponse("/forum?auth=login_required")
+        
+    # Проверяем роли пользователя через нашу иерархию (из функции get_forum_staff)
+    try:
+        staff_members = await get_forum_staff()
+        is_staff = any(str(u.get("name", "")).lower().strip() == username.lower().strip() for u in staff_members)
+        if not is_staff:
+            return RedirectResponse("/forum?error=access_denied") # Обычных юзеров не пускаем
+    except:
+        return RedirectResponse("/forum?error=db_error")
+
+    return FileResponse(os.path.join(BASE_DIR, "admins_chat.html"))
+
+
+# 2. WEBSOCKET ШЛЮЗ ДЛЯ ОБМЕНА СООБЩЕНИЯМИ В РЕАЛЬНОМ ВРЕМЕНИ
+@app.websocket("/ws/admins_chat")
+async def websocket_admins_chat_endpoint(websocket: WebSocket):
+    # Принимаем соединение
+    await websocket.accept()
+    
+    # Достаем имя пользователя из кук при подключении сокета
+    username = websocket.cookies.get("forum_user_name", "Анонимный Админ")
+    avatar = websocket.cookies.get("forum_user_avatar", "https://ibb.co")
+    
+    # Подтягиваем информацию о ролях и статусе владельца из Discord-иерархии
+    is_owner = False
+    user_roles = []
+    try:
+        staff_members = await get_forum_staff()
+        for u in staff_members:
+            if str(u.get("name", "")).lower().strip() == username.lower().strip():
+                user_roles = u.get("roles", [])
+                # Проверяем, есть ли у пользователя флаг создателя на сервере
+                is_owner = u.get("is_owner", False) or "Создатель" in user_roles
+                break
+    except: pass
+
+    # Регистрируем подключение в нашей комнате админов
+    room_id = "admin_general_room"
+    if room_id not in manager.rooms:
+        manager.rooms[room_id] = {}
+    manager.rooms[room_id][username] = websocket
+
+    try:
+        while True:
+            # Слушаем входящие сообщения от клиента
+            data = await websocket.receive_text()
+            
+            # Если это обычное текстовое сообщение, рассылаем его всем админам в сети
+            import json
+            payload = {
+                "sender": username,
+                "avatar": avatar,
+                "text": data,
+                "is_owner": is_owner,
+                "roles": user_roles,
+                "time": datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
+            }
+            
+            # Рассылаем широковещательно (broadcast) по комнате админов
+            for user, ws in list(manager.rooms[room_id].items()):
+                try:
+                    await ws.send_text(json.dumps(payload))
+                except: pass
+
+    except WebSocketDisconnect:
+        # Удаляем сокет при отключении
+        if room_id in manager.rooms and username in manager.rooms[room_id]:
+            del manager.rooms[room_id][username]
+
+
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
     async with aiosqlite.connect(DB_PATH) as db:
