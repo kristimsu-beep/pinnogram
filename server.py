@@ -1562,12 +1562,10 @@ async def get_admin_chat_history(request: Request):
 # 2. WEBSOCKET ШЛЮЗ ДЛЯ ОБМЕНА СООБЩЕНИЯМИ В РЕАЛЬНОМ ВРЕМЕНИ (СИНХРОННЫЙ ФИКС ПО ID)
 @app.websocket("/ws/admins_chat")
 async def websocket_admins_chat_endpoint(websocket: WebSocket):
-    # Принимаем соединение
     await websocket.accept()
     
-    # Достаем имя, аватарку и уникальный ID пользователя из кук при подключении сокета
-    username = websocket.cookies.get("forum_user_name", "Анонимный Админ")
-    avatar = websocket.cookies.get("forum_user_avatar", "https://i.ibb.co/4pSbxsh/user-avatar.png")
+    username = websocket.cookies.get("forum_user_name", "Анонимный Admin")
+    avatar = websocket.cookies.get("forum_user_avatar", "https://ibb.co")
     user_discord_id = websocket.cookies.get("forum_user_id")
     
     is_owner = False
@@ -1579,14 +1577,13 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
             m_id = str(member.get("id", "")).strip()
             m_name = str(member.get("name", "")).lower().strip()
             
-            # СВЕРХ-ТОЧНАЯ СВЕРКА: Если совпал либо ID, либо никнейм — выдаем роли модалки!
             if (user_discord_id and m_id == str(user_discord_id).strip()) or (m_name == username.lower().strip()):
-                # Передаем полный массив реальных текстовых ролей из Дискорда
                 user_roles = member.get("roles", [])
                 
-                # 🎯 СУПЕР-ФИКС: Склеиваем роли в строку, чтобы гарантированно поймать «Владелец 👑» с любыми эмодзи!
-                roles_str = "".join(user_roles)
-                is_owner = member.get("is_owner", False) or "Владелец" in roles_str or "Создатель" in roles_str
+                # 🎯 ВОТ ЭТУ СТРОКУ МЕНЯЕМ:
+                # Было: is_owner = member.get("is_owner", False) or "Владелец" in roles_str ...
+                # Стало (строго по официальному флагу из Discord API):
+                is_owner = member.get("is_owner", False)
                 break
                 
         # Если роли всё еще пусты, выдадим дефолтную роль STAFF-команды
