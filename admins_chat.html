@@ -153,6 +153,13 @@
             100% { border-color: #ffd700; box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
         }
 
+        /* 🎯 НОВАЯ АНИМАЦИЯ ДЛЯ ГРАДИЕНТНЫХ РОЛЕЙ ДИСКОРДА */
+        @keyframes discordRoleGradientFlow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
     </style>
 </head>
 <body>
@@ -293,7 +300,7 @@
             }
         }
 
-        // 4. УПРАВЛЕНИЕ МОДАЛЬНЫМ ОКНОМ ПРОФИЛЯ С РОЛЯМИ DISCORD
+        // 🎯 ИСПРАВЛЕНО: Полная поддержка живых переливающихся градиентов ролей!
         function openAdminProfileModal(name, avatarUrl, encodedRoles) {
             const modal = document.getElementById("user-profile-modal");
             const modalName = document.getElementById("modal-user-name");
@@ -311,16 +318,45 @@
                 if (rolesArray.length === 0) {
                     rolesContainer.innerHTML = `<span style="font-size:12px; color:var(--text-muted);">Нет назначенных ролей</span>`;
                 } else {
-                    rolesArray.forEach(role => {
+                    rolesArray.forEach(roleObj => {
                         const tag = document.createElement("span");
                         tag.className = "modal-role-tag";
+
+                        const roleName = roleObj.name || roleObj;
                         
-                        // Если это роль создателя/высшей администрации — подсвечиваем её золотом
-                        if (role.includes("Создатель") || role.includes("ГА") || role.includes("ЗГА")) {
-                            tag.style.cssText = "background: #fff8db; color: #b78103; border: 1px solid #ffd700;";
+                        // Проверяем, является ли роль градиентной/голографической
+                        if (roleObj.is_gradient === true || roleObj.is_gradient === "true") {
+                            const p = roleObj.primary || "#fff";
+                            const s = roleObj.secondary || "#007aff";
+                            const t = roleObj.tertiary; // Если есть третий цвет (голография)
+                            
+                            // Собираем градиентную строку
+                            const gradientString = t 
+                                ? `linear-gradient(90deg, ${p}, ${s}, ${t}, ${p})`
+                                : `linear-gradient(90deg, ${p}, ${s}, ${p})`;
+
+                            // 🎨 МАГИЯ ГРАДИЕНТА: Белая неоновая матовая заливка, текст переливается градиентом
+                            tag.style.cssText = `
+                                background: ${gradientString} !important;
+                                -webkit-background-clip: text !important;
+                                -webkit-text-fill-color: transparent !important;
+                                border: 1px solid ${p} !important;
+                                background-size: 200% auto !important;
+                                animation: discordRoleGradientFlow 4s linear infinite !important;
+                                font-weight: 700 !important;
+                                box-shadow: 0 0 8px rgba(255,255,255,0.05) !important;
+                            `;
+                        } else {
+                            // ОБЫЧНАЯ ОДНОЦВЕТНАЯ РОЛЬ: Красим матовым стилем, как раньше
+                            const roleColor = roleObj.primary || roleObj.color || "#828282";
+                            tag.style.cssText = `
+                                color: ${roleColor} !important;
+                                border: 1px solid ${roleColor} !important;
+                                background-color: ${roleColor}14 !important;
+                            `;
                         }
-                        
-                        tag.textContent = role;
+
+                        tag.textContent = roleName;
                         rolesContainer.appendChild(tag);
                     });
                 }
@@ -330,6 +366,7 @@
 
             modal.style.display = "flex";
         }
+
 
         function closeAdminProfileModal() {
             const modal = document.getElementById("user-profile-modal");
