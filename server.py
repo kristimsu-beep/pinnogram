@@ -1628,56 +1628,55 @@ async def get_admin_chat_history(request: Request):
         return {"status": "error", "message": str(e)}
 
 
-# 🎙️ ОБНОВЛЕННЫЙ WEBSOCKET ШЛЮЗ С ПОДДЕРЖКОЙ ВСТРОЕННОГО ГОЛОСОВОГО ЧАТА (WebRTC)
+# 🎙️ УЛЬТИМАТИВНЫЙ WEBSOCKET ШЛЮЗ С ФИКСОМ ДЛЯ ТЕЛЕФОНОВ И НЕЗАВИСИМЫХ СЕССИЙ
 @app.websocket("/ws/admins_chat")
 async def websocket_admins_chat_endpoint(websocket: WebSocket):
-    # Принимаем соединение
     await websocket.accept()
     
-    # Достаем базовые параметры из кук один раз при подключении сокета
     username = websocket.cookies.get("forum_user_name", "Анонимный Admin")
     avatar = websocket.cookies.get("forum_user_avatar", "https://i.ibb.co/4pSbxsh/user-avatar.png")
-    user_discord_id = websocket.cookies.get("forum_user_id")
+    user_discord_id = websocket.cookies.get("forum_user_id", "0000000000")
+
+    # 🎯 СУПЕР-ФИКС: Создаем уникальный ключ сессии (Имя + ID + Уникальный порт сокета)
+    # Теперь телефон и ПК никогда не затрут друг друга, даже под одним аккаунтом!
+    session_id = f"{username}_{user_discord_id}_{websocket.client.port}"
 
     room_id = "admin_general_room"
     if room_id not in manager.rooms:
         manager.rooms[room_id] = {}
-    manager.rooms[room_id][username] = websocket
+        
+    # Регистрируем устройство под уникальным ID сессии
+    manager.rooms[room_id][session_id] = websocket
 
     try:
         while True:
-            # Слушаем входящие данные от клиента
             raw_data = await websocket.receive_text()
             if not raw_data.strip(): continue
             
             import json
             
-            # 🎯 1. СУПЕР-ПЕРЕХВАТЧИК: Проверяем, является ли сообщение сигналом ГОЛОСОВОГО чата
+            # 1. ПЕРЕХВАТЧИК СИГНАЛОВ ГОЛОСОВОГО ЧАТА (WebRTC)
             try:
                 data_json = json.loads(raw_data)
                 if isinstance(data_json, dict) and "voice_type" in data_json:
-                    # Добавляем в технический пакет имя и аватарку отправителя на лету
                     data_json["sender"] = username
                     data_json["avatar"] = avatar
                     
-                    # Пересылаем WebRTC сигналы/аватарки всем остальным админам в сети (кроме себя)
-                    for user, ws in list(manager.rooms[room_id].items()):
-                        if user != username:
+                    # 🎯 ИСПРАВЛЕНО: Рассылаем голосовой пакет абсолютно всем ДРУГИМ сессиям устройств!
+                    for other_session, ws in list(manager.rooms[room_id].items()):
+                        if other_session != session_id:
                             try:
                                 await ws.send_text(json.dumps(data_json))
                             except: pass
-                    # Завершаем текущую итерацию цикла, чтобы голосовой пакет НЕ улетел в СУБД историю чата!
                     continue
             except:
-                # Если прилетел обычный не-JSON текст, просто идем дальше по коду текстового чата
                 pass
 
-            # 🎯 2. СТАНДАРТНАЯ ЛОГИКА ТЕКСТОВЫХ СООБЩЕНИЙ (Полностью сохранена)
+            # 2. СТАНДАРТНАЯ ЛОГИКА ТЕКСТОВЫХ СООБЩЕНИЙ
             is_owner = False
             user_roles = []
             
             try:
-                # Мгновенно опрашиваем Discord API на наличие изменений в ролях и цветах
                 staff_members = await get_forum_staff()
                 for member in staff_members:
                     m_id = str(member.get("id", "")).strip()
@@ -1689,35 +1688,22 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
                         break
                         
                 if not user_roles:
-                    user_roles = [{
-                        "name": "⚡ Администрация форума",
-                        "primary": "#828282",
-                        "secondary": None,
-                        "tertiary": None,
-                        "is_gradient": False
-                    }]
+                    user_roles = [{"name": "⚡ Администрация форума", "primary": "#828282", "secondary": None, "tertiary": None, "is_gradient": False}]
             except Exception as e:
-                print(f"⚠️ [WS LIVE ROLES ERROR] Ошибка живого обновления ролей: {e}")
-                user_roles = [{
-                    "name": "⚡ Модератор штата",
-                    "primary": "#828282",
-                    "secondary": None,
-                    "tertiary": None,
-                    "is_gradient": False
-                }]
+                print(f"⚠️ [WS LIVE ROLES ERROR] {e}")
+                user_roles = [{"name": "⚡ Модератор штата", "primary": "#828282", "secondary": None, "tertiary": None, "is_gradient": False}]
             
             msg_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
             
             payload = {
                 "sender": username,
                 "avatar": avatar,
-                "text": raw_data, # Оригинальный текст сообщения
+                "text": raw_data, 
                 "is_owner": is_owner,
                 "roles": user_roles,
                 "time": msg_time
             }
             
-            # СОХРАНЯЕМ ТЕКСТ В БАЗУ ДАННЫХ СУБД SQLITE
             try:
                 async with aiosqlite.connect(DB_PATH) as db:
                     await db.execute("""
@@ -1726,25 +1712,22 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
                     """, (username, avatar, raw_data, 1 if is_owner else 0, json.dumps(user_roles), msg_time))
                     await db.commit()
             except Exception as db_err:
-                print(f"🛑 Ошибка записи сообщения в базу чата: {db_err}")
+                print(f"🛑 Ошибка записи сообщения: {db_err}")
             
-            # Рассылаем широковещательно всем админам в онлайне
-            for user, ws in list(manager.rooms[room_id].items()):
+            # Рассылаем текстовое сообщение по всем устройствам
+            for other_session, ws in list(manager.rooms[room_id].items()):
                 try:
                     await ws.send_text(json.dumps(payload))
                 except: pass
 
     except WebSocketDisconnect:
-        if room_id in manager.rooms and username in manager.rooms[room_id]:
-            del manager.rooms[room_id][username]
+        if room_id in manager.rooms and session_id in manager.rooms[room_id]:
+            del manager.rooms[room_id][session_id]
             
-            # 🎯 3. СТРАХОВКА: Если админ резко закрыл вкладку, оповещаем остальных, что он покинул войс чат
             try:
-                for user, ws in list(manager.rooms[room_id].items()):
+                for other_session, ws in list(manager.rooms[room_id].items()):
                     await ws.send_text(json.dumps({"voice_type": "leave", "sender": username}))
             except: pass
-
-
 
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
