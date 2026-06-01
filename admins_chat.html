@@ -167,14 +167,44 @@
     <!-- ГЛАВНЫЙ АДАПТИВНЫЙ КОНТЕЙНЕР ДЛЯ ВСЕХ УСТРОЙСТВ -->
     <div class="chat-app-wrapper">
         
-        <!-- ШАПКА АДМИН-ЧАТА -->
+        <!-- ШАПКА ЧАТА С КНОПКОЙ ПОДКЛЮЧЕНИЯ В ВОЙС -->
         <div class="chat-header-bar">
             <div class="chat-title-info">
                 <span class="online-status-pulse"></span>
-                <span>STAFF — Общий чат администрации</span>
+                <span>STAFF — Чат и Голосовой сбор</span>
             </div>
-            <button onclick="location.href='/forum'" style="background:none; border:1px solid var(--border-color); padding:6px 14px; border-radius:14px; cursor:pointer; font-size:13px; font-weight:600; color:var(--text-muted); transition:0.2s;">Назад на форум</button>
+            
+            <!-- КНОПКА КРУГЛОГО СТОЛА/ГОЛОСОВОГО ЧАТА -->
+            <button id="voice-connect-trigger-btn" onclick="toggleVoiceAssemblyChannel()" style="background:#34c759; color:#fff; border:none; padding:8px 16px; border-radius:14px; cursor:pointer; font-size:13px; font-weight:700; display:flex; align-items:center; gap:8px; transition:0.2s; box-shadow: 0 4px 10px rgba(52, 199, 89, 0.2);">
+                <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M3.5 6.5A.5.5 0 0 1 4 7v1a4 4 0 0 0 8 0V7a.5.5 0 0 1 1 0v1a5 5 0 0 1-4.5 4.975V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 .5-.5z"/><path d="M5 3a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0V3z"/></svg>
+                Войти в голосовой сбор
+            </button>
+
+            <button onclick="location.href='/forum'" style="background:none; border:1px solid var(--border-color); padding:8px 14px; border-radius:14px; cursor:pointer; font-size:13px; font-weight:600; color:var(--text-muted); transition:0.2s;">Назад</button>
         </div>
+
+        <!-- 🎙️ ДИНАМИЧЕСКАЯ ПАНЕЛЬ ОТОБРАЖЕНИЯ УЧАСТНИКОВ В ГОЛОСОВОМ ЧАТЕ -->
+        <div id="voice-assembly-users-panel" style="display: none; background: #fafafa; border-bottom: 1px solid var(--border-color); padding: 16px 24px; box-sizing: border-box; flex-direction: column; gap: 12px; transition: 0.3s;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-size: 12px; font-weight: 700; color: #34c759; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+                    <span class="online-status-pulse" style="animation: pulse 1.5s infinite;"></span> На связи в голосовом собрании:
+                </span>
+                
+                <!-- ЦЕНТРАЛЬНАЯ КРАСНАЯ КНОПКА ВЫХОДА -->
+                <button onclick="leaveVoiceAssemblyChannel()" style="background:#ff3b30; color:#fff; border:none; padding:6px 14px; border-radius:10px; font-weight:700; font-size:12px; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 4px 10px rgba(255, 59, 48, 0.25);">
+                    🛑 Покинуть сбор
+                </button>
+            </div>
+            
+            <!-- Контейнер для аватарок подключенных админов -->
+            <div id="voice-users-avatar-grid" style="display: flex; flex-wrap: wrap; gap: 12px; padding-top: 6px;">
+                <!-- Аватарки генерируются через JS -->
+            </div>
+        </div>
+
+        <!-- ТЕХНИЧЕСКИЙ КОНТЕЙНЕР ДЛЯ АУДИО-ПОТОКОВ (СКРЫТЫЙ) -->
+        <div id="remote-audio-streams-container" style="display:none;"></div>
+
 
         <!-- ЛЕНТА СООБЩЕНИЙ ЧАТА (ОБНОВЛЯЕТСЯ ЧЕРЕЗ WEBSOCKET) -->
         <div class="chat-messages-timeline" id="chat-flow-container">
@@ -237,6 +267,12 @@
             socket.onmessage = (event) => {
                 try {
                     const payload = JSON.parse(event.data);
+                    
+                    // 🎯 ИСПРАВЛЕНО: Перехватываем сигналы голосового чата. 
+                    // Если это технический пакет WebRTC — завершаем обработку, чтобы он не летел в текстовую ленту!
+                    if (handleIncomingVoiceSignals(payload) === true) return;
+
+                    // Обычный рендеринг текстовых пузырей сообщений
                     appendNewAdminMessageBubble(payload);
                 } catch (e) {
                     console.error("Ошибка парсинга входящего сообщения:", e);
@@ -409,6 +445,195 @@
 
         // Переназначаем автозапуск страницы
         window.onload = initAdminChatSystem;
+                // ==========================================================
+        // 🎙️ КИБЕРПАНК МОДУЛЬ ГОЛОСОВОЙ СВЯЗИ WebRTC
+        // ==========================================================
+        let localAudioStream = null;
+        let peerConnections = {}; // Карта соединений с другими админами
+        let voiceActiveUsers = {}; // Список участников в голосовом канале
+        let isInVoiceRoom = false;
+
+        // Конфигурация бесплатных публичных серверов Google для обхода брандмауэров
+        const rtcIceConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+        // 1. ПОДКЛЮЧЕНИЕ / ВХОД В ГОЛОСОВОЙ КАНАЛ
+        async function toggleVoiceAssemblyChannel() {
+            if (isInVoiceRoom) return;
+            
+            try {
+                // Запрашиваем у браузера официальный доступ к микрофону админа
+                localAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                isInVoiceRoom = true;
+
+                // Переключаем интерфейс
+                document.getElementById("voice-assembly-users-panel").style.display = "flex";
+                document.getElementById("voice-connect-trigger-btn").style.background = "#86868b";
+                document.getElementById("voice-connect-trigger-btn").innerHTML = "🟢 Вы внутри сбора";
+
+                // Оповещаем всю комнату сокетов, что мы вошли в голосовой чат
+                sendVoiceSystemSignal({ voice_type: "join" });
+
+                // Добавляем себя на витрину аватарок
+                addVoiceUserToInterface(currentUserNameFromCookie, document.getElementById("modal-user-avatar")?.src || "https://i.ibb.co/4pSbxsh/user-avatar.png");
+
+            } catch (err) {
+                alert("🛑 Ошибка доступа к микрофону! Пожалуйста, разрешите браузеру доступ к записи аудио.");
+                console.error(err);
+            }
+        }
+
+        // 2. ВЫХОД ИЗ ГОЛОСОВОГО КАНАЛА (КРАСНАЯ КНОПКА)
+        function leaveVoiceAssemblyChannel() {
+            if (!isInVoiceRoom) return;
+
+            // Выключаем запись микрофона
+            if (localAudioStream) {
+                localAudioStream.getTracks().forEach(track => track.stop());
+                localAudioStream = null;
+            }
+
+            // Закрываем все сессии связи с другими модераторами
+            Object.keys(peerConnections).forEach(user => {
+                if (peerConnections[user]) {
+                    peerConnections[user].close();
+                    delete peerConnections[user];
+                }
+            });
+
+            // Оповещаем сокеты о выходе
+            sendVoiceSystemSignal({ voice_type: "leave" });
+
+            // Сбрасываем интерфейс панели
+            isInVoiceRoom = false;
+            document.getElementById("voice-assembly-users-panel").style.display = "none";
+            document.getElementById("voice-connect-trigger-btn").style.background = "#34c759";
+            document.getElementById("voice-connect-trigger-btn").innerHTML = `<svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16" style="margin-right:4px;"><path d="M3.5 6.5A.5.5 0 0 1 4 7v1a4 4 0 0 0 8 0V7a.5.5 0 0 1 1 0v1a5 5 0 0 1-4.5 4.975V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 .5-.5z"/><path d="M5 3a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0V3z"/></svg> Войти в голосовой сбор`;
+            document.getElementById("voice-users-avatar-grid").innerHTML = "";
+            document.getElementById("remote-audio-streams-container").innerHTML = "";
+            voiceActiveUsers = {};
+        }
+
+        // 3. ОТПРАВКА СИГНАЛОВ ГОЛОСА ЧЕРЕЗ WEBSOCKET
+        function sendVoiceSystemSignal(payload) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(json_stringify_safe(payload));
+            }
+        }
+
+        // Хелпер безопасного перевода в JSON
+        function json_stringify_safe(obj) { return JSON.stringify(obj); }
+
+        // 4. ОБРАБОТКА СИГНАЛОВ СВЯЗИ ОТ ДРУГИХ УЧАСТНИКОВ (Интегрировать внутрь socket.onmessage)
+        // Мы расширим главный обработчик сокетов, добавив этот перехватчик:
+        function handleIncomingVoiceSignals(data) {
+            if (!data.voice_type) return false; // Если это не голосовой сигнал, пропускаем
+
+            const user = data.sender;
+            const av = data.avatar;
+
+            // Сценарий А: Кто-то зашёл в войс чат
+            if (data.voice_type === "join") {
+                addVoiceUserToInterface(user, av);
+                if (isInVoiceRoom) {
+                    // Инициализируем WebRTC Peer Connection для звонка новичку
+                    initiateWebRTCPeerCall(user, true);
+                }
+            }
+            // Сценарий Б: Кто-то покинул войс чат
+            else if (data.voice_type === "leave") {
+                removeVoiceUserFromInterface(user);
+                if (peerConnections[user]) {
+                    peerConnections[user].close();
+                    delete peerConnections[user];
+                }
+                const audioEl = document.getElementById(`audio-stream-${user}`);
+                if (audioEl) audioEl.remove();
+            }
+            // Сценарии В: Технический обмен SDP-офферами и ICE-кандидатами для склейки звука
+            else if (data.voice_type === "offer" && isInVoiceRoom) {
+                initiateWebRTCPeerCall(user, false, data.sdp);
+            }
+            else if (data.voice_type === "answer" && isInVoiceRoom && peerConnections[user]) {
+                peerConnections[user].setRemoteDescription(new RTCSessionDescription(data.sdp));
+            }
+            else if (data.voice_type === "candidate" && isInVoiceRoom && peerConnections[user]) {
+                peerConnections[user].addIceCandidate(new RTCIceCandidate(data.candidate));
+            }
+
+            return true; // Голосовой пакет успешно обработан
+        }
+
+        // 5. ИНИЦИАЛИЗАЦИЯ И ПОДКЛЮЧЕНИЕ ЗВУКОВОГО ПОТОКА WebRTC ЧЕРЕЗ GOOGLE STUN
+        async function initiateWebRTCPeerCall(targetUser, isCaller, remoteSdp = null) {
+            if (peerConnections[targetUser]) return;
+
+            const pc = new RTCPeerConnection(rtcIceConfig);
+            peerConnections[targetUser] = pc;
+
+            // Добавляем наш микрофон в это соединение
+            if (localAudioStream) {
+                localAudioStream.getTracks().forEach(track => pc.addTrack(track, localAudioStream));
+            }
+
+            // Ловим аудио-поток от собеседника и выводим его в динамики браузера
+            pc.ontrack = (event) => {
+                let audioEl = document.getElementById(`audio-stream-${targetUser}`);
+                if (!audioEl) {
+                    audioEl = document.createElement("audio");
+                    audioEl.id = `audio-stream-${targetUser}`;
+                    audioEl.autoplay = true;
+                    document.getElementById("remote-audio-streams-container").appendChild(audioEl);
+                }
+                audioEl.srcObject = event.streams[0];
+            };
+
+            // Пересылаем сетевых кандидатов через сокет
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    sendVoiceSystemSignal({ voice_type: "candidate", candidate: event.candidate, sender: currentUserNameFromCookie });
+                }
+            };
+
+            if (isCaller) {
+                // Создаем приглашение к звонку (Offer)
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                sendVoiceSystemSignal({ voice_type: "offer", sdp: offer, sender: currentUserNameFromCookie });
+            } else {
+                // Отвечаем на приглашение (Answer)
+                await pc.setRemoteDescription(new RTCSessionDescription(remoteSdp));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                sendVoiceSystemSignal({ voice_type: "answer", sdp: answer, sender: currentUserNameFromCookie });
+            }
+        }
+
+        // 6. УПРАВЛЕНИЕ АВАТАРКАМИ УЧАСТНИКОВ В ИНТЕРФЕЙСЕ
+        function addVoiceUserToInterface(user, avatarUrl) {
+            if (voiceActiveUsers[user]) return;
+            voiceActiveUsers[user] = true;
+
+            const grid = document.getElementById("voice-users-avatar-grid");
+            if (!grid) return;
+
+            const box = document.createElement("div");
+            box.id = `voice-user-box-${user}`;
+            box.style.cssText = "display: flex; flex-direction: column; align-items: center; gap: 4px; width: 60px; position:relative;";
+            box.innerHTML = `
+                <div style="width: 44px; height: 44px; border-radius: 50%; overflow: hidden; border: 2px solid #34c759; box-shadow: 0 2px 8px rgba(52, 199, 89, 0.3); background:#fff;">
+                    <img src="${avatarUrl}" style="width:100%; height:100%; object-fit:cover;">
+                </div>
+                <span style="font-size: 10px; font-weight: 600; color: var(--text-main); text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${user}</span>
+            `;
+            grid.appendChild(box);
+        }
+
+        function removeVoiceUserFromInterface(user) {
+            if (!voiceActiveUsers[user]) return;
+            delete voiceActiveUsers[user];
+            const box = document.getElementById(`voice-user-box-${user}`);
+            if (box) box.remove();
+        }
 
     </script>
 </body>
