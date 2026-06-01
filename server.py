@@ -1628,7 +1628,7 @@ async def get_admin_chat_history(request: Request):
         return {"status": "error", "message": str(e)}
 
 
-# 2. WEBSOCKET ШЛЮЗ ДЛЯ ОБМЕНА СООБЩЕНИЯМИ В РЕАЛЬНОМ ВРЕМЕНИ (МГНОВЕННОЕ ОБНОВЛЕНИЕ РОЛЕЙ НА ЛЕТУ)
+# 🎙️ ОБНОВЛЕННЫЙ WEBSOCKET ШЛЮЗ С ПОДДЕРЖКОЙ ВСТРОЕННОГО ГОЛОСОВОГО ЧАТА (WebRTC)
 @app.websocket("/ws/admins_chat")
 async def websocket_admins_chat_endpoint(websocket: WebSocket):
     # Принимаем соединение
@@ -1646,11 +1646,33 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
 
     try:
         while True:
-            # Слушаем входящие сообщения от клиента
-            data = await websocket.receive_text()
-            if not data.strip(): continue
+            # Слушаем входящие данные от клиента
+            raw_data = await websocket.receive_text()
+            if not raw_data.strip(): continue
             
-            # 🎯 ЖИВОЙ АПДЕЙТ: Создаем чистые переменные под каждое новое сообщение
+            import json
+            
+            # 🎯 1. СУПЕР-ПЕРЕХВАТЧИК: Проверяем, является ли сообщение сигналом ГОЛОСОВОГО чата
+            try:
+                data_json = json.loads(raw_data)
+                if isinstance(data_json, dict) and "voice_type" in data_json:
+                    # Добавляем в технический пакет имя и аватарку отправителя на лету
+                    data_json["sender"] = username
+                    data_json["avatar"] = avatar
+                    
+                    # Пересылаем WebRTC сигналы/аватарки всем остальным админам в сети (кроме себя)
+                    for user, ws in list(manager.rooms[room_id].items()):
+                        if user != username:
+                            try:
+                                await ws.send_text(json.dumps(data_json))
+                            except: pass
+                    # Завершаем текущую итерацию цикла, чтобы голосовой пакет НЕ улетел в СУБД историю чата!
+                    continue
+            except:
+                # Если прилетел обычный не-JSON текст, просто идем дальше по коду текстового чата
+                pass
+
+            # 🎯 2. СТАНДАРТНАЯ ЛОГИКА ТЕКСТОВЫХ СООБЩЕНИЙ (Полностью сохранена)
             is_owner = False
             user_roles = []
             
@@ -1661,13 +1683,11 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
                     m_id = str(member.get("id", "")).strip()
                     m_name = str(member.get("name", "")).lower().strip()
                     
-                    # СВЕРХ-ТОЧНАЯ СВЕРКА
                     if (user_discord_id and m_id == str(user_discord_id).strip()) or (m_name == username.lower().strip()):
                         user_roles = member.get("roles", [])
                         is_owner = member.get("is_owner", False)
                         break
                         
-                # Безопасный фолбек в виде ОБЪЕКТА, если юзера временно нет в кэше бота
                 if not user_roles:
                     user_roles = [{
                         "name": "⚡ Администрация форума",
@@ -1687,24 +1707,23 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
                 }]
             
             msg_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
-            import json
             
             payload = {
                 "sender": username,
                 "avatar": avatar,
-                "text": data,
+                "text": raw_data, # Оригинальный текст сообщения
                 "is_owner": is_owner,
-                "roles": user_roles, # Улетают самые свежие роли и градиенты на текущую секунду!
+                "roles": user_roles,
                 "time": msg_time
             }
             
-            # 🎯 СОХРАНЯЕМ В БАЗУ ДАННЫХ СУБД SQLITE ДЛЯ ИСТОРИИ ЧАТА!
+            # СОХРАНЯЕМ ТЕКСТ В БАЗУ ДАННЫХ СУБД SQLITE
             try:
                 async with aiosqlite.connect(DB_PATH) as db:
                     await db.execute("""
                         INSERT INTO admin_chat_history (sender, avatar, message_text, is_owner, roles_json, timestamp)
                         VALUES (?, ?, ?, ?, ?, ?)
-                    """, (username, avatar, data, 1 if is_owner else 0, json.dumps(user_roles), msg_time))
+                    """, (username, avatar, raw_data, 1 if is_owner else 0, json.dumps(user_roles), msg_time))
                     await db.commit()
             except Exception as db_err:
                 print(f"🛑 Ошибка записи сообщения в базу чата: {db_err}")
@@ -1718,6 +1737,13 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         if room_id in manager.rooms and username in manager.rooms[room_id]:
             del manager.rooms[room_id][username]
+            
+            # 🎯 3. СТРАХОВКА: Если админ резко закрыл вкладку, оповещаем остальных, что он покинул войс чат
+            try:
+                for user, ws in list(manager.rooms[room_id].items()):
+                    await ws.send_text(json.dumps({"voice_type": "leave", "sender": username}))
+            except: pass
+
 
 
 @app.get("/poll/{poll_id}")
