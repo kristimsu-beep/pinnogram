@@ -234,7 +234,7 @@ STAFF_HIERARCHY = [
     "Зам.Менеджера", "Менеджер", "Тех. Админ"
 ]
 
-# 1. ПОЛУЧЕНИЕ STAFF-СОСТАВА С РАСЧЕТОМ СРЕДНЕГО ЗВЕЗДНОГО РЕЙТИНГА + ПАСПОРТ РОЛЕЙ ДЛЯ ЧАТА
+# 1. ПОЛУЧЕНИЕ STAFF-СОСТАВА С ПОДДЕРЖКОЙ ЖИВЫХ ГРАДИЕНТОВ РОЛЕЙ ИЗ DISCORD API
 @app.get("/api/forum/staff")
 async def get_forum_staff():
     BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
@@ -258,7 +258,30 @@ async def get_forum_staff():
                 return []
                 
             roles_data = roles_res.json()
-            roles_map = {r["id"]: r["name"] for r in roles_data}
+            roles_map = {}
+            
+            for r in roles_data:
+                # Читаем стандартный цвет роли
+                p_color = r.get("color", 0)
+                hex_p = f"#{p_color:06x}" if p_color != 0 else "#828282"
+                
+                # 🎯 СВЕРХ-ФИКС ДЛЯ ГРАДИЕНТОВ: Проверяем наличие дополнительных цветов Enhanced Role Styles
+                # Дискорд передает расширенные цвета в объекте "role_colors" или в виде полей primary/secondary
+                r_colors = r.get("role_colors", {})
+                s_color = r_colors.get("secondary_color")
+                t_color = r_colors.get("tertiary_color")
+                
+                hex_s = f"#{s_color:06x}" if s_color and s_color != 0 else None
+                hex_t = f"#{t_color:06x}" if t_color and t_color != 0 else None
+                
+                # Сохраняем паспорт цветов роли
+                roles_map[str(r["id"])] = {
+                    "name": r["name"],
+                    "primary": hex_p,
+                    "secondary": hex_s,
+                    "tertiary": hex_t,
+                    "is_gradient": hex_s is not None or hex_t is not None
+                }
             
             # Получаем участников
             members_url = f"https://discord.com/api/v10/guilds/{GUILD_ID}/members?limit=1000"
@@ -280,8 +303,16 @@ async def get_forum_staff():
                     username = m["user"]["username"]
                     
                     member_role_ids = m.get("roles", [])
-                    # Получаем ПОЛНЫЙ массив текстовых ролей по ID
-                    member_role_names = [roles_map[rid] for rid in member_role_ids if rid in roles_map]
+                    
+                    # 🎯 УПАКОВЫВАЕМ СЛОВАРЬ: Теперь это список объектов с цветами и градиентами
+                    member_role_objects = []
+                    member_role_names = []
+                    
+                    for rid in member_role_ids:
+                        rid_str = str(rid)
+                        if rid_str in roles_map:
+                            member_role_objects.append(roles_map[rid_str])
+                            member_role_names.append(roles_map[rid_str]["name"])
                     
                     matched_roles = [r for r in member_role_names if r in STAFF_HIERARCHY]
                     
@@ -295,7 +326,7 @@ async def get_forum_staff():
                         else:
                             avatar_url = "https://i.ibb.co/4pSbxsh/user-avatar.png"
                             
-                        # 🎯 РАСЧЕТ РЕЙТИНГА: Считаем среднюю оценку модератора в базе данных
+                        # РАСЧЕТ РЕЙТИНГА
                         avg_rating = 5.0
                         review_count = 0
                         async with db.execute("SELECT AVG(rating), COUNT(*) FROM forum_reviews WHERE target_id = ?", (user_id,)) as cur:
@@ -313,8 +344,9 @@ async def get_forum_staff():
                             "username": username,
                             "avatar": avatar_url,
                             "role": highest_role,
-                            "roles": member_role_names,  # 🎯 ИСПРАВЛЕНО: Передаем весь список ролей (Python комментарий)
-                            "is_owner": is_server_owner,  # 🎯 ИСПРАВЛЕНО: Флаг для золотого свечения (Python комментарий)
+                            # 🎯 ТЕПЕРЬ ПЕРЕДАЕМ СТРУКТУРУ С ЦВЕТАМИ И ТИПАМИ ДЛЯ АДМИН-ЧАТА!
+                            "roles": member_role_objects,  
+                            "is_owner": is_server_owner,  
                             "rating": avg_rating,        
                             "reviews": review_count      
                         })
@@ -1562,10 +1594,12 @@ async def get_admin_chat_history(request: Request):
 # 2. WEBSOCKET ШЛЮЗ ДЛЯ ОБМЕНА СООБЩЕНИЯМИ В РЕАЛЬНОМ ВРЕМЕНИ (СИНХРОННЫЙ ФИКС ПО ID)
 @app.websocket("/ws/admins_chat")
 async def websocket_admins_chat_endpoint(websocket: WebSocket):
+    # Принимаем соединение
     await websocket.accept()
     
+    # Достаем имя, аватарку и уникальный ID пользователя из кук при подключении сокета
     username = websocket.cookies.get("forum_user_name", "Анонимный Admin")
-    avatar = websocket.cookies.get("forum_user_avatar", "https://ibb.co")
+    avatar = websocket.cookies.get("forum_user_avatar", "https://i.ibb.co/4pSbxsh/user-avatar.png")
     user_discord_id = websocket.cookies.get("forum_user_id")
     
     is_owner = False
@@ -1577,21 +1611,32 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
             m_id = str(member.get("id", "")).strip()
             m_name = str(member.get("name", "")).lower().strip()
             
+            # СВЕРХ-ТОЧНАЯ СВЕРКА: Если совпал либо ID, либо никнейм — выдаем роли модалки!
             if (user_discord_id and m_id == str(user_discord_id).strip()) or (m_name == username.lower().strip()):
+                # Передаем полный массив реальных объектов ролей с градиентами и HEX-цветами
                 user_roles = member.get("roles", [])
-                
-                # 🎯 ВОТ ЭТУ СТРОКУ МЕНЯЕМ:
-                # Было: is_owner = member.get("is_owner", False) or "Владелец" in roles_str ...
-                # Стало (строго по официальному флагу из Discord API):
+                # Золотая корона — строго по официальному флагу из Discord API!
                 is_owner = member.get("is_owner", False)
                 break
                 
-        # Если роли всё еще пусты, выдадим дефолтную роль STAFF-команды
+        # 🎯 ИСПРАВЛЕНО: Безопасный фолбек в виде ОБЪЕКТА, чтобы фронтенд градиентов не падал!
         if not user_roles:
-            user_roles = ["⚡ Администрация форума"]
+            user_roles = [{
+                "name": "⚡ Администрация форума",
+                "primary": "#828282",
+                "secondary": None,
+                "tertiary": None,
+                "is_gradient": False
+            }]
     except Exception as e:
         print(f"⚠️ [WS ADMIN ROLES ERROR] {e}")
-        user_roles = ["⚡ Модератор штата"]
+        user_roles = [{
+            "name": "⚡ Модератор штата",
+            "primary": "#828282",
+            "secondary": None,
+            "tertiary": None,
+            "is_gradient": False
+        }]
 
     room_id = "admin_general_room"
     if room_id not in manager.rooms:
@@ -1636,6 +1681,7 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         if room_id in manager.rooms and username in manager.rooms[room_id]:
             del manager.rooms[room_id][username]
+
 
 @app.get("/poll/{poll_id}")
 async def get_poll(poll_id: int, username: str):
