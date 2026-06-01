@@ -456,7 +456,7 @@
         // Конфигурация бесплатных публичных серверов Google для обхода брандмауэров
         const rtcIceConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
-        // 1. ПОДКЛЮЧЕНИЕ / ВХОД В ГОЛОСОВОЙ КАНАЛ
+        // 1. ПОДКЛЮЧЕНИЕ / ВХОД В ГОЛОСОВОЙ КАНАЛ (ИСПРАВЛЕН ФИКС АВАТАРКИ)
         async function toggleVoiceAssemblyChannel() {
             if (isInVoiceRoom) return;
             
@@ -465,7 +465,7 @@
                 localAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
                 isInVoiceRoom = true;
 
-                // Переключаем интерфейс
+                // Переключаем интерфейс панели звонка
                 document.getElementById("voice-assembly-users-panel").style.display = "flex";
                 document.getElementById("voice-connect-trigger-btn").style.background = "#86868b";
                 document.getElementById("voice-connect-trigger-btn").innerHTML = "🟢 Вы внутри сбора";
@@ -473,14 +473,19 @@
                 // Оповещаем всю комнату сокетов, что мы вошли в голосовой чат
                 sendVoiceSystemSignal({ voice_type: "join" });
 
-                // Добавляем себя на витрину аватарок
-                addVoiceUserToInterface(currentUserNameFromCookie, document.getElementById("modal-user-avatar")?.src || "https://i.ibb.co/4pSbxsh/user-avatar.png");
+                // 🎯 СУПЕР-ФИКС: Берем аватарку напрямую из куки авторизации форума!
+                // Если кука пуста — сработает надежная стандартная заглушка
+                const myLiveAvatarFromCookie = getCookieValueByName("forum_user_avatar") || "https://i.ibb.co/4pSbxsh/user-avatar.png";
+
+                // Добавляем себя на витрину голосовых аватарок без багов и прочерков
+                addVoiceUserToInterface(currentUserNameFromCookie, myLiveAvatarFromCookie);
 
             } catch (err) {
                 alert("🛑 Ошибка доступа к микрофону! Пожалуйста, разрешите браузеру доступ к записи аудио.");
                 console.error(err);
             }
         }
+
 
         // 2. ВЫХОД ИЗ ГОЛОСОВОГО КАНАЛА (КРАСНАЯ КНОПКА)
         function leaveVoiceAssemblyChannel() {
@@ -575,17 +580,32 @@
                 localAudioStream.getTracks().forEach(track => pc.addTrack(track, localAudioStream));
             }
 
-            // Ловим аудио-поток от собеседника и выводим его в динамики браузера
+            // 🎙️ ИСПРАВЛЕНО: Принудительное включение звука в обход защитных блокировок браузера
             pc.ontrack = (event) => {
                 let audioEl = document.getElementById(`audio-stream-${targetUser}`);
                 if (!audioEl) {
                     audioEl = document.createElement("audio");
                     audioEl.id = `audio-stream-${targetUser}`;
+                    // Включаем обязательные атрибуты для авто-воспроизведения
                     audioEl.autoplay = true;
+                    audioEl.controls = false;
+                    audioEl.setAttribute("playsinline", "true"); 
                     document.getElementById("remote-audio-streams-container").appendChild(audioEl);
                 }
+                
+                // Передаем живой поток микрофона в элемент
                 audioEl.srcObject = event.streams[0];
+                
+                // ФИКС ПОЛИТИКИ БРАУЗЕРА: Принудительно запускаем воспроизведение потока софта
+                audioEl.play().catch(error => {
+                    console.log("📢 Браузер заблокировал звук до клика. Добавляем живую разблокировку по нажатию на экран...");
+                    // Если браузер заблокировал звук — включаем его сразу, как только админ кликнет в любом месте чата!
+                    document.body.addEventListener('click', () => {
+                        audioEl.play();
+                    }, { once: true });
+                });
             };
+
 
             // Пересылаем сетевых кандидатов через сокет
             pc.onicecandidate = (event) => {
@@ -621,7 +641,8 @@
             box.style.cssText = "display: flex; flex-direction: column; align-items: center; gap: 4px; width: 60px; position:relative;";
             box.innerHTML = `
                 <div style="width: 44px; height: 44px; border-radius: 50%; overflow: hidden; border: 2px solid #34c759; box-shadow: 0 2px 8px rgba(52, 199, 89, 0.3); background:#fff;">
-                    <img src="${avatarUrl}" style="width:100%; height:100%; object-fit:cover;">
+                    <img src="${avatarUrl}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'" style="width:100%; height:100%; object-fit:cover;">\
+
                 </div>
                 <span style="font-size: 10px; font-weight: 600; color: var(--text-main); text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${user}</span>
             `;
