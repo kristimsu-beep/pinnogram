@@ -1566,6 +1566,7 @@ async def serve_admins_chat_page(request: Request):
     return FileResponse(os.path.join(BASE_DIR, "admins_chat.html"))
 
 # API: ПОЛУЧЕНИЕ ИСТОРИИ СООБЩЕНИЙ ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+# API: ПОЛУЧЕНИЕ ИСТОРИИ ЧАТА С ДИНАМИЧЕСКИМ НАСЫЩЕНИЕМ РОЛЕЙ ИЗ DISCORD В РЕАЛЬНОМ ВРЕМЕНИ
 @app.get("/api/forum/admins_chat/history")
 async def get_admin_chat_history(request: Request):
     username = request.cookies.get("forum_user_name")
@@ -1574,69 +1575,69 @@ async def get_admin_chat_history(request: Request):
         
     import json
     try:
+        # 1. Сначала скачиваем живую карту актуальных ролей всех STAFF участников из Discord API через бота
+        # Это даст нам самые свежие цвета и градиенты участников, даже если они сейчас офлайн!
+        live_staff_members = await get_forum_staff()
+        # Собираем быструю карту поиска: { "имя_пользователя_на_форуме": {roles_object, is_owner} }
+        live_staff_map = {}
+        for member in live_staff_members:
+            # Привязываем к имени (или к username на случай если ник на форуме совпадает)
+            m_name = str(member.get("name", "")).lower().strip()
+            m_username = str(member.get("username", "")).lower().strip()
+            live_staff_map[m_name] = member
+            live_staff_map[m_username] = member
+
+        # 2. Извлекаем последние 50 сообщений из СУБД SQLite
         async with aiosqlite.connect(DB_PATH) as db:
             async with db.execute("SELECT sender, avatar, message_text, is_owner, roles_json, timestamp FROM admin_chat_history ORDER BY id ASC LIMIT 50") as cursor:
                 rows = await cursor.fetchall()
                 history = []
+                
                 for r in rows:
+                    sender_name = r[0]
+                    clean_sender = str(sender_name).lower().strip()
+                    
+                    # Извлекаем старые данные из базы на случай подстраховки
+                    backup_is_owner = bool(r[3])
+                    backup_roles = json.loads(r[4] if r[4] else "[]")
+                    
+                    # 🎯 ГЛАВНАЯ МАГИЯ: Ищем автора сообщения в нашей живой карте Дискорда!
+                    if clean_sender in live_staff_map:
+                        # Если нашли — подменяем старые роли из базы на СВЕЖАЙШИЕ живые градиенты ролей из Дискорда!
+                        live_data = live_staff_map[clean_sender]
+                        final_roles = live_data.get("roles", backup_roles)
+                        final_is_owner = live_data.get("is_owner", backup_is_owner)
+                    else:
+                        # Если модератора уже сняли и его нет в Дискорде — оставляем старые архивные роли
+                        final_roles = backup_roles
+                        final_is_owner = backup_is_owner
+
                     history.append({
-                        "sender": r[0],
+                        "sender": sender_name,
                         "avatar": r[1],
                         "text": r[2],
-                        "is_owner": bool(r[3]),
-                        "roles": json.loads(r[4] if r[4] else "[]"),
+                        "is_owner": final_is_owner,
+                        "roles": final_roles, # Сюда улетели живые переливы цветов прямо на текущую секунду!
                         "time": r[5]
                     })
+                    
                 return {"status": "ok", "messages": history}
+                
     except Exception as e:
+        print(f"🛑 [HISTORY HYDRATION ERROR] Ошибка насыщения истории чата: {e}")
         return {"status": "error", "message": str(e)}
 
-# 2. WEBSOCKET ШЛЮЗ ДЛЯ ОБМЕНА СООБЩЕНИЯМИ В РЕАЛЬНОМ ВРЕМЕНИ (СИНХРОННЫЙ ФИКС ПО ID)
+
+# 2. WEBSOCKET ШЛЮЗ ДЛЯ ОБМЕНА СООБЩЕНИЯМИ В РЕАЛЬНОМ ВРЕМЕНИ (МГНОВЕННОЕ ОБНОВЛЕНИЕ РОЛЕЙ НА ЛЕТУ)
 @app.websocket("/ws/admins_chat")
 async def websocket_admins_chat_endpoint(websocket: WebSocket):
     # Принимаем соединение
     await websocket.accept()
     
-    # Достаем имя, аватарку и уникальный ID пользователя из кук при подключении сокета
+    # Достаем базовые параметры из кук один раз при подключении сокета
     username = websocket.cookies.get("forum_user_name", "Анонимный Admin")
     avatar = websocket.cookies.get("forum_user_avatar", "https://i.ibb.co/4pSbxsh/user-avatar.png")
     user_discord_id = websocket.cookies.get("forum_user_id")
-    
-    is_owner = False
-    user_roles = []
-    
-    try:
-        staff_members = await get_forum_staff()
-        for member in staff_members:
-            m_id = str(member.get("id", "")).strip()
-            m_name = str(member.get("name", "")).lower().strip()
-            
-            # СВЕРХ-ТОЧНАЯ СВЕРКА: Если совпал либо ID, либо никнейм — выдаем роли модалки!
-            if (user_discord_id and m_id == str(user_discord_id).strip()) or (m_name == username.lower().strip()):
-                # Передаем полный массив реальных объектов ролей с градиентами и HEX-цветами
-                user_roles = member.get("roles", [])
-                # Золотая корона — строго по официальному флагу из Discord API!
-                is_owner = member.get("is_owner", False)
-                break
-                
-        # 🎯 ИСПРАВЛЕНО: Безопасный фолбек в виде ОБЪЕКТА, чтобы фронтенд градиентов не падал!
-        if not user_roles:
-            user_roles = [{
-                "name": "⚡ Администрация форума",
-                "primary": "#828282",
-                "secondary": None,
-                "tertiary": None,
-                "is_gradient": False
-            }]
-    except Exception as e:
-        print(f"⚠️ [WS ADMIN ROLES ERROR] {e}")
-        user_roles = [{
-            "name": "⚡ Модератор штата",
-            "primary": "#828282",
-            "secondary": None,
-            "tertiary": None,
-            "is_gradient": False
-        }]
 
     room_id = "admin_general_room"
     if room_id not in manager.rooms:
@@ -1649,6 +1650,42 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             if not data.strip(): continue
             
+            # 🎯 ЖИВОЙ АПДЕЙТ: Создаем чистые переменные под каждое новое сообщение
+            is_owner = False
+            user_roles = []
+            
+            try:
+                # Мгновенно опрашиваем Discord API на наличие изменений в ролях и цветах
+                staff_members = await get_forum_staff()
+                for member in staff_members:
+                    m_id = str(member.get("id", "")).strip()
+                    m_name = str(member.get("name", "")).lower().strip()
+                    
+                    # СВЕРХ-ТОЧНАЯ СВЕРКА
+                    if (user_discord_id and m_id == str(user_discord_id).strip()) or (m_name == username.lower().strip()):
+                        user_roles = member.get("roles", [])
+                        is_owner = member.get("is_owner", False)
+                        break
+                        
+                # Безопасный фолбек в виде ОБЪЕКТА, если юзера временно нет в кэше бота
+                if not user_roles:
+                    user_roles = [{
+                        "name": "⚡ Администрация форума",
+                        "primary": "#828282",
+                        "secondary": None,
+                        "tertiary": None,
+                        "is_gradient": False
+                    }]
+            except Exception as e:
+                print(f"⚠️ [WS LIVE ROLES ERROR] Ошибка живого обновления ролей: {e}")
+                user_roles = [{
+                    "name": "⚡ Модератор штата",
+                    "primary": "#828282",
+                    "secondary": None,
+                    "tertiary": None,
+                    "is_gradient": False
+                }]
+            
             msg_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
             import json
             
@@ -1657,7 +1694,7 @@ async def websocket_admins_chat_endpoint(websocket: WebSocket):
                 "avatar": avatar,
                 "text": data,
                 "is_owner": is_owner,
-                "roles": user_roles,
+                "roles": user_roles, # Улетают самые свежие роли и градиенты на текущую секунду!
                 "time": msg_time
             }
             
