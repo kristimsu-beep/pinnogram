@@ -445,40 +445,35 @@
 
         // Переназначаем автозапуск страницы
         window.onload = initAdminChatSystem;
-                // ==========================================================
-        // 🎙️ КИБЕРПАНК МОДУЛЬ ГОЛОСОВОЙ СВЯЗИ WebRTC
+        // ==========================================================
+        // 🎙️ СИММЕТРИЧНЫЙ МОДУЛЬ ГОЛОСОВОЙ СВЯЗИ WebRTC (АВТО-ХЕНДШЕЙК)
         // ==========================================================
         let localAudioStream = null;
-        let peerConnections = {}; // Карта соединений с другими админами
-        let voiceActiveUsers = {}; // Список участников в голосовом канале
+        let peerConnections = {}; 
+        let voiceActiveUsers = {}; 
         let isInVoiceRoom = false;
 
-        // Конфигурация бесплатных публичных серверов Google для обхода брандмауэров
         const rtcIceConfig = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 
-        // 1. ПОДКЛЮЧЕНИЕ / ВХОД В ГОЛОСОВОЙ КАНАЛ (ИСПРАВЛЕН ФИКС АВАТАРКИ)
+        // 1. ПОДКЛЮЧЕНИЕ / ВХОД В ГОЛОСОВОЙ КАНАЛ
         async function toggleVoiceAssemblyChannel() {
             if (isInVoiceRoom) return;
             
             try {
-                // Запрашиваем у браузера официальный доступ к микрофону админа
+                // Сначала железно инициализируем микрофон
                 localAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
                 isInVoiceRoom = true;
 
-                // Переключаем интерфейс панели звонка
                 document.getElementById("voice-assembly-users-panel").style.display = "flex";
                 document.getElementById("voice-connect-trigger-btn").style.background = "#86868b";
                 document.getElementById("voice-connect-trigger-btn").innerHTML = "🟢 Вы внутри сбора";
 
-                // Оповещаем всю комнату сокетов, что мы вошли в голосовой чат
-                sendVoiceSystemSignal({ voice_type: "join" });
-
-                // 🎯 СУПЕР-ФИКС: Берем аватарку напрямую из куки авторизации форума!
-                // Если кука пуста — сработает надежная стандартная заглушка
-                const myLiveAvatarFromCookie = getCookieValueByName("forum_user_avatar") || "https://i.ibb.co/4pSbxsh/user-avatar.png";
-
-                // Добавляем себя на витрину голосовых аватарок без багов и прочерков
+                // Добавляем себя на витрину
+                const myLiveAvatarFromCookie = getCookieValueByName("forum_user_avatar") || "https://ibb.co";
                 addVoiceUserToInterface(currentUserNameFromCookie, myLiveAvatarFromCookie);
+
+                // И только ПОСЛЕ этого оповещаем сокеты, чтобы старейшины канала начали слать нам звонки!
+                sendVoiceSystemSignal({ voice_type: "join" });
 
             } catch (err) {
                 alert("🛑 Ошибка доступа к микрофону! Пожалуйста, разрешите браузеру доступ к записи аудио.");
@@ -486,18 +481,15 @@
             }
         }
 
-
         // 2. ВЫХОД ИЗ ГОЛОСОВОГО КАНАЛА (КРАСНАЯ КНОПКА)
         function leaveVoiceAssemblyChannel() {
             if (!isInVoiceRoom) return;
 
-            // Выключаем запись микрофона
             if (localAudioStream) {
                 localAudioStream.getTracks().forEach(track => track.stop());
                 localAudioStream = null;
             }
 
-            // Закрываем все сессии связи с другими модераторами
             Object.keys(peerConnections).forEach(user => {
                 if (peerConnections[user]) {
                     peerConnections[user].close();
@@ -505,10 +497,8 @@
                 }
             });
 
-            // Оповещаем сокеты о выходе
             sendVoiceSystemSignal({ voice_type: "leave" });
 
-            // Сбрасываем интерфейс панели
             isInVoiceRoom = false;
             document.getElementById("voice-assembly-users-panel").style.display = "none";
             document.getElementById("voice-connect-trigger-btn").style.background = "#34c759";
@@ -518,29 +508,24 @@
             voiceActiveUsers = {};
         }
 
-        // 3. ОТПРАВКА СИГНАЛОВ ГОЛОСА ЧЕРЕЗ WEBSOCKET
         function sendVoiceSystemSignal(payload) {
             if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(json_stringify_safe(payload));
+                socket.send(JSON.stringify(payload));
             }
         }
 
-        // Хелпер безопасного перевода в JSON
-        function json_stringify_safe(obj) { return JSON.stringify(obj); }
-
-        // 4. ОБРАБОТКА СИГНАЛОВ СВЯЗИ ОТ ДРУГИХ УЧАСТНИКОВ (Интегрировать внутрь socket.onmessage)
-        // Мы расширим главный обработчик сокетов, добавив этот перехватчик:
+        // 3. СИММЕТРИЧНЫЙ ОБРАБОТЧИК СИГНАЛОВ ГОЛОСА
         function handleIncomingVoiceSignals(data) {
-            if (!data.voice_type) return false; // Если это не голосовой сигнал, пропускаем
+            if (!data.voice_type) return false; 
 
             const user = data.sender;
             const av = data.avatar;
 
-            // Сценарий А: Кто-то зашёл в войс чат
+            // Сценарий А: Кто-то зашёл в канал
             if (data.voice_type === "join") {
                 addVoiceUserToInterface(user, av);
-                if (isInVoiceRoom) {
-                    // Инициализируем WebRTC Peer Connection для звонка новичку
+                // 🎯 СУПЕР-ФИКС: Если мы УЖЕ сидим в войсе, мы сами инициируем вызов К НОВИЧКУ!
+                if (isInVoiceRoom && user !== currentUserNameFromCookie) {
                     initiateWebRTCPeerCall(user, true);
                 }
             }
@@ -554,7 +539,7 @@
                 const audioEl = document.getElementById(`audio-stream-${user}`);
                 if (audioEl) audioEl.remove();
             }
-            // Сценарии В: Технический обмен SDP-офферами и ICE-кандидатами для склейки звука
+            // Сценарии В: Автоматический обмен медиа-потоками
             else if (data.voice_type === "offer" && isInVoiceRoom) {
                 initiateWebRTCPeerCall(user, false, data.sdp);
             }
@@ -565,62 +550,62 @@
                 peerConnections[user].addIceCandidate(new RTCIceCandidate(data.candidate));
             }
 
-            return true; // Голосовой пакет успешно обработан
+            return true; 
         }
 
-        // 5. ИНИЦИАЛИЗАЦИЯ И ПОДКЛЮЧЕНИЕ ЗВУКОВОГО ПОТОКА WebRTC ЧЕРЕЗ GOOGLE STUN
+        // 4. ИНИЦИАЛИЗАЦИЯ И СИНХРОНИЗАЦИЯ ЗВУКА ЧЕРЕЗ ПЕРВЫЙ ПОТОК [0]
         async function initiateWebRTCPeerCall(targetUser, isCaller, remoteSdp = null) {
             if (peerConnections[targetUser]) return;
 
             const pc = new RTCPeerConnection(rtcIceConfig);
             peerConnections[targetUser] = pc;
 
-            // Добавляем наш микрофон в это соединение
+            // Привязываем наш микрофон
             if (localAudioStream) {
                 localAudioStream.getTracks().forEach(track => pc.addTrack(track, localAudioStream));
             }
 
-            // 🎙️ ИСПРАВЛЕНО: Принудительное включение звука в обход защитных блокировок браузера
+            // Ловим звук собеседника
             pc.ontrack = (event) => {
                 let audioEl = document.getElementById(`audio-stream-${targetUser}`);
                 if (!audioEl) {
                     audioEl = document.createElement("audio");
                     audioEl.id = `audio-stream-${targetUser}`;
-                    // Включаем обязательные атрибуты для авто-воспроизведения
                     audioEl.autoplay = true;
                     audioEl.controls = false;
                     audioEl.setAttribute("playsinline", "true"); 
                     document.getElementById("remote-audio-streams-container").appendChild(audioEl);
                 }
                 
-                // Передаем живой поток микрофона в элемент
-                audioEl.srcObject = event.streams[0];
+                // 🎯 Железно забираем первый активный аудиопоток из массива WebRTC
+                if (event.streams && event.streams[0]) {
+                    audioEl.srcObject = event.streams[0];
+                } else if (event.track) {
+                    const newStream = new MediaStream([event.track]);
+                    audioEl.srcObject = newStream;
+                }
                 
-                // ФИКС ПОЛИТИКИ БРАУЗЕРА: Принудительно запускаем воспроизведение потока софта
+                // Снимаем блокировку автовоспроизведения браузера
                 audioEl.play().catch(error => {
-                    console.log("📢 Браузер заблокировал звук до клика. Добавляем живую разблокировку по нажатию на экран...");
-                    // Если браузер заблокировал звук — включаем его сразу, как только админ кликнет в любом месте чата!
+                    console.log("📢 Ожидание клика для активации звука...");
                     document.body.addEventListener('click', () => {
                         audioEl.play();
                     }, { once: true });
                 });
             };
 
-
-            // Пересылаем сетевых кандидатов через сокет
             pc.onicecandidate = (event) => {
                 if (event.candidate) {
                     sendVoiceSystemSignal({ voice_type: "candidate", candidate: event.candidate, sender: currentUserNameFromCookie });
                 }
             };
 
+            // Симметричное распределение шагов звонка
             if (isCaller) {
-                // Создаем приглашение к звонку (Offer)
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 sendVoiceSystemSignal({ voice_type: "offer", sdp: offer, sender: currentUserNameFromCookie });
             } else {
-                // Отвечаем на приглашение (Answer)
                 await pc.setRemoteDescription(new RTCSessionDescription(remoteSdp));
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
@@ -628,7 +613,7 @@
             }
         }
 
-        // 6. УПРАВЛЕНИЕ АВАТАРКАМИ УЧАСТНИКОВ В ИНТЕРФЕЙСЕ
+        // 5. УПРАВЛЕНИЕ АВАТАРКАМИ
         function addVoiceUserToInterface(user, avatarUrl) {
             if (voiceActiveUsers[user]) return;
             voiceActiveUsers[user] = true;
@@ -641,8 +626,7 @@
             box.style.cssText = "display: flex; flex-direction: column; align-items: center; gap: 4px; width: 60px; position:relative;";
             box.innerHTML = `
                 <div style="width: 44px; height: 44px; border-radius: 50%; overflow: hidden; border: 2px solid #34c759; box-shadow: 0 2px 8px rgba(52, 199, 89, 0.3); background:#fff;">
-                    <img src="${avatarUrl}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'" style="width:100%; height:100%; object-fit:cover;">\
-
+                    <img src="${avatarUrl}" onerror="this.src='https://i.ibb.co/4pSbxsh/user-avatar.png'" style="width:100%; height:100%; object-fit:cover;">
                 </div>
                 <span style="font-size: 10px; font-weight: 600; color: var(--text-main); text-align: center; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${user}</span>
             `;
@@ -655,6 +639,7 @@
             const box = document.getElementById(`voice-user-box-${user}`);
             if (box) box.remove();
         }
+
 
     </script>
 </body>
