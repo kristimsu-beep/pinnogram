@@ -800,7 +800,7 @@ async def send_ticket_comment(data: dict, request: Request):
         
         if mentions:
             # Сюда вставь URL вебхука из настроек твоего Discord-канала "форум"
-            DISCORD_WEBHOOK_URL = os.getenv("FORUM_WEBHOOK_URL", "ТУТ_ТВОЙ_URL_ВЕБХУКА_ЕСЛИ_НЕ_В_RENDER")
+            DISCORD_WEBHOOK_URL = os.getenv("FORUM_WEBHOOK_URL", "https://discord.com/api/webhooks/1511469317391253645/XMovNDc-9ZLyA-WABFbNU-hic168Wo9O3-5aCJESimvHQH24549pRaCXCSi89JlUDmHA")
             async with aiosqlite.connect(DB_PATH) as db:
                 for mention_name in mentions:
                     target_mention_name = mention_name.strip()
