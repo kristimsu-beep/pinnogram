@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Центральный Пинийский Банк — ПинБанк</title>
+    <style>
+        :root {
+            --bg-main: #f4f7f6;        /* Светлый бело-серый фон страны Пиния */
+            --bg-card: #ffffff;        /* Белоснежные матовые карточки */
+            --accent-green: #2ec4b6;   /* Фирменный изумрудный зеленый ПинБанка */
+            --accent-dark: #0f2d2a;    /* Глубокий темно-зеленый для текста */
+            --text-muted: #869391;
+            --border-color: #e2e8e7;
+            --danger-red: #ff3b30;
+        }
+
+        body {
+            margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-main); color: var(--accent-dark);
+            display: flex; flex-direction: column; min-height: 100vh;
+        }
+
+        /* ШАПКА БАНКА */
+        .bank-navbar {
+            background-color: var(--bg-card); padding: 16px 40px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid var(--border-color); box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+        }
+        .bank-logo-title { font-size: 20px; font-weight: 800; color: var(--accent-green); display: flex; align-items: center; gap: 8px; }
+        
+        /* КНОПКА СЧЕТА И ПРОФИЛЯ В ПРАВОМ ВЕРХНЕМ УГЛУ */
+        .user-account-trigger {
+            background-color: var(--bg-main); border: 1px solid var(--border-color);
+            padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 14px;
+            cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s;
+        }
+        .user-account-trigger:hover { background-color: #e8eded; }
+
+        /* ГЛАВНЫЙ КОНТЕНТ */
+        .bank-container {
+            max-width: 1000px; width: 100%; margin: 40px auto; padding: 0 20px; box-sizing: border-box;
+            display: flex; flex-direction: column; gap: 30px;
+        }
+
+        /* СЕТКА БАНКОВСКИХ КАРТ */
+        .bank-cards-grid-layout {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;
+        }
+
+        /* ВИЗУАЛИЗАЦИЯ КАРТОЧКИ (ПИНБАНК СТИЛЬ) */
+        .pin-credit-card-box {
+            height: 180px; border-radius: 16px; padding: 24px; box-sizing: border-box;
+            color: #fff; display: flex; flex-direction: column; justify-content: space-between;
+            position: relative; box-shadow: 0 10px 25px rgba(15, 45, 42, 0.15); transition: 0.3s;
+        }
+        .pin-credit-card-box:hover { transform: translateY(-5px); }
+        .card-header-line { display: flex; justify-content: space-between; align-items: center; }
+        .card-triple-dots-btn {
+            background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; opacity: 0.8; transition: 0.2s;
+        }
+        .card-triple-dots-btn:hover { opacity: 1; transform: scale(1.1); }
+        .card-number-display { font-family: 'Courier New', Courier, monospace; font-size: 18px; font-weight: bold; letter-spacing: 1.5px; }
+
+        /* ИНФОРМАЦИОННЫЙ БЛОК ПОД КАРТОЙ */
+        .card-meta-under-box {
+            background: var(--bg-card); border: 1px solid var(--border-color);
+            border-top: none; margin-top: -10px; border-radius: 0 0 16px 16px;
+            padding: 20px 24px 16px 24px; font-size: 13px; display: flex; flex-direction: column; gap: 6px;
+        }
+        .meta-line-row { display: flex; justify-content: space-between; }
+        .meta-label { color: var(--text-muted); font-weight: 500; }
+        .meta-value { font-weight: 700; color: var(--accent-dark); }
+
+        /* ФУТУРИСТИЧЕСКИЕ КНОПКИ ДЕЙСТВИЙ */
+        .bank-action-primary-btn {
+            background-color: var(--accent-green); color: #fff; border: none;
+            padding: 12px 24px; border-radius: 12px; font-size: 15px; font-weight: 700;
+            cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; gap: 8px;
+        }
+        .bank-action-primary-btn:hover { background-color: #249e92; box-shadow: 0 4px 15px rgba(46, 196, 182, 0.25); }
+        .bank-action-primary-btn:disabled { background-color: #bdc7c5; cursor: not-allowed; box-shadow: none; }
+
+        /* СТИЛИЗАЦИЯ ВСЕХ МОДАЛЬНЫХ ОКОН ПИНБАНКА */
+        .bank-modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 45, 42, 0.4); backdrop-filter: blur(5px);
+            display: none; align-items: center; justify-content: center; z-index: 100;
+        }
+        .bank-modal-card {
+            background: var(--bg-card); border-radius: 20px; width: 100%; max-width: 400px;
+            padding: 30px; box-sizing: border-box; border: 1px solid var(--border-color);
+            box-shadow: 0 15px 50px rgba(15, 45, 42, 0.1); position: relative;
+        }
+        .bank-modal-card h3 { margin: 0 0 16px 0; font-size: 20px; font-weight: 800; color: var(--accent-dark); }
+        
+        /* ПОЛЯ ВВОДА С ИНТЕЛЛЕКТУАЛЬНЫМ КОНТУРОМ */
+        .bank-input-field {
+            width: 100%; background-color: var(--bg-main); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 12px; font-size: 15px; color: var(--accent-dark);
+            outline: none; box-sizing: border-box; margin-bottom: 12px; transition: 0.2s;
+        }
+        .bank-input-field:focus { border-color: var(--accent-green); background-color: #fff; }
+        
+        /* 🚨 КРИТИЧЕСКИЕ КЛАССЫ ОШИБКИ И СОТРЯСЕНИЯ */
+        .invalid-input-border { border-color: var(--danger-red) !important; box-shadow: 0 0 10px rgba(255, 59, 48, 0.15); }
+        
+        .shake-animation-active { animation: modalShake 0.4s ease-in-out; }
+
+        @keyframes modalShake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-8px); }
+            40%, 80% { transform: translateX(8px); }
+        }
+
+        /* КНОПКА РЕГИСТРАЦИИ ПО ДЕФОЛТУ СЕРАЯ И ОТКЛЮЧЕННАЯ */
+        .registration-submit-btn {
+            width: 100%; background-color: #bdc7c5; color: #fff; border: none;
+            padding: 14px; border-radius: 10px; font-size: 16px; font-weight: 700;
+            cursor: not-allowed; transition: 0.3s;
+        }
+        .registration-submit-btn.ready-to-submit { background-color: #34c759; cursor: pointer; box-shadow: 0 4px 15px rgba(52, 199, 89, 0.2); }
+
+        /* ПАНЕЛЬ ВВОДА СУММЫ (БАНКОМАТНЫЙ ИНТЕРФЕЙС) */
+        .atm-keyboard-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
+        .atm-key-btn {
+            background-color: var(--bg-main); border: 1px solid var(--border-color);
+            padding: 14px; border-radius: 10px; font-size: 18px; font-weight: 700;
+            cursor: pointer; transition: 0.1s; color: var(--accent-dark);
+        }
+        .atm-key-btn:active { background-color: #e2e8e7; transform: scale(0.95); }
+    </style>
+</head>
+<body>
+
+    <!-- ВЕРХНЯЯ НАВИГАЦИОННАЯ ПАНЕЛЬ ПИНБАНКА -->
+    <div class="bank-navbar">
+        <div class="bank-logo-title">
+            <svg width="24" height="24" fill="currentColor" viewBox="0 0 16 16"><path d="M8 1a2.5 2.5 0 0 1 2.5 2.5V4h-5v-.5A2.5 2.5 0 0 1 8 1m35 3v-.5a3.5 3.5 0 1 0-7 0V4H1a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1zM2 5h12v1H2zm12 2v7H2V7zm-3 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>
+            <span>ЦБ ПинБанк</span>
+        </div>
+        <button class="user-account-trigger" onclick="openUserProfileOverlayModal()">
+            <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6m2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0m4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4m-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10s-3.516.68-4.168 1.332c-.678.678-.83 1.418-.832 1.664z"/></svg>
+            <span id="nav-user-nickname-display">Загрузка...</span>
+        </button>
+    </div>
+
+    <!-- ГЛАВНЫЙ ИНТЕРФЕЙС БАНКОВСКОГО СЧЕТА -->
+    <div class="bank-container">
+        
+        <!-- ВЕРХНЯЯ СТРОКА УПРАВЛЕНИЯ -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+            <div>
+                <h1 style="margin: 0; font-size: 26px; font-weight: 800; color: var(--accent-dark);">Личный счёт гражданина</h1>
+                <p style="margin: 4px 0 0 0; color: var(--text-muted); font-size: 14px;">Управляйте картами и проводите бесконтактные платежи страны Пиния</p>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="bank-action-primary-btn" id="create-card-master-btn" onclick="openCreateNewCardWindowModal()">
+                    ➕ Создать банковскую карту
+                </button>
+                <button class="bank-action-primary-btn" style="background-color: #007aff;" onclick="openNfcTransactionWindowModal()">
+                    📲 Создать транзакцию (NFC)
+                </button>
+            </div>
+        </div>
+
+        <!-- СЕТКА ДЛЯ ВЫВОДА ВЫПУЩЕННЫХ КАРТ ИЗ SQLite -->
+        <div class="bank-cards-grid-layout" id="pin-bank-cards-container">
+            <!-- Сюда JS загрузит карты. Если карт нет, выведет пустую заглушку -->
+        </div>
+    </div>
+
+
+    <!-- ========================================================== -->
+    <!-- 🔒 1. ОКНО АВТОНОМНОЙ РЕГИСТРАЦИИ ГРАЖДАН ПИНИИ -->
+    <!-- ========================================================== -->
+    <div class="bank-modal-overlay" id="modal-registration-gate" style="display: none;">
+        <div class="bank-modal-card" id="reg-modal-card-node">
+            <h3>Регистрация в ПинБанке</h3>
+            <p style="color: var(--text-muted); font-size: 13px; margin-top: -10px; margin-bottom: 20px;">Заполните паспортные данные для открытия центрального счёта.</p>
+            
+            <input type="text" id="reg-firstname" class="bank-input-field" placeholder="Имя" oninput="validateRegistrationInputsForm()">
+            <input type="text" id="reg-lastname" class="bank-input-field" placeholder="Фамилия" oninput="validateRegistrationInputsForm()">
+            <!-- Маска Пинийского номера +613 жёстко вшита -->
+            <input type="text" id="reg-phone" class="bank-input-field" placeholder="Номер телефона (+613...)" value="+613 " oninput="applyPinPhoneFormattingMask(this); validateRegistrationInputsForm()">
+            
+            <button class="registration-submit-btn" id="reg-submit-trigger-btn" onclick="submitPinBankRegistrationToServer()">
+                Зарегистрироваться
+            </button>
+        </div>
+    </div>
+
+
+    <!-- ========================================================== -->
+    <!-- 👤 2. ОКНО ОБЩЕДОСТУПНОГО ПРОФИЛЯ ПОЛЬЗОВАТЕЛЯ -->
+    <!-- ========================================================== -->
+    <div class="bank-modal-overlay" id="modal-user-profile-overlay" onclick="closeUserProfileOverlayModal()">
+        <div class="bank-modal-card" onclick="event.stopPropagation()">
+            <h3>Профиль гражданина Пинии</h3>
+            <div style="display:flex; flex-direction:column; gap:12px; margin-top:20px;" id="profile-modal-data-wrapper">
+                <!-- Сюда JS подставит Имя, Фамилию и телефон -->
+            </div>
+            <button class="bank-action-primary-btn" style="width:100%; margin-top:25px; background-color: var(--text-muted);" onclick="closeUserProfileOverlayModal()">Закрыть</button>
+        </div>
+    </div>
+
+
+    <!-- ========================================================== -->
+    <!-- 💳 3. ОКНО СОЗДАНИЯ И ВЫБОРА ДИЗАЙНА КАРТЫ -->
+    <!-- ========================================================== -->
+    <div class="bank-modal-overlay" id="modal-create-card-wizard" onclick="closeCreateNewCardWindowModal()">
+        <div class="bank-modal-card" onclick="event.stopPropagation()">
+            <h3>Выпуск новой карты</h3>
+            <p style="color: var(--text-muted); font-size: 13px; margin-top:-10px;">Выберите градиентную палитру для вашей будущей карты.</p>
+            
+            <!-- Интерактивное превью карты внутри мастера -->
+            <div id="wizard-card-preview" class="pin-credit-card-box" style="background: linear-gradient(135deg, #2ec4b6, #007aff); margin: 20px 0;">
+                <div class="card-header-line"><span style="font-weight:700; font-size:12px; letter-spacing:1px;">PINBANK</span></div>
+                <div class="card-number-display">6130 PINX XXXX XXXX</div>
+                <div style="font-size:11px; opacity:0.7;">ЦБ СЧЁТ ПИНИИ</div>
+            </div>
+
+            <label style="font-size:12px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Выберите стиль:</label>
+            <select id="wizard-gradient-selector" class="bank-input-field" style="margin-top:6px;" onchange="updateWizardCardPreviewBackgroundStyle(this.value)">
+                <option value="linear-gradient(135deg, #2ec4b6, #007aff)">Изумрудный Бриз (Стандарт)</option>
+                <option value="linear-gradient(135deg, #ff0055, #7000ff)">Пурпурная Аномалия</option>
+                <option value="linear-gradient(135deg, #f2994a, #f2c94c)">Золото Полудня</option>
+                <option value="linear-gradient(135deg, #11090d, #ff003c)">Багровый Закат</option>
+                <option value="linear-gradient(135deg, #000000, #434343)">Матовый Нуар</option>
+            </select>
+
+            <button class="bank-action-primary-btn" style="width:100%; justify-content:center; margin-top:10px;" onclick="executePinCardGenerationOnServer()">
+                Создать карту
+            </button>
+        </div>
+    </div>
+
+
+    <!-- ========================================================== -->
+    <!-- ⚙️ 4. ОКНО НАСТРОЕК КАРТЫ (СМЕНА ГРАДИЕНТА) -->
+    <!-- ========================================================== -->
+    <div class="bank-modal-overlay" id="modal-card-settings-editor" onclick="closeCardSettingsEditorWindowModal()">
+        <div class="bank-modal-card" onclick="event.stopPropagation()">
+            <h3>Настройки карты</h3>
+            <input type="hidden" id="settings-target-card-id">
+            
+            <label style="font-size:12px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Сменить градиент карты:</label>
+            <select id="settings-gradient-selector" class="bank-input-field" style="margin-top:6px;">
+                <option value="linear-gradient(135deg, #2ec4b6, #007aff)">Изумрудный Бриз</option>
+                <option value="linear-gradient(135deg, #ff0055, #7000ff)">Пурпурная Аномалия</option>
+                <option value="linear-gradient(135deg, #f2994a, #f2c94c)">Золото Полудня</option>
+                <option value="linear-gradient(135deg, #11090d, #ff003c)">Багровый Закат</option>
+                <option value="linear-gradient(135deg, #000000, #434343)">Матовый Нуар</option>
+            </select>
+
+            <button class="bank-action-primary-btn" style="width:100%; justify-content:center; margin-top:10px;" onclick="submitCardGradientStyleChangeToServer()">
+                Сохранить новый дизайн
+            </button>
+        </div>
+    </div>
+    <!-- ========================================================== -->
+    <!-- 🏦 5. БАНКОМАТНОЕ ОКНО ВВОДА СУММЫ (КАЛЬКУЛЯТОР СТИЛЬ) -->
+    <!-- ========================================================== -->
+    <div class="bank-modal-overlay" id="modal-atm-cash-machine" onclick="closeAtmCashMachineWindowModal()">
+        <div class="bank-modal-card" onclick="event.stopPropagation()">
+            <h3 id="atm-machine-title-label">Пополнение счёта карты</h3>
+            <input type="hidden" id="atm-target-card-number">
+            <input type="hidden" id="atm-operation-mode" value="deposit"> <!-- 'deposit' или 'nfc_tx' -->
+            
+            <!-- Табло банкомата -->
+            <div style="background:var(--accent-dark); border-radius:12px; padding:20px; text-align:right; font-size:32px; font-weight:bold; color:var(--accent-green); font-family:monospace; margin-bottom:15px; box-shadow:inset 0 2px 10px rgba(0,0,0,0.5);" id="atm-display-screen">
+                0
+            </div>
+
+            <!-- Цифровая клавиатура банкомата -->
+            <div class="atm-keyboard-grid">
+                <button class="atm-key-btn" onclick="pressAtmDigitKeyNode('1')">1</button>
+                <button class="atm-key-btn" onclick="pressAtmDigitKeyNode('2')">2</button>
+                <button class="atm-key-btn" onclick="pressAtmDigitKeyNode('3')">3</button>
+                <button class="atm-key-btn" onclick="pressAtmDigitKeyNode('4')">4</button>
+                <button class="atm-key-btn" onclick="pressAtmDigitKeyNode('5')">5</button>
+                <button class="atm-key-btn" onclick="pressAtmDigitKeyNode('6')">6</button>
+                <button class="atm-key-btn" onclick="pressAtmDigitKeyNode('7')">7</button>
+                <button class="atm-key-btn" onclick="pressAtmDigitKeyNode('8')">8</button>
+                <button class="atm-key-btn" onclick="pressAtmDigitKeyNode('9')">9</button>
+                <button class="atm-key-btn" style="color:var(--danger-red);" onclick="clearAtmDisplayScreenBuffer()">C</button>
+                <button class="atm-key-btn" onclick="pressAtmDigitKeyNode('0')">0</button>
+                <button class="atm-key-btn" style="color:var(--accent-green); font-size:14px;" onclick="executeAtmTransactionSubmissionPipeline()">✔ OK</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ========================================================== -->
+    <!-- 🛡️ 6. СКРЫТЫЙ РАЗДЕЛ СЛУЖБЫ БЕЗОПАСНОСТИ (SHIFT + S) -->
+    <!-- ========================================================== -->
+    <div class="bank-modal-overlay" id="modal-security-dashboard-panel" onclick="closeSecurityDashboardPanel()" style="background: rgba(10,25,23,0.85);">
+        <div class="bank-modal-card" onclick="event.stopPropagation()" style="max-width: 600px; width:95%; max-height:85vh; overflow-y:auto;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-color); padding-bottom:12px; margin-bottom:16px;">
+                <h3 style="margin:0; color:var(--danger-red); display:flex; align-items:center; gap:8px;">
+                    <svg width="20" height="20" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/><path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/></svg>
+                    Раздел безопасности ПинБанка
+                </h3>
+                <span style="font-size:11px; font-weight:700; background-color:#ffdad6; color:#410002; padding:4px 8px; border-radius:6px;">SHIFT + S MODIFICATION</span>
+            </div>
+            
+            <div id="security-requests-queue-container" style="display:flex; flex-direction:column; gap:14px;">
+                <!-- Запросы на пополнение выгружаются сюда динамически -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin;
+        let currentBankUserCardsArray = [];
+        let atmDisplayValueBuffer = "0";
+
+        // 1. ПЕРВИЧНАЯ ПРОВЕРКА ПРОФИЛЯ ПРИ ЗАГРУЗКЕ СТРАНИЦЫ В СУБД
+        async function checkPinBankUserProfileStatus() {
+            try {
+                const res = await fetch(`${API_URL}/api/bank/profile`);
+                const data = await res.json();
+
+                if (data.status === "not_registered") {
+                    // Если пользователя нет в базе СУБД — принудительно открываем окно регистрации
+                    document.getElementById("modal-registration-gate").style.display = "flex";
+                    return;
+                }
+
+                if (data.status === "ok") {
+                    document.getElementById("modal-registration-gate").style.display = "none";
+                    
+                    // Выводим имя в правый верхний угол на кнопку
+                    const fullName = `${data.user_info.first_name} ${data.user_info.last_name}`;
+                    document.getElementById("nav-user-nickname-display").textContent = fullName;
+                    
+                    // Кэшируем карты и рендерим их на экран
+                    currentBankUserCardsArray = data.cards || [];
+                    renderPinBankCardsShowcase();
+                    
+                    // Обновляем состояние профиля в скрытом блоке
+                    storeUserProfileDataInDOM(data.user_info);
+                }
+            } catch (e) {
+                console.error("Ошибка инициализации ПинБанка:", e);
+            }
+        }
+
+        // 2. ИНТЕЛЛЕКТУАЛЬНЫЙ ВАЛИДАТОР РЕГИСТРАЦИИ И МАСКА НОМЕРА ПИНИИ (+613)
+        function applyPinPhoneFormattingMask(input) {
+            let matrix = "+613 ___ ___ __-__",
+                i = 0,
+                def = matrix.replace(/\D/g, ""),
+                val = input.value.replace(/\D/g, "");
+            
+            if (def.length >= val.length) val = def;
+            
+            input.value = matrix.replace(/./g, function(a) {
+                return /[_\d]/.test(a) && i < val.length ? val.charAt(i++) : i >= val.length ? "" : a;
+            });
+        }
+
+        function validateRegistrationInputsForm() {
+            const fn = document.getElementById("reg-firstname").value.trim();
+            const ln = document.getElementById("reg-lastname").value.trim();
+            const phone = document.getElementById("reg-phone").value.trim();
+            const submitBtn = document.getElementById("reg-submit-trigger-btn");
+
+            // Пинийский номер считается валидным, если он полностью заполнен (ровно 18 символов с маской)
+            const isPhoneValid = (phone.length === 18 && phone.startsWith("+613"));
+            const isFormReady = fn.length >= 2 && ln.length >= 2 && isPhoneValid;
+
+            if (isFormReady) {
+                submitBtn.classList.add("ready-to-submit");
+                submitBtn.removeAttribute("disabled");
+                submitBtn.style.cursor = "pointer";
+            } else {
+                submitBtn.classList.remove("ready-to-submit");
+                submitBtn.setAttribute("disabled", "true");
+                submitBtn.style.cursor = "not-allowed";
+            }
+            return isFormReady;
+        }
+
+        // ОБРАБОТКА НАЖАТИЯ ENTER И СТИМУЛЯЦИЯ ТРЯСКИ ОКНА ПРИ ОШИБКЕ
+        async function submitPinBankRegistrationToServer() {
+            const regCard = document.getElementById("reg-modal-card-node");
+            const fnInput = document.getElementById("reg-firstname");
+            const lnInput = document.getElementById("reg-lastname");
+            const phoneInput = document.getElementById("reg-phone");
+
+            if (!validateRegistrationInputsForm()) {
+                // Если форма заполнена неверно — активируем киберпанк-сотрясение
+                regCard.classList.add("shake-animation-active");
+                
+                if (fnInput.value.trim().length < 2) fnInput.classList.add("invalid-input-border");
+                if (lnInput.value.trim().length < 2) lnInput.classList.add("invalid-input-border");
+                if (phoneInput.value.trim().length < 18) phoneInput.classList.add("invalid-input-border");
+
+                alert("⚠️ Внимание! Все поля должны быть заполнены корректно. Номер телефона должен соответствовать стандарту Пинии: +613 XXX XXX XX-XX");
+
+                setTimeout(() => {
+                    regCard.classList.remove("shake-animation-active");
+                    fnInput.classList.remove("invalid-input-border");
+                    lnInput.classList.remove("invalid-input-border");
+                    phoneInput.classList.remove("invalid-input-border");
+                }, 400);
+                return;
+            }
+
+            // Отправляем данные на SQLite сервер
+            try {
+                const res = await fetch(`${API_URL}/api/bank/register`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        first_name: fnInput.value.trim(),
+                        last_name: lnInput.value.trim(),
+                        phone: phoneInput.value.trim()
+                    })
+                });
+                const data = await res.json();
+                if (data.status === "ok") {
+                    alert(data.message);
+                    checkPinBankUserProfileStatus(); // Перепроверяем профиль и открываем личный счет!
+                } else {
+                    alert("⚠️ Ошибка регистрации: " + data.message);
+                }
+            } catch (e) { alert("🛑 Ошибка связи с ЦБ ПинБанка."); }
+        }
+
+        // Перехватываем клавишу Enter внутри полей регистрации
+        document.getElementById("modal-registration-gate").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") submitPinBankRegistrationToServer();
+        });
+        // 3. ДИНАМИЧЕСКИЙ РЕНДЕРИНГ КАРТОЧЕК В ЛИЧНОМ КАБИНЕТЕ ИЗ SQLite
+        function renderPinBankCardsShowcase() {
+            const container = document.getElementById("pin-bank-cards-container");
+            const createBtn = document.getElementById("create-card-master-btn");
+            if (!container) return;
+            container.innerHTML = "";
+
+            // Проверяем лимит в 5 карт. Если достигнут — блокируем кнопку выпуска
+            if (currentBankUserCardsArray.length >= 5) {
+                createBtn.setAttribute("disabled", "true");
+                createBtn.textContent = "🔒 Лимит карт достигнут (5/5)";
+            } else {
+                createBtn.removeAttribute("disabled");
+                createBtn.textContent = "➕ Создать банковскую карту";
+            }
+
+            if (currentBankUserCardsArray.length === 0) {
+                container.innerHTML = `
+                    <div style="grid-column: 1/-1; text-align: center; padding: 40px; background: var(--bg-card); border: 1px dashed var(--border-color); border-radius: 16px; color: var(--text-muted);">
+                        💳 У вас пока нет открытых карт ПинБанка. Нажмите кнопку выше, чтобы выпустить свою первую карту!
+                    </div>
+                `;
+                return;
+            }
+
+            currentBankUserCardsArray.forEach(card => {
+                const wrapper = document.createElement("div");
+                wrapper.style.cssText = "display: flex; flex-direction: column;";
+                
+                wrapper.innerHTML = `
+                    <!-- Сама визуальная карта -->
+                    <div class="pin-credit-card-box" style="background: ${card.gradient};">
+                        <div class="card-header-line">
+                            <span style="font-weight: 800; font-size: 13px; letter-spacing: 1px;">PINBANK</span>
+                            <!-- Три полоски настроек в правом углу карты -->
+                            <button class="card-triple-dots-btn" onclick="openCardSettingsEditorWindowModal(${card.id}, '${card.gradient}')">☰</button>
+                        </div>
+                        <div class="card-number-display">${card.number}</div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                            <div style="font-size: 10px; opacity: 0.8; letter-spacing: 0.5px;">ЦЕНТРАЛЬНЫЙ БАНК ПИНИИ</div>
+                            <button onclick="openAtmCashMachineWindowModal('${card.number}', 'deposit')" style="background: rgba(255,255,255,0.2); border: none; padding: 5px 10px; border-radius: 6px; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; transition: 0.2s;">➕ Пополнить</button>
+                        </div>
+                    </div>
+                    <!-- Блок данных под картой из базы данных -->
+                    <div class="card-meta-under-box">
+                        <div class="meta-line-row">
+                            <span class="meta-label">Баланс счета:</span>
+                            <span class="meta-value" style="color: var(--accent-green); font-size:15px;">${card.balance} pin</span>
+                        </div>
+                        <div class="meta-line-row">
+                            <span class="meta-label">Серийный номер:</span>
+                            <span class="meta-value" style="font-family: monospace;">#${card.id}00${card.number.split(' ')[1]}</span>
+                        </div>
+                        <div class="meta-line-row">
+                            <span class="meta-label">Статус карты:</span>
+                            <span class="meta-value" style="color: #34c759;">${card.status}</span>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(wrapper);
+            });
+        }
+
+
+        // 4. УПРАВЛЕНИЕ ОКНАМИ ВЫПУСКА КАРТ И СМЕНЫ ДИЗАЙНА
+        function openCreateNewCardWindowModal() { document.getElementById("modal-create-card-wizard").style.display = "flex"; }
+        function closeCreateNewCardWindowModal() { document.getElementById("modal-create-card-wizard").style.display = "none"; }
+        function updateWizardCardPreviewBackgroundStyle(val) { document.getElementById("wizard-card-preview").style.background = val; }
+
+        async function executePinCardGenerationOnServer() {
+            const selectedGradient = document.getElementById("wizard-gradient-selector").value;
+            try {
+                const res = await fetch(`${API_URL}/api/bank/create_card`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ gradient: selectedGradient })
+                });
+                const data = await res.json();
+                alert(data.message);
+                closeCreateNewCardWindowModal();
+                checkPinBankUserProfileStatus(); // Перезагружаем кошелек из SQLite истории
+            } catch (e) { alert("Ошибка выпуска карты."); }
+        }
+
+        function openCardSettingsEditorWindowModal(cardId, currentGradient) {
+            document.getElementById("settings-target-card-id").value = cardId;
+            document.getElementById("settings-gradient-selector").value = currentGradient;
+            document.getElementById("modal-card-settings-editor").style.display = "flex";
+        }
+        function closeCardSettingsEditorWindowModal() { document.getElementById("modal-card-settings-editor").style.display = "none"; }
+
+        async function submitCardGradientStyleChangeToServer() {
+            const cId = document.getElementById("settings-target-card-id").value;
+            const grad = document.getElementById("settings-gradient-selector").value;
+            try {
+                const res = await fetch(`${API_URL}/api/bank/update_card_style`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ card_id: cId, gradient: grad })
+                });
+                const data = await res.json();
+                alert(data.message);
+                closeCardSettingsEditorWindowModal();
+                checkPinBankUserProfileStatus();
+            } catch (e) { alert("Ошибка обновления стиля."); }
+        }
+        // 5. ИНТЕРФЕЙС БАНКОМАТА: ЦИФРОВАЯ КЛАВИАТУРА КАЛЬКУЛЯТОРА
+        function openAtmCashMachineWindowModal(cardNumber, mode = "deposit") {
+            document.getElementById("atm-target-card-number").value = cardNumber;
+            document.getElementById("atm-operation-mode").value = mode;
+            atmDisplayValueBuffer = "0";
+            document.getElementById("atm-display-screen").textContent = "0";
+            
+            if (mode === "deposit") {
+                document.getElementById("atm-machine-title-label").textContent = "Пополнение счёта карты";
+            } else {
+                document.getElementById("atm-machine-title-label").textContent = "Создание NFC транзакции";
+            }
+            document.getElementById("modal-atm-cash-machine").style.display = "flex";
+        }
+        function closeAtmCashMachineWindowModal() { document.getElementById("modal-atm-cash-machine").style.display = "none"; }
+
+        function pressAtmDigitKeyNode(digit) {
+            if (atmDisplayValueBuffer === "0") {
+                atmDisplayValueBuffer = digit;
+            } else {
+                if (atmDisplayValueBuffer.length < 9) atmDisplayValueBuffer += digit; // Ограничение табло на 999.999.999 pin
+            }
+            document.getElementById("atm-display-screen").textContent = atmDisplayValueBuffer;
+        }
+
+        function clearAtmDisplayScreenBuffer() {
+            atmDisplayValueBuffer = "0";
+            document.getElementById("atm-display-screen").textContent = "0";
+        }
+
+        async function executeAtmTransactionSubmissionPipeline() {
+            const cardNumber = document.getElementById("atm-target-card-number").value;
+            const mode = document.getElementById("atm-operation-mode").value;
+            const finalAmount = parseInt(atmDisplayValueBuffer);
+
+            if (finalAmount <= 0) { alert("❌ Введите сумму больше нуля!"); return; }
+
+            if (mode === "deposit") {
+                // Сценарий 1: Запрос на пополнение в службу безопасности
+                try {
+                    const res = await fetch(`${API_URL}/api/bank/request_deposit`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ card_number: cardNumber, amount: finalAmount })
+                    });
+                    const data = await res.json();
+                    alert(data.message);
+                    closeAtmCashMachineWindowModal();
+                } catch (e) { alert("Ошибка отправки запроса."); }
+            } else {
+                // Сценарий 2: Запуск бесконтактного радара NFC-транзакции оплаты
+                closeAtmCashMachineWindowModal();
+                activateNfcHardwareTerminalBroadcast(cardNumber, finalAmount);
+            }
+        }
+
+
+        // 6. СКРЫТЫЙ СЕКРЕТНЫЙ РАЗДЕЛ БЕЗОПАСНОСТИ (SHIFT + S)
+        window.addEventListener("keydown", (e) => {
+            // Перехватываем комбинацию клавиш Shift (e.shiftKey) + S (e.key === "S" или "s")
+            if (e.shiftKey && (e.key === "S" || e.key === "s" || e.key === "Ы" || e.key === "ы")) {
+                e.preventDefault();
+                openSecurityDashboardPanel();
+            }
+        });
+
+        async function openSecurityDashboardPanel() {
+            try {
+                const res = await fetch(`${API_URL}/api/bank/security_requests`);
+                const data = await res.json();
+                const container = document.getElementById("security-requests-queue-container");
+                if (!container) return;
+                container.innerHTML = "";
+
+                if (data.requests.length === 0) {
+                    container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:14px;">📭 Активных запросов на верификацию транзакций нет.</div>`;
+                } else {
+                    data.requests.forEach(req => {
+                        const row = document.createElement("div");
+                        row.style.cssText = "background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:16px; display:flex; justify-content:space-between; align-items:center; gap:15px;";
+                        
+                        row.innerHTML = `
+                            <div>
+                                <div style="font-weight:700; font-size:14px; color:var(--accent-dark);">${req.type === 'deposit' ? '💰 Пополнение карты' : '💸 Перевод pin'}</div>
+                                <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">Отправитель: <b>${req.sender}</b> | Карта: <span style="font-family:monospace;">${req.card}</span></div>
+                                <div style="font-size:11px; color:var(--accent-green); font-weight:bold; margin-top:4px;">Сумма: ${req.amount} pin | Время: ${req.time}</div>
+                            </div>
+                            <div style="display:flex; gap:8px;">
+                                <button onclick="submitSecurityModerationDecision(${req.id}, 'approve')" style="background:#34c759; color:#fff; border:none; padding:8px 12px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer;">Подтвердить</button>
+                                <button onclick="submitSecurityModerationDecision(${req.id}, 'reject')" style="background:var(--danger-red); color:#fff; border:none; padding:8px 12px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer;">Отклонить</button>
+                            </div>
+                        `;
+                        container.appendChild(row);
+                    });
+                }
+                document.getElementById("modal-security-dashboard-panel").style.display = "flex";
+            } catch (e) { alert("Ошибка доступа к архиву СБ."); }
+        }
+
+        function closeSecurityDashboardPanel() { document.getElementById("modal-security-dashboard-panel").style.display = "none"; }
+
+        async function submitSecurityModerationDecision(requestId, decisionAction) {
+            try {
+                const res = await fetch(`${API_URL}/api/bank/moderate_request`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id: requestId, action: decisionAction })
+                });
+                const data = await res.json();
+                alert(data.message);
+                openSecurityDashboardPanel(); // Мгновенно перерендериваем очередь СБ на лету!
+                checkPinBankUserProfileStatus(); // Обновляем балансы карт на основном экране
+            } catch (e) { alert("Ошибка обработки модерации."); }
+        }
+
+
+        // 7. СИСТЕМА ОПЛАТЫ: БЕСКОНТАКТНАЯ ТРАНЗАКЦИЯ ЧЕРЕЗ КОРПУС СМАРТФОНА (Web NFC API)
+        function openNfcTransactionWindowModal() {
+            if (currentBankUserCardsArray.length === 0) {
+                alert("❌ Ошибка: Для создания терминала транзакции у вас должна быть открыта хотя бы одна карта ПинБанка!");
+                return;
+            }
+            // Открываем калькулятор банкомата в режиме транзакции 'nfc_tx'
+            openAtmCashMachineWindowModal(currentBankUserCardsArray[0].number, "nfc_tx");
+        }
+
+        async function activateNfcHardwareTerminalBroadcast(targetReceiverCardNumber, transactionAmount) {
+            if (!('NDEFReader' in window)) {
+                // Если тест идет с ПК или Айфона, где чип заблокирован, эмулируем транзакцию для разработчика
+                console.log("Web NFC не поддерживается на текущем устройстве. Запуск режима эмуляции...");
+                const dummySenderCard = prompt("⚙️ [ЭМУЛЯЦИЯ NFC] Введите номер карты плательщика (6130 XXXX XXXX XXXX):", "6130 1111 2222 3333");
+                if (!dummySenderCard) return;
+                
+                executeFinalNfcBankTransferOnServer(dummySenderCard, transactionAmount);
+                return;
+            }
+
+            // РЕАЛЬНЫЙ СЦЕНАРИЙ ДЛЯ СМАРТФОНОВ ANDROID (ЧИП-КАРТА ➔ ЧИП-ТЕРМИНАЛ)
+            try {
+                alert(`📡 Терминал ПинБанка активирован на ${transactionAmount} pin! Приложите другой телефон спинкой к этому корпусу.`);
+                const ndef = new NDEFReader();
+                
+                // Записываем банковский чек в магнитное поле чипа текущего телефона-терминала
+                await ndef.write(JSON.stringify({
+                    pinnogram_nfc_bank: true,
+                    sender_card_number: targetReceiverCardNumber, // Передаем карту
+                    amount: transactionAmount
+                }));
+                
+                // Включаем радар сканирования встречного ответа
+                await ndef.scan();
+                ndef.onreading = async (event) => {
+                    const decoder = new TextDecoder();
+                    for (const record of event.message.records) {
+                        const rawText = decoder.decode(record.data);
+                        const nfcData = JSON.parse(rawText);
+                        
+                        // Если встречный телефон приложился и отдал номер своей карты
+                        if (nfcData.sender_card_number) {
+                            executeFinalNfcBankTransferOnServer(nfcData.sender_card_number, transactionAmount);
+                            return;
+                        }
+                    }
+                };
+            } catch (err) { alert("🛑 Ошибка NFC терминала: " + err.message); }
+        }
+        async function executeFinalNfcBankTransferOnServer(senderCardNum, txAmount) {
+            try {
+                const res = await fetch(`${API_URL}/api/bank/nfc_pay_execute`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ sender_card_number: senderCardNum, amount: txAmount })
+                });
+                const serverStatus = await res.json();
+                alert(serverStatus.message);
+                checkPinBankUserProfileStatus(); // Обновляем балансы карт на экранах
+            } catch (e) { alert("Критический сбой проведения транзакции банком."); }
+        }
+
+
+        // 8. ХЕЛПЕРЫ ХРАНЕНИЯ ПРОФИЛЯ
+        let cachedUserProfileObject = null;
+        function storeUserProfileDataInDOM(info) { cachedUserProfileObject = info; }
+        
+        function openUserProfileOverlayModal() {
+            const wrapper = document.getElementById("profile-modal-data-wrapper");
+            if (!wrapper || !cachedUserProfileObject) return;
+            
+            wrapper.innerHTML = `
+                <div class="meta-line-row"><span class="meta-label">Имя:</span><span class="meta-value">${cachedUserProfileObject.first_name}</span></div>
+                <div class="meta-line-row"><span class="meta-label">Фамилия:</span><span class="meta-value">${cachedUserProfileObject.last_name}</span></div>
+                <div class="meta-line-row"><span class="meta-label">Пинийский номер:</span><span class="meta-value" style="font-family:monospace; color:var(--accent-green);">${cachedUserProfileObject.phone}</span></div>
+            `;
+            document.getElementById("modal-user-profile-overlay").style.display = "flex";
+        }
+        function closeUserProfileOverlayModal() { document.getElementById("modal-user-profile-overlay").style.display = "none"; }
+
+        function getCookieValueByName(name) {
+            const value = `; ${document.cookie}`; const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift(); return null;
+        }
+
+        // Автозапуск системы при загрузке страницы
+        window.onload = checkPinBankUserProfileStatus;
+    </script>
+</body>
+</html>
