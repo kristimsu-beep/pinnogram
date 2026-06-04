@@ -2516,6 +2516,7 @@ async def startup():
         
         await db.commit()
         asyncio.create_task(keep_alive_bot(manager))
+        asyncio.create_task(init_pin_bank_tables())
         asyncio.create_task(init_admin_chat_db())
         print("🚀 Pinnogram Engine: База готова, бот-будильник запущен!")
         TOKEN = os.getenv("KONATA_BOT_TOKEN", "").strip()
@@ -2566,8 +2567,243 @@ async def init_admin_chat_db():
         """)
         await db.commit()
 
+# ==========================================================
+# 🏛️ СУБД: ИНИЦИАЛИЗАЦИЯ СТРУКТУРЫ ЦЕНТРАЛЬНОГО ПИНБАНКА
+# ==========================================================
+async def init_pin_bank_tables():
+    async with aiosqlite.connect(DB_PATH) as db:
+        # 1. Таблица профилей граждан Пинии
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS pin_bank_users (
+                username TEXT PRIMARY KEY,
+                first_name TEXT,
+                last_name TEXT,
+                phone_number TEXT,
+                registered_at TEXT
+            )
+        """)
+        # 2. Таблица кастомных банковских карт (до 5 на пользователя)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS pin_bank_cards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT,
+                card_number TEXT UNIQUE,
+                balance INTEGER DEFAULT 0,
+                gradient_style TEXT,
+                status TEXT DEFAULT 'Активна'
+            )
+        """)
+        # 3. Таблица запросов безопасности (Пополнение/Переводы) для Shift + S
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS pin_bank_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                request_type TEXT, -- 'deposit' или 'transfer'
+                sender TEXT,
+                receiver_card TEXT,
+                amount INTEGER,
+                status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+                timestamp TEXT
+            )
+        """)
+        await db.commit()
+
+
 # Вставь свой ключ тут
 IMGBB_API_KEY = "140359baf01acef6aa27e35c55b32f99"
+# ==========================================================
+# 🏛️ МОДУЛЬ ЦЕНТРАЛЬНОГО ПИНБАНКА СТРАНЫ ПИНИЯ (/pin-bank)
+# ==========================================================
+
+# 1. РЕНДЕРИНГ СТРАНИЦЫ БАНКА
+@app.get("/pin-bank")
+async def serve_pin_bank_page(request: Request):
+    from fastapi.responses import FileResponse, RedirectResponse
+    import os
+    username = request.cookies.get("forum_user_name")
+    if not username:
+        return RedirectResponse("/forum?auth=login_required")
+    return FileResponse(os.path.join(BASE_DIR, "pin-bank.html"))
+
+
+# 2. API: ПРОВЕРКА СТАТУСА РЕГИСТРАЦИИ И ПОЛУЧЕНИЕ ДАННЫХ СЧЕТА
+@app.get("/api/bank/profile")
+async def get_bank_profile(request: Request):
+    username = request.cookies.get("forum_user_name")
+    if not username: return {"status": "error", "message": "🔒 Сессия истекла"}
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Проверяем регистрацию
+        async with db.execute("SELECT first_name, last_name, phone_number FROM pin_bank_users WHERE username = ?", (username,)) as cursor:
+            user_row = await cursor.fetchone()
+            
+        if not user_row:
+            return {"status": "not_registered"}
+
+        # Если зарегистрирован, тянем его карты
+        cards = []
+        async with db.execute("SELECT id, card_number, balance, gradient_style, status FROM pin_bank_cards WHERE username = ?", (username,)) as cursor:
+            rows = await cursor.fetchall()
+            for r in rows:
+                cards.append({"id": r[0], "number": r[1], "balance": r[2], "gradient": r[3], "status": r[4]})
+
+        return {
+            "status": "ok",
+            "user_info": {"first_name": user_row[0], "last_name": user_row[1], "phone": user_row[2]},
+            "cards": cards
+        }
+
+
+# 3. API: АВТОНОМНАЯ РЕГИСТРАЦИЯ ГРАЖДАНИНА
+@app.post("/api/bank/register")
+async def register_bank_user(data: dict, request: Request):
+    username = request.cookies.get("forum_user_name")
+    if not username: return {"status": "error", "message": "🔒 Сессия истекла"}
+
+    first_name = data.get("first_name", "").strip()
+    last_name = data.get("last_name", "").strip()
+    phone = data.get("phone", "").strip()
+
+    if not first_name or not last_name or not phone.startswith("+613"):
+        return {"status": "error", "message": "❌ Неверные данные заполнения полей!"}
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
+        try:
+            await db.execute("INSERT INTO pin_bank_users (username, first_name, last_name, phone_number, registered_at) VALUES (?, ?, ?, ?, ?)",
+                             (username, first_name, last_name, phone, now_time))
+            await db.commit()
+            return {"status": "ok", "message": "🎉 Добро пожаловать в ПинБанк! Регистрация успешна."}
+        except:
+            return {"status": "error", "message": "🛑 Вы уже зарегистрированы в системе."}
+
+
+# 4. API: СОЗДАНИЕ БАНКОВСКОЙ КАРТЫ (ЛИМИТ ДО 5 ШТУК)
+@app.post("/api/bank/create_card")
+async def create_bank_card(data: dict, request: Request):
+    username = request.cookies.get("forum_user_name")
+    if not username: return {"status": "error", "message": "🔒 Сессия истекла"}
+
+    gradient = data.get("gradient", "linear-gradient(135deg, #2ec4b6, #007aff)")
+    
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Проверяем лимит карт
+        async with db.execute("SELECT COUNT(*) FROM pin_bank_cards WHERE username = ?", (username,)) as cursor:
+            count = (await cursor.fetchone())[0]
+        if count >= 5:
+            return {"status": "error", "message": "❌ Достигнут лимит: нельзя создать более 5 карт!"}
+
+        # Генерируем уникальный серийный номер Пинийской карты: 6130 PINX XXXX XXXX
+        import random
+        card_number = f"6130 {random.randint(1000, 9999)} {random.randint(1000, 9999)} {random.randint(1000, 9999)}"
+        
+        await db.execute("INSERT INTO pin_bank_cards (username, card_number, gradient_style) VALUES (?, ?, ?)",
+                         (username, card_number, gradient))
+        await db.commit()
+        return {"status": "ok", "message": "💳 Карта успешно выпущена!"}
+
+
+# 5. API: ИЗМЕНЕНИЕ ДИЗАЙНА (ГРАДИЕНТА) КАРТЫ
+@app.post("/api/bank/update_card_style")
+async def update_card_style(data: dict, request: Request):
+    username = request.cookies.get("forum_user_name")
+    card_id = data.get("card_id")
+    new_gradient = data.get("gradient")
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE pin_bank_cards SET gradient_style = ? WHERE id = ? AND username = ?", (new_gradient, card_id, username))
+        await db.commit()
+        return {"status": "ok", "message": "✨ Дизайн карты успешно обновлен!"}
+
+
+# 6. API: ОТПРАВКА ЗАПРОСА НА ПОПОЛНЕНИЕ ДЛЯ КАНАЛА БЕЗОПАСНОСТИ
+@app.post("/api/bank/request_deposit")
+async def request_deposit(data: dict, request: Request):
+    username = request.cookies.get("forum_user_name")
+    card_number = data.get("card_number")
+    amount = int(data.get("amount", 0))
+
+    if amount <= 0: return {"status": "error", "message": "❌ Неверная сумма"}
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
+        await db.execute("INSERT INTO pin_bank_requests (request_type, sender, receiver_card, amount, timestamp) VALUES ('deposit', ?, ?, ?, ?)",
+                         (username, card_number, amount, now_time))
+        await db.commit()
+        return {"status": "ok", "message": "⏳ Запрос отправлен в службу безопасности ПинБанка на верификацию!"}
+
+
+# 7. API: ВЫГРУЗКА ВСЕХ ЗАПРОСОВ ДЛЯ ПАНЕЛИ БЕЗОПАСНОСТИ (Shift + S)
+@app.get("/api/bank/security_requests")
+async def get_security_requests():
+    async with aiosqlite.connect(DB_PATH) as db:
+        requests_list = []
+        async with db.execute("SELECT id, request_type, sender, receiver_card, amount, timestamp FROM pin_bank_requests WHERE status = 'pending' ORDER BY id DESC") as cursor:
+            rows = await cursor.fetchall()
+            for r in rows:
+                requests_list.append({"id": r[0], "type": r[1], "sender": r[2], "card": r[3], "amount": r[4], "time": r[5]})
+        return {"status": "ok", "requests": requests_list}
+
+
+# 8. API: ОБРАБОТКА РЕШЕНИЯ БЕЗОПАСНОСТИ (ПОДТВЕРДИТЬ / ОТКЛОНИТЬ)
+@app.post("/api/bank/moderate_request")
+async def moderate_request(data: dict):
+    req_id = data.get("id")
+    action = data.get("action") # 'approve' или 'reject'
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Берем данные запроса
+        async with db.execute("SELECT request_type, receiver_card, amount, sender FROM pin_bank_requests WHERE id = ?", (req_id,)) as cursor:
+            req = await cursor.fetchone()
+        if not req: return {"status": "error", "message": "Запрос не найден"}
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        if action == "approve":
+            # Если одобрено — начисляем средства на карту!
+            await db.execute("UPDATE pin_bank_cards SET balance = balance + ? WHERE card_number = ?", (req[2], req[1]))
+            await db.execute("UPDATE pin_bank_requests SET status = 'approved' WHERE id = ?", (req_id,))
+            await db.commit()
+            return {"status": "ok", "message": "✅ Транзакция успешно подтверждена, средства зачислены!"}
+        else:
+            await db.execute("UPDATE pin_bank_requests SET status = 'rejected' WHERE id = ?", (req_id,))
+            await db.commit()
+            return {"status": "ok", "message": "❌ Запрос безопасности успешно отклонен."}
+
+
+# 9. API: БЕСКОНТАКТНАЯ NFC-ОПЛАТА И ПЕРЕВОД МЕЖДУ СМАРТФОНАМИ (СМАРТФОН-КАРТА ➔ СМАРТФОН-ТЕРМИНАЛ)
+@app.post("/api/bank/nfc_pay_execute")
+async def nfc_pay_execute(data: dict, request: Request):
+    receiver_username = request.cookies.get("forum_user_name") # Тот, кто открыл терминал сбора
+    sender_card_number = data.get("sender_card_number") # Считываем из NFC-поля чипа плательщика
+    amount = int(data.get("amount", 0))
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Ищем карту плательщика и проверяем баланс pin
+        async with db.execute("SELECT username, balance FROM pin_bank_cards WHERE card_number = ?", (sender_card_number,)) as cursor:
+            sender_card = await cursor.fetchone()
+        if not sender_card: return {"status": "error", "message": "❌ Ошибка: Карта списания не найдена!"}
+        
+        sender_username, sender_balance = sender_card[0], sender_card[1]
+        if sender_balance < amount:
+            return {"status": "error", "message": "❌ Отказ: Недостаточно средств (pin) на карте плательщика!"}
+
+        # Ищем ПЕРВУЮ активную карту получателя, куда зачислять pin
+        async with db.execute("SELECT card_number FROM pin_bank_cards WHERE username = ? LIMIT 1", (receiver_username,)) as cursor:
+            receiver_card_row = await cursor.fetchone()
+        if not receiver_card_row:
+            return {"status": "error", "message": "❌ Ошибка: У получателя нет ни одной созданной карты ПинБанка!"}
+        
+        receiver_card_number = receiver_card_row[0]
+
+        # Проводим транзакцию списания и начисления
+        await db.execute("UPDATE pin_bank_cards SET balance = balance - ? WHERE card_number = ?", (amount, sender_card_number))
+        await db.execute("UPDATE pin_bank_cards SET balance = balance + ? WHERE card_number = ?", (amount, receiver_card_number))
+        
+        # Логируем перевод
+        now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
+        await db.execute("INSERT INTO pin_bank_requests (request_type, sender, receiver_card, amount, status, timestamp) VALUES ('transfer', ?, ?, ?, 'approved', ?)",
+                         (sender_username, receiver_card_number, amount, now_time))
+        await db.commit()
+        return {"status": "ok", "message": f"🎉 Транзакция одобрена! Списано {amount} pin с карты {sender_card_number}."}
 
 @app.post("/upload")
 async def upload_file(request: Request, file: UploadFile = File(...)):
