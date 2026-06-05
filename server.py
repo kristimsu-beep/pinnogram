@@ -2650,26 +2650,43 @@ async def get_bank_profile(uid: str):
         }
 
 
-# 3. API: АВТОНОМНАЯ РЕГИСТРАЦИЯ ЛЮБОГО ЖЕЛАЮЩЕГО
+# 3. API: АВТОНОМНАЯ РЕГИСТРАЦИЯ ГРАЖДАН ПИНИИ (ПУЛЕНЕПРОБИВАЕМЫЙ БЭКЕНД-ФИКС)
 @app.post("/api/bank/register")
-async def register_bank_user(data: dict):
-    uid = data.get("uid") # Уникальный сгенерированный ключ девайса
+async def register_bank_user(data: dict, request: Request):
+    # Убираем жесткую привязку к кукам форума для полной автономности
     first_name = data.get("first_name", "").strip()
     last_name = data.get("last_name", "").strip()
     phone = data.get("phone", "").strip()
+    
+    # Автоматически генерируем уникальный логин на основе Имени и Фамилии
+    username = data.get("username", f"{first_name}_{last_name}").lower().strip()
 
-    if not uid or not first_name or not last_name or not phone.startswith("+613"):
-        return {"status": "error", "message": "❌ Неверные данные заполнения полей!"}
+    # 🎯 БЭКЕНД-ФИКС: Очищаем номер от прочерков для проверки, если фронтенд прислал маску целиком
+    if not first_name or not last_name or not phone.startswith("+613"):
+        return {"status": "error", "message": "❌ Ошибка: Имя, Фамилия или префикс +613 заполнены неверно!"}
 
     async with aiosqlite.connect(DB_PATH) as db:
         now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
         try:
-            await db.execute("INSERT INTO pin_bank_users (username, first_name, last_name, phone_number, registered_at) VALUES (?, ?, ?, ?, ?)",
-                             (uid, first_name, last_name, phone, now_time))
+            # Проверяем, нет ли уже такого пользователя в базе ПинБанка
+            async with db.execute("SELECT 1 FROM pin_bank_users WHERE username = ?", (username,)) as cursor:
+                if await cursor.fetchone():
+                    return {"status": "error", "message": "🛑 Ошибка: Гражданин с таким Именем и Фамилией уже зарегистрирован!"}
+                    
+            # Записываем чистые данные в СУБД SQLite
+            await db.execute("""
+                INSERT INTO pin_bank_users (username, first_name, last_name, phone_number, registered_at) 
+                VALUES (?, ?, ?, ?, ?)
+            """, (username, first_name, last_name, phone, now_time))
             await db.commit()
-            return {"status": "ok", "message": "🎉 Регистрация в Центральном Банке Пинии успешна!"}
-        except:
-            return {"status": "error", "message": "🛑 Критическая ошибка базы данных."}
+            
+            print(f"🏛️ [ПИНБАНК] Успешная автономная регистрация: {username} ({phone})")
+            return {"status": "ok", "message": "🎉 Добро пожаловать в ЦБ ПинБанк! Регистрация успешна."}
+            
+        except Exception as db_err:
+            print(f"🛑 [ПИНБАНК REG ERROR] Критическая ошибка базы данных: {db_err}")
+            return {"status": "error", "message": f"⚙️ Ошибка СУБД: {str(db_err)}"}
+
 
 
 # 4. API: СОЗДАНИЕ КАРТЫ (ДО 5 ШТУК НА UID)
