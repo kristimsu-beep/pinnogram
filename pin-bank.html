@@ -374,7 +374,11 @@
             const phone = document.getElementById("reg-phone").value.trim();
             const submitBtn = document.getElementById("reg-submit-trigger-btn");
 
-            const isPhoneValid = (phone.length === 18 && phone.startsWith("+613"));
+            // 🎯 СУПЕР-ФИКС: Считаем только чистые цифры в номере телефона!
+            // В номере +613 должно быть ровно 13 цифр (613 + 10 цифр самого номера)
+            const cleanDigitsOnly = phone.replace(/\D/g, "");
+            const isPhoneValid = (cleanDigitsOnly.length === 13 && phone.startsWith("+613"));
+            
             const isFormReady = fn.length >= 2 && ln.length >= 2 && isPhoneValid;
 
             if (isFormReady) {
@@ -388,6 +392,7 @@
             }
             return isFormReady;
         }
+
 
         // АВТОНОМНАЯ ПУБЛИЧНАЯ РЕГИСТРАЦИЯ ДЛЯ ВСЕХ ЖЕЛАЮЩИХ
         async function submitPinBankRegistrationToServer() {
