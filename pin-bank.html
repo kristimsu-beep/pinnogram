@@ -148,18 +148,22 @@
     <!-- ГЛАВНЫЙ ИНТЕРФЕЙС БАНКОВСКОГО СЧЕТА -->
     <div class="bank-container">
         
-        <!-- ВЕРХНЯЯ СТРОКА УПРАВЛЕНИЯ -->
+        <!-- ВЕРХНЯЯ СТРОКА УПРАВЛЕНИЯ (ДОБАВЛЕНА НЕЗАВИСИМАЯ QR-ТРАНЗАКЦИЯ) -->
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
             <div>
                 <h1 style="margin: 0; font-size: 26px; font-weight: 800; color: var(--accent-dark);">Личный счёт гражданина</h1>
-                <p style="margin: 4px 0 0 0; color: var(--text-muted); font-size: 14px;">Управляйте картами и проводите бесконтактные платежи страны Пиния</p>
+                <p style="margin: 4px 0 0 0; color: var(--text-muted); font-size: 14px;">Управляйте картами и проводите платежи страны Пиния</p>
             </div>
-            <div style="display: flex; gap: 10px;">
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button class="bank-action-primary-btn" id="create-card-master-btn" onclick="openCreateNewCardWindowModal()">
                     ➕ Создать банковскую карту
                 </button>
-                <button class="bank-action-primary-btn" style="background-color: #007aff;" onclick="openNfcTransactionWindowModal()">
-                    📲 Создать транзакцию (NFC)
+                <button class="bank-action-primary-btn" style="background-color: #5865F2;" onclick="openNfcTransactionWindowModal()">
+                    📲 Транзакция по NFC
+                </button>
+                <!-- 🎯 НОВАЯ ИЗОЛИРОВАННАЯ КНОПКА ДЛЯ ТРАНЗАКЦИЙ ПО QR -->
+                <button class="bank-action-primary-btn" style="background-color: #007aff;" onclick="openQrTransactionAtmWindowModal()">
+                    🔲 Транзакция по QR-коду
                 </button>
             </div>
         </div>
@@ -287,6 +291,39 @@
                 <button class="atm-key-btn" onclick="pressAtmDigitKeyNode('0')">0</button>
                 <button class="atm-key-btn" style="color:var(--accent-green); font-size:14px;" onclick="executeAtmTransactionSubmissionPipeline()">✔ OK</button>
             </div>
+        </div>
+    </div>
+    
+    <!-- ========================================================== -->
+    <!-- 🔲 5.1. ОКНО ТЕРМИНАЛА: ОТОБРАЖЕНИЕ QR-КОДА ОПЛАТЫ (СБП) -->
+    <!-- ========================================================== -->
+    <div class="bank-modal-overlay" id="modal-qr-payment-screen" onclick="closeQrPaymentScreenWindow()">
+        <div class="bank-modal-card" onclick="event.stopPropagation()" style="text-align: center;">
+            <h3>Система быстрых платежей pin</h3>
+            <p style="color: var(--text-muted); font-size: 13px; margin-top: -10px; margin-bottom: 20px;" id="qr-payment-info-label">Генерация чека банка...</p>
+            
+            <!-- Сюда JS-библиотека выведет зашифрованный QR-код -->
+            <div id="qrcode-canvas-target" style="display: inline-block; padding: 16px; background: #fff; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px;"></div>
+            
+            <button class="bank-action-primary-btn" style="width: 100%; justify-content: center; background-color: var(--text-muted);" onclick="closeQrPaymentScreenWindow()">Отменить транзакцию</button>
+        </div>
+    </div>
+
+    <!-- ========================================================== -->
+    <!-- 📷 5.2. ОКНО СКАНИРОВАНИЯ QR-КОДА КАМЕРОЙ (КУПЮРОПРИЕМНИК) -->
+    <!-- ========================================================== -->
+    <div class="bank-modal-overlay" id="modal-qr-camera-scanner" onclick="closeQrCameraScannerWindow()">
+        <div class="bank-modal-card" onclick="event.stopPropagation()" style="text-align: center; max-width: 440px;">
+            <h3>Купюроприемник / Сканер QR-карт</h3>
+            <p style="color: var(--text-muted); font-size: 13px; margin-top: -10px; margin-bottom: 15px;">Наведите камеру смартфона на QR-код терминала продавца</p>
+            
+            <!-- Окно захвата видеопотока -->
+            <div style="width: 100%; height: 260px; background: #000; border-radius: 14px; overflow: hidden; position: relative; border: 2px solid var(--accent-green);" id="qr-camera-video-container-wrapper">
+                <video id="qr-scanner-video-preview-stream" style="width: 100%; height: 100%; object-fit: cover;"></video>
+                <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 160px; height: 160px; border: 2px dashed var(--accent-green); box-shadow: 0 0 0 9999px rgba(0,0,0,0.5); pointer-events: none; border-radius: 8px;"></div>
+            </div>
+            
+            <button class="bank-action-primary-btn" style="width: 100%; justify-content: center; background-color: var(--text-muted); margin-top: 15px;" onclick="closeQrCameraScannerWindow()">Закрыть сканер</button>
         </div>
     </div>
 
@@ -493,6 +530,13 @@
                                 <button onclick="openAtmCashMachineWindowModal('${card.number}', 'deposit')" style="background: rgba(255,255,255,0.2); border: none; padding: 5px 10px; border-radius: 6px; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; transition: 0.2s;">➕ Пополнить</button>
                             </div>
                         </div>
+                        // Добавляем две независимые кнопки оплаты на каждую карту счета
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <button onclick="triggerNfcCardTapMode('${card.number}')" style="background: #5865F2; border: none; padding: 5px 10px; border-radius: 6px; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; transition: 0.2s;">📲 Приложить</button>
+                            <button onclick="openQrCameraScannerPipeline('${card.number}')" style="background: #007aff; border: none; padding: 5px 10px; border-radius: 6px; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; transition: 0.2s;">🔲 Оплатить по QR</button>
+                            <button onclick="openAtmCashMachineWindowModal('${card.number}', 'deposit')" style="background: rgba(255,255,255,0.2); border: none; padding: 5px 10px; border-radius: 6px; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; transition: 0.2s;">➕ Пополнить</button>
+                        </div>
+
                     </div>
                     <!-- Блок данных под картой из базы данных -->
                     <div class="card-meta-under-box">
@@ -595,7 +639,6 @@
             if (finalAmount <= 0) { alert("❌ Введите сумму больше нуля!"); return; }
 
             if (mode === "deposit") {
-                // Сценарий 1: Запрос на пополнение в службу безопасности
                 try {
                     const res = await fetch(`${API_URL}/api/bank/request_deposit?anon_user=${encodeURIComponent(localBankSessionUsername)}`, {
                         method: "POST",
@@ -606,10 +649,14 @@
                     alert(data.message);
                     closeAtmCashMachineWindowModal();
                 } catch (e) { alert("Ошибка отправки запроса."); }
-            } else {
-                // Сценарий 2: Запуск бесконтактного радара NFC-транзакции оплаты
+            } else if (mode === "qr_tx") {
+                // 🎯 ОТДЕЛЕННЫЙ СЦЕНАРИЙ №2: Запуск QR-СБП терминала
                 closeAtmCashMachineWindowModal();
-                activateNfcHardwareTerminalReceiverMode(cardNumber, finalAmount);
+                generateQrCodeTerminalPayload(cardNumber, finalAmount);
+            } else {
+                // Сценарий 3: Запуск бесконтактного радара NFC-транзакции
+                closeAtmCashMachineWindowModal();
+                activateNfcHardwareTerminalBroadcast(cardNumber, finalAmount);
             }
         }
 
@@ -768,6 +815,121 @@
 
         // Автозапуск системы автономного банка
         window.onload = checkPinBankUserProfileStatus;
+        // ==========================================================
+        // 🔲 НОВЫЙ ИЗОЛИРОВАННЫЙ РАЗДЕЛ: ТРАНЗАКЦИИ ПО QR-КОДУ (СБП)
+        // ==========================================================
+        
+        // Автоматически подтягиваем ИИ-библиотеки генерации и чтения кодов из CDN
+        if (!document.getElementById("qr-script-generator")) {
+            let s1 = document.createElement("script"); s1.id = "qr-script-generator";
+            s1.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";
+            document.head.appendChild(s1);
+        }
+        if (!document.getElementById("qr-script-scanner")) {
+            let s2 = document.createElement("script"); s2.id = "qr-script-scanner";
+            s2.src = "https://unpkg.com/html5-qrcode/html5-qrcode.min.js";
+            document.head.appendChild(s2);
+        }
+
+        let html5QrScannerInstance = null;
+
+        // 1. ВЫЗОВ БАНКОМАТА В РЕЖИМЕ ГЕНЕРАЦИИ ЧЕКА 'qr_tx'
+        function openQrTransactionAtmWindowModal() {
+            if (currentBankUserCardsArray.length === 0) {
+                alert("❌ Ошибка: Для создания терминала транзакции у вас должна быть открыта хотя бы одна карта ПинБанка!");
+                return;
+            }
+            openAtmCashMachineWindowModal(currentBankUserCardsArray.number, "qr_tx");
+        }
+
+        // 2. УСТРОЙСТВО А (ПРОДАВЕЦ): ВЫВОД КАРТИНКИ QR-КОДА НА ЭКРАН TERMINALA
+        function generateQrCodeTerminalPayload(receiverCardNumber, transactionAmount) {
+            document.getElementById("qr-payment-info-label").innerHTML = `Сумма к оплате: <b style="color:var(--accent-green); font-size:15px;">${transactionAmount} pin</b><br>Зачисление на карту: ${receiverCardNumber}`;
+            document.getElementById("qrcode-canvas-target").innerHTML = ""; 
+
+            // Упаковываем сухой платежный чек для сканера
+            const qrPayload = JSON.stringify({
+                pinnogram_qr_bank: true,
+                receiver_card_number: receiverCardNumber,
+                amount: transactionAmount
+            });
+
+            setTimeout(() => {
+                new QRCode(document.getElementById("qrcode-canvas-target"), {
+                    text: qrPayload,
+                    width: 200,
+                    height: 200,
+                    colorDark: "#0f2d2a",
+                    colorLight: "#ffffff"
+                });
+                document.getElementById("modal-qr-payment-screen").style.display = "flex";
+            }, 200);
+        }
+
+        function closeQrPaymentScreenWindow() { document.getElementById("modal-qr-payment-screen").style.display = "none"; }
+
+        // 3. УСТРОЙСТВО Б (ПОКУПАТЕЛЬ): ВКЛЮЧЕНИЕ КАМЕРЫ ДЛЯ СЧИТЫВАНИЯ ЧЕКА
+        function openQrCameraScannerPipeline(senderCardNumber) {
+            document.getElementById("modal-qr-camera-scanner").style.display = "flex";
+            
+            setTimeout(() => {
+                html5QrScannerInstance = new Html5Qrcode("qr-camera-video-container-wrapper");
+                
+                html5QrScannerInstance.start(
+                    { facingMode: "environment" }, // Включаем заднюю камеру смартфона
+                    { fps: 10, qrbox: { width: 160, height: 160 } },
+                    async (decodedText) => {
+                        try {
+                            const qrData = JSON.parse(decodedText);
+                            if (qrData.pinnogram_qr_bank === true) {
+                                // Глушим камеру при успешном фокусе
+                                stopAndReleaseQrCameraStream();
+                                closeQrCameraScannerWindow();
+
+                                alert(`⚡ Чек верифицирован ПинБанком! Списание ${qrData.amount} pin со счета ${senderCardNumber}...`);
+                                
+                                // Отправляем транзакцию на бэкенд в 9-й роут СУБД SQLite
+                                executeFinalQrBankTransferOnServer(senderCardNumber, qrData.amount, qrData.receiver_card_number);
+                            }
+                        } catch (err) { console.log("Пропущен сторонний QR-код"); }
+                    },
+                    (error) => { /* Поиск фокуса */ }
+                ).catch(err => {
+                    alert("🛑 Ошибка камеры! Пожалуйста, разрешите браузеру доступ к съемке видео в настройках конфиденциальности устройства.");
+                    closeQrCameraScannerWindow();
+                });
+            }, 300);
+        }
+
+        function closeQrCameraScannerWindow() {
+            stopAndReleaseQrCameraStream();
+            document.getElementById("modal-qr-camera-scanner").style.display = "none";
+        }
+
+        function stopAndReleaseQrCameraStream() {
+            if (html5QrScannerInstance) {
+                html5QrScannerInstance.stop().then(() => { html5QrScannerInstance = null; }).catch(() => {});
+            }
+        }
+
+        // 4. БЭКЕНД-ТРАНСПОРТ: ОТПРАВКА СБП ПЛАТЕЖА В SQLite
+        async function executeFinalQrBankTransferOnServer(senderCardNum, txAmount, receiverCardNum) {
+            try {
+                const res = await fetch(`${API_URL}/api/bank/nfc_pay_execute?anon_user=${encodeURIComponent(localBankSessionUsername)}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ 
+                        sender_card_number: senderCardNum, 
+                        amount: txAmount,
+                        receiver_card_number: receiverCardNum 
+                    })
+                });
+                const serverStatus = await res.json();
+                alert(serverStatus.message);
+                checkPinBankUserProfileStatus(); // Обновляем балансы pin на экранах
+            } catch (e) { alert("Критический сбой проведения транзакции банком."); }
+        }
+
     </script>
 </body>
 </html>
