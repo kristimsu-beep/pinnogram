@@ -315,14 +315,26 @@
         let currentBankUserCardsArray = [];
         let atmDisplayValueBuffer = "0";
 
-        // 1. ПЕРВИЧНАЯ ПРОВЕРКА ПРОФИЛЯ ПРИ ЗАГРУЗКЕ СТРАНИЦЫ В СУБД
+        // Глобальная переменная автономного пользователя Пинии (не связанного с форумом)
+        let localBankSessionUsername = localStorage.getItem("pin_bank_logged_user") || null;
+
+        // 1. АВТОНОМНАЯ ПРОВЕРКА ПРОФИЛЯ В ЛОКАЛЬНОЙ БАЗЕ
         async function checkPinBankUserProfileStatus() {
+            // Если в браузере вообще нет сессии — принудительно выкатываем окно регистрации
+            if (!localBankSessionUsername) {
+                document.getElementById("modal-registration-gate").style.display = "flex";
+                document.getElementById("nav-user-nickname-display").textContent = "Вход в банк";
+                return;
+            }
+
             try {
-                const res = await fetch(`${API_URL}/api/bank/profile`);
+                // Запрашиваем данные конкретного автономного юзера из СУБД SQLite по его логину
+                const res = await fetch(`${API_URL}/api/bank/profile?anon_user=${encodeURIComponent(localBankSessionUsername)}`);
                 const data = await res.json();
 
                 if (data.status === "not_registered") {
-                    // Если пользователя нет в базе СУБД — принудительно открываем окно регистрации
+                    localStorage.removeItem("pin_bank_logged_user");
+                    localBankSessionUsername = null;
                     document.getElementById("modal-registration-gate").style.display = "flex";
                     return;
                 }
@@ -330,23 +342,19 @@
                 if (data.status === "ok") {
                     document.getElementById("modal-registration-gate").style.display = "none";
                     
-                    // Выводим имя в правый верхний угол на кнопку
                     const fullName = `${data.user_info.first_name} ${data.user_info.last_name}`;
                     document.getElementById("nav-user-nickname-display").textContent = fullName;
                     
-                    // Кэшируем карты и рендерим их на экран
                     currentBankUserCardsArray = data.cards || [];
                     renderPinBankCardsShowcase();
-                    
-                    // Обновляем состояние профиля в скрытом блоке
                     storeUserProfileDataInDOM(data.user_info);
                 }
             } catch (e) {
-                console.error("Ошибка инициализации ПинБанка:", e);
+                console.error("Ошибка автономной инициализации ПинБанка:", e);
             }
         }
 
-        // 2. ИНТЕЛЛЕКТУАЛЬНЫЙ ВАЛИДАТОР РЕГИСТРАЦИИ И МАСКА НОМЕРА ПИНИИ (+613)
+        // 2. МАСКА НОМЕРА ПИНИИ (+613) И ПРОВЕРКА КЛЮЧЕЙ
         function applyPinPhoneFormattingMask(input) {
             let matrix = "+613 ___ ___ __-__",
                 i = 0,
@@ -366,7 +374,6 @@
             const phone = document.getElementById("reg-phone").value.trim();
             const submitBtn = document.getElementById("reg-submit-trigger-btn");
 
-            // Пинийский номер считается валидным, если он полностью заполнен (ровно 18 символов с маской)
             const isPhoneValid = (phone.length === 18 && phone.startsWith("+613"));
             const isFormReady = fn.length >= 2 && ln.length >= 2 && isPhoneValid;
 
@@ -382,7 +389,7 @@
             return isFormReady;
         }
 
-        // ОБРАБОТКА НАЖАТИЯ ENTER И СТИМУЛЯЦИЯ ТРЯСКИ ОКНА ПРИ ОШИБКЕ
+        // АВТОНОМНАЯ ПУБЛИЧНАЯ РЕГИСТРАЦИЯ ДЛЯ ВСЕХ ЖЕЛАЮЩИХ
         async function submitPinBankRegistrationToServer() {
             const regCard = document.getElementById("reg-modal-card-node");
             const fnInput = document.getElementById("reg-firstname");
@@ -390,14 +397,12 @@
             const phoneInput = document.getElementById("reg-phone");
 
             if (!validateRegistrationInputsForm()) {
-                // Если форма заполнена неверно — активируем киберпанк-сотрясение
                 regCard.classList.add("shake-animation-active");
-                
                 if (fnInput.value.trim().length < 2) fnInput.classList.add("invalid-input-border");
                 if (lnInput.value.trim().length < 2) lnInput.classList.add("invalid-input-border");
                 if (phoneInput.value.trim().length < 18) phoneInput.classList.add("invalid-input-border");
 
-                alert("⚠️ Внимание! Все поля должны быть заполнены корректно. Номер телефона должен соответствовать стандарту Пинии: +613 XXX XXX XX-XX");
+                alert("⚠️ Заполните все поля! Номер Пинии должен быть полным: +613 XXX XXX XX-XX");
 
                 setTimeout(() => {
                     regCard.classList.remove("shake-animation-active");
@@ -408,12 +413,15 @@
                 return;
             }
 
-            // Отправляем данные на SQLite сервер
+            // Создаем уникальный текстовый логин на основе имени и фамилии
+            const generatedUsername = `${fnInput.value.trim()}_${lnInput.value.trim()}`.toLowerCase();
+
             try {
                 const res = await fetch(`${API_URL}/api/bank/register`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
+                        username: generatedUsername, // Передаем автономный юзернейм
                         first_name: fnInput.value.trim(),
                         last_name: lnInput.value.trim(),
                         phone: phoneInput.value.trim()
@@ -422,14 +430,16 @@
                 const data = await res.json();
                 if (data.status === "ok") {
                     alert(data.message);
-                    checkPinBankUserProfileStatus(); // Перепроверяем профиль и открываем личный счет!
+                    // Намертво сохраняем автономную сессию в память телефона!
+                    localStorage.setItem("pin_bank_logged_user", generatedUsername);
+                    localBankSessionUsername = generatedUsername;
+                    checkPinBankUserProfileStatus(); 
                 } else {
-                    alert("⚠️ Ошибка регистрации: " + data.message);
+                    alert("⚠️ Ошибка: " + data.message);
                 }
-            } catch (e) { alert("🛑 Ошибка связи с ЦБ ПинБанка."); }
+            } catch (e) { alert("🛑 Ошибка связи с сервером ПинБанка."); }
         }
 
-        // Перехватываем клавишу Enter внутри полей регистрации
         document.getElementById("modal-registration-gate").addEventListener("keydown", (e) => {
             if (e.key === "Enter") submitPinBankRegistrationToServer();
         });
@@ -473,7 +483,10 @@
                         <div class="card-number-display">${card.number}</div>
                         <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                             <div style="font-size: 10px; opacity: 0.8; letter-spacing: 0.5px;">ЦЕНТРАЛЬНЫЙ БАНК ПИНИИ</div>
-                            <button onclick="openAtmCashMachineWindowModal('${card.number}', 'deposit')" style="background: rgba(255,255,255,0.2); border: none; padding: 5px 10px; border-radius: 6px; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; transition: 0.2s;">➕ Пополнить</button>
+                            <div style="display: flex; gap: 6px;">
+                                <button onclick="triggerNfcCardTapMode('${card.number}')" style="background: #34c759; border: none; padding: 5px 10px; border-radius: 6px; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; transition: 0.2s;">📲 Приложить</button>
+                                <button onclick="openAtmCashMachineWindowModal('${card.number}', 'deposit')" style="background: rgba(255,255,255,0.2); border: none; padding: 5px 10px; border-radius: 6px; color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; transition: 0.2s;">➕ Пополнить</button>
+                            </div>
                         </div>
                     </div>
                     <!-- Блок данных под картой из базы данных -->
@@ -484,7 +497,7 @@
                         </div>
                         <div class="meta-line-row">
                             <span class="meta-label">Серийный номер:</span>
-                            <span class="meta-value" style="font-family: monospace;">#${card.id}00${card.number.split(' ')[1]}</span>
+                            <span class="meta-value" style="font-family: monospace;">#${card.id}00${card.number.split(' ')}</span>
                         </div>
                         <div class="meta-line-row">
                             <span class="meta-label">Статус карты:</span>
@@ -505,7 +518,7 @@
         async function executePinCardGenerationOnServer() {
             const selectedGradient = document.getElementById("wizard-gradient-selector").value;
             try {
-                const res = await fetch(`${API_URL}/api/bank/create_card`, {
+                const res = await fetch(`${API_URL}/api/bank/create_card?anon_user=${encodeURIComponent(localBankSessionUsername)}`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ gradient: selectedGradient })
@@ -528,7 +541,7 @@
             const cId = document.getElementById("settings-target-card-id").value;
             const grad = document.getElementById("settings-gradient-selector").value;
             try {
-                const res = await fetch(`${API_URL}/api/bank/update_card_style`, {
+                const res = await fetch(`${API_URL}/api/bank/update_card_style?anon_user=${encodeURIComponent(localBankSessionUsername)}`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ card_id: cId, gradient: grad })
@@ -579,7 +592,7 @@
             if (mode === "deposit") {
                 // Сценарий 1: Запрос на пополнение в службу безопасности
                 try {
-                    const res = await fetch(`${API_URL}/api/bank/request_deposit`, {
+                    const res = await fetch(`${API_URL}/api/bank/request_deposit?anon_user=${encodeURIComponent(localBankSessionUsername)}`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ card_number: cardNumber, amount: finalAmount })
@@ -591,14 +604,13 @@
             } else {
                 // Сценарий 2: Запуск бесконтактного радара NFC-транзакции оплаты
                 closeAtmCashMachineWindowModal();
-                activateNfcHardwareTerminalBroadcast(cardNumber, finalAmount);
+                activateNfcHardwareTerminalReceiverMode(cardNumber, finalAmount);
             }
         }
 
 
         // 6. СКРЫТЫЙ СЕКРЕТНЫЙ РАЗДЕЛ БЕЗОПАСНОСТИ (SHIFT + S)
         window.addEventListener("keydown", (e) => {
-            // Перехватываем комбинацию клавиш Shift (e.shiftKey) + S (e.key === "S" или "s")
             if (e.shiftKey && (e.key === "S" || e.key === "s" || e.key === "Ы" || e.key === "ы")) {
                 e.preventDefault();
                 openSecurityDashboardPanel();
@@ -649,13 +661,13 @@
                 });
                 const data = await res.json();
                 alert(data.message);
-                openSecurityDashboardPanel(); // Мгновенно перерендериваем очередь СБ на лету!
-                checkPinBankUserProfileStatus(); // Обновляем балансы карт на основном экране
+                openSecurityDashboardPanel(); 
+                checkPinBankUserProfileStatus(); 
             } catch (e) { alert("Ошибка обработки модерации."); }
         }
 
 
-        // 7. СИСТЕМА ОПЛАТЫ: БЕСКОНТАКТНАЯ ТРАНЗАКЦИЯ ЧЕРЕЗ КОРПУС СМАРТФОНА (Web NFC API)
+        // 7. РАЗДЕЛ ТРАНЗАКЦИЙ: БЕСКОНТАКТНАЯ NFC ОПЛАТА ПО СХЕМЕ «ТЕРМИНАЛ И КАРТА»
         function openNfcTransactionWindowModal() {
             if (currentBankUserCardsArray.length === 0) {
                 alert("❌ Ошибка: Для создания терминала транзакции у вас должна быть открыта хотя бы одна карта ПинБанка!");
@@ -665,56 +677,69 @@
             openAtmCashMachineWindowModal(currentBankUserCardsArray[0].number, "nfc_tx");
         }
 
-        async function activateNfcHardwareTerminalBroadcast(targetReceiverCardNumber, transactionAmount) {
+        // УСТРОЙСТВО А (ПРОДАВЕЦ / ТЕРМИНАЛ) — ВКЛЮЧАЕТ ЧИСТОЕ СКАН ИРОВАНИЕ
+        async function activateNfcHardwareTerminalReceiverMode(targetReceiverCardNumber, transactionAmount) {
             if (!('NDEFReader' in window)) {
-                // Если тест идет с ПК или Айфона, где чип заблокирован, эмулируем транзакцию для разработчика
-                console.log("Web NFC не поддерживается на текущем устройстве. Запуск режима эмуляции...");
+                console.log("Web NFC не поддерживается. Режим эмуляции...");
                 const dummySenderCard = prompt("⚙️ [ЭМУЛЯЦИЯ NFC] Введите номер карты плательщика (6130 XXXX XXXX XXXX):", "6130 1111 2222 3333");
                 if (!dummySenderCard) return;
-                
                 executeFinalNfcBankTransferOnServer(dummySenderCard, transactionAmount);
                 return;
             }
 
-            // РЕАЛЬНЫЙ СЦЕНАРИЙ ДЛЯ СМАРТФОНОВ ANDROID (ЧИП-КАРТА ➔ ЧИП-ТЕРМИНАЛ)
             try {
-                alert(`📡 Терминал ПинБанка активирован на ${transactionAmount} pin! Приложите другой телефон спинкой к этому корпусу.`);
+                alert(`📡 ТЕРМИНАЛ ЗАПУЩЕН на ${transactionAmount} pin! Поднесите второй телефон (карту) спинкой к этому корпусу и держите до сигнала.`);
                 const ndef = new NDEFReader();
-                
-                // Записываем банковский чек в магнитное поле чипа текущего телефона-терминала
-                await ndef.write(JSON.stringify({
-                    pinnogram_nfc_bank: true,
-                    sender_card_number: targetReceiverCardNumber, // Передаем карту
-                    amount: transactionAmount
-                }));
-                
-                // Включаем радар сканирования встречного ответа
-                await ndef.scan();
+                await ndef.scan(); // Чистый скан, никакой одновременной записи!
+
                 ndef.onreading = async (event) => {
                     const decoder = new TextDecoder();
                     for (const record of event.message.records) {
-                        const rawText = decoder.decode(record.data);
-                        const nfcData = JSON.parse(rawText);
-                        
-                        // Если встречный телефон приложился и отдал номер своей карты
-                        if (nfcData.sender_card_number) {
-                            executeFinalNfcBankTransferOnServer(nfcData.sender_card_number, transactionAmount);
-                            return;
-                        }
+                        try {
+                            const rawText = decoder.decode(record.data);
+                            const nfcData = JSON.parse(rawText);
+                            
+                            // Терминал перехватил банковский токен от телефона-карты
+                            if (nfcData.pinnogram_nfc_bank && nfcData.sender_card_number) {
+                                executeFinalNfcBankTransferOnServer(nfcData.sender_card_number, transactionAmount);
+                                return; // Выходим из бесконечного радара
+                            }
+                        } catch (e) { console.log("Пропущен сторонний чип"); }
                     }
                 };
-            } catch (err) { alert("🛑 Ошибка NFC терминала: " + err.message); }
+            } catch (err) { alert("🛑 Ошибка запуска терминала: " + err.message); }
         }
+        // УСТРОЙСТВО Б (ПОКУПАТЕЛЬ / КАРТА) — ВКЛЮЧАЕТ ЧИСТУЮ ЗАПИСЬ СВОЕГО НОМЕРА
+        async function triggerNfcCardTapMode(senderCardNumber) {
+            if (!('NDEFReader' in window)) {
+                alert(`⚙️ [ЭМУЛЯЦИЯ] Номер вашей карты скопирован: ${senderCardNumber}. Передайте его на устройство-терминал!`);
+                return;
+            }
+
+            try {
+                alert(`💳 РЕЖИМ КАРТЫ АКТИВИРОВАН. Приложите этот телефон к терминалу (другому   смартфону) для отправки карты ${senderCardNumber}.`);
+                const ndef = new NDEFReader();
+                
+                // Чистая бесконтактная отправка своего серийного номера в чип терминала
+                await ndef.write(JSON.stringify({
+                    pinnogram_nfc_bank: true,
+                    sender_card_number: senderCardNumber
+                }));
+                
+                alert("✨ Карта успешно считана терминалом!");
+            } catch (err) { alert("🛑 Ошибка бесконтактной карты: " + err.message + ". Не убирайте телефон слишком быстро!"); }
+        }
+
         async function executeFinalNfcBankTransferOnServer(senderCardNum, txAmount) {
             try {
-                const res = await fetch(`${API_URL}/api/bank/nfc_pay_execute`, {
+                const res = await fetch(`${API_URL}/api/bank/nfc_pay_execute?anon_user=${encodeURIComponent(localBankSessionUsername)}`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ sender_card_number: senderCardNum, amount: txAmount })
                 });
                 const serverStatus = await res.json();
                 alert(serverStatus.message);
-                checkPinBankUserProfileStatus(); // Обновляем балансы карт на экранах
+                checkPinBankUserProfileStatus(); // Перерендериваем балансы
             } catch (e) { alert("Критический сбой проведения транзакции банком."); }
         }
 
@@ -736,12 +761,7 @@
         }
         function closeUserProfileOverlayModal() { document.getElementById("modal-user-profile-overlay").style.display = "none"; }
 
-        function getCookieValueByName(name) {
-            const value = `; ${document.cookie}`; const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop().split(';').shift(); return null;
-        }
-
-        // Автозапуск системы при загрузке страницы
+        // Автозапуск системы автономного банка
         window.onload = checkPinBankUserProfileStatus;
     </script>
 </body>
