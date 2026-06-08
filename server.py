@@ -2726,11 +2726,13 @@ async def serve_stock_exchange_page(request: Request):
     return FileResponse(os.path.join(BASE_DIR, "stock.html"))
 
 
-# 2. API: ОБНОВЛЕННЫЙ СЪЕМ МАРКЕТА (СТАРТ 1000 SC + КЛИЕНТСКИЕ ОПИСАНИЯ ДЛЯ ПОЛНОЭКРАННЫХ МОДАЛОК)
+# 2. API: ОБНОВЛЕННЫЙ СЪЕМ МАРКЕТА (СТАРТ 1000 SC + КЛИЕНТСКИЕ ОПИСАНИЯ + ЧЕСТНЫЙ ТОП-10 ИЗ ВСЕХ ЮЗЕРОВ)
 @app.get("/api/stock/market")
 async def get_sochi_market_data(request: Request):
     user_discord_id = request.cookies.get("forum_user_id")
     username = request.cookies.get("forum_user_name", "Участник форума")
+    user_avatar = request.cookies.get("forum_user_avatar", "https://ibb.co")
+    
     if not user_discord_id: 
         return {"status": "error", "message": "🔒 Сессия Discord не найдена. Авторизуйтесь на форуме!"}
 
@@ -2743,13 +2745,14 @@ async def get_sochi_market_data(request: Request):
         """, (user_discord_id, username, username))
         await db.commit()
 
-        # Баланс криптокошелька
+        # Баланс криптокошелька текущего пользователя
         async with db.execute("SELECT sochi_coins FROM sochi_wallets WHERE user_discord_id = ?", (user_discord_id,)) as cursor:
             wallet_row = await cursor.fetchone()
             sochi_balance = wallet_row[0] if wallet_row else 1000.0
 
-        # Котировки активов (🎯 ДОБАВЛЕНО ПОЛЕ description для полноэкранного интерфейса!)
+        # Котировки активов и сбор карты цен для быстрой калькуляции топа
         market = []
+        prices_map = {}
         async with db.execute("SELECT ticker, company_name, current_price, last_change, description FROM stock_assets") as cursor:
             rows = await cursor.fetchall()
             for r in rows: 
@@ -2760,6 +2763,94 @@ async def get_sochi_market_data(request: Request):
                     "change": r[3],
                     "description": r[4] if r[4] else "Описание компании подготавливается аналитическим отделом SSE."
                 })
+                prices_map[r[0]] = r[2]
+
+        # Портфель текущего игрока (сколько куплено акций)
+        portfolio = {}
+        async with db.execute("SELECT ticker, shares_count FROM user_stock_portfolio WHERE user_discord_id = ?", (user_discord_id,)) as cursor:
+            rows = await cursor.fetchall()
+            for r in rows: 
+                portfolio[r[0]] = r[1]
+
+        # Вековая история шкалы курса для отрисовки тонких линий на Canvas
+        history_map = {}
+        async with db.execute("SELECT ticker, price, timestamp FROM stock_price_history ORDER BY id ASC") as cursor:
+            rows = await cursor.fetchall()
+            for r in rows:
+                t, p, time_stamp = r[0], r[1], r[2]
+                if t not in history_map: 
+                    history_map[t] = []
+                history_map[t].append({"price": p, "time": time_stamp})
+
+        # 🎯 ГЛАВНАЯ МАГИЯ: ФОРМИРУЕМ АВТОНОМНЫЙ ЛИДЕРБОРД ИЗ ВООБЩЕ ВСЕХ УЧАСТНИКОВ ФОРУМА
+        # 1. Загружаем имена абсолютно всех зарегистрированных граждан из таблицы профилей форума
+        async with db.execute("SELECT username FROM user_shop_profile") as cursor:
+            forum_users_rows = await cursor.fetchall()
+            all_forum_usernames = [str(row[0]).lower().strip() for row in forum_users_rows if row]
+
+        # Подстраховка: принудительно заносим текущего пользователя в список, если его там нет
+        if username.lower().strip() not in all_forum_usernames:
+            all_forum_usernames.append(username.lower().strip())
+
+        # 2. Скачиваем все уже созданные кошельки Сочи-коинов
+        async with db.execute("SELECT user_discord_id, username, sochi_coins FROM sochi_wallets") as cursor:
+            wallet_rows = await cursor.fetchall()
+            wallets_map = {str(w[1]).lower().strip(): {"uid": w[0], "coins": w[2]} for w in wallet_rows}
+
+        # 3. Скачиваем пакеты акций всех инвесторов
+        all_portfolios_map = {}
+        async with db.execute("SELECT user_discord_id, ticker, shares_count FROM user_stock_portfolio") as cursor:
+            all_shares = await cursor.fetchall()
+            for s in all_shares:
+                u_id, tick, count = s[0], s[1], s[2]
+                if u_id not in all_portfolios_map: 
+                    all_portfolios_map[u_id] = []
+                all_portfolios_map[u_id].append({"ticker": tick, "count": count})
+
+        # 4. Суммируем чистый капитал каждого человека (если кошелька нет — выдаем 1000.0 SC по умолчанию!)
+        leaderboard_list = []
+        for user_name_raw in all_forum_usernames:
+            clean_name = user_name_raw.lower().strip()
+            
+            # Извлекаем кошелек из карты. Если юзер зашёл первый раз — у него ровно 1000.0 SC
+            wallet_data = wallets_map.get(clean_name, {"uid": "new_" + clean_name, "coins": 1000.0})
+            w_uid = wallet_data["uid"]
+            w_coins = wallet_data["coins"]
+
+            # Калькулируем рыночную стоимость акций человека по текущему тику биржи
+            shares_value = 0.0
+            user_shares_list = all_portfolios_map.get(w_uid, [])
+            for share in user_shares_list:
+                ticker_price = prices_map.get(share["ticker"], 0.0)
+                shares_value += share["count"] * ticker_price
+                
+            total_worth = w_coins + shares_value
+            
+            # Красивое имя с большой буквы
+            display_name = user_name_raw.capitalize() if "_" not in user_name_raw else user_name_raw
+            is_me = (clean_name == username.lower().strip())
+
+            leaderboard_list.append({
+                "username": display_name,
+                "avatar": user_avatar if is_me else "https://ibb.co",
+                "total_worth": total_worth
+            })
+
+        # Сортируем инвесторов от самых богатых к бедным
+        leaderboard_list.sort(key=lambda x: x["total_worth"], reverse=True)
+        
+        # Обрезаем до ТОП-10. Если на форуме зарегистрировано всего 3 или 5 человек, выведутся они все!
+        top_10_leaderboard = leaderboard_list[:10]
+
+        return {
+            "status": "ok", 
+            "sochi_coins": round(sochi_balance, 2), 
+            "market": market, 
+            "portfolio": portfolio, 
+            "history": history_map,
+            "wallets_leaderboard": top_10_leaderboard # Улетает честный, динамический Топ богатства!
+        }
+
 
         # Портфель игрока (сколько куплено акций)
         portfolio = {}
