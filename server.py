@@ -2531,10 +2531,10 @@ async def startup():
             except Exception as e:
                 print(f"🛑 [KONATA START ERROR] Ошибка запуска бота: {e}")
 
-# 1. СУБД: ОБНОВЛЕННАЯ ДИНАМИЧЕСКАЯ ИНИЦИАЛИЗАЦИЯ С 12 АКТИВАМИ И АВТО-ОБНОВЛЕНИЕМ ЦЕН
+# 1. СУБД: ОБНОВЛЕННАЯ ИНИЦИАЛИЗАЦИЯ (ДОБАВЛЕНЫ ПОЛЯ 5-МИНУТНОГО КРАХА И ПОДДЕРЖКА ВНЕШНЕГО РЕЕСТРА)
 async def init_sochi_stock_exchange_tables():
     async with aiosqlite.connect(DB_PATH) as db:
-        # Устанавливаем дефолтное значение 1000.0 Сочи-коинов
+        # Устанавливаем дефолтное значение 1000.0 Сочи-коинов для автономных криптокошельков
         await db.execute("""
             CREATE TABLE IF NOT EXISTS sochi_wallets (
                 user_discord_id TEXT PRIMARY KEY,
@@ -2542,15 +2542,19 @@ async def init_sochi_stock_exchange_tables():
                 sochi_coins REAL DEFAULT 1000.0
             )
         """)
+        
+        # 🎯 УЛЬТИМАТИВНЫЙ АПДЕЙТ: Добавляем поле crash_until_ts (Unix-таймштамп, до которого идет обвал)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS stock_assets (
                 ticker TEXT PRIMARY KEY,
                 company_name TEXT,
                 current_price REAL,
                 last_change REAL DEFAULT 0.0,
-                description TEXT DEFAULT ''
+                description TEXT DEFAULT '',
+                crash_until_ts REAL DEFAULT 0.0
             )
         """)
+        
         await db.execute("""
             CREATE TABLE IF NOT EXISTS user_stock_portfolio (
                 user_discord_id TEXT,
@@ -2567,40 +2571,28 @@ async def init_sochi_stock_exchange_tables():
                 timestamp TEXT
             )
         """)
-        
-        # ==========================================================
-        # 📈 СУБД: ДОРАБОТАННЫЙ МАСШТАБИРУЕМЫЙ REESTR AKCIY SOCHI
-        # ==========================================================
-        STARTER_SOCHI_STOCKS = [
-            ("GOV", "Правительство Сочи", 500.0, "Центральный аппарат управления инфраструктурой и экономическими зонами курортной столицы."),
-            ("GER", "Герасев и Команда", 350.0, "Медиа-гигант и творческое объединение, генерирующее основной трафик и контент."),
-            ("SBR", "Сбер Банк Сочи", 800.0, "Главный финансовый конгломерат, обеспечивающий ликвидность региона."),
-            ("ALPB", "Альфа Банк Сочи", 650.0, "Высокотехнологичный частный банк, развивающий цифровые сервисы."),
-            ("BBR", "Бобер Корпорейшн", 200.0, "Прогрессивная крафтовая корпорация, контролирующая лесную промышленность."),
-            ("INFS", "Инфраструктура Сочи", 400.0, "Главный строительный узел: отели, дороги, неоновые вывески."),
-            ("ENRG", "Электроэнергетика Сочи", 900.0, "Главная энергетическая артерия города, питающая майнинг-фермы."),
-            ("SRSRP", "Сервер Сочи РП", 100.0, "Официальный цифровой хаб игрового симулятора жизни."),
-            ("TRNS", "Транспорт Сочи", 250.0, "Логистический гигант региона: монорельсы, скоростные шоссе."),
-            # 🎯 ТВОИ НОВЫЕ МОЩНЫЕ АКЦИИ ЖЕСТКО ЗАФИКСИРОВАНЫ В SQLite:
-            ("HIMARS", "Ракетный комплекс Хаймарс", 2000.0, "Оборонно-промышленный комплекс высокоточного сдерживания и защиты рубежей Сочи."),
-            ("GOVBBRSTN", "Правительство Боберстана", 10.0, "Суверенный аппарат дружественного Боберстана, экспортирующий дерево и плотины."),
-            ("USSR", "Акции СССР", 100000.0, "Легендарное наследие сверхдержавы. Главный золотовалютный и индустриальный резерв биржи."),
-            ("BURMLD", "Бурмалда", 10000.0, "Бурмалда")
-        ]
+        await db.commit()
 
+        # 🎯 СИНХРОНИЗАЦИЯ: Подтягиваем данные из твоего STARTER_SOCHI_STOCKS, который объявлен в коде ниже
         now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
+        
+        # Запускаем цикл проверки по глобальной переменной реестра
         for ticker, name, initial_price, desc in STARTER_SOCHI_STOCKS:
             async with db.execute("SELECT 1 FROM stock_assets WHERE ticker = ?", (ticker,)) as cursor:
                 if not await cursor.fetchone():
-                    # Если акции еще нет в СУБД — вставляем чистую запись
-                    await db.execute("INSERT INTO stock_assets (ticker, company_name, current_price, description) VALUES (?, ?, ?, ?)", 
-                                     (ticker, name, initial_price, desc))
+                    # Если тикера еще нет в СУБД — регистрируем компанию и ее стартовую точку линии
+                    await db.execute("""
+                        INSERT INTO stock_assets (ticker, company_name, current_price, description) 
+                        VALUES (?, ?, ?, ?)
+                    """, (ticker, name, initial_price, desc))
                     await db.execute("INSERT INTO stock_price_history (ticker, price, timestamp) VALUES (?, ?, ?)", 
                                      (ticker, initial_price, now_time))
                 else:
-                    # 🎯 УЛЬТИМАТИВНЫЙ ФИКС: Железно принудительно накатываем свежие цены и описания при деплое!
-                    await db.execute("UPDATE stock_assets SET company_name = ?, description = ? WHERE ticker = ?", (name, desc, ticker))
+                    # Принудительно обновляем паспортные данные и описания при перезапуске сервера
+                    await db.execute("UPDATE stock_assets SET company_name = ?, description = ? WHERE ticker = ?", 
+                                     (name, desc, ticker))
         await db.commit()
+
 
         
 import random
@@ -2610,9 +2602,11 @@ async def sochi_market_ticker_simulation_loop():
     while True:
         try:
             await asyncio.sleep(30) # Колебания котировок каждые 30 секунд
+            current_timestamp = time.time()
+            
             async with aiosqlite.connect(DB_PATH) as db:
-                # Динамически достаем абсолютно все зарегистрированные в базе акции
-                async with db.execute("SELECT ticker, current_price FROM stock_assets") as cursor:
+                # Тянем тикеры, цены и таймеры обвала
+                async with db.execute("SELECT ticker, current_price, crash_until_ts FROM stock_assets") as cursor:
                     stocks = await cursor.fetchall()
                     
                 now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
@@ -2620,28 +2614,83 @@ async def sochi_market_ticker_simulation_loop():
                 for r in stocks:
                     ticker = r[0]
                     price = r[1]
+                    crash_until = r[2] if r[2] else 0.0
                     
-                    # Симуляция трендов (bull - рост, bear - спад, chaos - скачки, flat - затишье)
-                    market_trend = random.choice(["bull", "bear", "flat", "chaos"])
-                    if market_trend == "bull": change_percent = random.uniform(0.01, 0.075)
-                    elif market_trend == "bear": change_percent = random.uniform(-0.07, -0.01)
-                    elif market_trend == "chaos": change_percent = random.uniform(-0.065, 0.07)
-                    else: change_percent = random.uniform(-0.02, 0.02)
-                        
-                    new_price = round(price * (1.0 + change_percent), 2)
-                    if new_price < 10.0: new_price = 10.0 # Защита акций от полного обнуления
+                    # 🎯 ПРОВЕРКА ОБВАЛА: Если админ запустил крах и 5 минут еще не прошло
+                    if current_timestamp < crash_until:
+                        # Стремительное плавное падение от -12% до -18% на каждом тике
+                        change_percent = random.uniform(-0.18, -0.12)
+                        new_price = round(price * (1.0 + change_percent), 2)
+                        if new_price < 1.0: new_price = 1.0 # Лимит падения (почти до нуля, но не в минус)
+                    else:
+                        # Обычный стандартный рыночный рандом
+                        market_trend = random.choice(["bull", "bear", "flat", "chaos"])
+                        if market_trend == "bull": change_percent = random.uniform(0.01, 0.075)
+                        elif market_trend == "bear": change_percent = random.uniform(-0.07, -0.01)
+                        elif market_trend == "chaos": change_percent = random.uniform(-0.065, 0.07)
+                        else: change_percent = random.uniform(-0.02, 0.02)
+                        new_price = round(price * (1.0 + change_percent), 2)
+                        if new_price < 10.0: new_price = 10.0
+
+                    # Рассчитываем итоговое изменение для вывода на экран
+                    last_calc_change = round(((new_price - price) / price) * 100, 2) if price > 0 else 0.0
                     
-                    # Записываем новые котировки и добавляем точку в историю для шкалы
                     await db.execute("UPDATE stock_assets SET current_price = ?, last_change = ? WHERE ticker = ?", 
-                                     (new_price, round(change_percent * 100, 2), ticker))
+                                     (new_price, last_calc_change, ticker))
                     await db.execute("INSERT INTO stock_price_history (ticker, price, timestamp) VALUES (?, ?, ?)", 
                                      (ticker, new_price, now_time))
                     
-                # 🎯 СУПЕР-ФИКС: Расширяем лимит хранения истории до 50 000 точек, чтобы графики не обрезались!
                 await db.execute("DELETE FROM stock_price_history WHERE id NOT IN (SELECT id FROM stock_price_history ORDER BY id DESC LIMIT 50000)")
                 await db.commit()
         except Exception as e:
-            print(f"⚠️ [STOCK MARKET SIMULATION ERROR] {e}")
+            print(f"⚠️ [STOCK CRASH LOOP ERROR] {e}")
+            
+# 12. API: ПУЛЬТ МАРКЕТМЕЙКЕРА ДЛЯ УПРАВЛЕНИЯ КУРСАМИ (ПОВЫСИТЬ / ПОНИЗИТЬ)
+@app.post("/api/stock/admin/market_control")
+async def admin_market_control_prices(data: dict, request: Request):
+    user_discord_id = request.cookies.get("forum_user_id")
+    if not user_discord_id: return {"status": "error", "message": "🔒 Сессия администратора не найдена"}
+
+    ticker = data.get("ticker")
+    action_mode = data.get("action_mode") # 'pump', 'dump' или 'crash'
+    percent_value = float(data.get("percent", 0))
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Извлекаем текущую стоимость акции из SQLite
+        async with db.execute("SELECT current_price FROM stock_assets WHERE ticker = ?", (ticker,)) as cursor:
+            asset_row = await cursor.fetchone()
+        if not asset_row: return {"status": "error", "message": "❌ Акция не найдена в реестре биржи"}
+        
+        current_price = asset_row[0]
+        now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
+
+        if action_mode == "pump":
+            # Мгновенно повышаем стоимость акции на заданный процент
+            multiplier = 1.0 + (percent_value / 100.0)
+            new_price = round(current_price * multiplier, 2)
+            await db.execute("UPDATE stock_assets SET current_price = ?, last_change = ? WHERE ticker = ?", (new_price, percent_value, ticker))
+            await db.execute("INSERT INTO stock_price_history (ticker, price, timestamp) VALUES (?, ?, ?)", (ticker, new_price, now_time))
+            await db.commit()
+            return {"status": "ok", "message": f"🚀 Акция {ticker} успешно пропамплена на +{percent_value}%!"}
+
+        elif action_mode == "dump":
+            # Мгновенно понижаем стоимость акции
+            multiplier = 1.0 - (percent_value / 100.0)
+            new_price = round(current_price * multiplier, 2)
+            if new_price < 1.0: new_price = 1.0
+            await db.execute("UPDATE stock_assets SET current_price = ?, last_change = ? WHERE ticker = ?", (new_price, -percent_value, ticker))
+            await db.execute("INSERT INTO stock_price_history (ticker, price, timestamp) VALUES (?, ?, ?)", (ticker, new_price, now_time))
+            await db.commit()
+            return {"status": "ok", "message": f"💥 Стоимость акции {ticker} снижена на -{percent_value}%!"}
+
+        elif action_mode == "crash":
+            # 🎯 ЗАПУСК ОБВАЛА НА 5 МИНУТ (300 секунд вперед от текущей секунды)
+            end_crash_timestamp = time.time() + 300.0
+            await db.execute("UPDATE stock_assets SET crash_until_ts = ? WHERE ticker = ?", (end_crash_timestamp, ticker))
+            await db.commit()
+            return {"status": "ok", "message": f"🚨 Внимание! Запущен постепенный 5-минутный обвал цен акции {ticker} на дно!"}
+
+    return {"status": "error", "message": "Неизвестная директива маркетмейкера"}
 
 # ==========================================================
 # СУБД: ИНИЦИАЛИЗАЦИЯ ТАБЛИЦ ИНВЕНТАРЯ И МАГАЗИНА ФОНОВ
