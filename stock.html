@@ -730,10 +730,16 @@
                 if (activePointsArray.length === 0) return;
 
                 const rect = container.getBoundingClientRect();
-                const clientX = event.touches ? event.touches.clientX : event.clientX;
+                
+                // Перехватываем координаты в зависимости от устройства (Touch для телефонов, Mouse для ПК)
+                const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+                const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+                
+                // Рассчитываем точное положение пальца/курсора относительно границ холста
                 const pointerX = clientX - rect.left;
+                const pointerY = clientY - rect.top;
 
-                // Находим ближайшую точку на графике от самого начала шкалы
+                // Находим ближайшую по горизонтали временную точку на графике
                 let closestPoint = activePointsArray[0];
                 let minDistance = Math.abs(pointerX - closestPoint.x);
 
@@ -749,14 +755,17 @@
                     tooltip.textContent = `${Number(closestPoint.price).toFixed(2)} SC (${closestPoint.time})`;
                     tooltip.style.display = "block";
                     
-                    // Окошко следует прямо за указателем мышки
-                    tooltip.style.left = `${clientX - rect.left + 15}px`;
-                    tooltip.style.top = `${event.clientY - rect.top - 15}px`;
+                    // 🎯 СУПЕР-ФИКС КООРДИНАТ: Привязываемся строго к физическому offset мышки в контейнере!
+                    // Окошко будет следовать СТРОГО возле кончика указателя в любой точке оверлея.
+                    // Сдвигаем на 15 пикселей вправо и на 20 пикселей вниз, чтобы текст не скрывался и не улетал вверх
+                    tooltip.style.left = `${pointerX + 15}px`;
+                    tooltip.style.top = `${pointerY + 20}px`;
                 }
             };
 
             const hidePointerHandler = () => { tooltip.style.display = "none"; };
 
+            // Подключаем слушатели для мышки и тач-событий мобильных устройств
             container.addEventListener("mousemove", trackMovePointerHandler);
             container.addEventListener("mouseleave", hidePointerHandler);
             container.addEventListener("touchmove", trackMovePointerHandler, { passive: true });
