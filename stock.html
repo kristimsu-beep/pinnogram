@@ -243,6 +243,43 @@
 
     <!-- ВСПЛЫВАЮЩИЙ ИНТЕРАКТИВНЫЙ ПОПОВЕР ДЛЯ СЛЕДОВАНИЯ ЗА ПАЛЬЦЕМ/МЫШКОЙ -->
     <div class="canvas-hover-popover-tooltip" id="global-canvas-chart-tooltip" style="position: absolute; display: none;">0.00 SC (00:00)</div>
+    <!-- ========================================================== -->
+    <!-- 🛡️ 4.1. СКРЫТАЯ АДМИН-ПАНЕЛЬ СЧЕТОВ МАЙНЕРОВ (SHIFT + G) -->
+    <!-- ========================================================== -->
+    <div class="stock-modal-overlay" id="modal-admin-god-panel" onclick="closeAdminGodPanelDashboard()" style="background: rgba(15,23,42,0.8);">
+        <div class="trade-terminal-card" onclick="event.stopPropagation()" style="max-width: 550px; width: 95%; max-height: 80vh; overflow-y: auto;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+                <h3 style="margin: 0; color: var(--bull-green); font-size: 18px; display: flex; align-items: center; gap: 8px;">
+                    👑 Реестр управления балансами SSE
+                </h3>
+                <span style="font-size: 11px; font-weight: 800; background: #d1fae5; color: #065f46; padding: 4px 8px; border-radius: 6px;">SHIFT + G PANEL</span>
+            </div>
+            
+            <!-- Сюда JS выведет список всех пользователей биржи -->
+            <div id="admin-users-list-target-container" style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="text-align: center; color: var(--text-muted); padding: 20px;">Загрузка списка граждан...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================== -->
+    <!-- 🧮 4.2. МИНИ-ОКНО СУММЫ ОПЕРАЦИИ (НАЧИСЛИТЬ / ЗАБРАТЬ) -->
+    <!-- ========================================================== -->
+    <div class="stock-modal-overlay" id="modal-admin-amount-wizard" onclick="closeAdminAmountWizardWindow()" style="z-index: 200; background: rgba(0,0,0,0.4);">
+        <div class="trade-terminal-card" onclick="event.stopPropagation()" style="max-width: 360px;">
+            <h3 id="wizard-operation-title-label" style="margin: 0 0 15px 0; font-size: 16px; font-weight: 800;">Редактирование баланса</h3>
+            <input type="hidden" id="wizard-target-user-discord-id">
+            <input type="hidden" id="wizard-active-action-type">
+            
+            <input type="number" id="wizard-coins-amount-input" min="1" value="100" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border-color); background: var(--bg-main); font-size: 18px; font-weight: bold; outline: none; box-sizing: border-box; text-align: center; margin-bottom: 16px;">
+            
+            <div style="display: flex; gap: 10px;">
+                <button class="terminal-btn" style="background-color: var(--text-muted); color: #fff;" onclick="closeAdminAmountWizardWindow()">Отмена</button>
+                <button class="terminal-btn" style="background-color: var(--bull-green); color: #fff;" onclick="submitAdminBalanceModificationToServer()">✔ Подтвердить</button>
+            </div>
+        </div>
+    </div>
+
 
     <script>
         const API_URL = window.location.origin;
@@ -381,30 +418,30 @@
             });
         }
         // ==========================================================
-        // 🖥️ 4. УПРАВЛЕНИЕ ПОЛНОЭКРАННЫМ ТЕРМИНАЛОМ ОРДЕРОВ (АДАПТИВ)
+        // 💻 💎 4. УПРАВЛЕНИЕ ПОЛНОЭКРАННЫЙ ТЕРМИНАЛ ОРДЕРОВ (АДАПТИВ)
         // ==========================================================
         function openFullscreenTradingStationOverlay(ticker) {
             activeSelectedTicker = ticker;
 
-            // Извлекаем активный объект компании из кэша СУБД SQLite
+            // Находим данные компании в глобальном кэше СУБД SQLite
             const asset = marketDataCache.find(a => a.ticker === ticker);
             if (!asset) return;
 
-            // Насыщаем верхнюю шапку полноэкранного оверлея паспортными данными
+            // Насыщаем паспортные данные в шапку полноэкранного оверлея
             document.getElementById("fs-company-title-label").textContent = asset.company_name;
             document.getElementById("fs-company-ticker-badge").textContent = ticker;
-            document.getElementById("fs-company-detailed-description-text").textContent = asset.description || "Аналитический паспорт объекта формируется СУБД.";
+            document.getElementById("fs-company-detailed-description-text").textContent = asset.description || "Аналитический паспорт формируется СУБД.";
 
-            // Сбрасываем количество лотов в калькуляторе на 1 акцию по умолчанию
+            // Сбрасываем количество лотов на 1 акцию по умолчанию
             document.getElementById("fs-trade-shares-quantity-input").value = 1;
 
-            // Синхронизируем котировки, балансы кошелька SC и портфеля
+            // Синхронизируем котировки, балансы кошелька SC и инвентаря
             refreshActiveTerminalLabelsOnMarketTick();
 
             // Разворачиваем торговую станцию на весь экран
             document.getElementById("fullscreen-trading-station-overlay").style.display = "flex";
 
-            // Даем браузеру 100 миллисекунд пересчитать ширину под мобильный экран и запускаем Canvas линию
+            // Даем браузеру 100 миллисекунд пересчитать ширину экрана под смартфоны и запускаем холст Canvas
             setTimeout(() => {
                 if (stockHistoryCache && stockHistoryCache[activeSelectedTicker]) {
                     const historyPoints = stockHistoryCache[activeSelectedTicker] || [];
@@ -438,7 +475,7 @@
             document.getElementById("fs-terminal-estimated-total-cost").textContent = `${totalCost.toFixed(2)} SC`;
         }
 
-        // СИНХРОННЫЙ АПДЕЙТОР ДАННЫХ ВНУТРИ ТЕРМИНАЛА (ПРИ КАЖДОМ ТИКЕ БИРЖИ)
+        // СИНХРОННЫЙ АПДЕЙТОР ДАННЫХ ВНУТРИ СТАНЦИИ ПРИ КАЖДОМ ТИКЕ БИРЖИ
         function refreshActiveTerminalLabelsOnMarketTick() {
             if (!activeSelectedTicker) return;
 
@@ -463,14 +500,16 @@
             // Обновляем показатели итоговой стоимости кассы
             recalculateFullscreenTerminalTotalCostEstimated();
             
-            // Врубаем живой перерендер непрерывной Canvas линии прямо по ходу торгов в реальном времени!
+            // Врубаем живой перерендер непрерывной Canvas линии прямо по ходу торгов!
             if (stockHistoryCache && stockHistoryCache[activeSelectedTicker]) {
                 const historyPoints = stockHistoryCache[activeSelectedTicker] || [];
                 drawContinuousLineChartOnCanvas("fullscreen-main-line-chart-canvas", historyPoints, asset.change, true);
             }
         }
+
+
         // ==========================================================
-        // 📈 5. ХОЛОГРАФИЧЕСКИЙ ГРАФИЧЕСКИЙ ДВИЖОК CANVAS (TRADINGVIEW)
+        // 📈 5. ХОЛОГРАФИЧЕСКИЙ ГРАФИЧЕСКИЙ ДВИЖОК CANVAS (TRADINGVIEW СТИЛЬ)
         // ==========================================================
         let largeTerminalCoordinatesArray = []; // Массив для магнитного трекинга мышки/пальца
 
@@ -490,7 +529,7 @@
                 ctx.fillStyle = "var(--text-muted)";
                 ctx.font = "13px -apple-system, sans-serif";
                 ctx.textAlign = "center";
-                ctx.fillText("⏳ Накопление истории... Ожидайте первых тиков рынка Сочи", canvas.width / 2, canvas.height / 2);
+                ctx.fillText("⏳ Формирование непрерывной линии... Ожидайте первых тиков рынка Сочи", canvas.width / 2, canvas.height / 2);
                 return;
             }
 
@@ -529,12 +568,12 @@
                 }
             });
 
-            // Настройка цвета: Рост — изумрудный, Падение — багрово-красный
+            // Настройка цвета тонкой сплошной линии: Рост — изумрудный, Падение — багрово-красный
             const isBullishTrend = currentChange >= 0;
             const trendColor = isBullishTrend ? "#10b981" : "#ef4444";
             
             ctx.strokeStyle = trendColor;
-            ctx.lineWidth = isLargeTerminal ? 3.5 : 2; // Тонкая линия на карточке, сочная — в терминале
+            ctx.lineWidth = isLargeTerminal ? 3.5 : 2; 
             ctx.lineCap = "round";
             ctx.lineJoin = "round";
             ctx.stroke();
@@ -550,7 +589,7 @@
             ctx.fillStyle = gradientFill;
             ctx.fill();
 
-            // Рисуем пульсирующую финальную точку курса прямо сейчас
+            // Рисуем светящуюся точку курса прямо сейчас на самом кончике
             const lastDot = paddingLeft + ((historyPoints.length - 1) * stepX);
             const lastDotY = canvas.height - paddingBottom - ((prices[prices.length - 1] - minPrice) / priceRange * plotHeight);
             ctx.beginPath();
@@ -559,11 +598,9 @@
             ctx.shadowBlur = 8;
             ctx.shadowColor = trendColor;
             ctx.fill();
-            ctx.shadowBlur = 0; // Сброс теней
+            ctx.shadowBlur = 0; 
         }
-
-
-        // 📡 6. МАГНИТНЫЙ РАДАР СЛЕЖЕНИЯ: ПРИВЯЗКА ПОДСКАЗКИ СТРОГО К КОНЧИКУ МЫШКИ
+        // 📡 6. МАГНИТНЫЙ РАДАР СЛЕЖЕНИЯ: ПРИВЯЗКА ПОДСКАЗКИ СТРОГО ВОЗЛЕ МЫШКИ
         function initInteractiveCanvasHoverTrackingSystem() {
             const container = document.getElementById("interactive-canvas-box-container");
             const tooltip = document.getElementById("global-canvas-chart-tooltip");
@@ -576,12 +613,10 @@
                 
                 // Перехватываем координаты пальца или мышки
                 const clientX = event.touches ? event.touches.clientX : event.clientX;
-                const clientY = event.touches ? event.touches.clientY : event.clientY;
-                
                 const pointerX = clientX - rect.left;
 
                 // Снимаем ближайший по горизонтали промежуток времени от самого начала хода
-                let closestPoint = largeTerminalCoordinatesArray[0];
+                let closestPoint = largeTerminalCoordinatesArray;
                 let minDistance = Math.abs(pointerX - closestPoint.x);
 
                 for (let i = 1; i < largeTerminalCoordinatesArray.length; i++) {
@@ -596,13 +631,10 @@
                 tooltip.textContent = `${Number(closestPoint.price).toFixed(2)} SC (${closestPoint.time})`;
                 tooltip.style.display = "block";
                 
-                // 🎯 СУПЕР-ФИКС КООРДИНАТ: Привязываемся к абсолютным координатам страницы (window.pageX/Y)
-                // Окошко горит строго над стрелкой мышки в реальном времени!
-                const pageX = event.touches ? event.touches[0].pageX : event.pageX;
-                const pageY = event.touches ? event.touches[0].pageY : event.pageY;
-
-                tooltip.style.left = `${pageX - rect.left - window.scrollX + 15}px`;
-                tooltip.style.top = `${pageY - rect.top - window.scrollY - 40}px`;
+                // 🎯 СУПЕР-ФИКС КООРДИНАТ: Привязываемся строго к мышке внутри родительского контейнера!
+                // Больше окошко никогда не улетит наверх — оно горит прямо возле твоего курсора!
+                tooltip.style.left = `${clientX - rect.left + 15}px`;
+                tooltip.style.top = `${event.clientY - rect.top - container.parentElement.scrollTop - 15}px`;
             };
 
             const hidePointerHandler = () => { tooltip.style.display = "none"; };
@@ -613,8 +645,9 @@
             container.addEventListener("touchend", hidePointerHandler);
         }
 
+
         // ==========================================================
-        // 🛍️ 7. СИНХРОННЫЙ ОБМЕН ТОРГОВЫМИ ОРДЕРАМИ С БАЗОЙ ДАННЫХ
+        // 🛍️ 7. СИНХРОННЫЙ ОБМЕН ТОРГОВЫМИ ОРДЕРАМИ BUY / SELL
         // ==========================================================
         async function executeFullscreenStockOrderActionPipeline(actionType) {
             if (!activeSelectedTicker) return;
@@ -635,24 +668,101 @@
                 });
 
                 const data = await res.json();
-
                 if (data.status === "ok") {
                     alert(data.message);
-                    await fetchSochiMarketDataFromServer(); // Снапшот криптокошелька и рейтинга богачей
+                    await fetchSochiMarketDataFromServer(); 
                 } else {
                     alert("⚠️ Ордер отклонён: " + data.message);
                 }
-            } catch (e) {
-                alert("🛑 Критический сбой проведения сделки сервером SSE.");
-            }
+            } catch (e) { alert("🛑 Критический сбой проведения сделки банком."); }
         }
 
-        // Автозапуск всей биржевой экосистемы Сочи
+
+        // ==========================================================
+        // 👑 8. СЕКРЕТНЫЙ АДМИН-МОДУЛЬ КАССЫ (SHIFT + G)
+        // ==========================================================
+        window.addEventListener("keydown", (e) => {
+            if (e.shiftKey && (e.key === "G" || e.key === "g" || e.key === "П" || e.key === "п")) {
+                e.preventDefault();
+                openAdminGodPanelDashboard();
+            }
+        });
+
+        async function openAdminGodPanelDashboard() {
+            try {
+                const res = await fetch(`${API_URL}/api/stock/admin/users`);
+                const data = await res.json();
+                const container = document.getElementById("admin-users-list-target-container");
+                if (!container) return;
+                container.innerHTML = "";
+
+                if (data.users.length === 0) {
+                    container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">Инвесторов в базе нет</div>`;
+                } else {
+                    data.users.forEach(user => {
+                        const row = document.createElement("div");
+                        row.style.cssText = "background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:14px; display:flex; justify-content:space-between; align-items:center; gap:15px;";
+                        
+                        row.innerHTML = `
+                            <div>
+                                <div style="font-weight:700; font-size:14px; color:var(--text-dark);">${user.username}</div>
+                                <div style="font-size:12px; color:var(--text-muted); font-family:monospace; margin-top:2px;">ID: ${user.discord_id}</div>
+                                <div style="font-size:13px; color:var(--bull-green); font-weight:bold; margin-top:4px;">Баланс: ${user.sochi_coins} SC</div>
+                            </div>
+                            <div style="display:flex; gap:8px;">
+                                <button onclick="openAdminAmountWizardWindow('${user.discord_id}', 'give', '${user.username}')" style="background:var(--bull-green); color:#fff; border:none; padding:8px 12px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer;">Начислить</button>
+                                <button onclick="openAdminAmountWizardWindow('${user.discord_id}', 'take', '${user.username}')" style="background:var(--bear-red); color:#fff; border:none; padding:8px 12px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer;">Забрать</button>
+                            </div>
+                        `;
+                        container.appendChild(row);
+                    });
+                }
+                document.getElementById("modal-admin-god-panel").style.display = "flex";
+            } catch (e) { alert("Ошибка выгрузки реестра СБ."); }
+        }
+
+        function closeAdminGodPanelDashboard() { document.getElementById("modal-admin-god-panel").style.display = "none"; }
+
+        // ОТКРЫТИЕ МИНИ-КАЛЬКУЛЯТОРА ОПЕРАЦИИ ВВОДА СУММЫ
+        function openAdminAmountWizardWindow(discordId, actionType, userName) {
+            document.getElementById("wizard-target-user-discord-id").value = discordId;
+            document.getElementById("wizard-active-action-type").value = actionType;
+            document.getElementById("wizard-coins-amount-input").value = 100;
+            
+            const title = actionType === "give" ? `Начислить монеты для ${userName}` : `Изъять монеты у ${userName}`;
+            document.getElementById("wizard-operation-title-label").textContent = title;
+            
+            document.getElementById("modal-admin-amount-wizard").style.display = "flex";
+        }
+
+        function closeAdminAmountWizardWindow() { document.getElementById("modal-admin-amount-wizard").style.display = "none"; }
+
+        async function submitAdminBalanceModificationToServer() {
+            const tUid = document.getElementById("wizard-target-user-discord-id").value;
+            const action = document.getElementById("wizard-active-action-type").value;
+            const finalAmount = parseFloat(document.getElementById("wizard-coins-amount-input").value);
+
+            if (isNaN(finalAmount) || finalAmount <= 0) { alert("❌ Введите сумму больше нуля!"); return; }
+
+            try {
+                const res = await fetch(`${API_URL}/api/stock/admin/manage_balance`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ target_discord_id: tUid, action_type: action, amount: finalAmount })
+                });
+                const data = await res.json();
+                alert(data.message);
+                
+                closeAdminAmountWizardWindow();
+                openAdminGodPanelDashboard(); // Мгновенно обновляем админ-таблицу на экране
+                await fetchSochiMarketDataFromServer(); // Перерендериваем кошелек и Лидерборд
+            } catch (e) { alert("Ошибка изменения баланса."); }
+        }
+
+        // Автозапуск системы
         window.onload = () => {
             fetchSochiMarketDataFromServer();
-            initInteractiveCanvasHoverTrackingSystem(); // Врубаем слежение за пальцем
-            
-            // Котировки и Топ-10 в SQLite обновляются на экране каждые 5 секунд сами!
+            initInteractiveCanvasHoverTrackingSystem(); 
             setInterval(fetchSochiMarketDataFromServer, 5000);
         };
     </script>
