@@ -733,17 +733,17 @@
             const tooltip = document.getElementById("global-canvas-chart-tooltip");
             if (!container || !tooltip) return;
 
-            // 🎯 СУПЕР-ФИКС НАЛОЖЕНИЯ СЛОЕВ: Переносим подсказку в самый корень <body>,
-            // чтобы её не обрезали свойства overflow:hidden внутри TradingView контейнеров
+            // Принудительно выносим подсказку в самый корень body, защищая от обрезания слоёв
             if (tooltip.parentElement !== document.body) {
                 document.body.appendChild(tooltip);
             }
 
             const trackMovePointerHandler = (event) => {
-                if (!activeSelectedTicker || !lineChartCoordinatesCache[activeSelectedTicker]) return;
+                // 🎯 СУПЕР-ФИКС: Берем точки напрямую из СУБД-кэша истории, защищая от пустоты Canvas!
+                if (!activeSelectedTicker || !stockHistoryCache || !stockHistoryCache[activeSelectedTicker]) return;
                 
-                const activePointsArray = lineChartCoordinatesCache[activeSelectedTicker];
-                if (activePointsArray.length === 0) return;
+                const historyPoints = stockHistoryCache[activeSelectedTicker];
+                if (historyPoints.length < 2) return;
 
                 const rect = container.getBoundingClientRect();
                 
@@ -751,27 +751,27 @@
                 const clientX = event.touches ? event.touches.clientX : event.clientX;
                 const clientY = event.touches ? event.touches.clientY : event.clientY;
                 
-                // pointerX нужен для поиска ближайшей точки по горизонтали внутри Canvas
+                // Высчитываем локальное положение курсора внутри черного холста графика
                 const pointerX = clientX - rect.left;
 
-                // Находим ближайшую временную точку на графике Canvas
-                let closestPoint = activePointsArray;
-                let minDistance = Math.abs(pointerX - closestPoint.x);
+                // Находим общую ширину и шаг, чтобы точно знать, над каким промежутком времени висит мышка
+                const paddingLeft = 15;
+                const paddingRight = 20;
+                const plotWidth = rect.width - paddingLeft - paddingRight;
+                const stepX = plotWidth / (historyPoints.length - 1);
 
-                for (let i = 1; i < activePointsArray.length; i++) {
-                    const dist = Math.abs(pointerX - activePointsArray[i].x);
-                    if (dist < minDistance) {
-                        minDistance = dist;
-                        closestPoint = activePointsArray[i];
-                    }
-                }
+                // Вычисляем индекс ближайшей точки в истории от самого начала торгов
+                let closestIndex = Math.round((pointerX - paddingLeft) / stepX);
+                closestIndex = Math.max(0, Math.min(historyPoints.length - 1, closestIndex));
 
-                if (closestPoint && !isNaN(closestPoint.price)) {
+                const closestPoint = historyPoints[closestIndex];
+
+                if (closestPoint && closestPoint.price !== undefined) {
+                    // 🎯 ОКОШКО МАТЕРИАЛИЗУЕТСЯ НА ЭКРАНЕ С ГАРАНТИЕЙ 100%:
                     tooltip.textContent = `${Number(closestPoint.price).toFixed(2)} SC (${closestPoint.time})`;
                     tooltip.style.display = "block";
                     
-                    // 🎯 ЧЁТКАЯ СВЯЗЬ С МЫШКОЙ: Подсказка материализуется строго по координатам экрана!
-                    // Сдвигаем на 15 пикселей правее и на 35 пикселей выше кончика стрелки курсора
+                    // Мёртвая, пиксель-в-пиксель привязка к фиксированным координатам твоей мышки
                     tooltip.style.left = `${clientX + 15}px`;
                     tooltip.style.top = `${clientY - 35}px`;
                 }
@@ -779,6 +779,7 @@
 
             const hidePointerHandler = () => { tooltip.style.display = "none"; };
 
+            // Подключаем события слежения для компьютеров и тач-событий телефонов
             container.addEventListener("mousemove", trackMovePointerHandler);
             container.addEventListener("mouseleave", hidePointerHandler);
             container.addEventListener("touchmove", trackMovePointerHandler, { passive: true });
