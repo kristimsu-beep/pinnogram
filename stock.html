@@ -3,62 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SSE — Полноэкранный Торговый Терминал Сочи</title>
+    <title>SSE — Фондовая Биржа Сочи</title>
     <style>
         :root {
-            --bg-main: #f8fafc;        /* Чистый бело-серый фон страницы */
+            --bg-main: #f8fafc;        /* Стартовый чистый белый фон биржи */
             --bg-card: #ffffff;        /* Белоснежные матовые карточки */
-            --text-dark: #0f172a;      /* Глубокий темный для текстов */
+            --text-dark: #0f172a;      /* Глубокий темный для заголовков */
             --text-muted: #64748b;
             --border-color: #e2e8f0;
             --bull-green: #10b981;     /* Изумрудный для подъемов линии */
-            --bear-red: #ef4444;       /* Багровый для падений линии */
+            --bear-red: #ef4444;       /* Багровый для падений/обвалов */
         }
 
         body {
             margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: var(--bg-main); color: var(--text-dark);
             display: flex; flex-direction: column; min-height: 100vh;
+            transition: background-color 0.2s ease, color 0.2s ease;
         }
 
-        /* НАВИГАЦИОННАЯ ПАНЕЛЬ */
-        <!-- ВЕРХНЯЯ ШАПКА БИРЖИ С КРИПТОКОШЕЛЬКОМ И КНОПКОЙ СМЕНЫ ТЕМЫ -->
-        <div class="stock-navbar">
-            <div class="stock-logo">
-                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
-                <span style="letter-spacing: -0.5px;">Sochi Stock Exchange (SSE)</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                <button onclick="toggleSochiStockExchangeThemeMode()" style="background: var(--bg-main); border: 1px solid var(--border-color); padding: 8px 14px; border-radius: 14px; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--text-dark); display: flex; align-items: center; gap: 6px; transition: 0.2s;">
-                    🌗 Кастомная тема
-                </button>
-                <div class="crypto-wallet-badge">
-                    <span>Баланс кошелька:</span>
-                    <span id="sochi-coins-wallet-display" style="color: var(--text-dark); font-weight: 800;">1000.00</span>
-                    <span style="color: var(--text-muted); font-size: 11px; font-weight: 800;">SC</span>
-                </div>
-                <button onclick="location.href='/forum'" style="background: none; border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 14px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-muted); transition: 0.2s;">Назад</button>
-            </div>
-        </div>
-
+        /* ШАПКА БИРЖИ */
+        .stock-navbar {
+            background-color: var(--bg-card); padding: 16px 24px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid var(--border-color); box-shadow: 0 1px 3px rgba(0,0,0,0.01);
+            flex-wrap: wrap; gap: 15px;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+        .stock-logo { font-size: 18px; font-weight: 800; color: var(--text-dark); display: flex; align-items: center; gap: 8px; }
         
         /* КРИПТОКОШЕЛЕК СОЧИ-КОИНОВ (1000 SC) */
         .crypto-wallet-badge {
-            background-color: #f1f5f9; border: 1px solid var(--border-color);
+            background-color: var(--bg-main); border: 1px solid var(--border-color);
             padding: 8px 16px; border-radius: 20px; font-weight: 700; font-size: 14px;
             display: flex; align-items: center; gap: 6px; color: var(--text-dark);
+            transition: background-color 0.2s ease, border-color 0.2s ease;
         }
 
-        /* ГЛАВНАЯ СЕТКА КАРТОЧЕК НА СТОЛЕ */
+        /* ГЛАВНЫЙ ИНТЕРФЕЙСНЫЙ БЛОК */
         .stock-container {
             max-width: 1200px; width: 100%; margin: 30px auto; padding: 0 20px; box-sizing: border-box;
             display: flex; flex-direction: column; gap: 25px; flex-grow: 1;
         }
+
+        /* АДАПТИВНАЯ СЕТКА КАРТОЧЕК АКЦИЙ ПОД ТЕЛЕФОНЫ */
         .stock-market-grid {
             display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;
         }
 
-        /* МИНИ-КАРТОЧКА АКЦИИ */
+        /* МИНИ-КАРТОЧКА СТОЛА */
         .stock-asset-card {
             background-color: var(--bg-card); border: 1px solid var(--border-color);
             border-radius: 16px; padding: 20px; box-sizing: border-box; cursor: pointer;
@@ -67,20 +60,21 @@
         }
         .stock-asset-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.03); border-color: #cbd5e1; }
 
-        /* МИНИ-КОНТЕЙНЕР ДЛЯ ХОЛСТА CANVAS (ТОНКАЯ ШКАЛА-ЛИНИЯ) */
+        /* МИНИ-ХОЛСТ ДЛЯ ТОНКОЙ ЛИНИИ CANVAS */
         .mini-canvas-timeline-box {
-            width: 100%; height: 50px; background-color: #f8fafc; border: 1px solid var(--border-color);
+            width: 100%; height: 50px; background-color: var(--bg-main); border: 1px solid var(--border-color);
             border-radius: 10px; position: relative; overflow: hidden;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
         }
         .mini-canvas-timeline-box canvas { width: 100%; height: 100%; display: block; }
-
         /* ========================================================== */
-        <!-- 💻 💎 УЛЬТИМАТИВНЫЙ ПОЛНОЭКРАННЫЙ ТЕРМИНАЛ (ПАНЕЛЬ ВЕСЬ ЭКРАН) -->
+        /* 💻 💎 УЛЬТИМАТИВНЫЙ ПОЛНОЭКРАННЫЙ ТЕРМИНАЛ (TRADINGVIEW) */
         /* ========================================================== */
         .fullscreen-trade-terminal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background-color: var(--bg-main); display: none; flex-direction: column;
             z-index: 150; animation: slideInFullscreen 0.25s cubic-bezier(0.1, 0.76, 0.55, 0.94);
+            transition: background-color 0.2s ease;
         }
         @keyframes slideInFullscreen {
             from { transform: translateY(30px); opacity: 0; }
@@ -91,7 +85,6 @@
             max-width: 1200px; width: 100%; margin: 0 auto; padding: 24px; box-sizing: border-box;
             display: grid; grid-template-columns: 2fr 1fr; gap: 24px; flex-grow: 1; overflow-y: auto;
         }
-        /* Сжатие сетки на узких экранах смартфонов в одну колонку */
         @media (max-width: 868px) {
             .fullscreen-terminal-layout-grid { grid-template-columns: 1fr; }
         }
@@ -101,10 +94,12 @@
             background-color: var(--bg-card); border: 1px solid var(--border-color);
             border-radius: 16px; padding: 24px; box-sizing: border-box; display: flex;
             flex-direction: column; gap: 16px; min-height: 320px; position: relative;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
         }
         .canvas-interactive-area-node {
-            width: 100%; height: 260px; background-color: #fafbfc; border-radius: 10px;
+            width: 100%; height: 260px; background-color: var(--bg-main); border-radius: 10px;
             border: 1px solid var(--border-color); cursor: crosshair; position: relative;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
         }
         .canvas-interactive-area-node canvas { width: 100%; height: 100%; display: block; }
 
@@ -113,6 +108,7 @@
             background-color: var(--bg-card); border: 1px solid var(--border-color);
             border-radius: 16px; padding: 24px; box-sizing: border-box; display: flex;
             flex-direction: column; justify-content: space-between; gap: 20px;
+            transition: background-color 0.2s ease, border-color 0.2s ease;
         }
 
         .terminal-btn {
@@ -120,45 +116,44 @@
             cursor: pointer; transition: 0.2s; width: 100%; text-align: center; text-transform: uppercase;
         }
 
-        /* ТЕПЕРЬ ПОДСКАЗКА ПРИКЛЕЕНА К КУРСОРУ НА ЭКРАНЕ (VIEWPORT-FIX) */
-        .canvas-hover-popover-tooltip {
-            position: fixed; background: #0f172a; color: #fff; padding: 6px 12px;
-            border-radius: 6px; font-size: 11px; font-weight: 700; font-family: monospace;
-            pointer-events: none; display: none; z-index: 9999; box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-            white-space: nowrap; transform: translate(12px, -35px); /* Сдвиг вбок и вверх от острия стрелки */
-        }
-        .canvas-hover-popover-tooltip::after {
-            content: ''; position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
-            border-width: 4px 4px 0; border-style: solid; border-color: #0f172a transparent transparent;
-        }
-        /* ИСПРАВЛЕНО: Пуленепробиваемое центрирование модалок по центру экрана */
+        /* ИСПРАВЛЕНО: ПУЛЕНЕПРОБИВАЕМОЕ ЦЕНТРИРОВАНИЕ СКРЫТЫХ АДМИН-ОКОН СТРОГО ПО ЦЕНТРУ */
         .stock-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px);
             display: none; align-items: center; justify-content: center; z-index: 200; padding: 20px; box-sizing: border-box;
         }
-        
-        /* Модальные карточки внутри оверлеев */
         .trade-terminal-card {
             background: var(--bg-card); border-radius: 20px; width: 100%; max-width: 440px;
             padding: 24px; box-sizing: border-box; border: 1px solid var(--border-color);
             box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05);
-            margin: auto; /* Жестко выравнивает окно по центру */
+            margin: auto; /* Жестко выравнивает окно по центру экрана */
+            transition: background-color 0.2s ease, border-color 0.2s ease;
         }
 
+        /* ВСПЛЫВАЮЩИЙ ИНТЕРАКТИВНЫЙ ПОПОВЕР КУРСА ВОЗЛЕ МЫШКИ */
+        .canvas-hover-popover-tooltip {
+            position: absolute; background: #0f172a; color: #fff; padding: 6px 12px;
+            border-radius: 6px; font-size: 11px; font-weight: 700; font-family: monospace;
+            pointer-events: none; display: none; z-index: 210; box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
 
-    <!-- НАВИГАЦИОННАЯ ПАНЕЛЬ С КРИПТОКОШЕЛЬКОМ -->
+    <!-- ВЕРХНЯЯ ШАПКА БИРЖИ С КРИПТОКОШЕЛЬКОМ И КНОПКОЙ СМЕНЫ ТЕМЫ -->
     <div class="stock-navbar">
         <div class="stock-logo">
             <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
-            <span style="letter-spacing: -0.5px; font-weight: 800;">Sochi Stock Exchange (SSE)</span>
+            <span style="letter-spacing: -0.5px;">Sochi Stock Exchange (SSE)</span>
         </div>
-        <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <!-- 🎯 ДОБАВЛЕНО: КНОПКА МГНОВЕННОГО ПЕРЕКЛЮЧЕНИЯ ТЕМЫ ОФОРМЛЕНИЯ -->
+            <button onclick="toggleSochiStockExchangeThemeMode()" style="background: var(--bg-main); border: 1px solid var(--border-color); padding: 8px 14px; border-radius: 14px; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--text-dark); display: flex; align-items: center; gap: 6px; transition: 0.2s;">
+                🌗 Тема интерфейса
+            </button>
             <div class="crypto-wallet-badge">
-                <span>Кошелек:</span>
+                <span>Баланс кошелька:</span>
                 <span id="sochi-coins-wallet-display" style="color: var(--text-dark); font-weight: 800;">1000.00</span>
                 <span style="color: var(--text-muted); font-size: 11px; font-weight: 800;">SC</span>
             </div>
@@ -166,80 +161,102 @@
         </div>
     </div>
 
-    <!-- ГЛАВНЫЙ СТОЛ БИРЖИ -->
+    <!-- ГЛАВНЫЙ КОНТЕНТЕР БИРЖЕВОГО СТОЛА С ТОП-10 БОКОВОЙ ПАНЕЛЬЬЮ -->
     <div class="stock-container">
-        <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 15px;">
-            <div>
-                <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">Фондовый рынок Сочи</h1>
-                <p style="margin: 4px 0 0 0; color: var(--text-muted); font-size: 14px;">Кликните на акцию, чтобы развернуть полноэкранный терминал со сквозным ведением графика</p>
-            </div>
+        <div>
+            <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">Фондовый рынок Сочи</h1>
+            <p style="margin: 4px 0 0 0; color: var(--text-muted); font-size: 14px;">Кликните на карточку любого актива, чтобы развернуть полноэкранный аналитический терминал TradingView</p>
         </div>
 
-        <!-- СЕТКА КАРТОЧЕК 6 АКТИВОВ -->
-        <div class="stock-market-grid" id="sochi-market-cards-wrapper">
-            <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">Синхронизация с реестром СУБД SSE...</div>
+        <!-- ДВУХКОЛОНОЧНЫЙ МАКЕТ: КАРТОЧКИ + ЛИДЕРБОРД -->
+        <div style="display: grid; grid-template-columns: 2.8fr 1.2fr; gap: 24px; width: 100%; align-items: start;" id="main-responsive-market-layout">
+            
+            <!-- ЛЕВАЯ ЧАСТЬ: ДИНАМИЧЕСКИЙ КОНТЕЙНЕР ДЛЯ ПОДГРУЗКИ 12 АКЦИЙ -->
+            <div class="stock-market-grid" id="sochi-market-cards-wrapper">
+                <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">Синхронизация с реестром СУБД SSE...</div>
+            </div>
+
+            <!-- ПРАВАЯ ЧАСТЬ: БЕЛОСНЕЖНЫЙ РЕЙТИНГ ВСЕХ МАЙНЕРОВ ПО ВОЗРАСТАНИЮ -->
+            <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.01); transition: background-color 0.2s ease, border-color 0.2s ease;">
+                <div style="display: flex; align-items: center; gap: 8px; border-bottom: 1px dashed var(--border-color); padding-bottom: 12px;">
+                    <svg width="18" height="18" fill="currentColor" style="color: #f2c94c;" viewBox="0 0 16 16"><path d="M2.5.5A.5.5 0 0 1 3 0h10a.5.5 0 0 1 .5.5c0 .538-.012 1.05-.034 1.536a7 7 0 1 1-10.932 0A13 13 0 0 1 2.5.5M3.933 1.05c-.013.442-.02.888-.02 1.335a6 6 0 0 0 8.174 0c-.002-.447-.01-.893-.022-1.335z"/></svg>
+                    <h3 style="margin: 0; font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dark);">Рейтинг олигархов SSE:</h3>
+                </div>
+                <!-- Сюда JS-движок выводит майнеров форума по возрастанию капитала -->
+                <div id="sochi-rich-leaderboard-container" style="display: flex; flex-direction: column; gap: 4px;">
+                    <div style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 15px 0;">Расчет капиталов...</div>
+                </div>
+            </div>
+
         </div>
     </div>
 
-    <!-- ВСПЛЫВАЮЩИЙ ИНТЕРАКТИВНЫЙ ПОПОВЕР ДЛЯ СНЯТИЯ КУРСА НА СТОЛЕ -->
-    <div class="canvas-hover-popover-tooltip" id="global-canvas-chart-tooltip">0.00 SC (00:00)</div>
+    <!-- АДАПТИВНОЕ СЖАТИЕ ЛИДЕРБОРДА ПОД КАРТОЧКИ НА СМАРТФОНАХ -->
+    <style>
+        @media (max-width: 992px) {
+            #main-responsive-market-layout { grid-template-columns: 1fr !important; }
+        }
+    </style>
 
 
     <!-- ========================================================== -->
-    <!-- 💻 💎 НОВЫЙ ПОЛНОЭКРАННЫЙ ТЕРМИНАЛ С АНТИ-БЛОКИРОВКОЙ ДЛЯ ТЕЛИКОВ И ТЕЛЕФОНОВ -->
+    <!-- 💻 💎 УЛЬТИМАТИВНЫЙ ПОЛНОЭКРАННЫЙ АНАЛИТИЧЕСКИЙ ТЕРМИНАЛ -->
     <!-- ========================================================== -->
     <div class="fullscreen-trade-terminal-overlay" id="fullscreen-trading-station-overlay">
         
-        <!-- Шапка полноэкранного окна -->
-        <div style="background:#fff; padding:16px 24px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; flex-wrap: wrap; gap: 10px;">
-            <div style="display:flex; align-items:center; gap:12px; flex-wrap: wrap;">
-                <button onclick="closeFullscreenTradingStationOverlay()" style="background:none; border:1px solid var(--border-color); padding:8px 16px; border-radius:10px; font-weight:700; font-size:13px; cursor:pointer; color:var(--text-dark); transition:0.2s;">🡨 Назад к столу</button>
+        <!-- Верхняя служебная панель терминала -->
+        <div style="background:var(--bg-card); border-bottom:1px solid var(--border-color); padding:16px 24px; display:flex; justify-content:space-between; align-items:center; transition: background-color 0.2s ease, border-color 0.2s ease;">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <button onclick="closeFullscreenTradingStationOverlay()" style="background:none; border:1px solid var(--border-color); padding:6px 14px; border-radius:10px; font-weight:700; font-size:13px; cursor:pointer; color:var(--text-muted); transition:0.2s;">🡨 Назад к столу</button>
                 <h2 id="fs-company-title-label" style="margin:0; font-size:20px; font-weight:800; letter-spacing:-0.5px;">Название компании</h2>
                 <span id="fs-company-ticker-badge" style="font-size:11px; font-weight:800; background:#f1f5f9; color:var(--text-muted); padding:3px 8px; border-radius:4px; font-family:monospace;">TICKER</span>
             </div>
-            <div style="text-align: right;">
-                <div id="fs-current-live-price-label" style="font-size:22px; font-weight:800; color:var(--text-dark);">0.00 SC</div>
-                <div id="fs-current-percent-change-label" style="font-size:12px; font-weight:700; color:var(--bull-green); margin-top:2px;">+0.00%</div>
+            <div style="display:flex; align-items:center; gap:20px;">
+                <div style="text-align:right;">
+                    <div id="fs-current-live-price-label" style="font-size:22px; font-weight:800; color:var(--text-dark);">0.00 SC</div>
+                    <div id="fs-current-percent-change-label" style="font-size:12px; font-weight:700; color:var(--bull-green); margin-top:2px;">+0.00%</div>
+                </div>
             </div>
         </div>
 
-        <!-- ТРЕХКОЛОННАЯ СЕТКА: ГРАФИК (ЛЕВО) | КАССА (ЦЕНТР) | ТОП-10 (ПРАВО) -->
-        <div class="fullscreen-terminal-layout-grid" style="display: grid; padding: 20px; gap: 20px; box-sizing: border-box; overflow-y: auto;">
+        <!-- ДВУХКОЛОНОЧНАЯ СЕТКА ХОЛСТА И КАССЫ -->
+        <div class="fullscreen-terminal-layout-grid">
             
-            <!-- ЛЕВАЯ КОЛОНКА: CANVAS ГРАФИК + ОПИСАНИЕ -->
+            <!-- ЛЕВАЯ СТОРОНА: БОЛЬШОЙ ИНТЕРАКТИВНЫЙ CANVAS ГРАФИК + ОПИСАНИЕ -->
             <div style="display:flex; flex-direction:column; gap:20px;">
-                <div class="fullscreen-main-canvas-wrapper" style="position: relative;">
+                <div class="fullscreen-main-canvas-wrapper">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span style="font-size:12px; font-weight:800; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Линейный интерактивный график курса:</span>
-                        <span style="font-size:11px; color:var(--text-muted); font-family:monospace; font-weight: 700;">Проведите пальцем или мышкой</span>
+                        <span style="font-size:12px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Живой линейный график курса (Line Chart):</span>
+                        <span style="font-size:11px; color:var(--text-muted); font-family:monospace;">Поминутный интервал</span>
                     </div>
                     
-                    <!-- Интерактивная зона холста -->
-                    <div class="canvas-interactive-area-node" id="interactive-canvas-box-container" style="position: relative; height: 280px; width: 100%;">
-                        <canvas id="fullscreen-main-line-chart-canvas" style="position: absolute; top:0; left:0; width:100%; height:100%;"></canvas>
+                    <!-- Интерактивная зона с большим холстом Canvas -->
+                    <div class="canvas-interactive-area-node" id="interactive-canvas-box-container">
+                        <canvas id="fullscreen-main-line-chart-canvas"></canvas>
                     </div>
                 </div>
 
-                <!-- Паспорт эмитента (Защищен от выползания скроллом) -->
-                <div style="background:#fff; border:1px solid var(--border-color); border-radius:16px; padding:20px; box-sizing: border-box; overflow-x: auto;">
-                    <h4 style="margin:0 0 8px 0; font-size:13px; font-weight:800; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.5px;">Паспорт эмитента и аналитика:</h4>
-                    <p id="fs-company-detailed-description-text" style="margin:0; font-size:14px; line-height:1.6; color:var(--text-dark); min-width: 250px;">Загрузка аналитического паспорта объекта...</p>
+                <!-- БЛОК ПОДРОБНОГО ОПИСАНИЯ КОМПАНИИ ИЗ SQLite -->
+                <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:16px; padding:20px; transition: background-color 0.2s ease, border-color 0.2s ease;">
+                    <h4 style="margin:0 0 8px 0; font-size:14px; font-weight:800; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.5px;">Паспорт эмитента и аналитика:</h4>
+                    <p id="fs-company-detailed-description-text" style="margin:0; font-size:14px; line-height:1.6; color:var(--text-dark);">Загрузка аналитического паспорта объекта...</p>
                 </div>
             </div>
-
-            <!-- СРЕДНЯЯ КОЛОНКА: КАССА И ОРДЕРА -->
-            <div class="fullscreen-right-sidebar-panel" style="height: fit-content;">
+            <!-- ПРАВАЯ СТОРОНА: БАНКОМАТНАЯ ПАНЕЛЬ ОРДЕРОВ -->
+            <div class="fullscreen-right-sidebar-panel">
                 <div style="display:flex; flex-direction:column; gap:16px;">
                     <h4 style="margin:0; font-size:13px; font-weight:800; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.5px;">Управление ордером:</h4>
                     
-                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:8px;">
-                        <div style="display:flex; justify-content:space-between; font-size:13px;"><span style="color:var(--text-muted);">Доступно крипты:</span><b id="fs-sidebar-coins-balance">0.00 SC</b></div>
+                    <!-- Вывод баланса и инвентаря акций -->
+                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:8px; transition: background-color 0.2s ease, border-color 0.2s ease;">
+                        <div style="display:flex; justify-content:space-between; font-size:13px;"><span style="color:var(--text-muted);">Доступно коинов:</span><b id="fs-sidebar-coins-balance">0.00 SC</b></div>
                         <div style="display:flex; justify-content:space-between; font-size:13px;"><span style="color:var(--text-muted);">Акций в наличии:</span><b id="fs-sidebar-shares-owned-count" style="color:var(--bull-green);">0 шт.</b></div>
                     </div>
 
-                    <div>
-                        <label style="font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:6px;">Количество к сделке:</label>
-                        <input type="number" id="fs-trade-shares-quantity-input" min="1" value="1" style="width:100%; padding:14px; border-radius:10px; border:1px solid var(--border-color); background:var(--bg-main); font-size:18px; font-weight:bold; color:var(--text-dark); outline:none; box-sizing:border-box;" oninput="recalculateFullscreenTerminalTotalCostEstimated()">
+                    <!-- Калькулятор ввода количества -->
+                    <div style="margin-top:10px;">
+                        <label style="font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; display:block; margin-bottom:6px;">Количество к покупке/продаже:</label>
+                        <input type="number" id="fs-trade-shares-quantity-input" min="1" value="1" style="width:100%; padding:14px; border-radius:10px; border:1px solid var(--border-color); background:var(--bg-main); font-size:18px; font-weight:bold; color:var(--text-dark); outline:none; box-sizing:border-box; transition: background-color 0.2s ease, border-color 0.2s ease;" oninput="recalculateFullscreenTerminalTotalCostEstimated()">
                         
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; padding-top:12px; border-top:1px dashed var(--border-color);">
                             <span style="font-size:13px; color:var(--text-muted); font-weight:500;">Стоимость сделки:</span>
@@ -248,30 +265,23 @@
                     </div>
                 </div>
 
-                <div style="display:flex; flex-direction:column; gap:10px; margin-top: 15px;">
-                    <button class="terminal-btn" onclick="executeFullscreenStockOrderActionPipeline('buy')" style="background-color: var(--bull-green); color: #fff; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25);">📈 Выполнить ордер BUY</button>
-                    <button class="terminal-btn" onclick="executeFullscreenStockOrderActionPipeline('sell')" style="background-color: var(--bear-red); color: #fff; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);">📉 Выполнить ордер SELL</button>
+                <!-- Кнопки отправки транзакций в СУБД SQLite -->
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <button class="terminal-btn" onclick="executeFullscreenStockOrderActionPipeline('buy')" style="background-color: var(--bull-green); color: #fff; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25);">
+                        📈 Выполнить ордер BUY
+                    </button>
+                    <button class="terminal-btn" onclick="executeFullscreenStockOrderActionPipeline('sell')" style="background-color: var(--bear-red); color: #fff; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);">
+                        📉 Выполнить ордер SELL
+                    </button>
                 </div>
             </div>
-
-            <!-- ПРАВАЯ КОЛОНКА: РЕЙТИНГ ТОП-10 МАЙНЕРОВ -->
-            <div style="background:#fff; border:1px solid var(--border-color); border-radius:16px; padding:20px; box-sizing: border-box; display:flex; flex-direction:column; gap:14px; height: fit-content;">
-                <h4 style="margin:0; font-size:13px; font-weight:800; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.5px; display:flex; align-items:center; gap:6px;">
-                    👑 Лидеры рынка (ТОП-10)
-                </h4>
-                <div id="fs-leaderboard-list-container" style="display:flex; flex-direction:column; gap:10px;">
-                    <!-- Сюда JS загрузит топ богачей с их балансами капитала -->
-                    <span style="font-size:12px; color:var(--text-muted);">Загрузка инвесторов...</span>
-                </div>
-            </div>
-
+            
         </div>
     </div>
 
-    <!-- ВСПЛЫВАЮЩИЙ ИНТЕРАКТИВНЫЙ ПОПОВЕР ДЛЯ СЛЕДОВАНИЯ ЗА ПАЛЬЦЕМ/МЫШКОЙ -->
-    <div class="canvas-hover-popover-tooltip" id="global-canvas-chart-tooltip" style="position: absolute; display: none;">0.00 SC (00:00)</div>
+
     <!-- ========================================================== -->
-    <!-- 🛡️ 4.1. СКРЫТАЯ АДМИН-ПАНЕЛЬ СЧЕТОВ МАЙНЕРОВ (SHIFT + G) -->
+    <!-- 👑 4.1. СКРЫТАЯ АДМИН-ПАНЕЛЬ СЧЕТОВ МАЙНЕРОВ (SHIFT + G) -->
     <!-- ========================================================== -->
     <div class="stock-modal-overlay" id="modal-admin-god-panel" onclick="closeAdminGodPanelDashboard()" style="background: rgba(15,23,42,0.8);">
         <div class="trade-terminal-card" onclick="event.stopPropagation()" style="max-width: 550px; width: 95%; max-height: 80vh; overflow-y: auto;">
@@ -281,8 +291,6 @@
                 </h3>
                 <span style="font-size: 11px; font-weight: 800; background: #d1fae5; color: #065f46; padding: 4px 8px; border-radius: 6px;">SHIFT + G PANEL</span>
             </div>
-            
-            <!-- Сюда JS выведет список всех пользователей биржи -->
             <div id="admin-users-list-target-container" style="display: flex; flex-direction: column; gap: 8px;">
                 <div style="text-align: center; color: var(--text-muted); padding: 20px;">Загрузка списка граждан...</div>
             </div>
@@ -290,22 +298,21 @@
     </div>
 
     <!-- ========================================================== -->
-    <!-- 🧮 4.2. МИНИ-ОКНО СУММЫ ОПЕРАЦИИ (НАЧИСЛИТЬ / ЗАБРАТЬ) -->
+    <!-- 🧮 4.2. МИНИ-ОКНО ВВОДА СУММЫ ОПЕРАЦИИ (НАЧИСЛИТЬ / ЗАБРАТЬ) -->
     <!-- ========================================================== -->
-    <div class="stock-modal-overlay" id="modal-admin-amount-wizard" onclick="closeAdminAmountWizardWindow()" style="z-index: 200; background: rgba(0,0,0,0.4);">
+    <div class="stock-modal-overlay" id="modal-admin-amount-wizard" onclick="closeAdminAmountWizardWindow()" style="z-index: 220; background: rgba(0,0,0,0.4);">
         <div class="trade-terminal-card" onclick="event.stopPropagation()" style="max-width: 360px;">
             <h3 id="wizard-operation-title-label" style="margin: 0 0 15px 0; font-size: 16px; font-weight: 800;">Редактирование баланса</h3>
             <input type="hidden" id="wizard-target-user-discord-id">
             <input type="hidden" id="wizard-active-action-type">
-            
-            <input type="number" id="wizard-coins-amount-input" min="1" value="100" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border-color); background: var(--bg-main); font-size: 18px; font-weight: bold; outline: none; box-sizing: border-box; text-align: center; margin-bottom: 16px;">
-            
+            <input type="number" id="wizard-coins-amount-input" min="1" value="100" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border-color); background: var(--bg-main); font-size: 18px; font-weight: bold; color:var(--text-dark); outline: none; box-sizing: border-box; text-align: center; margin-bottom: 16px;">
             <div style="display: flex; gap: 10px;">
                 <button class="terminal-btn" style="background-color: var(--text-muted); color: #fff;" onclick="closeAdminAmountWizardWindow()">Отмена</button>
                 <button class="terminal-btn" style="background-color: var(--bull-green); color: #fff;" onclick="submitAdminBalanceModificationToServer()">✔ Подтвердить</button>
             </div>
         </div>
     </div>
+
     <!-- ========================================================== -->
     <!-- 🎛️ 4.3. СКРЫТЫЙ ПУЛЬТ МАРКЕТМЕЙКЕРА (CTRL + SHIFT + A) -->
     <!-- ========================================================== -->
@@ -317,14 +324,12 @@
                 </h3>
                 <span style="font-size: 11px; font-weight: 800; background: #dbeafe; color: #1e40af; padding: 4px 8px; border-radius: 6px; display: inline-block; margin-top: 4px;">CTRL + SHIFT + A MODIFICATION</span>
             </div>
-            
             <label style="font-size: 11px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 6px;">Выберите регулируемую акцию:</label>
-            <select id="mm-asset-ticker-selector" class="bank-input-field" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border-color); background:var(--bg-main); font-size:14px; font-weight:700; color:var(--text-dark); outline:none; margin-bottom:16px;" onchange="renderMarketMakerAssetActiveControlsState(this.value)">
-                <!-- Заполняется через JS динамически всеми 12 акциями из SQLite -->
+            <select id="mm-asset-ticker-selector" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border-color); background:var(--bg-main); font-size:14px; font-weight:700; color:var(--text-dark); outline:none; margin-bottom:16px;" onchange="renderMarketMakerAssetActiveControlsState(this.value)">
+                <!-- Заполняется динамически 12 акциями из SQLite -->
             </select>
-
             <div id="mm-active-controls-wrapper-zone" style="display: flex; flex-direction: column; gap: 14px;">
-                <!-- Тут выведутся кнопки Памп / Дамп / Обвал -->
+                <!-- Кнопки Памп / Дамп / Обвал рендерятся тут -->
             </div>
         </div>
     </div>
@@ -332,14 +337,12 @@
     <!-- ========================================================== -->
     <!-- 🧮 4.4. МИНИ-ОКНО ВВОДА ПРОЦЕНТА ИЗМЕНЕНИЯ КУРСА -->
     <!-- ========================================================== -->
-    <div class="stock-modal-overlay" id="modal-mm-percent-wizard" onclick="closeMmPercentWizardWindow()" style="z-index: 220; background: rgba(0,0,0,0.5);">
+    <div class="stock-modal-overlay" id="modal-mm-percent-wizard" onclick="closeMmPercentWizardWindow()" style="z-index: 230; background: rgba(0,0,0,0.5);">
         <div class="trade-terminal-card" onclick="event.stopPropagation()" style="max-width: 340px; text-align: center;">
             <h3 id="mm-wizard-title-label" style="margin: 0 0 12px 0; font-size: 15px; font-weight: 800;">Задать шаг курса</h3>
             <input type="hidden" id="mm-wizard-target-ticker">
             <input type="hidden" id="mm-wizard-active-mode">
-            
-            <input type="number" id="mm-wizard-percent-input" min="1" max="500" value="15" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border-color); background: var(--bg-main); font-size: 20px; font-weight: bold; outline: none; text-align: center; margin-bottom: 16px;">
-            
+            <input type="number" id="mm-wizard-percent-input" min="1" max="500" value="15" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border-color); background: var(--bg-main); font-size: 20px; font-weight: bold; color:var(--text-dark); outline: none; text-align: center; margin-bottom: 16px;">
             <div style="display: flex; gap: 10px;">
                 <button class="terminal-btn" style="background-color: var(--text-muted); color: #fff;" onclick="closeMmPercentWizardWindow()">Отмена</button>
                 <button class="terminal-btn" style="background-color: #007aff; color: #fff;" onclick="submitAdminMarketControlCommandToServer()">✔ Применить</button>
@@ -347,6 +350,8 @@
         </div>
     </div>
 
+    <!-- ВСПЛЫВАЮЩИЙ ИНТЕРАКТИВНЫЙ ПОПОВЕР ДЛЯ СНЯТИЯ КУРСА/ВРЕМЕНИ НА БОЛЬШОМ CANVAS -->
+    <div class="canvas-hover-popover-tooltip" id="global-canvas-chart-tooltip">0.00 SC (00:00)</div>
 
     <script>
         const API_URL = window.location.origin;
