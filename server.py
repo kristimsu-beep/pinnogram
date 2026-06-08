@@ -2861,6 +2861,51 @@ async def sell_sochi_stock(data: dict, request: Request):
         await db.execute("DELETE FROM user_stock_portfolio WHERE user_discord_id = ? AND shares_count <= 0", (user_discord_id,))
         await db.commit()
         return {"status": "ok", "message": f"📉 Акции проданы! Начислено +{total_payout} Сочи-коинов."}
+        
+# 5. API: ТОП-10 САМЫХ БОГАТЫХ МАЙНЕРОВ (ОБЩИЙ КАПИТАЛ = КОИНЫ + СТОИМОСТЬ АКЦИЙ)
+@app.get("/api/stock/leaderboard")
+async def get_sochi_stock_leaderboard(request: Request):
+    user_discord_id = request.cookies.get("forum_user_id")
+    if not user_discord_id: 
+        return {"status": "error", "message": "🔒 Сессия не найдена"}
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        # 1. Тянем текущие цены всех акций для мгновенной переоценки портфелей
+        prices_map = {}
+        async with db.execute("SELECT ticker, current_price FROM stock_assets") as cursor:
+            rows = await cursor.fetchall()
+            for r in rows:
+                prices_map[r[0]] = r[1]
+
+        # 2. Вытаскиваем балансы всех зарегистрированных криптокошельков
+        users_capital = {}
+        async with db.execute("SELECT user_discord_id, username, sochi_coins FROM sochi_wallets") as cursor:
+            rows = await cursor.fetchall()
+            for r in rows:
+                uid, uname, coins = r[0], r[1], r[2]
+                users_capital[uid] = {
+                    "username": uname,
+                    "avatar": "https://ibb.co", # Фолбек заглушка, фронтенд подтянет живую из кук, если это сам юзер
+                    "total_net_worth": coins
+                }
+
+        # 3. Вытаскиваем все портфели акций и прибавляем их стоимость к капиталу
+        async with db.execute("SELECT user_discord_id, ticker, shares_count FROM user_stock_portfolio") as cursor:
+            rows = await cursor.fetchall()
+            for r in rows:
+                uid, ticker, count = r[0], r[1], r[2]
+                if uid in users_capital and ticker in prices_map:
+                    asset_value = count * prices_map[ticker]
+                    users_capital[uid]["total_net_worth"] += asset_value
+
+        # Сортируем майнеров по убыванию их богатства и берем ТОП-10
+        sorted_leaderboard = sorted(users_capital.values(), key=lambda x: x["total_net_worth"], reverse=True)[:10]
+        
+        # Округляем финальные капиталы
+        for player in sorted_leaderboard:
+            player["total_net_worth"] = round(player["total_net_worth"], 2)
+
+        return {"status": "ok", "leaderboard": sorted_leaderboard}
 
 # ==========================================================
 # 🏛️ МОДУЛЬ ЦЕНТРАЛЬНОГО ПИНБАНКА СТРАНЫ ПИНИЯ (/pin-bank)
