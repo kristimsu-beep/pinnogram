@@ -368,42 +368,50 @@
 
             ctx.stroke();
         }
-        // 4. РАЗВЕРТЫВАНИЕ ПОЛНОЭКРАННОЙ ТОРГОВОЙ СТАНЦИИ
+        // ==========================================================
+        // 💻 💎 4. УПРАВЛЕНИЕ ПОЛНОЭКРАННОЙ ТОРГОВОЙ СТАНЦИЕЙ (ИСПРАВЛЕНЫ ID)
+        // ==========================================================
         function openFullscreenTradingStationOverlay(ticker) {
             activeSelectedTicker = ticker;
 
-            // Находим данные актива в глобальном кэше
+            // Находим данные актива в глобальном кэше рынка
             const asset = marketDataCache.find(a => a.ticker === ticker);
             if (!asset) return;
 
-            document.getElementById("fs-asset-name-label").textContent = asset.company_name;
-            document.getElementById("fs-asset-ticker-label").textContent = ticker;
+            // 🎯 СИНХРОНИЗАЦИЯ ID С ТВОИМ HTML ФАЙЛОМ:
+            document.getElementById("fs-company-title-label").textContent = asset.company_name;
+            document.getElementById("fs-company-ticker-badge").textContent = ticker;
+            document.getElementById("fs-company-detailed-description-text").textContent = asset.description || "Описание подготавливается аналитическим отделом SSE.";
 
-            // Сбрасываем поле ввода на 1 акцию по умолчанию
-            document.getElementById("fs-trade-quantity-input").value = 1;
+            // Сброс поля ввода на 1 акцию по умолчанию
+            document.getElementById("fs-trade-shares-quantity-input").value = 1;
 
-            // Обновляем показатели и перерисовываем большую шкалу курса
+            // Накатываем актуальные балансы и цены
             refreshActiveTerminalLabelsOnMarketTick();
 
-            // Разворачиваем окно на весь экран
-            document.getElementById("modal-fullscreen-trading-station").style.display = "flex";
+            // Плавно разворачиваем окно на весь экран
+            document.getElementById("fullscreen-trading-station-overlay").style.display = "flex";
 
-            // Вызываем отрисовку большой интерактивной шкалы с задержкой для расчета геометрии
+            // Вызываем расчет сетки Canvas с микро-задержкой для точного вычисления ширины экрана
             setTimeout(() => {
-                renderInteractiveLargeWaveTimeline();
+                if (stockHistoryCache && stockHistoryCache[activeSelectedTicker]) {
+                    const historyPoints = stockHistoryCache[activeSelectedTicker] || [];
+                    const assetData = marketDataCache.find(a => a.ticker === activeSelectedTicker);
+                    drawContinuousLineChartOnCanvas("fullscreen-main-line-chart-canvas", historyPoints, assetData ? assetData.change : 0);
+                }
             }, 150);
         }
 
         function closeFullscreenTradingStationOverlay() {
-            document.getElementById("modal-fullscreen-trading-station").style.display = "none";
+            document.getElementById("fullscreen-trading-station-overlay").style.display = "none";
             activeSelectedTicker = null;
         }
 
-        // МАТЕМАТИЧЕСКИЙ АВТОРАСЧЕТ ИТОГА СДЕЛКИ НА ЛЕТУ
-        function recalculateFullscreenTerminalTotalCost() {
+        // МАТЕМАТИЧЕСКИЙ КАЛЬКУЛЯТОР АВТОРАСЧЕТА СТОИМОСТИ НА ЛЕТУ
+        function recalculateFullscreenTerminalTotalCostEstimated() {
             if (!activeSelectedTicker) return;
 
-            const qtyInput = document.getElementById("fs-trade-quantity-input");
+            const qtyInput = document.getElementById("fs-trade-shares-quantity-input");
             let qty = parseInt(qtyInput.value);
 
             if (isNaN(qty) || qty < 1) {
@@ -415,10 +423,10 @@
             if (!asset) return;
 
             const totalCost = qty * asset.price;
-            document.getElementById("fs-estimated-total-payout").textContent = `${totalCost.toFixed(2)} SC`;
+            document.getElementById("fs-terminal-estimated-total-cost").textContent = `${totalCost.toFixed(2)} SC`;
         }
 
-        // ОБНОВЛЕНИЕ ДАННЫХ ВНУТРИ СТАНЦИИ ПРИ КАЖДОМ ТИКЕ РЫНКА
+        // ОБНОВЛЕНИЕ ДАННЫХ ВНУТРИ СТАНЦИИ ПРИ КАЖДОМ ТИКЕ РЫНКА (КАЖДЫЕ 5 СЕК)
         function refreshActiveTerminalLabelsOnMarketTick() {
             if (!activeSelectedTicker) return;
 
@@ -428,16 +436,26 @@
             const sharesOwned = userPortfolioCache[activeSelectedTicker] || 0;
             const changeSign = asset.change >= 0 ? "+" : "";
 
-            document.getElementById("fs-current-price-badge").textContent = `${asset.price.toFixed(2)} SC`;
+            // Заносим живые цены в шапку терминала
+            document.getElementById("fs-current-live-price-label").textContent = `${asset.price.toFixed(2)} SC`;
             
-            const changeEl = document.getElementById("fs-market-change-percent");
+            const changeEl = document.getElementById("fs-current-percent-change-label");
             changeEl.textContent = `${changeSign}${asset.change}%`;
             changeEl.style.color = asset.change >= 0 ? "var(--bull-green)" : "var(--bear-red)";
 
-            document.getElementById("fs-user-shares-count-label").textContent = `${sharesOwned} шт.`;
+            // Обновляем балансы в боковой панели ордеров
+            const walletDisplay = document.getElementById("sochi-coins-wallet-display");
+            document.getElementById("fs-sidebar-coins-balance").textContent = walletDisplay ? walletDisplay.textContent + " SC" : "1000.00 SC";
+            document.getElementById("fs-sidebar-shares-owned-count").textContent = `${sharesOwned} шт.`;
 
-            recalculateFullscreenTerminalTotalCost();
-            renderInteractiveLargeWaveTimeline(); // Живой перерендер полосочки графика
+            // Запускаем пересчет калькулятора кассы
+            recalculateFullscreenTerminalTotalCostEstimated();
+            
+            // Живая перерисовка непрерывной линии Canvas прямо во время торгов!
+            if (stockHistoryCache && stockHistoryCache[activeSelectedTicker]) {
+                const historyPoints = stockHistoryCache[activeSelectedTicker] || [];
+                drawContinuousLineChartOnCanvas("fullscreen-main-line-chart-canvas", historyPoints, asset.change);
+            }
         }
 
         // 5. ИНТЕЛЛЕКТУАЛЬНАЯ СБОРКА БОЛЬШОЙ ИНТЕРАКТИВНОЙ ШКАЛЫ КУРСА
