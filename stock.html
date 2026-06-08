@@ -563,28 +563,24 @@
         }
 
 
-        // ==========================================================
-        // 📡 6. МАГНИТНЫЙ РАДАР СЛЕЖЕНИЯ: ВЕДЕНИЕ ПАЛЬЦА / МЫШКИ ПО ШКАЛЕ
-        // ==========================================================
+        // 📡 6. МАГНИТНЫЙ РАДАР СЛЕЖЕНИЯ: ПРИВЯЗКА ПОДСКАЗКИ СТРОГО К КОНЧИКУ МЫШКИ
         function initInteractiveCanvasHoverTrackingSystem() {
             const container = document.getElementById("interactive-canvas-box-container");
             const tooltip = document.getElementById("global-canvas-chart-tooltip");
             if (!container || !tooltip) return;
 
-            // Срабатывает, когда пользователь водит мышкой или пальцем по графику
             const trackMovePointerHandler = (event) => {
                 if (largeTerminalCoordinatesArray.length === 0) return;
 
                 const rect = container.getBoundingClientRect();
                 
-                // Перехватываем координаты тача на смартфонах или курсора на ПК
+                // Перехватываем координаты пальца или мышки
                 const clientX = event.touches ? event.touches.clientX : event.clientX;
                 const clientY = event.touches ? event.touches.clientY : event.clientY;
                 
-                // Высчитываем локальное положение указателя внутри черного холста графика
                 const pointerX = clientX - rect.left;
 
-                // 🎯 МГНОВЕННЫЙ СЪЕМ: Находим ближайшую точку промежутка времени от самого начала шкалы
+                // Снимаем ближайший по горизонтали промежуток времени от самого начала хода
                 let closestPoint = largeTerminalCoordinatesArray[0];
                 let minDistance = Math.abs(pointerX - closestPoint.x);
 
@@ -596,26 +592,26 @@
                     }
                 }
 
-                // Выводим подсказку курса на то время
+                // Выводим данные в черное окошко-подсказку
                 tooltip.textContent = `${Number(closestPoint.price).toFixed(2)} SC (${closestPoint.time})`;
                 tooltip.style.display = "block";
                 
-                // 🎯 ФИКС: Окошко привязывается СТРОГО к координатам твоей мышки в данную секунду!
-                // Сдвигаем на 12 пикселей вбок и вверх, чтобы подсказка не перекрывала остриё курсора
-                tooltip.style.left = `${clientX - rect.left + 12}px`;
-                tooltip.style.top = `${clientY - rect.top - 35}px`;
+                // 🎯 СУПЕР-ФИКС КООРДИНАТ: Привязываемся к абсолютным координатам страницы (window.pageX/Y)
+                // Окошко горит строго над стрелкой мышки в реальном времени!
+                const pageX = event.touches ? event.touches[0].pageX : event.pageX;
+                const pageY = event.touches ? event.touches[0].pageY : event.pageY;
+
+                tooltip.style.left = `${pageX - rect.left - window.scrollX + 15}px`;
+                tooltip.style.top = `${pageY - rect.top - window.scrollY - 40}px`;
             };
 
             const hidePointerHandler = () => { tooltip.style.display = "none"; };
 
-            // Подключаем события трекинга для компьютеров (мышь) и телефонов (тач)
             container.addEventListener("mousemove", trackMovePointerHandler);
             container.addEventListener("mouseleave", hidePointerHandler);
             container.addEventListener("touchmove", trackMovePointerHandler, { passive: true });
             container.addEventListener("touchend", hidePointerHandler);
         }
-
-
 
         // ==========================================================
         // 🛍️ 7. СИНХРОННЫЙ ОБМЕН ТОРГОВЫМИ ОРДЕРАМИ С БАЗОЙ ДАННЫХ
