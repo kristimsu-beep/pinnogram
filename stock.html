@@ -130,9 +130,9 @@
             transition: background-color 0.2s ease, border-color 0.2s ease;
         }
 
-        /* 🎯 ПУЛЕНЕПРОБИВАЕМЫЕ СТИЛИ: Абсолютная привязка к координатам курсора */
+        /* 🎯 УЛЬТИМАТИВНЫЙ ФИКС: Подсказка поверх абсолютно всех слоёв документа */
         .canvas-hover-popover-tooltip {
-            position: absolute; 
+            position: fixed; 
             background: #0f172a; 
             color: #ffffff; 
             padding: 6px 12px;
@@ -142,11 +142,10 @@
             font-family: monospace;
             pointer-events: none; 
             display: none; 
-            z-index: 9999; /* Поверх всех окон */
-            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            z-index: 999999 !important; /* Гарантия того, что окно будет поверх оверлеев */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             white-space: nowrap;
         }
-
         
     </style>
 </head>
@@ -734,6 +733,12 @@
             const tooltip = document.getElementById("global-canvas-chart-tooltip");
             if (!container || !tooltip) return;
 
+            // 🎯 СУПЕР-ФИКС НАЛОЖЕНИЯ СЛОЕВ: Переносим подсказку в самый корень <body>,
+            // чтобы её не обрезали свойства overflow:hidden внутри TradingView контейнеров
+            if (tooltip.parentElement !== document.body) {
+                document.body.appendChild(tooltip);
+            }
+
             const trackMovePointerHandler = (event) => {
                 if (!activeSelectedTicker || !lineChartCoordinatesCache[activeSelectedTicker]) return;
                 
@@ -744,9 +749,12 @@
                 
                 // Перехватываем координаты пальца (смартфоны) или мышки (ПК)
                 const clientX = event.touches ? event.touches.clientX : event.clientX;
+                const clientY = event.touches ? event.touches.clientY : event.clientY;
+                
+                // pointerX нужен для поиска ближайшей точки по горизонтали внутри Canvas
                 const pointerX = clientX - rect.left;
 
-                // Находим ближайшую по горизонтали точку на графике Canvas
+                // Находим ближайшую временную точку на графике Canvas
                 let closestPoint = activePointsArray;
                 let minDistance = Math.abs(pointerX - closestPoint.x);
 
@@ -762,17 +770,10 @@
                     tooltip.textContent = `${Number(closestPoint.price).toFixed(2)} SC (${closestPoint.time})`;
                     tooltip.style.display = "block";
                     
-                    // 🎯 ЖЕЛЕЗОБЕТОННЫЙ ФИКС: Считываем абсолютное положение мышки на странице!
-                    const pageX = event.touches ? event.touches[0].pageX : event.pageX;
-                    const pageY = event.touches ? event.touches[0].pageY : event.pageY;
-
-                    // Высчитываем положение относительно родительского контейнера TradingView-станции
-                    const terminalOverlay = document.getElementById("fullscreen-trading-station-overlay");
-                    const scrollTopOffset = terminalOverlay ? terminalOverlay.scrollTop : 0;
-
-                    // Окошко горит строго в 15 пикселях правее и на 35 пикселей выше острия стрелки мышки!
-                    tooltip.style.left = `${pageX + 15}px`;
-                    tooltip.style.top = `${pageY - 35 + scrollTopOffset}px`;
+                    // 🎯 ЧЁТКАЯ СВЯЗЬ С МЫШКОЙ: Подсказка материализуется строго по координатам экрана!
+                    // Сдвигаем на 15 пикселей правее и на 35 пикселей выше кончика стрелки курсора
+                    tooltip.style.left = `${clientX + 15}px`;
+                    tooltip.style.top = `${clientY - 35}px`;
                 }
             };
 
