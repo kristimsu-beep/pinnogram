@@ -130,9 +130,9 @@
             transition: background-color 0.2s ease, border-color 0.2s ease;
         }
 
-        /* 🎯 УЛЬТИМАТИВНЫЙ ФИКС: Абсолютное фиксированное позиционирование на экране */
+        /* 🎯 ПУЛЕНЕПРОБИВАЕМЫЕ СТИЛИ: Абсолютная привязка к координатам курсора */
         .canvas-hover-popover-tooltip {
-            position: fixed; 
+            position: absolute; 
             background: #0f172a; 
             color: #ffffff; 
             padding: 6px 12px;
@@ -142,11 +142,11 @@
             font-family: monospace;
             pointer-events: none; 
             display: none; 
-            z-index: 9999; /* Поверх всех модалок и элементов */
+            z-index: 9999; /* Поверх всех окон */
             box-shadow: 0 4px 12px rgba(0,0,0,0.25);
             white-space: nowrap;
-            transform: translate(15px, -35px); /* Ювелирный сдвиг: чуть правее и выше кончика курсора */
         }
+
         
     </style>
 </head>
@@ -744,12 +744,9 @@
                 
                 // Перехватываем координаты пальца (смартфоны) или мышки (ПК)
                 const clientX = event.touches ? event.touches.clientX : event.clientX;
-                const clientY = event.touches ? event.touches.clientY : event.clientY;
-                
-                //pointerX всё еще нужен для поиска ближайшей точки по горизонтали на Canvas
                 const pointerX = clientX - rect.left;
 
-                // Находим ближайшую точку истории курса на графике
+                // Находим ближайшую по горизонтали точку на графике Canvas
                 let closestPoint = activePointsArray;
                 let minDistance = Math.abs(pointerX - closestPoint.x);
 
@@ -765,10 +762,17 @@
                     tooltip.textContent = `${Number(closestPoint.price).toFixed(2)} SC (${closestPoint.time})`;
                     tooltip.style.display = "block";
                     
-                    // 🎯 СУПЕР-ФИКС: Мёртвая привязка к физическим координатам окна браузера!
-                    // Окошко всегда будет следовать СТРОГО за кончиком мышки, где бы она ни находилась.
-                    tooltip.style.left = `${clientX}px`;
-                    tooltip.style.top = `${clientY}px`;
+                    // 🎯 ЖЕЛЕЗОБЕТОННЫЙ ФИКС: Считываем абсолютное положение мышки на странице!
+                    const pageX = event.touches ? event.touches[0].pageX : event.pageX;
+                    const pageY = event.touches ? event.touches[0].pageY : event.pageY;
+
+                    // Высчитываем положение относительно родительского контейнера TradingView-станции
+                    const terminalOverlay = document.getElementById("fullscreen-trading-station-overlay");
+                    const scrollTopOffset = terminalOverlay ? terminalOverlay.scrollTop : 0;
+
+                    // Окошко горит строго в 15 пикселях правее и на 35 пикселей выше острия стрелки мышки!
+                    tooltip.style.left = `${pageX + 15}px`;
+                    tooltip.style.top = `${pageY - 35 + scrollTopOffset}px`;
                 }
             };
 
@@ -779,7 +783,7 @@
             container.addEventListener("touchmove", trackMovePointerHandler, { passive: true });
             container.addEventListener("touchend", hidePointerHandler);
         }
-
+        
         // ==========================================================
         // 🛍️ 8. СИНХРОННЫЙ ОБМЕН ТОРГОВЫМИ ОРДЕРАМИ BUY / SELL
         // ==========================================================
