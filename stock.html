@@ -130,13 +130,24 @@
             transition: background-color 0.2s ease, border-color 0.2s ease;
         }
 
-        /* ВСПЛЫВАЮЩИЙ ИНТЕРАКТИВНЫЙ ПОПОВЕР КУРСА ВОЗЛЕ МЫШКИ */
+        /* 🎯 УЛЬТИМАТИВНЫЙ ФИКС: Абсолютное фиксированное позиционирование на экране */
         .canvas-hover-popover-tooltip {
-            position: absolute; background: #0f172a; color: #fff; padding: 6px 12px;
-            border-radius: 6px; font-size: 11px; font-weight: 700; font-family: monospace;
-            pointer-events: none; display: none; z-index: 210; box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            position: fixed; 
+            background: #0f172a; 
+            color: #ffffff; 
+            padding: 6px 12px;
+            border-radius: 6px; 
+            font-size: 11px; 
+            font-weight: 700; 
+            font-family: monospace;
+            pointer-events: none; 
+            display: none; 
+            z-index: 9999; /* Поверх всех модалок и элементов */
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
             white-space: nowrap;
+            transform: translate(15px, -35px); /* Ювелирный сдвиг: чуть правее и выше кончика курсора */
         }
+        
     </style>
 </head>
 <body>
@@ -731,16 +742,15 @@
 
                 const rect = container.getBoundingClientRect();
                 
-                // Перехватываем координаты в зависимости от устройства (Touch для телефонов, Mouse для ПК)
-                const clientX = event.touches ? event.touches[0].clientX : event.clientX;
-                const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+                // Перехватываем координаты пальца (смартфоны) или мышки (ПК)
+                const clientX = event.touches ? event.touches.clientX : event.clientX;
+                const clientY = event.touches ? event.touches.clientY : event.clientY;
                 
-                // Рассчитываем точное положение пальца/курсора относительно границ холста
+                //pointerX всё еще нужен для поиска ближайшей точки по горизонтали на Canvas
                 const pointerX = clientX - rect.left;
-                const pointerY = clientY - rect.top;
 
-                // Находим ближайшую по горизонтали временную точку на графике
-                let closestPoint = activePointsArray[0];
+                // Находим ближайшую точку истории курса на графике
+                let closestPoint = activePointsArray;
                 let minDistance = Math.abs(pointerX - closestPoint.x);
 
                 for (let i = 1; i < activePointsArray.length; i++) {
@@ -755,17 +765,15 @@
                     tooltip.textContent = `${Number(closestPoint.price).toFixed(2)} SC (${closestPoint.time})`;
                     tooltip.style.display = "block";
                     
-                    // 🎯 СУПЕР-ФИКС КООРДИНАТ: Привязываемся строго к физическому offset мышки в контейнере!
-                    // Окошко будет следовать СТРОГО возле кончика указателя в любой точке оверлея.
-                    // Сдвигаем на 15 пикселей вправо и на 20 пикселей вниз, чтобы текст не скрывался и не улетал вверх
-                    tooltip.style.left = `${pointerX + 15}px`;
-                    tooltip.style.top = `${pointerY + 20}px`;
+                    // 🎯 СУПЕР-ФИКС: Мёртвая привязка к физическим координатам окна браузера!
+                    // Окошко всегда будет следовать СТРОГО за кончиком мышки, где бы она ни находилась.
+                    tooltip.style.left = `${clientX}px`;
+                    tooltip.style.top = `${clientY}px`;
                 }
             };
 
             const hidePointerHandler = () => { tooltip.style.display = "none"; };
 
-            // Подключаем слушатели для мышки и тач-событий мобильных устройств
             container.addEventListener("mousemove", trackMovePointerHandler);
             container.addEventListener("mouseleave", hidePointerHandler);
             container.addEventListener("touchmove", trackMovePointerHandler, { passive: true });
