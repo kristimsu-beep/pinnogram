@@ -2535,37 +2535,27 @@ async def startup():
 # 📈 СУБД: РЕЕСТР И ИНИЦИАЛИЗАЦИЯ ФОНДОВОЙ БИРЖИ СОЧИ
 # ==========================================================
 
-# 🎯 Наш реестр акций. Стартовые цены жестко зашиты от 100 до 1000 Сочи-коинов.
-# Чтобы добавить новую акцию в будущем, просто допиши строку в этот массив!
-STARTER_SOCHI_STOCKS = [
-    ("GOV", "Правительство Сочи", 500.0),
-    ("GER", "Герасев и Команда", 350.0),
-    ("SBR", "Сбер Банк Сочи", 800.0),
-    ("ALPB", "Альфа Банк Сочи", 650.0),
-    ("BBR", "Бобер Корпорейшн", 200.0),
-    ("INFS", "Инфраструктура Сочи", 400.0)
-]
 
+# 1. СУБД: ОБНОВЛЕННАЯ ИНИЦИАЛИЗАЦИЯ (СТАРТОВЫЙ КАПИТАЛ 1000 SC)
 async def init_sochi_stock_exchange_tables():
     async with aiosqlite.connect(DB_PATH) as db:
-        # 1. Кошельки игроков (Стартовый капитал 100.0 Сочи-коинов)
+        # Устанавливаем дефолтное значение 1000.0 Сочи-коинов
         await db.execute("""
             CREATE TABLE IF NOT EXISTS sochi_wallets (
                 user_discord_id TEXT PRIMARY KEY,
                 username TEXT,
-                sochi_coins REAL DEFAULT 100.0
+                sochi_coins REAL DEFAULT 1000.0
             )
         """)
-        # 2. Таблица доступных активов (Компаний Сочи)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS stock_assets (
                 ticker TEXT PRIMARY KEY,
                 company_name TEXT,
                 current_price REAL,
-                last_change REAL DEFAULT 0.0
+                last_change REAL DEFAULT 0.0,
+                description TEXT DEFAULT '' -- Добавляем поле описания компании
             )
         """)
-        # 3. Портфель акций (инвентарь игроков)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS user_stock_portfolio (
                 user_discord_id TEXT,
@@ -2574,7 +2564,6 @@ async def init_sochi_stock_exchange_tables():
                 PRIMARY KEY (user_discord_id, ticker)
             )
         """)
-        # 4. Таблица поминутной истории курса для живых шкал
         await db.execute("""
             CREATE TABLE IF NOT EXISTS stock_price_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2584,14 +2573,29 @@ async def init_sochi_stock_exchange_tables():
             )
         """)
         
-        # 🎯 Автоматическая инъекция: проверяем и добавляем новые акции из реестра
+        # Обновленный динамический реестр с подробными описаниями компаний Сочи
+        STARTER_SOCHI_STOCKS = [
+            ("GOV", "Правительство Сочи", 500.0, "Центральный аппарат управления инфраструктурой и экономическими зонами курортной столицы."),
+            ("GER", "Герасев и Команда", 350.0, "Медиа-гигант и творческое объединение, генерирующее основной трафик и эксклюзивный контент на сервере."),
+            ("SBR", "Сбер Банк Сочи", 800.0, "Главный финансовый конгломерат, обеспечивающий ликвидность, кредитование и хранение золотовалютных резервов."),
+            ("ALPB", "Альфа Банк Сочи", 650.0, "Высокотехнологичный частный банк, развивающий цифровые сервисы и автоматизированные системы расчетов."),
+            ("BBR", "Бобер Корпорейшн", 200.0, "Прогрессивная крафтовая корпорация, контролирующая лесную промышленность и эко-строительство в регионе."),
+            ("INFS", "Инфраструктура Сочи", 400.0, "Главный строительный узел: отели, дороги, неоновые вывески и поддержание работоспособности всех систем.")
+        ]
+        
         now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
-        for ticker, name, initial_price in STARTER_SOCHI_STOCKS:
+        for ticker, name, initial_price, desc in STARTER_SOCHI_STOCKS:
             async with db.execute("SELECT 1 FROM stock_assets WHERE ticker = ?", (ticker,)) as cursor:
                 if not await cursor.fetchone():
-                    await db.execute("INSERT INTO stock_assets (ticker, company_name, current_price) VALUES (?, ?, ?)", (ticker, name, initial_price))
-                    await db.execute("INSERT INTO stock_price_history (ticker, price, timestamp) VALUES (?, ?, ?)", (ticker, initial_price, now_time))
+                    await db.execute("INSERT INTO stock_assets (ticker, company_name, current_price, description) VALUES (?, ?, ?, ?)", 
+                                     (ticker, name, initial_price, desc))
+                    await db.execute("INSERT INTO stock_price_history (ticker, price, timestamp) VALUES (?, ?, ?)", 
+                                     (ticker, initial_price, now_time))
+                else:
+                    # На случай если таблица уже была — просто накатим описания
+                    await db.execute("UPDATE stock_assets SET description = ? WHERE ticker = ?", (desc, ticker))
         await db.commit()
+
         
 import random
 
@@ -2722,7 +2726,7 @@ async def serve_stock_exchange_page(request: Request):
     return FileResponse(os.path.join(BASE_DIR, "stock.html"))
 
 
-# 2. API: СЪЕМ СВЕЖИХ КОТИРОВОК, ИНВЕНТАРЯ И ЖИВЫХ ШКАЛ ИЗ SQLite
+# 2. API: ОБНОВЛЕННЫЙ СЪЕМ МАРКЕТА (СТАРТ 1000 SC + КЛИЕНТСКИЕ ОПИСАНИЯ ДЛЯ ПОЛНОЭКРАННЫХ МОДАЛОК)
 @app.get("/api/stock/market")
 async def get_sochi_market_data(request: Request):
     user_discord_id = request.cookies.get("forum_user_id")
@@ -2731,10 +2735,10 @@ async def get_sochi_market_data(request: Request):
         return {"status": "error", "message": "🔒 Сессия Discord не найдена. Авторизуйтесь на форуме!"}
 
     async with aiosqlite.connect(DB_PATH) as db:
-        # Автоматический кошелек на 100 Сочи-коинов новичкам
+        # 🎯 СУПЕР-ФИКС: Всем новым пользователям при первом входе намертво выдаем 1000.0 Сочи-коинов!
         await db.execute("""
-            INSERT INTO sochi_wallets (user_discord_id, username) 
-            VALUES (?, ?) 
+            INSERT INTO sochi_wallets (user_discord_id, username, sochi_coins) 
+            VALUES (?, ?, 1000.0) 
             ON CONFLICT(user_discord_id) DO UPDATE SET username = ?
         """, (user_discord_id, username, username))
         await db.commit()
@@ -2742,14 +2746,20 @@ async def get_sochi_market_data(request: Request):
         # Баланс криптокошелька
         async with db.execute("SELECT sochi_coins FROM sochi_wallets WHERE user_discord_id = ?", (user_discord_id,)) as cursor:
             wallet_row = await cursor.fetchone()
-            sochi_balance = wallet_row[0] if wallet_row else 100.0
+            sochi_balance = wallet_row[0] if wallet_row else 1000.0
 
-        # Котировки активов
+        # Котировки активов (🎯 ДОБАВЛЕНО ПОЛЕ description для полноэкранного интерфейса!)
         market = []
-        async with db.execute("SELECT ticker, company_name, current_price, last_change FROM stock_assets") as cursor:
+        async with db.execute("SELECT ticker, company_name, current_price, last_change, description FROM stock_assets") as cursor:
             rows = await cursor.fetchall()
             for r in rows: 
-                market.append({"ticker": r[0], "name": r[1], "price": r[2], "change": r[3]})
+                market.append({
+                    "ticker": r[0], 
+                    "name": r[1], 
+                    "price": r[2], 
+                    "change": r[3],
+                    "description": r[4] if r[4] else "Описание компании подготавливается аналитическим отделом SSE."
+                })
 
         # Портфель игрока (сколько куплено акций)
         portfolio = {}
@@ -2758,7 +2768,7 @@ async def get_sochi_market_data(request: Request):
             for r in rows: 
                 portfolio[r[0]] = r[1]
 
-        # Вековая история шкалы курса для отрисовки графиков на фронтенде
+        # Вековая история шкалы курса для отрисовки тонких линий на Canvas
         history_map = {}
         async with db.execute("SELECT ticker, price, timestamp FROM stock_price_history ORDER BY id ASC") as cursor:
             rows = await cursor.fetchall()
