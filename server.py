@@ -2605,6 +2605,7 @@ async def init_sochi_stock_exchange_tables():
         
 import random
 
+# 🎯 ОБНОВЛЕННЫЙ ВЕЧНЫЙ СИМУЛЯТОР: БЕЗ ОБРЕЗКИ ИСТОРИИ ЦЕН (ГРАФИКИ РАСТУТ БЕЗУПРЕЧНО)
 async def sochi_market_ticker_simulation_loop():
     while True:
         try:
@@ -2616,7 +2617,10 @@ async def sochi_market_ticker_simulation_loop():
                     
                 now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
                 
-                for ticker, price in stocks:
+                for r in stocks:
+                    ticker = r[0]
+                    price = r[1]
+                    
                     # Симуляция трендов (bull - рост, bear - спад, chaos - скачки, flat - затишье)
                     market_trend = random.choice(["bull", "bear", "flat", "chaos"])
                     if market_trend == "bull": change_percent = random.uniform(0.01, 0.075)
@@ -2633,8 +2637,8 @@ async def sochi_market_ticker_simulation_loop():
                     await db.execute("INSERT INTO stock_price_history (ticker, price, timestamp) VALUES (?, ?, ?)", 
                                      (ticker, new_price, now_time))
                     
-                # Храним последние 1000 точек в истории, чтобы не перегружать жесткий диск сервера
-                await db.execute("DELETE FROM stock_price_history WHERE id NOT IN (SELECT id FROM stock_price_history ORDER BY id DESC LIMIT 1000)")
+                # 🎯 СУПЕР-ФИКС: Расширяем лимит хранения истории до 50 000 точек, чтобы графики не обрезались!
+                await db.execute("DELETE FROM stock_price_history WHERE id NOT IN (SELECT id FROM stock_price_history ORDER BY id DESC LIMIT 50000)")
                 await db.commit()
         except Exception as e:
             print(f"⚠️ [STOCK MARKET SIMULATION ERROR] {e}")
@@ -2733,25 +2737,33 @@ async def serve_stock_exchange_page(request: Request):
 
 
 
-# 2. API: ОБНОВЛЕННЫЙ СЪЕМ МАРКЕТА И ЛИДЕРБОРДА
+# 2. API: СЪЕМ МАРКЕТА (ФИКС ЛИДЕРБОРДА И ТОТАЛЬНАЯ РАСПАКОВКА КОРТЕЖЕЙ SQLite)
 @app.get("/api/stock/market")
 async def get_sochi_market_data(request: Request):
     user_discord_id = request.cookies.get("forum_user_id")
     username = request.cookies.get("forum_user_name", "Участник форума")
     user_avatar = request.cookies.get("forum_user_avatar", "https://ibb.co")
     
-    if not user_discord_id: return {"status": "error", "message": "🔒 Сессия Discord не найдена"}
+    if not user_discord_id: 
+        return {"status": "error", "message": "🔒 Сессия Discord не найдена. Авторизуйтесь на форуме!"}
 
     async with aiosqlite.connect(DB_PATH) as db:
+        # Автоматический кошелек на 1000 Сочи-коинов новичкам
         try:
-            await db.execute("INSERT INTO sochi_wallets (user_discord_id, username, sochi_coins) VALUES (?, ?, 1000.0) ON CONFLICT(user_discord_id) DO UPDATE SET username = ?", (user_discord_id, username, username))
+            await db.execute("""
+                INSERT INTO sochi_wallets (user_discord_id, username, sochi_coins) 
+                VALUES (?, ?, 1000.0) 
+                ON CONFLICT(user_discord_id) DO UPDATE SET username = ?
+            """, (user_discord_id, username, username))
             await db.commit()
         except: pass
 
+        # Баланс криптокошелька текущего пользователя
         async with db.execute("SELECT sochi_coins FROM sochi_wallets WHERE user_discord_id = ?", (user_discord_id,)) as cursor:
             wallet_row = await cursor.fetchone()
             sochi_balance = wallet_row[0] if wallet_row else 1000.0
 
+        # Котировки всех 12 активов
         market = []
         prices_map = {}
         async with db.execute("SELECT ticker, company_name, current_price, last_change, description FROM stock_assets") as cursor:
@@ -2763,49 +2775,79 @@ async def get_sochi_market_data(request: Request):
         portfolio = {}
         async with db.execute("SELECT ticker, shares_count FROM user_stock_portfolio WHERE user_discord_id = ?", (user_discord_id,)) as cursor:
             rows = await cursor.fetchall()
-            for r in rows: portfolio[r[0]] = r[1]
+            for r in rows: 
+                portfolio[r[0]] = r[1]
 
         history_map = {}
         async with db.execute("SELECT ticker, price, timestamp FROM stock_price_history ORDER BY id ASC") as cursor:
             rows = await cursor.fetchall()
             for r in rows:
-                if r[0] not in history_map: history_map[r[0]] = []
-                history_map[r[0]].append({"price": r[1], "time": r[2]})
+                t, p, time_stamp = r[0], r[1], r[2]
+                if t not in history_map: history_map[t] = []
+                history_map[t].append({"price": p, "time": time_stamp})
 
-        # 🎯 ЧЕСТНЫЙ ЛИДЕРБОРД ПО ВСЕМ ИМЕЮЩИМСЯ ПОЛЬЗОВАТЕЛЯМ БИРЖИ
+        # 🎯 ГЛАВНАЯ МАГИЯ: ЛИДЕРБОРД ВСЕХ УЧАСТНИКОВ ПО ВОЗРАСТАНИЮ (С РАСПАКОВКОЙ)
         leaderboard_list = []
-        async with db.execute("SELECT user_discord_id, username, sochi_coins FROM sochi_wallets") as cursor:
-            wallet_rows = await cursor.fetchall()
+        try:
+            async with db.execute("SELECT user_discord_id, username, sochi_coins FROM sochi_wallets") as cursor:
+                wallet_rows = await cursor.fetchall()
+            
+            all_portfolios_map = {}
+            async with db.execute("SELECT user_discord_id, ticker, shares_count FROM user_stock_portfolio") as cursor:
+                all_shares = await cursor.fetchall()
+                for s in all_shares:
+                    u_id, tick, count = s[0], s[1], s[2]
+                    if u_id not in all_portfolios_map: all_portfolios_map[u_id] = []
+                    all_portfolios_map[u_id].append({"ticker": tick, "count": count})
 
-        all_portfolios_map = {}
-        async with db.execute("SELECT user_discord_id, ticker, shares_count FROM user_stock_portfolio") as cursor:
-            all_shares = await cursor.fetchall()
-            for s in all_shares:
-                if s[0] not in all_portfolios_map: all_portfolios_map[s[0]] = []
-                all_portfolios_map[s[0]].append({"ticker": s[1], "count": s[2]})
-
-        for w in wallet_rows:
-            w_uid, w_name, w_coins = w[0], w[1], w[2]
-            shares_value = 0.0
-            user_shares_list = all_portfolios_map.get(w_uid, [])
-            for share in user_shares_list:
-                shares_value += share["count"] * prices_map.get(share["ticker"], 0.0)
+            for w in wallet_rows:
+                w_uid, w_name, w_coins = w[0], w[1], w[2]
+                shares_value = 0.0
+                user_shares_list = all_portfolios_map.get(w_uid, [])
+                for share in user_shares_list:
+                    shares_value += share["count"] * prices_map.get(share["ticker"], 0.0)
+                    
+                total_worth = w_coins + shares_value
+                display_name = w_name.capitalize() if "_" not in w_name else w_name
                 
-            total_worth = w_coins + shares_value
-            leaderboard_list.append({
-                "discord_id": w_uid,
-                "username": w_name.capitalize() if "_" not in w_name else w_name,
-                "avatar": user_avatar if w_uid == user_discord_id else "https://ibb.co",
-                "total_worth": total_worth
-            })
+                leaderboard_list.append({
+                    "username": display_name,
+                    "avatar": user_avatar if w_uid == user_discord_id else "https://ibb.co",
+                    "total_worth": total_worth
+                })
 
-        # Сортируем по возрастанию капитала (от меньшего к большему) или убыванию. Твой запрос: "по возрастанию"
-        leaderboard_list.sort(key=lambda x: x["total_worth"], reverse=False)
-        
+            # Подтягиваем остальных юзеров из общей базы форума со стартовыми 1000 SC
+            try:
+                async with db.execute("SELECT username FROM user_shop_profile") as cursor:
+                    forum_rows = await cursor.fetchall()
+                for f_row in forum_rows:
+                    f_name = f_row[0]
+                    if not any(x["username"].lower() == f_name.lower() for x in leaderboard_list):
+                        leaderboard_list.append({
+                            "username": f_name.capitalize(),
+                            "avatar": "https://ibb.co",
+                            "total_worth": 1000.0
+                        })
+            except: pass
+
+            if not any(x["username"].lower() == username.lower() for x in leaderboard_list):
+                leaderboard_list.append({"username": username.capitalize(), "avatar": user_avatar, "total_worth": sochi_balance})
+
+            # СОРТИРОВКА ПО ВОЗРАСТАНИЮ (От меньшего баланса к большему)
+            leaderboard_list.sort(key=lambda x: x["total_worth"], reverse=False)
+        except Exception as e:
+            print(f"Ошибка топа: {e}")
+            leaderboard_list = [{"username": username.capitalize(), "avatar": user_avatar, "total_worth": sochi_balance}]
+
         return {
-            "status": "ok", "sochi_coins": round(sochi_balance, 2), "market": market, 
-            "portfolio": portfolio, "history": history_map, "wallets_leaderboard": leaderboard_list[:10]
+            "status": "ok", 
+            "sochi_coins": round(sochi_balance, 2), 
+            "market": market, 
+            "portfolio": portfolio, 
+            "history": history_map,
+            "wallets_leaderboard": leaderboard_list[:10]
         }
+
 
 # ==========================================================
 # 📈 СУБД: ДОРАБОТАННЫЙ МАСШТАБИРУЕМЫЙ REESTR AKCIY SOCHI
@@ -2917,17 +2959,26 @@ async def get_sochi_market_data(request: Request):
             "portfolio": portfolio, "history": history_map, "wallets_leaderboard": leaderboard_list[:10]
         }
 
-# 🎯 3. API АДМИН-ПАНЕЛИ (SHIFT + G): КОРРЕКЦИЯ КАПИТАЛА ПОЛЬЗОВАТЕЛЕЙ
+# 10. API: ПОЛУЧЕНИЕ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ БИРЖИ ДЛЯ АДМИН-ПАНЕЛИ (ФИКС КОРТЕЖЕЙ SQLite)
 @app.get("/api/stock/admin/users")
-async def get_admin_stock_users_list(request: Request):
-    # (Опционально: здесь можно вставить проверку на роль админа, если необходимо)
+async def get_all_bank_users_for_admin(request: Request):
+    user_discord_id = request.cookies.get("forum_user_id")
+    if not user_discord_id:
+        return {"status": "error", "message": "🔒 Доступ запрещен"}
+
     async with aiosqlite.connect(DB_PATH) as db:
         users_list = []
-        async with db.execute("SELECT user_discord_id, username, sochi_coins FROM sochi_wallets") as cursor:
+        async with db.execute("SELECT user_discord_id, username, sochi_coins FROM sochi_wallets ORDER BY username ASC") as cursor:
             rows = await cursor.fetchall()
             for r in rows:
-                users_list.append({"discord_id": r[0], "username": r[1], "coins": round(r[2], 2)})
+                # 🎯 ИСПРАВЛЕНО: Четкая распаковка индексов кортежа!
+                users_list.append({
+                    "discord_id": r[0],
+                    "username": r[1].capitalize() if "_" not in r[1] else r[1],
+                    "sochi_coins": round(r[2], 2)
+                })
         return {"status": "ok", "users": users_list}
+
 
 @app.post("/api/stock/admin/adjust")
 async def adjust_user_stock_balance(data: dict):
