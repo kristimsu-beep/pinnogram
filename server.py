@@ -2597,7 +2597,7 @@ async def init_sochi_stock_exchange_tables():
         
 import random
 
-# 🎯 ОБНОВЛЕННЫЙ ВЕЧНЫЙ СИМУЛЯТОР: БЕЗ ОБРЕЗКИ ИСТОРИИ ЦЕН (ГРАФИКИ РАСТУТ БЕЗУПРЕЧНО)
+# 🎯 ОБНОВЛЕННЫЙ ПУЛЕНЕПРОБИВАЕМЫЙ СИМУЛЯТОР С АВТО-ДОБАВЛЕНИЕМ КОЛОНОК (ФИКС ОШИБКИ 500)
 async def sochi_market_ticker_simulation_loop():
     while True:
         try:
@@ -2605,45 +2605,63 @@ async def sochi_market_ticker_simulation_loop():
             current_timestamp = time.time()
             
             async with aiosqlite.connect(DB_PATH) as db:
-                # Тянем тикеры, цены и таймеры обвала
+                # 🎯 СУПЕР-ФИКС: Проверяем, есть ли колонка crash_until_ts в СУБД SQLite. 
+                # Если её нет (старый файл базы данных), Python сам её допишет без удаления данных!
+                async with db.execute("PRAGMA table_info(stock_assets)") as info_cursor:
+                    columns = [col[1] for col in await info_cursor.fetchall()]
+                
+                if "crash_until_ts" not in columns:
+                    await db.execute("ALTER TABLE stock_assets ADD COLUMN crash_until_ts REAL DEFAULT 0.0")
+                    await db.commit()
+                    print("🏛️ [СУБД БИРЖИ] Успешно добавлена недостающая колонка crash_until_ts в stock_assets!")
+
+                # Теперь запрос выполнится на 100% идеально и без ошибок 500!
                 async with db.execute("SELECT ticker, current_price, crash_until_ts FROM stock_assets") as cursor:
                     stocks = await cursor.fetchall()
                     
                 now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
                 
                 for r in stocks:
-                    ticker = r[0]
-                    price = r[1]
-                    crash_until = r[2] if r[2] else 0.0
+                    if not r or len(r) < 2: continue
+                    ticker = str(r[0]).strip()
+                    price = float(r[1]) if r[1] is not None else 100.0
                     
-                    # 🎯 ПРОВЕРКА ОБВАЛА: Если админ запустил крах и 5 минут еще не прошло
+                    # Безопасное чтение таймера обвала
+                    crash_until = float(r[2]) if (len(r) > 2 and r[2] is not None) else 0.0
+                    
+                    # ПРОВЕРКА ОБВАЛА: Если админ запустил крах по Ctrl + Shift + A
                     if current_timestamp < crash_until:
-                        # Стремительное плавное падение от -12% до -18% на каждом тике
+                        # Плавное затяжное падение от -18% до -12% на каждом тике
                         change_percent = random.uniform(-0.18, -0.12)
                         new_price = round(price * (1.0 + change_percent), 2)
-                        if new_price < 1.0: new_price = 1.0 # Лимит падения (почти до нуля, но не в минус)
+                        if new_price < 1.0: new_price = 1.0 # Защитный лимит (почти до нуля, но не в минус)
                     else:
-                        # Обычный стандартный рыночный рандом
+                        # Стандартный рыночный рандом с множеством вариаций
                         market_trend = random.choice(["bull", "bear", "flat", "chaos"])
                         if market_trend == "bull": change_percent = random.uniform(0.01, 0.075)
                         elif market_trend == "bear": change_percent = random.uniform(-0.07, -0.01)
                         elif market_trend == "chaos": change_percent = random.uniform(-0.065, 0.07)
                         else: change_percent = random.uniform(-0.02, 0.02)
+                        
                         new_price = round(price * (1.0 + change_percent), 2)
                         if new_price < 10.0: new_price = 10.0
 
-                    # Рассчитываем итоговое изменение для вывода на экран
+                    # Безопасный расчет изменения процента (защита от ZeroDivisionError)
                     last_calc_change = round(((new_price - price) / price) * 100, 2) if price > 0 else 0.0
                     
+                    # Записываем новые котировки в СУБД SQLite
                     await db.execute("UPDATE stock_assets SET current_price = ?, last_change = ? WHERE ticker = ?", 
                                      (new_price, last_calc_change, ticker))
                     await db.execute("INSERT INTO stock_price_history (ticker, price, timestamp) VALUES (?, ?, ?)", 
                                      (ticker, new_price, now_time))
                     
+                # Расширяем лимит хранения истории до 50 000 точек, чтобы графики не обрезались за 5 дней
                 await db.execute("DELETE FROM stock_price_history WHERE id NOT IN (SELECT id FROM stock_price_history ORDER BY id DESC LIMIT 50000)")
                 await db.commit()
+                print(f"📈 [SOCHI MARKET TICK] Успешный тик котировок выполнен в {now_time}")
         except Exception as e:
-            print(f"⚠️ [STOCK CRASH LOOP ERROR] {e}")
+            print(f"⚠️ [STOCK CRASH LOOP ERROR] Критический сбой симулятора цен: {e}")
+
             
 # 12. API: ПУЛЬТ МАРКЕТМЕЙКЕРА ДЛЯ УПРАВЛЕНИЯ КУРСАМИ (ПОВЫСИТЬ / ПОНИЗИТЬ)
 @app.post("/api/stock/admin/market_control")
