@@ -571,16 +571,20 @@
             const tooltip = document.getElementById("global-canvas-chart-tooltip");
             if (!container || !tooltip) return;
 
-            // Обрабатываем ведение пальца (смартфоны) и мышки (ПК)
+            // Срабатывает, когда пользователь водит мышкой или пальцем по графику
             const trackMovePointerHandler = (event) => {
                 if (largeTerminalCoordinatesArray.length === 0) return;
 
                 const rect = container.getBoundingClientRect();
-                // Полноценный перехват координат тача или клика
-                const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+                
+                // Перехватываем координаты тача на смартфонах или курсора на ПК
+                const clientX = event.touches ? event.touches.clientX : event.clientX;
+                const clientY = event.touches ? event.touches.clientY : event.clientY;
+                
+                // Высчитываем локальное положение указателя внутри черного холста графика
                 const pointerX = clientX - rect.left;
 
-                // Находим БЛИЖАЙШУЮ точку во времени от самого начала истории торгов
+                // 🎯 МГНОВЕННЫЙ СЪЕМ: Находим ближайшую точку промежутка времени от самого начала шкалы
                 let closestPoint = largeTerminalCoordinatesArray[0];
                 let minDistance = Math.abs(pointerX - closestPoint.x);
 
@@ -592,21 +596,25 @@
                     }
                 }
 
-                // Выводим сочное черное окошко над текущим промежутком шкалы
+                // Выводим подсказку курса на то время
                 tooltip.textContent = `${Number(closestPoint.price).toFixed(2)} SC (${closestPoint.time})`;
                 tooltip.style.display = "block";
-                tooltip.style.left = `${closestPoint.x}px`;
-                tooltip.style.top = `${closestPoint.y}px`;
+                
+                // 🎯 ФИКС: Окошко привязывается СТРОГО к координатам твоей мышки в данную секунду!
+                // Сдвигаем на 12 пикселей вбок и вверх, чтобы подсказка не перекрывала остриё курсора
+                tooltip.style.left = `${clientX - rect.left + 12}px`;
+                tooltip.style.top = `${clientY - rect.top - 35}px`;
             };
 
             const hidePointerHandler = () => { tooltip.style.display = "none"; };
 
-            // Вешаем слушатели на ПК (мышь) и Смартфоны (тач-события)
+            // Подключаем события трекинга для компьютеров (мышь) и телефонов (тач)
             container.addEventListener("mousemove", trackMovePointerHandler);
             container.addEventListener("mouseleave", hidePointerHandler);
             container.addEventListener("touchmove", trackMovePointerHandler, { passive: true });
             container.addEventListener("touchend", hidePointerHandler);
         }
+
 
 
         // ==========================================================
