@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE — Фондовая Биржа Сочи</title>
+    <style>
+        :root {
+            --bg-main: #f8fafc;        /* Чистый бело-серый фон биржи */
+            --bg-card: #ffffff;        /* Белоснежные матовые блоки */
+            --text-dark: #0f172a;      /* Глубокий темный для заголовков */
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --bull-green: #10b981;     /* Зеленый для подъемов курса */
+            --bear-red: #ef4444;       /* Красный для спусков курса */
+        }
+
+        body {
+            margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-main); color: var(--text-dark);
+            display: flex; flex-direction: column; min-height: 100vh;
+        }
+
+        /* КИБЕРПАНК ШАПКА БИРЖИ */
+        .stock-navbar {
+            background-color: var(--bg-card); padding: 16px 24px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid var(--border-color); box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+            flex-wrap: wrap; gap: 15px;
+        }
+        .stock-logo { font-size: 18px; font-weight: 800; color: var(--text-dark); display: flex; align-items: center; gap: 8px; }
+        
+        /* КРИПТОКОШЕЛЕК СОЧИ-КОИНОВ В ШАПКЕ */
+        .crypto-wallet-badge {
+            background-color: #f1f5f9; border: 1px solid var(--border-color);
+            padding: 8px 16px; border-radius: 20px; font-weight: 700; font-size: 14px;
+            display: flex; align-items: center; gap: 6px; color: var(--text-dark);
+        }
+
+        /* ГЛАВНЫЙ КОНТЕНТ */
+        .stock-container {
+            max-width: 1200px; width: 100%; margin: 30px auto; padding: 0 20px; box-sizing: border-box;
+            display: flex; flex-direction: column; gap: 25px; flex-grow: 1;
+        }
+
+        /* АДАПТИВНАЯ СЕТКА КАРТОЧЕК АКЦИЙ (ПОД ЛЮБОЙ ЭКРАН) */
+        .stock-market-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;
+        }
+
+        /* СТИЛЬ КАРТОЧКИ АКЦИИ НА ГЛАВНОМ СТОЛЕ */
+        .stock-asset-card {
+            background-color: var(--bg-card); border: 1px solid var(--border-color);
+            border-radius: 16px; padding: 20px; box-sizing: border-box; cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -1px rgba(0,0,0,0.01);
+            transition: 0.2s ease-in-out; display: flex; flex-direction: column; gap: 12px;
+        }
+        .stock-asset-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.04); border-color: #cbd5e1; }
+
+        /* ЖИВАЯ АНИМИРОВАННАЯ ШКАЛА КУРСА (ГРАФИК-ПОЛОСОЧКА) */
+        .stock-live-wave-timeline {
+            width: 100%; height: 60px; background-color: #f8fafc; border: 1px solid var(--border-color);
+            border-radius: 10px; position: relative; overflow: visible; display: flex; align-items: flex-end; padding: 0 4px; box-sizing: border-box;
+        }
+        
+        /* СЕГМЕНТ (СТОЛБИК) КУРСА НА ШКАЛЕ */
+        .wave-bar-segment {
+            flex-grow: 1; margin: 0 1px; border-radius: 2px 2px 0 0; position: relative;
+            cursor: pointer; transition: 0.1s; min-height: 3px;
+        }
+        .wave-bar-segment:hover { filter: brightness(0.85); transform: scaleY(1.05); }
+
+        /* ТРЕНДЫ ЦВЕТОВ: Зеленый — подъем, Красный — спуск */
+        .trend-bullish { background-color: var(--bull-green); }
+        .trend-bearish { background-color: var(--bear-red); }
+
+        /* КОНЧИК (ТОЧКА КУРСА СЕЙЧАС) С МИГАЮЩИМ НЕОНОМ */
+        .timeline-endpoint-tip {
+            position: absolute; bottom: 0; right: 2px; width: 6px; height: 6px;
+            border-radius: 50%; z-index: 10; transform: translateY(50%);
+        }
+        .endpoint-bull { background-color: var(--bull-green); box-shadow: 0 0 8px var(--bull-green); }
+        .endpoint-bear { background-color: var(--bear-red); box-shadow: 0 0 8px var(--bear-red); }
+
+        /* ИНТЕРФЕЙС ТОРГОВОГО ОРДЕРА (КУПИТЬ/ПРОДАТЬ) */
+        .stock-modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.3); backdrop-filter: blur(4px);
+            display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; box-sizing: border-box;
+        }
+        .trade-terminal-card {
+            background: var(--bg-card); border-radius: 20px; width: 100%; max-width: 440px;
+            padding: 24px; box-sizing: border-box; border: 1px solid var(--border-color);
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05);
+        }
+
+        .terminal-btn {
+            border: none; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: 700;
+            cursor: pointer; transition: 0.2s; width: 100%; text-align: center;
+        }
+
+        /* МИНИ-ОКНО ДЛЯ ПОДСКАЗОК ВРЕМЕНИ И КУРСА ПРИ КЛИКЕ НА ПОЛОСОЧКУ */
+        .bar-hover-popover-tooltip {
+            position: absolute; background: #0f172a; color: #fff; padding: 6px 10px;
+            border-radius: 6px; font-size: 11px; font-weight: 600; font-family: monospace;
+            pointer-events: none; display: none; z-index: 50; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            white-space: nowrap; transform: translate(-50%, -120%);
+        }
+        .bar-hover-popover-tooltip::after {
+            content: ''; position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
+            border-width: 4px 4px 0; border-style: solid; border-color: #0f172a transparent transparent;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ВЕРХНЯЯ ШАПКА БИРЖИ С КРИПТОКОШЕЛЬКОМ -->
+    <div class="stock-navbar">
+        <div class="stock-logo">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+            <span style="letter-spacing: -0.5px;">Sochi Stock Exchange (SSE)</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="crypto-wallet-badge">
+                <span>Криптокошелек:</span>
+                <span id="sochi-coins-wallet-display" style="color: var(--text-dark);">0.00</span>
+                <span style="color: var(--text-muted); font-size: 11px; font-weight: 800;">SC</span>
+            </div>
+            <button onclick="location.href='/forum'" style="background: none; border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 14px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-muted); transition: 0.2s;">Назад</button>
+        </div>
+    </div>
+
+    <!-- ГЛАВНЫЙ КОНТЕНТЕР БИРЖЕВОГО СТОЛА -->
+    <div class="stock-container">
+        <div>
+            <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">Фондовый рынок Сочи</h1>
+            <p style="margin: 4px 0 0 0; color: var(--text-muted); font-size: 14px;">Инвестируйте Сочи-коины в ключевые объекты, отслеживайте шкалу курса и торгуйте в реальном времени</p>
+        </div>
+
+        <!-- ДИНАМИЧЕСКИЙ КОНТЕЙНЕР ДЛЯ 6 АКЦИЙ ИЗ SQLite -->
+        <div class="stock-market-grid" id="sochi-market-cards-wrapper">
+            <!-- Сюда JS загрузит карточки с анимированными полосочками -->
+            <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">Загрузка котировок SSE...</div>
+        </div>
+    </div>
+
+    <!-- ВСПЛЫВАЮЩИЙ ИНТЕРАКТИВНЫЙ ПОПОВЕР ДЛЯ ПОДСКАЗОК КУРСА/ВРЕМЕНИ -->
+    <div class="bar-hover-popover-tooltip" id="global-stock-bar-tooltip">0.00 SC (00:00)</div>
+
+
+    <!-- ========================================================== -->
+    <!-- 💰 3. МОДАЛЬНОЕ ОКНО: ТОРГОВЫЙ ТЕРМИНАЛ ОРДЕРОВ -->
+    <!-- ========================================================== -->
+    <div class="stock-modal-overlay" id="modal-trade-terminal" onclick="closeSochiStockTradeTerminal()">
+        <div class="trade-terminal-card" onclick="event.stopPropagation()">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+                <div>
+                    <h3 id="terminal-company-name" style="margin: 0; font-size: 18px; font-weight: 800;">Название компании</h3>
+                    <span id="terminal-stock-ticker" style="font-size: 11px; font-weight: 800; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; color: var(--text-muted); margin-top: 4px; display: inline-block;">TICKER</span>
+                </div>
+                <div style="text-align: right;">
+                    <div id="terminal-current-price-label" style="font-size: 20px; font-weight: 800; color: var(--text-dark);">0.00 SC</div>
+                    <div id="terminal-user-shares-owned" style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">В портфеле: 0 шт.</div>
+                </div>
+            </div>
+
+            <!-- ПОЛЕ ВВОДА КОЛИЧЕСТВА АКЦИЙ С АВТОРАСЧЕТОМ ИТОГА -->
+            <div style="margin: 20px 0;">
+                <label style="font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 6px;">Количество акций к сделке:</label>
+                <input type="number" id="trade-shares-quantity-input" min="1" value="1" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border-color); background: var(--bg-main); font-size: 16px; font-weight: bold; color: var(--text-dark); outline: none; box-sizing: border-box;" oninput="recalculateTerminalTotalCostEstimated()">
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding: 10px 0 0 0; border-top: 1px dashed var(--border-color);">
+                    <span style="font-size: 13px; color: var(--text-muted); font-weight: 500;">Итоговая стоимость ордера:</span>
+                    <span id="terminal-estimated-total-cost" style="font-size: 16px; font-weight: 800; color: var(--text-dark);">0.00 SC</span>
+                </div>
+            </div>
+
+            <!-- КНОПКИ ОРДЕРОВ СИНХРОННОЙ ПОКУПКИ И ПРОДАЖИ -->
+            <div style="display: flex; gap: 12px; margin-top: 20px;">
+                <button class="terminal-btn" onclick="executeStockOrderActionPipeline('buy')" style="background-color: var(--bull-green); color: #fff; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);">
+                    📈 КУПИТЬ (BUY)
+                </button>
+                <button class="terminal-btn" onclick="executeStockOrderActionPipeline('sell')" style="background-color: var(--bear-red); color: #fff; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);">
+                    📉 ПРОДАТЬ (SELL)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin;
+        
+        // Глобальный кэш данных рынка для расчётов ордеров
+        let marketDataCache = [];
+        let userPortfolioCache = {};
+        let activeSelectedTicker = null;
+
+        // 1. ФОНОВЫЙ ЦИКЛ ОБНОВЛЕНИЯ ДАННЫХ БИРЖИ С СЕРВЕРА RENDER
+        async function fetchSochiMarketDataFromServer() {
+            try {
+                // Делаем живой запрос к нашему API в SQLite
+                const res = await fetch(`${API_URL}/api/stock/market`);
+                const data = await res.json();
+
+                if (data.status !== "ok") {
+                    document.getElementById("sochi-market-cards-wrapper").innerHTML = `
+                        <div style="grid-column: 1/-1; text-align: center; color: #ef4444; padding: 40px; font-weight: bold; background: #fff; border-radius: 12px; border: 1px solid var(--border-color);">
+                            🔒 Доступ заблокирован: ${data.message || "Авторизуйтесь на форуме через Discord!"}
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Обновляем баланс криптокошелька в шапке биржи
+                document.getElementById("sochi-coins-wallet-display").textContent = Number(data.sochi_coins).toFixed(2);
+
+                // Кэшируем данные для работы торгового терминала
+                marketDataCache = data.market || [];
+                userPortfolioCache = data.portfolio || {};
+
+                // Отрисовываем 6 карточек акций с живыми шкалами
+                renderSochiMarketCardsShowcase(data.market, data.portfolio, data.history || {});
+                
+                // Если сейчас открыто окно конкретной акции — обновляем данные и в нём на лету!
+                if (activeSelectedTicker) {
+                    refreshActiveTerminalLabelsOnMarketTick();
+                }
+
+            } catch (e) {
+                console.error("Ошибка обновления котировок SSE:", e);
+            }
+        }
+
+        // 2. ДИНАМИЧЕСКИЙ РЕНДЕРИНГ 6 АКЦИЙ И СБОРКА ИХ РАСТУЩИХ ШКАЛ
+        function renderSochiMarketCardsShowcase(market, portfolio, history) {
+            const wrapper = document.getElementById("sochi-market-cards-wrapper");
+            if (!wrapper) return;
+            wrapper.innerHTML = "";
+
+            market.forEach(asset => {
+                const card = document.createElement("div");
+                card.className = "stock-asset-card";
+                card.onclick = () => openSochiStockTradeTerminal(asset.ticker, asset.name, asset.price);
+
+                const sharesOwned = portfolio[asset.ticker] || 0;
+                const changeClass = asset.change >= 0 ? "trend-bullish" : "trend-bearish";
+                const changeSign = asset.change >= 0 ? "+" : "";
+                
+                // Извлекаем историю цены для сборки полосочек графика
+                const assetHistoryArray = history[asset.ticker] || [];
+
+                // ГЕНЕРИРУЕМ ВЕРТИКАЛЬНЫЕ СТОЛБИКИ ЖИВОЙ ШКАЛЫ (ПРОПОРЦИОНАЛЬНО ЦЕНЕ)
+                let waveBarsHtml = "";
+                if (assetHistoryArray.length === 0) {
+                    // Подстраховка: если истории ещё нет, рисуем одну стартовую точку
+                    waveBarsHtml = `<div class="wave-bar-segment trend-bullish" style="height: 50%;" data-price="${asset.price}" data-time="00:00"></div>`;
+                } else {
+                    // Находим максимальную цену в истории, чтобы шкала росла прямо пропорционально!
+                    const maxPriceInHistory = Math.max(...assetHistoryArray.map(h => h.price), asset.price);
+                    
+                    assetHistoryArray.forEach(point => {
+                        // Высчитываем высоту столбика в процентах относительно максимального курса
+                        const barHeightPercent = Math.max(8, Math.min(100, (point.price / maxPriceInHistory) * 100));
+                        
+                        // Определяем тренд конкретного столбца (подъем — зеленый, спуск — красный)
+                        // Сравниваем цену текущего столбца с предыдущей точкой истории
+                        const idx = assetHistoryArray.indexOf(point);
+                        let barTrendClass = "trend-bullish";
+                        if (idx > 0 && assetHistoryArray[idx - 1].price > point.price) {
+                            barTrendClass = "trend-bearish";
+                        }
+
+                        waveBarsHtml += `
+                            <div class="wave-bar-segment ${barTrendClass}" 
+                                 style="height: ${barHeightPercent}%;" 
+                                 data-price="${point.price}" 
+                                 data-time="${point.time}"
+                                 onmouseover="showInteractiveBarTooltipPopover(event)"
+                                 onmouseout="hideInteractiveBarTooltipPopover()">
+                            </div>
+                        `;
+                    });
+                }
+
+                // Определяем цвет кончика (точки курса сейчас)
+                const endpointTrendClass = asset.change >= 0 ? "endpoint-bull" : "endpoint-bear";
+
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.3px;">${asset.name}</h3>
+                            <span style="font-size: 11px; font-weight: 800; color: var(--text-muted); font-family: monospace;">${asset.ticker}</span>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 16px; font-weight: 800;">${Number(asset.price).toFixed(2)} SC</div>
+                            <div style="font-size: 11px; font-weight: 700; color: ${asset.change >= 0 ? 'var(--bull-green)' : 'var(--bear-red)'}; margin-top: 2px;">
+                                ${changeSign}${asset.change}%
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 📈 ИНТЕРАКТИВНАЯ ПОЛОСОЧКА-ГРАФИК (КУРС АКЦИИ) -->
+                    <div class="stock-live-wave-timeline">
+                        ${waveBarsHtml}
+                        <!-- Неоновый кончик текущего курса акции прямо сейчас -->
+                        <div class="timeline-endpoint-tip ${endpointTrendClass}"></div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted); margin-top: 4px; padding-top: 8px; border-top: 1px dashed var(--border-color);">
+                        <span>В портфеле: <b style="color: var(--text-dark);">${sharesOwned} шт.</b></span>
+                        <span style="font-weight: 600; color: var(--accent-green); font-size: 11px; text-transform: uppercase;">Торговать ➔</span>
+                    </div>
+                `;
+                wrapper.appendChild(card);
+            });
+        }
+        // 3. ИНТЕРАКТИВНЫЙ ПОПОФЕР: МГНОВЕННЫЙ СЪЕМ КУРСА И ВРЕМЕНИ ПРИ КЛИКЕ ИЛИ НАВЕДЕНИИ
+        function showInteractiveBarTooltipPopover(event) {
+            const bar = event.currentTarget;
+            const tooltip = document.getElementById("global-stock-bar-tooltip");
+            if (!bar || !tooltip) return;
+
+            const price = Number(bar.getAttribute("data-price")).toFixed(2);
+            const time = bar.getAttribute("data-time");
+
+            // Насыщаем текст поповера текущими архивными показателями
+            tooltip.textContent = `${price} SC (${time})`;
+            tooltip.style.display = "block";
+
+            // Высчитываем геометрию экрана для точного прицела над полосочкой
+            const barRect = bar.getBoundingClientRect();
+            const containerRect = document.getElementById("sochi-market-cards-wrapper").getBoundingClientRect();
+            
+            // Позиционируем относительно окна браузера с учетом прокрутки
+            tooltip.style.left = `${barRect.left + (barRect.width / 2) + window.scrollX}px`;
+            tooltip.style.top = `${barRect.top + window.scrollY}px`;
+        }
+
+        function hideInteractiveBarTooltipPopover() {
+            const tooltip = document.getElementById("global-stock-bar-tooltip");
+            if (tooltip) tooltip.style.display = "none";
+        }
+
+
+        // 4. УПРАВЛЕНИЕ ОКНОМ ТОРГОВОГО ТЕРМИНАЛА ОРДЕРОВ
+        function openSochiStockTradeTerminal(ticker, companyName, currentPrice) {
+            activeSelectedTicker = ticker;
+            
+            document.getElementById("terminal-company-name").textContent = companyName;
+            document.getElementById("terminal-stock-ticker").textContent = ticker;
+            document.getElementById("terminal-current-price-label").textContent = `${Number(currentPrice).toFixed(2)} SC`;
+            
+            // Вытаскиваем количество акций из кэша портфеля
+            const sharesOwned = userPortfolioCache[ticker] || 0;
+            document.getElementById("terminal-user-shares-owned").textContent = `В портфеле: ${sharesOwned} шт.`;
+            
+            // Сбрасываем поле ввода на стандартную 1 акцию
+            document.getElementById("trade-shares-quantity-input").value = 1;
+            
+            // Запускаем автоматический калькулятор итоговой цены ордера
+            recalculateTerminalTotalCostEstimated();
+            
+            // Разворачиваем модальное окно на экране
+            document.getElementById("modal-trade-terminal").style.display = "flex";
+        }
+
+        function closeSochiStockTradeTerminal() {
+            document.getElementById("modal-trade-terminal").style.display = "none";
+            activeSelectedTicker = null;
+        }
+
+        // МАТЕМАТИЧЕСКИЙ КАЛЬКУЛЯТОР АВТОРАСЧЕТА СТОИМОСТИ НА ЛЕТУ
+        function recalculateTerminalTotalCostEstimated() {
+            if (!activeSelectedTicker) return;
+
+            const qtyInput = document.getElementById("trade-shares-quantity-input");
+            let qty = parseInt(qtyInput.value);
+            
+            // Страховка от отрицательного ввода или пустых полей
+            if (isNaN(qty) || qty < 1) {
+                qty = 1;
+                qtyInput.value = 1;
+            }
+
+            // Находим текущую цену акции из кэша рынка
+            const currentAsset = marketDataCache.find(a => a.ticker === activeSelectedTicker);
+            if (!currentAsset) return;
+
+            const estimatedCost = roundToTwoDecimals(currentAsset.price * qty);
+            document.getElementById("terminal-estimated-total-cost").textContent = `${estimatedCost.toFixed(2)} SC`;
+        }
+
+        // Хелпер округления финансовых котировок в JS
+        function roundToTwoDecimals(num) {
+            return Math.round((num + Number.EPSILON) * 100) / 100;
+        }
+
+        // СВЕРХ-ТОЧНЫЙ ЖИВОЙ ТИКЕР: Обновляет цены внутри открытого окна прямо во время торгов!
+        function refreshActiveTerminalLabelsOnMarketTick() {
+            if (!activeSelectedTicker) return;
+            
+            const currentAsset = marketDataCache.find(a => a.ticker === activeSelectedTicker);
+            if (!currentAsset) return;
+
+            document.getElementById("terminal-current-price-label").textContent = `${Number(currentAsset.price).toFixed(2)} SC`;
+            
+            const sharesOwned = userPortfolioCache[activeSelectedTicker] || 0;
+            document.getElementById("terminal-user-shares-owned").textContent = `В портфеле: ${sharesOwned} шт.`;
+            
+            recalculateTerminalTotalCostEstimated();
+        }
+        // 5. БЕЗОПАСНЫЙ СИНХРОННЫЙ КОНВЕЙЕР ТОРГОВЫХ ОРДЕРОВ (BUY / SELL)
+        async function executeStockOrderActionPipeline(actionType) {
+            if (!activeSelectedTicker) return;
+
+            const quantity = parseInt(document.getElementById("trade-shares-quantity-input").value);
+            if (isNaN(quantity) || quantity <= 0) {
+                alert("❌ Ошибка: Введите корректное количество акций!");
+                return;
+            }
+
+            // Выбираем правильный роут в зависимости от кнопки ордера
+            const endpointRoute = actionType === "buy" ? "buy" : "sell";
+
+            try {
+                // Шлём зашифрованный пакет ордера на бэкенд в SQLite базу
+                const res = await fetch(`${API_URL}/api/stock/${endpointRoute}`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        ticker: activeSelectedTicker,
+                        quantity: quantity
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.status === "ok") {
+                    alert(data.message);
+                    // Моментально запрашиваем обновленный баланс кошелька и портфеля
+                    await fetchSochiMarketDataFromServer();
+                } else {
+                    // Выводим отказ биржи (например: недостаточно Сочи-коинов или акций)
+                    alert("⚠️ Ордер отклонён: " + data.message);
+                }
+
+            } catch (e) {
+                alert("🛑 Критическая ошибка связи с Фондовой биржей Сочи.");
+                console.error(e);
+            }
+        }
+
+        // Автозапуск системы: опрашиваем биржу первый раз при загрузке страницы
+        window.onload = () => {
+            fetchSochiMarketDataFromServer();
+            
+            // 🎯 ВЕЧНЫЙ ДВИГАТЕЛЬ SSE: Каждые 5 секунд обновляем котировки на экране
+            // Это создаст идеальную динамику, полосочки будут расти и падать сами!
+            setInterval(fetchSochiMarketDataFromServer, 5000);
+        };
+    </script>
+</body>
+</html>
