@@ -351,32 +351,43 @@
     <script>
         const API_URL = window.location.origin;
         
-        // Глобальный кэш данных для бесшовных графиков и расчетов
+        // Глобальный кэш данных рынка для бесшовной отрисовки и расчетов
         let marketDataCache = [];
         let userPortfolioCache = {};
         let stockHistoryCache = {};
         let activeSelectedTicker = null;
+        let lineChartCoordinatesCache = {}; // Изолированный кэш точек под каждый тикер отдельно
+
+        // ==========================================================
+        // 🌗 1. МОДУЛЬ КАСТОМНОЙ ТЕМЫ ОФОРМЛЕНИЯ (WHITE / DARK)
+        // ==========================================================
+        // Проверяем сохраненную тему в памяти устройства, по умолчанию — светлая
         let currentInterfaceThemeMode = localStorage.getItem("sse_theme_mode") || "light";
 
         function applyInterfaceThemeStylesMode() {
             const root = document.documentElement;
             if (currentInterfaceThemeMode === "dark") {
-                root.style.setProperty('--bg-main', '#0f172a');     /* Глубокий ночной фон */
-                root.style.setProperty('--bg-card', '#1e293b');     /* Темные матовые блоки */
+                // Переключаем CSS-переменные в неоновый ночной режим
+                root.style.setProperty('--bg-main', '#0f172a');     /* Темно-синий фон */
+                root.style.setProperty('--bg-card', '#1e293b');     /* Матовые темные карточки */
                 root.style.setProperty('--text-dark', '#f8fafc');   /* Белоснежный текст */
                 root.style.setProperty('--text-muted', '#94a3b8');  /* Серый текст */
-                root.style.setProperty('--border-color', '#334155');/* Стальные границы */
+                root.style.setProperty('--border-color', '#334155');/* Темные границы */
             } else {
-                root.style.setProperty('--bg-main', '#f8fafc');     /* Базовый белый фон */
+                // Возвращаем эталонный премиальный белый дизайн
+                root.style.setProperty('--bg-main', '#f8fafc');
                 root.style.setProperty('--bg-card', '#ffffff');
                 root.style.setProperty('--text-dark', '#0f172a');
                 root.style.setProperty('--text-muted', '#64748b');
                 root.style.setProperty('--border-color', '#e2e8f0');
             }
-            // Мгновенный перерендер Canvas-шкал под новые контрастные цвета
+            
+            // Запускаем принудительный перерендер всех Canvas-линий под новые цвета темы
             if (marketDataCache.length > 0) {
                 renderSochiMarketCardsShowcase(marketDataCache, userPortfolioCache);
-                if (activeSelectedTicker) refreshActiveTerminalLabelsOnMarketTick();
+                if (activeSelectedTicker) {
+                    refreshActiveTerminalLabelsOnMarketTick();
+                }
             }
         }
 
@@ -386,8 +397,9 @@
             applyInterfaceThemeStylesMode();
         }
 
-
-        // 1. ВЕЧНЫЙ ДВИГАТЕЛЬ SSE: ФОНОВЫЙ ОПРОС СЕРВЕРА С ОБНОВЛЕНИЕМ СТАТИСТИКИ
+        // ==========================================================
+        // ⚙️ 2. ВЕЧНЫЙ ДВИГАТЕЛЬ SSE: ФОНОВЫЙ ОПРОС СЕРВЕРА С ОБНОВЛЕНИЕМ
+        // ==========================================================
         async function fetchSochiMarketDataFromServer() {
             try {
                 const res = await fetch(`${API_URL}/api/stock/market`);
@@ -395,7 +407,7 @@
 
                 if (data.status !== "ok") {
                     document.getElementById("sochi-market-cards-wrapper").innerHTML = `
-                        <div style="grid-column: 1/-1; text-align: center; color: #ef4444; padding: 40px; font-weight: bold; background: #fff; border-radius: 12px; border: 1px solid var(--border-color);">
+                        <div style="grid-column: 1/-1; text-align: center; color: #ef4444; padding: 40px; font-weight: bold; background: var(--bg-card); border-radius: 12px; border: 1px solid var(--border-color);">
                             🔒 Доступ заблокирован: ${data.message || "Авторизуйтесь на форуме через Discord!"}
                         </div>
                     `;
@@ -405,28 +417,25 @@
                 // Обновляем криптокошелек в шапке
                 document.getElementById("sochi-coins-wallet-display").textContent = Number(data.sochi_coins).toFixed(2);
 
-                // Кэшируем глобальные рыночные показатели из СУБД SQLite
                 marketDataCache = data.market || [];
                 userPortfolioCache = data.portfolio || {};
                 stockHistoryCache = data.history || {};
 
-                // Отрисовываем 6 карточек акций на главном столе
+                // Отрисовываем 12 карточек акций на главном столе
                 renderSochiMarketCardsShowcase(data.market, data.portfolio);
                 
-                // Рендерим Топ-10 Богатейших майнеров Сочи на боковой панели
+                // Рендерим Топ-10 Богатейших майнеров строго по возрастанию капитала
                 calculateAndRenderRichLeaderboard(data.wallets_leaderboard || []);
 
-                // Если развернут полноэкранный терминал — обновляем его labels и перерисовываем Canvas линию на лету
                 if (activeSelectedTicker) {
                     refreshActiveTerminalLabelsOnMarketTick();
                 }
 
-            } catch (e) {
-                console.error("Ошибка обновления котировок SSE:", e);
-            }
+            } catch (e) { console.error("Ошибка котировок SSE:", e); }
         }
-
-        // 2. ДИНАМИЧЕСКИЙ РЕНДЕРИНГ КАРТОЧЕК НА ГЛАВНОМ СТОЛЕ
+        // ==========================================================
+        // 📊 3. ДИНАМИЧЕСКИЙ РЕНДЕРИНГ КАРТОЧЕК И ЛИДЕРБОРДА
+        // ==========================================================
         function renderSochiMarketCardsShowcase(market, portfolio) {
             const wrapper = document.getElementById("sochi-market-cards-wrapper");
             if (!wrapper) return;
@@ -439,8 +448,6 @@
 
                 const sharesOwned = portfolio[asset.ticker] || 0;
                 const changeSign = asset.change >= 0 ? "+" : "";
-                
-                // Уникальный ID под холст Canvas каждой карточки
                 const miniCanvasId = `mini-canvas-${asset.ticker}`;
                 const historyPoints = stockHistoryCache[asset.ticker] || [];
 
@@ -457,52 +464,43 @@
                             </div>
                         </div>
                     </div>
-
-                    <!-- 📈 МИНИ-ХОЛСТ ДЛЯ ТОНКОЙ ЛИНИИ КУРСА НА СТОЛЕ -->
                     <div class="mini-canvas-timeline-box">
                         <canvas id="${miniCanvasId}"></canvas>
                     </div>
-
                     <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted); margin-top: 2px; padding-top: 8px; border-top: 1px dashed var(--border-color);">
-                        <span>В портфеле: <b style="color: var(--text-dark);">${sharesOwned} шт.</b></span>
+                        <span>В portfolio: <b style="color: var(--text-dark);">${sharesOwned} шт.</b></span>
                         <span style="font-weight: 600; color: var(--bull-green); font-size: 11px; text-transform: uppercase;">Аналитика ➔</span>
                     </div>
                 `;
                 wrapper.appendChild(card);
 
-                // Отрисовываем тонкую превью-линию на карточке стола
+                // Отрисовываем тонкую Canvas превью-линию на карточке стола
                 setTimeout(() => {
                     drawContinuousLineChartOnCanvas(miniCanvasId, historyPoints, asset.change, false);
                 }, 50);
             });
         }
 
-        // 3. АВТОНОМНЫЙ РАСЧЕТ И ОТРИСОВКА РЕЙТИНГА ТОП-10 МАЙНЕРОВ
         function calculateAndRenderRichLeaderboard(walletsList) {
             const container = document.getElementById("sochi-rich-leaderboard-container");
             if (!container) return;
             container.innerHTML = "";
 
             if (walletsList.length === 0) {
-                container.innerHTML = `<div style="text-align:center; color:var(--text-muted); font-size:13px; padding:10px 0;">Список инвесторов пуст</div>`;
+                container.innerHTML = `<div style="text-align:center; color:var(--text-muted); font-size:13px; padding:15px 0;">Расчет капитала СУБД...</div>`;
                 return;
             }
 
-            // Рендерим отсортированных богачей
+            // Рендерим отсортированных по возрастанию майнеров (от меньшего баланса к большему)
             walletsList.forEach((user, index) => {
-                let crownBadge = "";
-                if (index === 0) crownBadge = "👑 ";
-                else if (index === 1) crownBadge = "🥈 ";
-                else if (index === 2) crownBadge = "🥉 ";
-
                 const row = document.createElement("div");
                 row.style.cssText = "display: flex; align-items: center; justify-content: space-between; padding: 10px; border-bottom: 1px solid var(--border-color); font-size: 13px;";
                 
                 row.innerHTML = `
                     <div style="display: flex; align-items: center; gap: 10px; max-width:65%; overflow:hidden;">
-                        <span style="font-weight: 800; color: var(--text-muted); width: 18px;">${crownBadge || (index + 1)}</span>
+                        <span style="font-weight: 800; color: var(--text-muted); width: 14px;">${index + 1}</span>
                         <div style="width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background: #f1f5f9; flex-shrink: 0; border: 1px solid var(--border-color);">
-                            <img src="${user.avatar || 'https://ibb.co'}" onerror="this.src='https://ibb.co'" style="width:100%; height:100%; object-fit:cover;">
+                            <img src="${user.avatar}" onerror="this.src='https://ibb.co'" style="width:100%; height:100%; object-fit:cover;">
                         </div>
                         <span style="font-weight: 700; color: var(--text-dark); white-space: nowrap; text-overflow: ellipsis; overflow: hidden;">${user.username}</span>
                     </div>
@@ -514,31 +512,53 @@
                 container.appendChild(row);
             });
         }
+
         // ==========================================================
-        // 💻 💎 4. УПРАВЛЕНИЕ ПОЛНОЭКРАННЫЙ ТЕРМИНАЛ ОРДЕРОВ (АДАПТИВ)
+        // ⌨️ 4. ПЕРЕХВАТ КЛАВИШ АДМИН-ПАНЕЛЕЙ (SHIFT+G и CTRL+SHIFT+A)
+        // ==========================================================
+        window.addEventListener("keydown", (e) => {
+            // 1. Панель Казначейства по Shift + G
+            if (e.shiftKey && !e.ctrlKey && (e.key === "G" || e.key === "g" || e.key === "П" || e.key === "п")) {
+                e.preventDefault();
+                openAdminGodPanelDashboard();
+            }
+            // 2. Пульт Регулятора Экономики по Ctrl + Shift + A
+            if (e.ctrlKey && e.shiftKey && (e.key === "A" || e.key === "a" || e.key === "Ф" || e.key === "ф")) {
+                e.preventDefault();
+                openAdminMarketMakerPanel();
+            }
+        });
+        // ==========================================================
+        // 💻 💎 5. УПРАВЛЕНИЕ ПОЛНОЭКРАННЫМ ТЕРМИНАЛОМ ОРДЕРОВ (АДАПТИВ)
         // ==========================================================
         function openFullscreenTradingStationOverlay(ticker) {
             activeSelectedTicker = ticker;
 
+            // Находим данные компании в глобальном кэше СУБД SQLite
             const asset = marketDataCache.find(a => a.ticker === ticker);
             if (!asset) return;
 
+            // Насыщаем паспортные данные в шапку полноэкранного оверлея
             document.getElementById("fs-company-title-label").textContent = asset.company_name;
             document.getElementById("fs-company-ticker-badge").textContent = ticker;
             document.getElementById("fs-company-detailed-description-text").textContent = asset.description || "Аналитический паспорт формируется СУБД.";
 
+            // Сбрасываем количество лотов на 1 акцию по умолчанию
             document.getElementById("fs-trade-shares-quantity-input").value = 1;
 
+            // Синхронизируем котировки, балансы кошелька SC и инвентаря
             refreshActiveTerminalLabelsOnMarketTick();
 
+            // Разворачиваем торговую станцию на весь экран
             document.getElementById("fullscreen-trading-station-overlay").style.display = "flex";
 
+            // Даем браузеру 100 миллисекунд пересчитать ширину экрана под смартфоны и запускаем холст Canvas
             setTimeout(() => {
                 if (stockHistoryCache && stockHistoryCache[activeSelectedTicker]) {
                     const historyPoints = stockHistoryCache[activeSelectedTicker] || [];
                     drawContinuousLineChartOnCanvas("fullscreen-main-line-chart-canvas", historyPoints, asset.change, true);
                 }
-            }, 120);
+            }, 100);
         }
 
         function closeFullscreenTradingStationOverlay() {
@@ -546,12 +566,14 @@
             activeSelectedTicker = null;
         }
 
+        // МАТЕМАТИЧЕСКИЙ КАЛЬКУЛЯТОР АВТОРАСЧЕТА СТОИМОСТИ СДЕЛКИ
         function recalculateFullscreenTerminalTotalCostEstimated() {
             if (!activeSelectedTicker) return;
 
             const qtyInput = document.getElementById("fs-trade-shares-quantity-input");
             let qty = parseInt(qtyInput.value);
 
+            // Защитный барьер от пустых полей или отрицательного ввода
             if (isNaN(qty) || qty < 1) {
                 qty = 1;
                 qtyInput.value = 1;
@@ -564,6 +586,7 @@
             document.getElementById("fs-terminal-estimated-total-cost").textContent = `${totalCost.toFixed(2)} SC`;
         }
 
+        // СИНХРОННЫЙ АПДЕЙТОР ДАННЫХ ВНУТРИ СТАНЦИИ ПРИ КАЖДОМ ТИКЕ БИРЖИ
         function refreshActiveTerminalLabelsOnMarketTick() {
             if (!activeSelectedTicker) return;
 
@@ -573,18 +596,22 @@
             const sharesOwned = userPortfolioCache[activeSelectedTicker] || 0;
             const changeSign = asset.change >= 0 ? "+" : "";
 
+            // Выводим живой курс Сочи-коинов наверх страницы
             document.getElementById("fs-current-live-price-label").textContent = `${asset.price.toFixed(2)} SC`;
             
             const changeEl = document.getElementById("fs-current-percent-change-label");
             changeEl.textContent = `${changeSign}${asset.change}%`;
             changeEl.style.color = asset.change >= 0 ? "var(--bull-green)" : "var(--bear-red)";
 
+            // Считываем баланс кошелька SC из шапки биржи и выводим в сайдбар ордеров
             const walletDisplay = document.getElementById("sochi-coins-wallet-display");
             document.getElementById("fs-sidebar-coins-balance").textContent = walletDisplay ? walletDisplay.textContent + " SC" : "1000.00 SC";
             document.getElementById("fs-sidebar-shares-owned-count").textContent = `${sharesOwned} шт.`;
 
+            // Обновляем показатели итоговой стоимости кассы
             recalculateFullscreenTerminalTotalCostEstimated();
             
+            // Врубаем живой перерендер непрерывной Canvas линии прямо по ходу торгов!
             if (stockHistoryCache && stockHistoryCache[activeSelectedTicker]) {
                 const historyPoints = stockHistoryCache[activeSelectedTicker] || [];
                 drawContinuousLineChartOnCanvas("fullscreen-main-line-chart-canvas", historyPoints, asset.change, true);
@@ -593,7 +620,7 @@
 
 
         // ==========================================================
-        // 📈 5. ХОЛОГРАФИЧЕСКИЙ ГРАФИЧЕСКИЙ ДВИЖОК CANVAS (TRADINGVIEW СТИЛЬ)
+        // 📈 6. ХОЛОГРАФИЧЕСКИЙ ГРАФИЧЕСКИЙ ДВИЖОК CANVAS (TRADINGVIEW СТИЛЬ)
         // ==========================================================
         let lineChartCoordinatesCache = {}; // Изолированный кэш точек под каждый тикер отдельно!
 
@@ -602,6 +629,7 @@
             if (!canvas) return;
             const ctx = canvas.getContext("2d");
             
+            // Заставляем Canvas адаптироваться под любую ширину экрана смартфона/ПК без искажения пикселей
             const rect = canvas.parentElement.getBoundingClientRect();
             canvas.width = rect.width;
             canvas.height = rect.height;
@@ -612,10 +640,11 @@
                 ctx.fillStyle = "var(--text-muted)";
                 ctx.font = "13px -apple-system, sans-serif";
                 ctx.textAlign = "center";
-                ctx.fillText("⏳ Формирование непрерывной линии курса...", canvas.width / 2, canvas.height / 2);
+                ctx.fillText("⏳ Формирование непрерывной линии... Ожидайте первых тиков рынка Сочи", canvas.width / 2, canvas.height / 2);
                 return;
             }
 
+            // Масштабируем котировки Сочи-коинов по вертикали
             const prices = historyPoints.map(h => h.price);
             const minPrice = Math.min(...prices) * 0.98;
             const maxPrice = Math.max(...prices) * 1.02;
@@ -629,11 +658,11 @@
             const plotWidth = canvas.width - paddingLeft - paddingRight;
             const plotHeight = canvas.height - paddingTop - paddingBottom;
 
+            // Распределяем точки по горизонтали от САМОГО НАЧАЛА до текущей секунды (шкала сжимается сама!)
             const stepX = plotWidth / (historyPoints.length - 1);
             
-            // Заводим массив точек под конкретный холст
             if (isLargeTerminal && activeSelectedTicker) {
-                lineChartCoordinatesCache[activeSelectedTicker] = [];
+                lineChartCoordinatesCache[activeSelectedTicker] = []; // Сбрасываем старый трекинг
             }
             
             ctx.beginPath();
@@ -650,6 +679,7 @@
                 }
             });
 
+            // Настройка цвета тонкой сплошной линии: Рост — изумрудный, Падение — багрово-красный
             const isBullishTrend = currentChange >= 0;
             const trendColor = isBullishTrend ? "#10b981" : "#ef4444";
             
@@ -659,6 +689,7 @@
             ctx.lineJoin = "round";
             ctx.stroke();
 
+            // Плавное неоновое затухание градиента под линией
             ctx.lineTo(paddingLeft + ((historyPoints.length - 1) * stepX), canvas.height - paddingBottom);
             ctx.lineTo(paddingLeft, canvas.height - paddingBottom);
             ctx.closePath();
@@ -669,6 +700,7 @@
             ctx.fillStyle = gradientFill;
             ctx.fill();
 
+            // Рисуем светящуюся точку курса прямо сейчас на самом кончике
             const lastDot = paddingLeft + ((historyPoints.length - 1) * stepX);
             const lastDotY = canvas.height - paddingBottom - ((prices[prices.length - 1] - minPrice) / priceRange * plotHeight);
             ctx.beginPath();
@@ -679,29 +711,25 @@
             ctx.fill();
             ctx.shadowBlur = 0; 
         }
-        // 📡 6. МАГНИТНЫЙ РАДАР СЛЕЖЕНИЯ: ИСПРАВЛЕННЫЙ ТРЕКИНГ МЫШКИ (УСТРАНЕНЫ НАВЕДЕНИЯ ВЫШЕ И NaN)
+        // ==========================================================
+        // 📡 7. МАГНИТНЫЙ РАДАР СЛЕЖЕНИЯ: ПРИВЯЗКА ПОДСКАЗКИ СТРОГО ВОЗЛЕ МЫШКИ
+        // ==========================================================
         function initInteractiveCanvasHoverTrackingSystem() {
             const container = document.getElementById("interactive-canvas-box-container");
             const tooltip = document.getElementById("global-canvas-chart-tooltip");
             if (!container || !tooltip) return;
 
             const trackMovePointerHandler = (event) => {
-                // Если акция не выбрана или под неё ещё нет вековой истории в кэше — сбрасываем радар
                 if (!activeSelectedTicker || !lineChartCoordinatesCache[activeSelectedTicker]) return;
                 
                 const activePointsArray = lineChartCoordinatesCache[activeSelectedTicker];
                 if (activePointsArray.length === 0) return;
 
                 const rect = container.getBoundingClientRect();
-                
-                // Перехватываем координаты пальца на смартфонах или курсора на ПК
                 const clientX = event.touches ? event.touches.clientX : event.clientX;
-                const clientY = event.touches ? event.touches.clientY : event.clientY;
-                
-                // Рассчитываем точное локальное смещение указателя внутри Canvas
                 const pointerX = clientX - rect.left;
 
-                // 🎯 МГНОВЕННЫЙ СЪЕМ: Находим ближайшую точку промежутка времени от самого начала хода (5 дней)
+                // Находим ближайшую точку на графике от самого начала шкалы
                 let closestPoint = activePointsArray[0];
                 let minDistance = Math.abs(pointerX - closestPoint.x);
 
@@ -713,30 +741,26 @@
                     }
                 }
 
-                // 🎯 СУПЕР-ФИКС NaN: Выводим данные, только если цена успешно считана как число
                 if (closestPoint && !isNaN(closestPoint.price)) {
                     tooltip.textContent = `${Number(closestPoint.price).toFixed(2)} SC (${closestPoint.time})`;
                     tooltip.style.display = "block";
                     
-                    // 🎯 ИДЕАЛЬНЫЙ ПРИЦЕЛ: Окошко привязывается строго к кончику мышки в реальном времени!
-                    // Сдвигаем на 15 пикселей вбок и на 15 вверх, чтобы текст не перекрывал остриё стрелки
+                    // Окошко следует прямо за указателем мышки
                     tooltip.style.left = `${clientX - rect.left + 15}px`;
-                    tooltip.style.top = `${clientY - rect.top - 15}px`;
+                    tooltip.style.top = `${event.clientY - rect.top - 15}px`;
                 }
             };
 
             const hidePointerHandler = () => { tooltip.style.display = "none"; };
 
-            // Подключаем события трекинга для ПК (мышь) и смартфонов (тач-экраны)
             container.addEventListener("mousemove", trackMovePointerHandler);
             container.addEventListener("mouseleave", hidePointerHandler);
             container.addEventListener("touchmove", trackMovePointerHandler, { passive: true });
             container.addEventListener("touchend", hidePointerHandler);
         }
 
-
         // ==========================================================
-        // 🛍️ 7. СИНХРОННЫЙ ОБМЕН ТОРГОВЫМИ ОРДЕРАМИ BUY / SELL
+        // 🛍️ 8. СИНХРОННЫЙ ОБМЕН ТОРГОВЫМИ ОРДЕРАМИ BUY / SELL
         // ==========================================================
         async function executeFullscreenStockOrderActionPipeline(actionType) {
             if (!activeSelectedTicker) return;
@@ -765,25 +789,9 @@
                 }
             } catch (e) { alert("🛑 Критический сбой проведения сделки банком."); }
         }
-
-
         // ==========================================================
-        // 👑 8. СЕКРЕТНЫЙ АДМИН-МОДУЛЬ КАССЫ (SHIFT + G)
+        // 👑 9. СЕКРЕТНЫЙ АДМИН-МОДУЛЬ КАССЫ (SHIFT + G)
         // ==========================================================
-        window.addEventListener("keydown", (e) => {
-            // 1. Панель Казначейства (Shift + G)
-            if (e.shiftKey && !e.ctrlKey && (e.key === "G" || e.key === "g" || e.key === "П" || e.key === "п")) {
-                e.preventDefault();
-                openAdminGodPanelDashboard();
-            }
-            // 2. Пульт Маркетмейкера Регулятора (Ctrl + Shift + A)
-            if (e.ctrlKey && e.shiftKey && (e.key === "A" || e.key === "a" || e.key === "Ф" || e.key === "ф")) {
-                e.preventDefault();
-                openAdminMarketMakerPanel();
-            }
-        });
-
-
         async function openAdminGodPanelDashboard() {
             try {
                 const res = await fetch(`${API_URL}/api/stock/admin/users`);
@@ -853,16 +861,15 @@
                 await fetchSochiMarketDataFromServer(); 
             } catch (e) { alert("Ошибка изменения баланса."); }
         }
-        
+
         // ==========================================================
-        // 🎛️ ДОБАВЛЕНО: ЛОГИКА ПУЛЬТА МАРКЕТМЕЙКЕРА (CTRL + SHIFT + A)
+        // 🎛️ 10. ЛОГИКА ПУЛЬТА МАРКЕТМЕЙКЕРА (CTRL + SHIFT + A)
         // ==========================================================
         function openAdminMarketMakerPanel() {
             const selector = document.getElementById("mm-asset-ticker-selector");
             if (!selector) return;
             selector.innerHTML = "";
 
-            // Динамически заполняем селектор пульта всеми доступными на бирже акциями
             marketDataCache.forEach(asset => {
                 const opt = document.createElement("option");
                 opt.value = asset.ticker;
@@ -870,7 +877,6 @@
                 selector.appendChild(opt);
             });
 
-            // Рендерим кнопки управления для первой акции в списке
             if (marketDataCache.length > 0) {
                 renderMarketMakerAssetActiveControlsState(marketDataCache[0].ticker);
             }
@@ -892,7 +898,6 @@
                     <button class="terminal-btn" style="background:#34c759; color:#fff;" onclick="openMmPercentWizardWindow('${ticker}', 'pump')">🚀 Памп (Рост)</button>
                     <button class="terminal-btn" style="background:#ff9500; color:#fff;" onclick="openMmPercentWizardWindow('${ticker}', 'dump')">💥 Дамп (Спад)</button>
                 </div>
-                <!-- Кнопка 5-минутного затяжного падения почти до нуля -->
                 <button class="terminal-btn" style="background:var(--bear-red); color:#fff; box-shadow:0 4px 12px rgba(239,68,68,0.2);" onclick="executeImmediateStockCrashCommand('${ticker}')">
                     🚨 ЗАПУСТИТЬ ОБВАЛ АКЦИИ (5 МИН)
                 </button>
@@ -908,9 +913,8 @@
             document.getElementById("modal-mm-percent-wizard").style.display = "flex";
         }
 
-        function closeMmPercentWizardWindow() { document.getElementById("modal-mm-mm-percent-wizard"); document.getElementById("modal-mm-percent-wizard").style.display = "none"; }
+        function closeMmPercentWizardWindow() { document.getElementById("modal-mm-percent-wizard").style.display = "none"; }
 
-        // 1. КОМАНДА: МГНОВЕННЫЙ ПАМП / ДАМП НА ЗАДАННЫЙ ПРОЦЕНТ
         async function submitAdminMarketControlCommandToServer() {
             const ticker = document.getElementById("mm-wizard-target-ticker").value;
             const mode = document.getElementById("mm-wizard-active-mode").value;
@@ -928,13 +932,12 @@
                 alert(data.message);
                 
                 closeMmPercentWizardWindow();
-                await fetchSochiMarketDataFromServer(); // Живой перерендер полосочек графиков
+                await fetchSochiMarketDataFromServer(); 
             } catch (e) { alert("Ошибка управления котировками."); }
         }
 
-        // 2. КОМАНДА: ВЕКОВОЙ 5-МИНУТНЫЙ ПЛАВНЫЙ КРАХ ДО НУЛЯ
         async function executeImmediateStockCrashCommand(ticker) {
-            if (!confirm(`🚨 Вы уверены, что хотите запустить 5-минутный обвал акций ${ticker}? Стоимость начнет стремительно падать на каждом тике!`)) return;
+            if (!confirm(`🚨 Вы уверены, что хотите запустить 5-минутный обвал акций ${ticker}?`)) return;
 
             try {
                 const res = await fetch(`${API_URL}/api/stock/admin/market_control`, {
@@ -949,12 +952,11 @@
         }
 
         window.onload = () => {
-            applyInterfaceThemeStylesMode(); // 🎯 ДОБАВЛЕНО: Применяем тему оформления со старта!
+            applyInterfaceThemeStylesMode(); 
             fetchSochiMarketDataFromServer();
             initInteractiveCanvasHoverTrackingSystem(); 
             setInterval(fetchSochiMarketDataFromServer, 5000);
         };
-
     </script>
 </body>
 </html>
