@@ -2531,12 +2531,7 @@ async def startup():
             except Exception as e:
                 print(f"🛑 [KONATA START ERROR] Ошибка запуска бота: {e}")
 
-# ==========================================================
-# 📈 СУБД: РЕЕСТР И ИНИЦИАЛИЗАЦИЯ ФОНДОВОЙ БИРЖИ СОЧИ
-# ==========================================================
-
-
-# 1. СУБД: ОБНОВЛЕННАЯ ИНИЦИАЛИЗАЦИЯ (СТАРТОВЫЙ КАПИТАЛ 1000 SC)
+# 1. СУБД: ОБНОВЛЕННАЯ ДИНАМИЧЕСКАЯ ИНИЦИАЛИЗАЦИЯ С 12 АКТИВАМИ И АВТО-ОБНОВЛЕНИЕМ ЦЕН
 async def init_sochi_stock_exchange_tables():
     async with aiosqlite.connect(DB_PATH) as db:
         # Устанавливаем дефолтное значение 1000.0 Сочи-коинов
@@ -2553,7 +2548,7 @@ async def init_sochi_stock_exchange_tables():
                 company_name TEXT,
                 current_price REAL,
                 last_change REAL DEFAULT 0.0,
-                description TEXT DEFAULT '' -- Добавляем поле описания компании
+                description TEXT DEFAULT ''
             )
         """)
         await db.execute("""
@@ -2574,32 +2569,36 @@ async def init_sochi_stock_exchange_tables():
         """)
         
         # ==========================================================
-        # 📈 СУБД: ДОРАБОТАННЫЙ МАСШТАБИРУЕМЫЙ РЕЕСТР АКЦИЙ СОЧИ
+        # 📈 СУБД: ДОРАБОТАННЫЙ МАСШТАБИРУЕМЫЙ REESTR AKCIY SOCHI
         # ==========================================================
         STARTER_SOCHI_STOCKS = [
             ("GOV", "Правительство Сочи", 500.0, "Центральный аппарат управления инфраструктурой и экономическими зонами курортной столицы."),
-            ("GER", "Герасев и Команда", 350.0, "Медиа-гигант и творческое объединение, генерирующее основной трафик и эксклюзивный контент на сервере."),
-            ("SBR", "Сбер Банк Сочи", 800.0, "Главный финансовый конгломерат, обеспечивающий ликвидность, кредитование и хранение золотуалютных резервов."),
-            ("ALPB", "Альфа Банк Сочи", 650.0, "Высокотехнологичный частный банк, развивающий цифровые сервисы и автоматизированные системы расчетов."),
-            ("BBR", "Бобер Корпорейшн", 200.0, "Прогрессивная крафтовая корпорация, контролирующая лесную промышленность и эко-строительство в регионе."),
-            ("INFS", "Инфраструктура Сочи", 400.0, "Главный строительный узел: отели, дороги, неоновые вывески и поддержание работоспособности всех систем."),
-            # 🎯 ТВОИ НОВЫЕ СВЕЖИЕ АКЦИИ ПУЛЕНЕПРОБИВАЕМО ВШИТЫ В ЭКОНОМИКУ:
-            ("ENRG", "Электроэнергетика Сочи", 900.0, "Главная энергетическая артерия города, питающая майнинг-фермы, неоновые кварталы и инфраструктуру."),
-            ("SRSRP", "Сервер Сочи РП", 100.0, "Официальный цифровой хаб игрового симулятора жизни, генерирующий колоссальный трафик новых граждан."),
-            ("TRNS", "Транспорт Сочи", 250.0, "Логистический гигант региона: монорельсы, скоростные шоссе, канатные дороги и каршеринг.")
+            ("GER", "Герасев и Команда", 350.0, "Медиа-гигант и творческое объединение, генерирующее основной трафик и контент."),
+            ("SBR", "Сбер Банк Сочи", 800.0, "Главный финансовый конгломерат, обеспечивающий ликвидность региона."),
+            ("ALPB", "Альфа Банк Сочи", 650.0, "Высокотехнологичный частный банк, развивающий цифровые сервисы."),
+            ("BBR", "Бобер Корпорейшн", 200.0, "Прогрессивная крафтовая корпорация, контролирующая лесную промышленность."),
+            ("INFS", "Инфраструктура Сочи", 400.0, "Главный строительный узел: отели, дороги, неоновые вывески."),
+            ("ENRG", "Электроэнергетика Сочи", 900.0, "Главная энергетическая артерия города, питающая майнинг-фермы."),
+            ("SRSRP", "Сервер Сочи РП", 100.0, "Официальный цифровой хаб игрового симулятора жизни."),
+            ("TRNS", "Транспорт Сочи", 250.0, "Логистический гигант региона: монорельсы, скоростные шоссе."),
+            # 🎯 ТВОИ НОВЫЕ МОЩНЫЕ АКЦИИ ЖЕСТКО ЗАФИКСИРОВАНЫ В SQLite:
+            ("HIMARS", "Ракетный комплекс Хаймарс", 2000.0, "Оборонно-промышленный комплекс высокоточного сдерживания и защиты рубежей Сочи."),
+            ("GOVBBRSTN", "Правительство Боберстана", 10.0, "Суверенный аппарат дружественного Боберстана, экспортирующий дерево и плотины."),
+            ("USSR", "Акции СССР", 100000.0, "Легендарное наследие сверхдержавы. Главный золотовалютный и индустриальный резерв биржи.")
         ]
-        
+
         now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
         for ticker, name, initial_price, desc in STARTER_SOCHI_STOCKS:
             async with db.execute("SELECT 1 FROM stock_assets WHERE ticker = ?", (ticker,)) as cursor:
                 if not await cursor.fetchone():
+                    # Если акции еще нет в СУБД — вставляем чистую запись
                     await db.execute("INSERT INTO stock_assets (ticker, company_name, current_price, description) VALUES (?, ?, ?, ?)", 
                                      (ticker, name, initial_price, desc))
                     await db.execute("INSERT INTO stock_price_history (ticker, price, timestamp) VALUES (?, ?, ?)", 
                                      (ticker, initial_price, now_time))
                 else:
-                    # На случай если таблица уже была — просто накатим описания
-                    await db.execute("UPDATE stock_assets SET description = ? WHERE ticker = ?", (desc, ticker))
+                    # 🎯 УЛЬТИМАТИВНЫЙ ФИКС: Железно принудительно накатываем свежие цены и описания при деплое!
+                    await db.execute("UPDATE stock_assets SET company_name = ?, description = ? WHERE ticker = ?", (name, desc, ticker))
         await db.commit()
 
         
@@ -2733,131 +2732,268 @@ async def serve_stock_exchange_page(request: Request):
 
 
 
-# 2. API: ОБНОВЛЕННЫЙ СЪЕМ МАРКЕТА (ФИКС ЛИДЕРБОРДА И НОВЫЕ ТИКЕРЫ)
+# 2. API: ОБНОВЛЕННЫЙ СЪЕМ МАРКЕТА И ЛИДЕРБОРДА
 @app.get("/api/stock/market")
 async def get_sochi_market_data(request: Request):
     user_discord_id = request.cookies.get("forum_user_id")
     username = request.cookies.get("forum_user_name", "Участник форума")
     user_avatar = request.cookies.get("forum_user_avatar", "https://ibb.co")
     
-    if not user_discord_id: 
-        return {"status": "error", "message": "🔒 Сессия Discord не найдена. Авторизуйтесь на форуме!"}
+    if not user_discord_id: return {"status": "error", "message": "🔒 Сессия Discord не найдена"}
 
     async with aiosqlite.connect(DB_PATH) as db:
-        # Автоматический кошелек на 1000 Сочи-коинов новичкам при первом входе
         try:
-            await db.execute("""
-                INSERT INTO sochi_wallets (user_discord_id, username, sochi_coins) 
-                VALUES (?, ?, 1000.0) 
-                ON CONFLICT(user_discord_id) DO UPDATE SET username = ?
-            """, (user_discord_id, username, username))
+            await db.execute("INSERT INTO sochi_wallets (user_discord_id, username, sochi_coins) VALUES (?, ?, 1000.0) ON CONFLICT(user_discord_id) DO UPDATE SET username = ?", (user_discord_id, username, username))
             await db.commit()
         except: pass
 
-        # Баланс криптокошелька текущего пользователя
         async with db.execute("SELECT sochi_coins FROM sochi_wallets WHERE user_discord_id = ?", (user_discord_id,)) as cursor:
             wallet_row = await cursor.fetchone()
             sochi_balance = wallet_row[0] if wallet_row else 1000.0
 
-        # Котировки активов и сбор карты цен для быстрой калькуляции топа
         market = []
         prices_map = {}
         async with db.execute("SELECT ticker, company_name, current_price, last_change, description FROM stock_assets") as cursor:
             rows = await cursor.fetchall()
             for r in rows: 
-                market.append({
-                    "ticker": r[0], "name": r[1], "price": r[2], "change": r[3],
-                    "description": r[4] if r[4] else "Описание компании подготавливается аналитическим отделом SSE."
-                })
+                market.append({"ticker": r[0], "name": r[1], "price": r[2], "change": r[3], "description": r[4]})
                 prices_map[r[0]] = r[2]
 
-        # Портфель текущего игрока (сколько куплено акций)
         portfolio = {}
         async with db.execute("SELECT ticker, shares_count FROM user_stock_portfolio WHERE user_discord_id = ?", (user_discord_id,)) as cursor:
             rows = await cursor.fetchall()
             for r in rows: portfolio[r[0]] = r[1]
 
-        # Вековая история шкалы курса для отрисовки тонких линий на Canvas
         history_map = {}
         async with db.execute("SELECT ticker, price, timestamp FROM stock_price_history ORDER BY id ASC") as cursor:
             rows = await cursor.fetchall()
             for r in rows:
-                t, p, time_stamp = r[0], r[1], r[2]
-                if t not in history_map: history_map[t] = []
-                history_map[t].append({"price": p, "time": time_stamp})
+                if r[0] not in history_map: history_map[r[0]] = []
+                history_map[r[0]].append({"price": r[1], "time": r[2]})
 
-        # 🎯 ГЛАВНАЯ МАГИЯ: ПУЛЕНЕПРОБИВАЕМЫЙ ЛИДЕРБОРД БЕЗ ПУСТОТЫ НА ЭКРАНЕ
+        # 🎯 ЧЕСТНЫЙ ЛИДЕРБОРД ПО ВСЕМ ИМЕЮЩИМСЯ ПОЛЬЗОВАТЕЛЯМ БИРЖИ
         leaderboard_list = []
-        try:
-            # Сначала собираем вообще всех людей, у которых уже есть кошельки на самой бирже
-            async with db.execute("SELECT user_discord_id, username, sochi_coins FROM sochi_wallets") as cursor:
-                wallet_rows = await cursor.fetchall()
-            
-            # Собираем портфели акций всех инвесторов
-            all_portfolios_map = {}
-            async with db.execute("SELECT user_discord_id, ticker, shares_count FROM user_stock_portfolio") as cursor:
-                all_shares = await cursor.fetchall()
-                for s in all_shares:
-                    u_id, tick, count = s[0], s[1], s[2]
-                    if u_id not in all_portfolios_map: all_portfolios_map[u_id] = []
-                    all_portfolios_map[u_id].append({"ticker": tick, "count": count})
+        async with db.execute("SELECT user_discord_id, username, sochi_coins FROM sochi_wallets") as cursor:
+            wallet_rows = await cursor.fetchall()
 
-            # Подсчитываем общий капитал для каждого кошелька биржи
-            existing_uids = set()
-            for w in wallet_rows:
-                w_uid, w_name, w_coins = w[0], w[1], w[2]
-                existing_uids.add(w_uid)
+        all_portfolios_map = {}
+        async with db.execute("SELECT user_discord_id, ticker, shares_count FROM user_stock_portfolio") as cursor:
+            all_shares = await cursor.fetchall()
+            for s in all_shares:
+                if s[0] not in all_portfolios_map: all_portfolios_map[s[0]] = []
+                all_portfolios_map[s[0]].append({"ticker": s[1], "count": s[2]})
+
+        for w in wallet_rows:
+            w_uid, w_name, w_coins = w[0], w[1], w[2]
+            shares_value = 0.0
+            user_shares_list = all_portfolios_map.get(w_uid, [])
+            for share in user_shares_list:
+                shares_value += share["count"] * prices_map.get(share["ticker"], 0.0)
                 
-                shares_value = 0.0
-                user_shares_list = all_portfolios_map.get(w_uid, [])
-                for share in user_shares_list:
-                    shares_value += share["count"] * prices_map.get(share["ticker"], 0.0)
-                    
-                total_worth = w_coins + shares_value
-                display_name = w_name.capitalize() if "_" not in w_name else w_name
-                
-                leaderboard_list.append({
-                    "username": display_name,
-                    "avatar": user_avatar if w_uid == user_discord_id else "https://ibb.co",
-                    "total_worth": total_worth
-                })
+            total_worth = w_coins + shares_value
+            leaderboard_list.append({
+                "discord_id": w_uid,
+                "username": w_name.capitalize() if "_" not in w_name else w_name,
+                "avatar": user_avatar if w_uid == user_discord_id else "https://ibb.co",
+                "total_worth": total_worth
+            })
 
-            # 🎯 ФИКС: Если людей на бирже меньше 10, подтягиваем остальных юзеров из общей базы форума со стартовыми 1000 SC!
-            try:
-                async with db.execute("SELECT username FROM user_shop_profile") as cursor:
-                    forum_rows = await cursor.fetchall()
-                for f_row in forum_rows:
-                    f_name = f_row[0]
-                    # Проверяем, нет ли этого человека уже в нашем списке лидеров
-                    if not any(x["username"].lower() == f_name.lower() for x in leaderboard_list):
-                        leaderboard_list.append({
-                            "username": f_name.capitalize(),
-                            "avatar": "https://ibb.co",
-                            "total_worth": 1000.0 # Стартовый капитал поровну!
-                        })
-            except: pass
-
-            # Всегда принудительно закидываем в топ самого себя, чтобы экран никогда не был пустым
-            if not any(x["username"].lower() == username.lower() for x in leaderboard_list):
-                leaderboard_list.append({"username": username.capitalize(), "avatar": user_avatar, "total_worth": sochi_balance})
-
-            # Сортируем инвесторов по убыванию богатства
-            leaderboard_list.sort(key=lambda x: x["total_worth"], reverse=True)
-        except Exception as e:
-            print(f"🛑 Ошибка расчета лидерборда: {e}")
-            leaderboard_list = [{"username": username.capitalize(), "avatar": user_avatar, "total_worth": sochi_balance}]
-
-        # Выводим ровно столько людей, сколько есть (хоть 1, хоть 4, максимум 10)
-        top_10_leaderboard = leaderboard_list[:10]
-
+        # Сортируем по возрастанию капитала (от меньшего к большему) или убыванию. Твой запрос: "по возрастанию"
+        leaderboard_list.sort(key=lambda x: x["total_worth"], reverse=False)
+        
         return {
-            "status": "ok", 
-            "sochi_coins": round(sochi_balance, 2), 
-            "market": market, 
-            "portfolio": portfolio, 
-            "history": history_map,
-            "wallets_leaderboard": top_10_leaderboard
+            "status": "ok", "sochi_coins": round(sochi_balance, 2), "market": market, 
+            "portfolio": portfolio, "history": history_map, "wallets_leaderboard": leaderboard_list[:10]
         }
+
+# ==========================================================
+# 📈 СУБД: ДОРАБОТАННЫЙ МАСШТАБИРУЕМЫЙ REESTR AKCIY SOCHI
+# ==========================================================
+STARTER_SOCHI_STOCKS = [
+    ("GOV", "Правительство Сочи", 500.0, "Центральный аппарат управления инфраструктурой и экономическими зонами курортной столицы."),
+    ("GER", "Герасев и Команда", 350.0, "Медиа-гигант и творческое объединение, генерирующее основной трафик и контент."),
+    ("SBR", "Сбер Банк Сочи", 800.0, "Главный финансовый конгломерат, обеспечивающий ликвидность региона."),
+    ("ALPB", "Альфа Банк Сочи", 650.0, "Высокотехнологичный частный банк, развивающий цифровые сервисы."),
+    ("BBR", "Бобер Корпорейшн", 200.0, "Прогрессивная крафтовая корпорация, контролирующая лесную промышленность."),
+    ("INFS", "Инфраструктура Сочи", 400.0, "Главный строительный узел: отели, дороги, неоновые вывески."),
+    ("ENRG", "Электроэнергетика Сочи", 900.0, "Главная энергетическая артерия города, питающая майнинг-фермы."),
+    ("SRSRP", "Сервер Сочи РП", 100.0, "Официальный цифровой хаб игрового симулятора жизни."),
+    ("TRNS", "Транспорт Сочи", 250.0, "Логистический гигант региона: монорельсы, скоростные шоссе."),
+    # 🎯 ТВОИ НОВЫЕ МОЩНЫЕ АКЦИИ ДОБАВЛЕНЫ:
+    ("HIMARS", "Ракетный комплекс Хаймарс", 2000.0, "Оборонно-промышленный комплекс высокоточного сдерживания и защиты рубежей Сочи."),
+    ("GOVBBRSTN", "Правительство Боберстана", 10.0, "Суверенный аппарат дружественного Боберстана, экспортирующий дерево и плотины."),
+    ("USSR", "Акции СССР", 100000.0, "Легендарное наследие сверхдержавы. Главный золотовалютный и индустриальный резерв биржи.")
+]
+
+async def init_sochi_stock_exchange_tables():
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("CREATE TABLE IF NOT EXISTS sochi_wallets (user_discord_id TEXT PRIMARY KEY, username TEXT, sochi_coins REAL DEFAULT 1000.0)")
+        await db.execute("CREATE TABLE IF NOT EXISTS stock_assets (ticker TEXT PRIMARY KEY, company_name TEXT, current_price REAL, last_change REAL DEFAULT 0.0, description TEXT DEFAULT '')")
+        await db.execute("CREATE TABLE IF NOT EXISTS user_stock_portfolio (user_discord_id TEXT, ticker TEXT, shares_count INTEGER DEFAULT 0, PRIMARY KEY (user_discord_id, ticker))")
+        await db.execute("CREATE TABLE IF NOT EXISTS stock_price_history (id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT, price REAL, timestamp TEXT)")
+        
+        now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
+        for ticker, name, initial_price, desc in STARTER_SOCHI_STOCKS:
+            async with db.execute("SELECT 1 FROM stock_assets WHERE ticker = ?", (ticker,)) as cursor:
+                if not await cursor.fetchone():
+                    await db.execute("INSERT INTO stock_assets (ticker, company_name, current_price, description) VALUES (?, ?, ?, ?)", (ticker, name, initial_price, desc))
+                    await db.execute("INSERT INTO stock_price_history (ticker, price, timestamp) VALUES (?, ?, ?)", (ticker, initial_price, now_time))
+                else:
+                    await db.execute("UPDATE stock_assets SET description = ? WHERE ticker = ?", (desc, ticker))
+        await db.commit()
+
+# 2. API: ОБНОВЛЕННЫЙ СЪЕМ МАРКЕТА И ЛИДЕРБОРДА
+@app.get("/api/stock/market")
+async def get_sochi_market_data(request: Request):
+    user_discord_id = request.cookies.get("forum_user_id")
+    username = request.cookies.get("forum_user_name", "Участник форума")
+    user_avatar = request.cookies.get("forum_user_avatar", "https://ibb.co")
+    
+    if not user_discord_id: return {"status": "error", "message": "🔒 Сессия Discord не найдена"}
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        try:
+            await db.execute("INSERT INTO sochi_wallets (user_discord_id, username, sochi_coins) VALUES (?, ?, 1000.0) ON CONFLICT(user_discord_id) DO UPDATE SET username = ?", (user_discord_id, username, username))
+            await db.commit()
+        except: pass
+
+        async with db.execute("SELECT sochi_coins FROM sochi_wallets WHERE user_discord_id = ?", (user_discord_id,)) as cursor:
+            wallet_row = await cursor.fetchone()
+            sochi_balance = wallet_row[0] if wallet_row else 1000.0
+
+        market = []
+        prices_map = {}
+        async with db.execute("SELECT ticker, company_name, current_price, last_change, description FROM stock_assets") as cursor:
+            rows = await cursor.fetchall()
+            for r in rows: 
+                market.append({"ticker": r[0], "name": r[1], "price": r[2], "change": r[3], "description": r[4]})
+                prices_map[r[0]] = r[2]
+
+        portfolio = {}
+        async with db.execute("SELECT ticker, shares_count FROM user_stock_portfolio WHERE user_discord_id = ?", (user_discord_id,)) as cursor:
+            rows = await cursor.fetchall()
+            for r in rows: portfolio[r[0]] = r[1]
+
+        history_map = {}
+        async with db.execute("SELECT ticker, price, timestamp FROM stock_price_history ORDER BY id ASC") as cursor:
+            rows = await cursor.fetchall()
+            for r in rows:
+                if r[0] not in history_map: history_map[r[0]] = []
+                history_map[r[0]].append({"price": r[1], "time": r[2]})
+
+        # 🎯 ЧЕСТНЫЙ ЛИДЕРБОРД ПО ВСЕМ ИМЕЮЩИМСЯ ПОЛЬЗОВАТЕЛЯМ БИРЖИ
+        leaderboard_list = []
+        async with db.execute("SELECT user_discord_id, username, sochi_coins FROM sochi_wallets") as cursor:
+            wallet_rows = await cursor.fetchall()
+
+        all_portfolios_map = {}
+        async with db.execute("SELECT user_discord_id, ticker, shares_count FROM user_stock_portfolio") as cursor:
+            all_shares = await cursor.fetchall()
+            for s in all_shares:
+                if s[0] not in all_portfolios_map: all_portfolios_map[s[0]] = []
+                all_portfolios_map[s[0]].append({"ticker": s[1], "count": s[2]})
+
+        for w in wallet_rows:
+            w_uid, w_name, w_coins = w[0], w[1], w[2]
+            shares_value = 0.0
+            user_shares_list = all_portfolios_map.get(w_uid, [])
+            for share in user_shares_list:
+                shares_value += share["count"] * prices_map.get(share["ticker"], 0.0)
+                
+            total_worth = w_coins + shares_value
+            leaderboard_list.append({
+                "discord_id": w_uid,
+                "username": w_name.capitalize() if "_" not in w_name else w_name,
+                "avatar": user_avatar if w_uid == user_discord_id else "https://ibb.co",
+                "total_worth": total_worth
+            })
+
+        # Сортируем по возрастанию капитала (от меньшего к большему) или убыванию. Твой запрос: "по возрастанию"
+        leaderboard_list.sort(key=lambda x: x["total_worth"], reverse=False)
+        
+        return {
+            "status": "ok", "sochi_coins": round(sochi_balance, 2), "market": market, 
+            "portfolio": portfolio, "history": history_map, "wallets_leaderboard": leaderboard_list[:10]
+        }
+
+# 🎯 3. API АДМИН-ПАНЕЛИ (SHIFT + G): КОРРЕКЦИЯ КАПИТАЛА ПОЛЬЗОВАТЕЛЕЙ
+@app.get("/api/stock/admin/users")
+async def get_admin_stock_users_list(request: Request):
+    # (Опционально: здесь можно вставить проверку на роль админа, если необходимо)
+    async with aiosqlite.connect(DB_PATH) as db:
+        users_list = []
+        async with db.execute("SELECT user_discord_id, username, sochi_coins FROM sochi_wallets") as cursor:
+            rows = await cursor.fetchall()
+            for r in rows:
+                users_list.append({"discord_id": r[0], "username": r[1], "coins": round(r[2], 2)})
+        return {"status": "ok", "users": users_list}
+
+@app.post("/api/stock/admin/adjust")
+async def adjust_user_stock_balance(data: dict):
+    target_uid = data.get("discord_id")
+    mode = data.get("mode") # 'give' или 'take'
+    amount = float(data.get("amount", 0))
+
+    if amount <= 0: return {"status": "error", "message": "Сумма должна быть больше нуля"}
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT sochi_coins FROM sochi_wallets WHERE user_discord_id = ?", (target_uid,)) as cursor:
+            row = await cursor.fetchone()
+        if not row: return {"status": "error", "message": "Пользователь не найден"}
+        
+        current_balance = row[0]
+        if mode == "give":
+            new_balance = current_balance + amount
+        else:
+            # ЖЁСТКОЕ ОГРАНИЧЕНИЕ: Списание до 0, не уходя в минус!
+            new_balance = current_balance - amount
+            if new_balance < 0: new_balance = 0.0
+
+        await db.execute("UPDATE sochi_wallets SET sochi_coins = ? WHERE user_discord_id = ?", (new_balance, target_uid))
+        await db.commit()
+        return {"status": "ok", "message": f"🔥 Баланс успешно обновлен до {round(new_balance, 2)} SC!"}
+
+# 11. API: АДМИН-НАЧИСЛЕНИЕ ИЛИ СКАЧИВАНИЕ СОЧИ-КОИНОВ (С ОГРАНИЧЕНИЕМ ДО 0)
+@app.post("/api/stock/admin/manage_balance")
+async def admin_manage_user_balance(data: dict, request: Request):
+    user_discord_id = request.cookies.get("forum_user_id")
+    if not user_discord_id:
+        return {"status": "error", "message": "🔒 Сессия администратора истекла"}
+
+    target_discord_id = data.get("target_discord_id")
+    action_type = data.get("action_type") # 'give' или 'take'
+    amount = float(data.get("amount", 0))
+
+    if amount <= 0:
+        return {"status": "error", "message": "❌ Сумма должна быть больше 0"}
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Проверяем текущий баланс пользователя в СУБД SQLite
+        async with db.execute("SELECT sochi_coins FROM sochi_wallets WHERE user_discord_id = ?", (target_discord_id,)) as cursor:
+            row = await cursor.fetchone()
+        if not row:
+            return {"status": "error", "message": "❌ Гражданин не найден в реестре ПинБанка"}
+        
+        current_balance = row[0]
+
+        if action_type == "give":
+            # Начисляем монеты без лимитов
+            await db.execute("UPDATE sochi_wallets SET sochi_coins = sochi_coins + ? WHERE user_discord_id = ?", (amount, target_discord_id))
+            await db.commit()
+            return {"status": "ok", "message": f"💰 Успешно начислено +{amount} SC пользователю!"}
+        
+        elif action_type == "take":
+            # 🎯 СУПЕР-ОГРАНИЧЕНИЕ: Если списывают больше, чем есть — опускаем строго до 0, но не в минус!
+            if current_balance - amount < 0:
+                await db.execute("UPDATE sochi_wallets SET sochi_coins = 0.0 WHERE user_discord_id = ?", (target_discord_id,))
+                await db.commit()
+                return {"status": "ok", "message": "💸 Забрано максимум средств. Баланс пользователя снижен до 0.0 SC (Защита от минуса сработала)"}
+            else:
+                await db.execute("UPDATE sochi_wallets SET sochi_coins = sochi_coins - ? WHERE user_discord_id = ?", (amount, target_discord_id))
+                await db.commit()
+                return {"status": "ok", "message": f"📉 Успешно изъято -{amount} SC с кошелька пользователя!"}
+
+    return {"status": "error", "message": "Неизвестная ошибка банка"}
 
 # 3. API: БЕСКОНТАКТНАЯ БЕЗОПАСНАЯ ПОКУПКА ЛЮБОЙ АКЦИИ ЗА СОЧИ-КОИНЫ
 @app.post("/api/stock/buy")
