@@ -2573,14 +2573,20 @@ async def init_sochi_stock_exchange_tables():
             )
         """)
         
-        # Обновленный динамический реестр с подробными описаниями компаний Сочи
+        # ==========================================================
+        # 📈 СУБД: ДОРАБОТАННЫЙ МАСШТАБИРУЕМЫЙ РЕЕСТР АКЦИЙ СОЧИ
+        # ==========================================================
         STARTER_SOCHI_STOCKS = [
             ("GOV", "Правительство Сочи", 500.0, "Центральный аппарат управления инфраструктурой и экономическими зонами курортной столицы."),
             ("GER", "Герасев и Команда", 350.0, "Медиа-гигант и творческое объединение, генерирующее основной трафик и эксклюзивный контент на сервере."),
-            ("SBR", "Сбер Банк Сочи", 800.0, "Главный финансовый конгломерат, обеспечивающий ликвидность, кредитование и хранение золотовалютных резервов."),
+            ("SBR", "Сбер Банк Сочи", 800.0, "Главный финансовый конгломерат, обеспечивающий ликвидность, кредитование и хранение золотуалютных резервов."),
             ("ALPB", "Альфа Банк Сочи", 650.0, "Высокотехнологичный частный банк, развивающий цифровые сервисы и автоматизированные системы расчетов."),
             ("BBR", "Бобер Корпорейшн", 200.0, "Прогрессивная крафтовая корпорация, контролирующая лесную промышленность и эко-строительство в регионе."),
-            ("INFS", "Инфраструктура Сочи", 400.0, "Главный строительный узел: отели, дороги, неоновые вывески и поддержание работоспособности всех систем.")
+            ("INFS", "Инфраструктура Сочи", 400.0, "Главный строительный узел: отели, дороги, неоновые вывески и поддержание работоспособности всех систем."),
+            # 🎯 ТВОИ НОВЫЕ СВЕЖИЕ АКЦИИ ПУЛЕНЕПРОБИВАЕМО ВШИТЫ В ЭКОНОМИКУ:
+            ("ENRG", "Электроэнергетика Сочи", 900.0, "Главная энергетическая артерия города, питающая майнинг-фермы, неоновые кварталы и инфраструктуру."),
+            ("SRSRP", "Сервер Сочи РП", 100.0, "Официальный цифровой хаб игрового симулятора жизни, генерирующий колоссальный трафик новых граждан."),
+            ("TRNS", "Транспорт Сочи", 250.0, "Логистический гигант региона: монорельсы, скоростные шоссе, канатные дороги и каршеринг.")
         ]
         
         now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
@@ -2726,7 +2732,8 @@ async def serve_stock_exchange_page(request: Request):
     return FileResponse(os.path.join(BASE_DIR, "stock.html"))
 
 
-# 2. API: ОБНОВЛЕННЫЙ СЪЕМ МАРКЕТА (ПУЛЕНЕПРОБИВАЕМЫЙ ФИКС ОШИБКИ 500 И РАСПАКОВКИ КОРТЕЖЕЙ SQLite)
+
+# 2. API: ОБНОВЛЕННЫЙ СЪЕМ МАРКЕТА (ФИКС ЛИДЕРБОРДА И НОВЫЕ ТИКЕРЫ)
 @app.get("/api/stock/market")
 async def get_sochi_market_data(request: Request):
     user_discord_id = request.cookies.get("forum_user_id")
@@ -2759,10 +2766,7 @@ async def get_sochi_market_data(request: Request):
             rows = await cursor.fetchall()
             for r in rows: 
                 market.append({
-                    "ticker": r[0], 
-                    "name": r[1], 
-                    "price": r[2], 
-                    "change": r[3],
+                    "ticker": r[0], "name": r[1], "price": r[2], "change": r[3],
                     "description": r[4] if r[4] else "Описание компании подготавливается аналитическим отделом SSE."
                 })
                 prices_map[r[0]] = r[2]
@@ -2771,8 +2775,7 @@ async def get_sochi_market_data(request: Request):
         portfolio = {}
         async with db.execute("SELECT ticker, shares_count FROM user_stock_portfolio WHERE user_discord_id = ?", (user_discord_id,)) as cursor:
             rows = await cursor.fetchall()
-            for r in rows: 
-                portfolio[r[0]] = r[1]
+            for r in rows: portfolio[r[0]] = r[1]
 
         # Вековая история шкалы курса для отрисовки тонких линий на Canvas
         history_map = {}
@@ -2780,74 +2783,71 @@ async def get_sochi_market_data(request: Request):
             rows = await cursor.fetchall()
             for r in rows:
                 t, p, time_stamp = r[0], r[1], r[2]
-                if t not in history_map: 
-                    history_map[t] = []
+                if t not in history_map: history_map[t] = []
                 history_map[t].append({"price": p, "time": time_stamp})
 
-        # 🎯 ГЛАВНАЯ МАГИЯ: ФОРМИРУЕМ АВТОНОМНЫЙ ЛИДЕРБОРД ИЗ ВООБЩЕ ВСЕХ УЧАСТНИКОВ ФОРУМА
+        # 🎯 ГЛАВНАЯ МАГИЯ: ПУЛЕНЕПРОБИВАЕМЫЙ ЛИДЕРБОРД БЕЗ ПУСТОТЫ НА ЭКРАНЕ
         leaderboard_list = []
         try:
-            # 1. Загружаем имена абсолютно всех зарегистрированных граждан из таблицы профилей форума
-            async with db.execute("SELECT username FROM user_shop_profile") as cursor:
-                forum_users_rows = await cursor.fetchall()
-                all_forum_usernames = [str(row[0]).lower().strip() for row in forum_users_rows if row and row[0]]
-
-            # Подстраховка: принудительно заносим текущего пользователя в список, если его там нет
-            if username.lower().strip() not in all_forum_usernames:
-                all_forum_usernames.append(username.lower().strip())
-
-            # 2. Скачиваем все уже созданные кошельки Сочи-коинов
+            # Сначала собираем вообще всех людей, у которых уже есть кошельки на самой бирже
             async with db.execute("SELECT user_discord_id, username, sochi_coins FROM sochi_wallets") as cursor:
                 wallet_rows = await cursor.fetchall()
-                wallets_map = {str(w[1]).lower().strip(): {"uid": w[0], "coins": w[2]} for w in wallet_rows if w and w[1]}
-
-            # 3. Скачиваем пакеты акций всех инвесторов
+            
+            # Собираем портфели акций всех инвесторов
             all_portfolios_map = {}
             async with db.execute("SELECT user_discord_id, ticker, shares_count FROM user_stock_portfolio") as cursor:
                 all_shares = await cursor.fetchall()
                 for s in all_shares:
-                    if s and s[0]:
-                        u_id, tick, count = s[0], s[1], s[2]
-                        if u_id not in all_portfolios_map: 
-                            all_portfolios_map[u_id] = []
-                        all_portfolios_map[u_id].append({"ticker": tick, "count": count})
+                    u_id, tick, count = s[0], s[1], s[2]
+                    if u_id not in all_portfolios_map: all_portfolios_map[u_id] = []
+                    all_portfolios_map[u_id].append({"ticker": tick, "count": count})
 
-            # 4. Суммируем чистый капитал каждого человека
-            for user_name_raw in all_forum_usernames:
-                clean_name = user_name_raw.lower().strip()
+            # Подсчитываем общий капитал для каждого кошелька биржи
+            existing_uids = set()
+            for w in wallet_rows:
+                w_uid, w_name, w_coins = w[0], w[1], w[2]
+                existing_uids.add(w_uid)
                 
-                # Извлекаем кошелек из карты. Если юзер зашёл первый раз — у него ровно 1000.0 SC
-                wallet_data = wallets_map.get(clean_name, {"uid": "new_" + clean_name, "coins": 1000.0})
-                w_uid = wallet_data["uid"]
-                w_coins = wallet_data["coins"]
-
-                # Калькулируем рыночную стоимость акций человека по текущему тику биржи
                 shares_value = 0.0
                 user_shares_list = all_portfolios_map.get(w_uid, [])
                 for share in user_shares_list:
-                    ticker_price = prices_map.get(share["ticker"], 0.0)
-                    shares_value += share["count"] * ticker_price
+                    shares_value += share["count"] * prices_map.get(share["ticker"], 0.0)
                     
                 total_worth = w_coins + shares_value
+                display_name = w_name.capitalize() if "_" not in w_name else w_name
                 
-                # Красивое имя с большой буквы
-                display_name = user_name_raw.capitalize() if "_" not in user_name_raw else user_name_raw
-                is_me = (clean_name == username.lower().strip())
-
                 leaderboard_list.append({
                     "username": display_name,
-                    "avatar": user_avatar if is_me else "https://ibb.co",
+                    "avatar": user_avatar if w_uid == user_discord_id else "https://ibb.co",
                     "total_worth": total_worth
                 })
 
-            # Сортируем инвесторов от самых богатых к бедным
+            # 🎯 ФИКС: Если людей на бирже меньше 10, подтягиваем остальных юзеров из общей базы форума со стартовыми 1000 SC!
+            try:
+                async with db.execute("SELECT username FROM user_shop_profile") as cursor:
+                    forum_rows = await cursor.fetchall()
+                for f_row in forum_rows:
+                    f_name = f_row[0]
+                    # Проверяем, нет ли этого человека уже в нашем списке лидеров
+                    if not any(x["username"].lower() == f_name.lower() for x in leaderboard_list):
+                        leaderboard_list.append({
+                            "username": f_name.capitalize(),
+                            "avatar": "https://ibb.co",
+                            "total_worth": 1000.0 # Стартовый капитал поровну!
+                        })
+            except: pass
+
+            # Всегда принудительно закидываем в топ самого себя, чтобы экран никогда не был пустым
+            if not any(x["username"].lower() == username.lower() for x in leaderboard_list):
+                leaderboard_list.append({"username": username.capitalize(), "avatar": user_avatar, "total_worth": sochi_balance})
+
+            # Сортируем инвесторов по убыванию богатства
             leaderboard_list.sort(key=lambda x: x["total_worth"], reverse=True)
-        except Exception as leader_err:
-            print(f"🛑 [LEADERBOARD CALC ERROR] Сбой расчета топа богатства: {leader_err}")
-            # Страховочный фолбек: если в базе форума кривые данные, выводим хотя бы текущего юзера
+        except Exception as e:
+            print(f"🛑 Ошибка расчета лидерборда: {e}")
             leaderboard_list = [{"username": username.capitalize(), "avatar": user_avatar, "total_worth": sochi_balance}]
-        
-        # Обрезаем до ТОП-10
+
+        # Выводим ровно столько людей, сколько есть (хоть 1, хоть 4, максимум 10)
         top_10_leaderboard = leaderboard_list[:10]
 
         return {
