@@ -22,13 +22,25 @@
         }
 
         /* НАВИГАЦИОННАЯ ПАНЕЛЬ */
-        .stock-navbar {
-            background-color: var(--bg-card); padding: 16px 24px;
-            display: flex; align-items: center; justify-content: space-between;
-            border-bottom: 1px solid var(--border-color); box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-            flex-wrap: wrap; gap: 15px;
-        }
-        .stock-logo { font-size: 18px; font-weight: 800; color: var(--text-dark); display: flex; align-items: center; gap: 8px; }
+        <!-- ВЕРХНЯЯ ШАПКА БИРЖИ С КРИПТОКОШЕЛЬКОМ И КНОПКОЙ СМЕНЫ ТЕМЫ -->
+        <div class="stock-navbar">
+            <div class="stock-logo">
+                <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                <span style="letter-spacing: -0.5px;">Sochi Stock Exchange (SSE)</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <button onclick="toggleSochiStockExchangeThemeMode()" style="background: var(--bg-main); border: 1px solid var(--border-color); padding: 8px 14px; border-radius: 14px; cursor: pointer; font-size: 13px; font-weight: 700; color: var(--text-dark); display: flex; align-items: center; gap: 6px; transition: 0.2s;">
+                    🌗 Кастомная тема
+                </button>
+                <div class="crypto-wallet-badge">
+                    <span>Баланс кошелька:</span>
+                    <span id="sochi-coins-wallet-display" style="color: var(--text-dark); font-weight: 800;">1000.00</span>
+                    <span style="color: var(--text-muted); font-size: 11px; font-weight: 800;">SC</span>
+                </div>
+                <button onclick="location.href='/forum'" style="background: none; border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 14px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-muted); transition: 0.2s;">Назад</button>
+            </div>
+        </div>
+
         
         /* КРИПТОКОШЕЛЕК СОЧИ-КОИНОВ (1000 SC) */
         .crypto-wallet-badge {
@@ -294,6 +306,46 @@
             </div>
         </div>
     </div>
+    <!-- ========================================================== -->
+    <!-- 🎛️ 4.3. СКРЫТЫЙ ПУЛЬТ МАРКЕТМЕЙКЕРА (CTRL + SHIFT + A) -->
+    <!-- ========================================================== -->
+    <div class="stock-modal-overlay" id="modal-admin-market-maker-panel" onclick="closeAdminMarketMakerPanel()" style="background: rgba(15,23,42,0.85);">
+        <div class="trade-terminal-card" onclick="event.stopPropagation()" style="max-width: 450px;">
+            <div style="border-bottom: 1px dashed var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+                <h3 style="margin: 0; color: #007aff; font-size: 18px; display: flex; align-items: center; gap: 8px;">
+                    📈 Пульт регулятора экономики Сочи
+                </h3>
+                <span style="font-size: 11px; font-weight: 800; background: #dbeafe; color: #1e40af; padding: 4px 8px; border-radius: 6px; display: inline-block; margin-top: 4px;">CTRL + SHIFT + A MODIFICATION</span>
+            </div>
+            
+            <label style="font-size: 11px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 6px;">Выберите регулируемую акцию:</label>
+            <select id="mm-asset-ticker-selector" class="bank-input-field" style="width:100%; padding:12px; border-radius:10px; border:1px solid var(--border-color); background:var(--bg-main); font-size:14px; font-weight:700; color:var(--text-dark); outline:none; margin-bottom:16px;" onchange="renderMarketMakerAssetActiveControlsState(this.value)">
+                <!-- Заполняется через JS динамически всеми 12 акциями из SQLite -->
+            </select>
+
+            <div id="mm-active-controls-wrapper-zone" style="display: flex; flex-direction: column; gap: 14px;">
+                <!-- Тут выведутся кнопки Памп / Дамп / Обвал -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================== -->
+    <!-- 🧮 4.4. МИНИ-ОКНО ВВОДА ПРОЦЕНТА ИЗМЕНЕНИЯ КУРСА -->
+    <!-- ========================================================== -->
+    <div class="stock-modal-overlay" id="modal-mm-percent-wizard" onclick="closeMmPercentWizardWindow()" style="z-index: 220; background: rgba(0,0,0,0.5);">
+        <div class="trade-terminal-card" onclick="event.stopPropagation()" style="max-width: 340px; text-align: center;">
+            <h3 id="mm-wizard-title-label" style="margin: 0 0 12px 0; font-size: 15px; font-weight: 800;">Задать шаг курса</h3>
+            <input type="hidden" id="mm-wizard-target-ticker">
+            <input type="hidden" id="mm-wizard-active-mode">
+            
+            <input type="number" id="mm-wizard-percent-input" min="1" max="500" value="15" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border-color); background: var(--bg-main); font-size: 20px; font-weight: bold; outline: none; text-align: center; margin-bottom: 16px;">
+            
+            <div style="display: flex; gap: 10px;">
+                <button class="terminal-btn" style="background-color: var(--text-muted); color: #fff;" onclick="closeMmPercentWizardWindow()">Отмена</button>
+                <button class="terminal-btn" style="background-color: #007aff; color: #fff;" onclick="submitAdminMarketControlCommandToServer()">✔ Применить</button>
+            </div>
+        </div>
+    </div>
 
 
     <script>
@@ -304,6 +356,36 @@
         let userPortfolioCache = {};
         let stockHistoryCache = {};
         let activeSelectedTicker = null;
+        let currentInterfaceThemeMode = localStorage.getItem("sse_theme_mode") || "light";
+
+        function applyInterfaceThemeStylesMode() {
+            const root = document.documentElement;
+            if (currentInterfaceThemeMode === "dark") {
+                root.style.setProperty('--bg-main', '#0f172a');     /* Глубокий ночной фон */
+                root.style.setProperty('--bg-card', '#1e293b');     /* Темные матовые блоки */
+                root.style.setProperty('--text-dark', '#f8fafc');   /* Белоснежный текст */
+                root.style.setProperty('--text-muted', '#94a3b8');  /* Серый текст */
+                root.style.setProperty('--border-color', '#334155');/* Стальные границы */
+            } else {
+                root.style.setProperty('--bg-main', '#f8fafc');     /* Базовый белый фон */
+                root.style.setProperty('--bg-card', '#ffffff');
+                root.style.setProperty('--text-dark', '#0f172a');
+                root.style.setProperty('--text-muted', '#64748b');
+                root.style.setProperty('--border-color', '#e2e8f0');
+            }
+            // Мгновенный перерендер Canvas-шкал под новые контрастные цвета
+            if (marketDataCache.length > 0) {
+                renderSochiMarketCardsShowcase(marketDataCache, userPortfolioCache);
+                if (activeSelectedTicker) refreshActiveTerminalLabelsOnMarketTick();
+            }
+        }
+
+        function toggleSochiStockExchangeThemeMode() {
+            currentInterfaceThemeMode = currentInterfaceThemeMode === "light" ? "dark" : "light";
+            localStorage.setItem("sse_theme_mode", currentInterfaceThemeMode);
+            applyInterfaceThemeStylesMode();
+        }
+
 
         // 1. ВЕЧНЫЙ ДВИГАТЕЛЬ SSE: ФОНОВЫЙ ОПРОС СЕРВЕРА С ОБНОВЛЕНИЕМ СТАТИСТИКИ
         async function fetchSochiMarketDataFromServer() {
@@ -689,11 +771,18 @@
         // 👑 8. СЕКРЕТНЫЙ АДМИН-МОДУЛЬ КАССЫ (SHIFT + G)
         // ==========================================================
         window.addEventListener("keydown", (e) => {
-            if (e.shiftKey && (e.key === "G" || e.key === "g" || e.key === "П" || e.key === "п")) {
+            // 1. Панель Казначейства (Shift + G)
+            if (e.shiftKey && !e.ctrlKey && (e.key === "G" || e.key === "g" || e.key === "П" || e.key === "п")) {
                 e.preventDefault();
                 openAdminGodPanelDashboard();
             }
+            // 2. Пульт Маркетмейкера Регулятора (Ctrl + Shift + A)
+            if (e.ctrlKey && e.shiftKey && (e.key === "A" || e.key === "a" || e.key === "Ф" || e.key === "ф")) {
+                e.preventDefault();
+                openAdminMarketMakerPanel();
+            }
         });
+
 
         async function openAdminGodPanelDashboard() {
             try {
@@ -764,15 +853,108 @@
                 await fetchSochiMarketDataFromServer(); 
             } catch (e) { alert("Ошибка изменения баланса."); }
         }
+        
+        // ==========================================================
+        // 🎛️ ДОБАВЛЕНО: ЛОГИКА ПУЛЬТА МАРКЕТМЕЙКЕРА (CTRL + SHIFT + A)
+        // ==========================================================
+        function openAdminMarketMakerPanel() {
+            const selector = document.getElementById("mm-asset-ticker-selector");
+            if (!selector) return;
+            selector.innerHTML = "";
 
-        // Автозапуск всей биржевой системы Сочи
+            // Динамически заполняем селектор пульта всеми доступными на бирже акциями
+            marketDataCache.forEach(asset => {
+                const opt = document.createElement("option");
+                opt.value = asset.ticker;
+                opt.textContent = `[${asset.ticker}] ${asset.name}`;
+                selector.appendChild(opt);
+            });
+
+            // Рендерим кнопки управления для первой акции в списке
+            if (marketDataCache.length > 0) {
+                renderMarketMakerAssetActiveControlsState(marketDataCache[0].ticker);
+            }
+
+            document.getElementById("modal-admin-market-maker-panel").style.display = "flex";
+        }
+
+        function closeAdminMarketMakerPanel() { document.getElementById("modal-admin-market-maker-panel").style.display = "none"; }
+
+        function renderMarketMakerAssetActiveControlsState(ticker) {
+            const zone = document.getElementById("mm-active-controls-wrapper-zone");
+            if (!zone) return;
+
+            zone.innerHTML = `
+                <div style="background:var(--bg-main); padding:12px; border-radius:10px; border:1px dashed var(--border-color); font-size:13px; font-weight:700; text-align:center;">
+                    Выбран актив: <span style="color:#007aff;">${ticker}</span>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button class="terminal-btn" style="background:#34c759; color:#fff;" onclick="openMmPercentWizardWindow('${ticker}', 'pump')">🚀 Памп (Рост)</button>
+                    <button class="terminal-btn" style="background:#ff9500; color:#fff;" onclick="openMmPercentWizardWindow('${ticker}', 'dump')">💥 Дамп (Спад)</button>
+                </div>
+                <!-- Кнопка 5-минутного затяжного падения почти до нуля -->
+                <button class="terminal-btn" style="background:var(--bear-red); color:#fff; box-shadow:0 4px 12px rgba(239,68,68,0.2);" onclick="executeImmediateStockCrashCommand('${ticker}')">
+                    🚨 ЗАПУСТИТЬ ОБВАЛ АКЦИИ (5 МИН)
+                </button>
+            `;
+        }
+
+        function openMmPercentWizardWindow(ticker, mode) {
+            document.getElementById("mm-wizard-target-ticker").value = ticker;
+            document.getElementById("mm-wizard-active-mode").value = mode;
+            document.getElementById("mm-wizard-percent-input").value = 15;
+            
+            document.getElementById("mm-wizard-title-label").textContent = mode === "pump" ? `Пропампить курс ${ticker} (%)` : `Опустить курс ${ticker} (%)`;
+            document.getElementById("modal-mm-percent-wizard").style.display = "flex";
+        }
+
+        function closeMmPercentWizardWindow() { document.getElementById("modal-mm-mm-percent-wizard"); document.getElementById("modal-mm-percent-wizard").style.display = "none"; }
+
+        // 1. КОМАНДА: МГНОВЕННЫЙ ПАМП / ДАМП НА ЗАДАННЫЙ ПРОЦЕНТ
+        async function submitAdminMarketControlCommandToServer() {
+            const ticker = document.getElementById("mm-wizard-target-ticker").value;
+            const mode = document.getElementById("mm-wizard-active-mode").value;
+            const percent = parseFloat(document.getElementById("mm-wizard-percent-input").value);
+
+            if (isNaN(percent) || percent <= 0) { alert("❌ Введите корректный процент!"); return; }
+
+            try {
+                const res = await fetch(`${API_URL}/api/stock/admin/market_control`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ ticker: ticker, action_mode: mode, percent: percent })
+                });
+                const data = await res.json();
+                alert(data.message);
+                
+                closeMmPercentWizardWindow();
+                await fetchSochiMarketDataFromServer(); // Живой перерендер полосочек графиков
+            } catch (e) { alert("Ошибка управления котировками."); }
+        }
+
+        // 2. КОМАНДА: ВЕКОВОЙ 5-МИНУТНЫЙ ПЛАВНЫЙ КРАХ ДО НУЛЯ
+        async function executeImmediateStockCrashCommand(ticker) {
+            if (!confirm(`🚨 Вы уверены, что хотите запустить 5-минутный обвал акций ${ticker}? Стоимость начнет стремительно падать на каждом тике!`)) return;
+
+            try {
+                const res = await fetch(`${API_URL}/api/stock/admin/market_control`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ ticker: ticker, action_mode: "crash" })
+                });
+                const data = await res.json();
+                alert(data.message);
+                closeAdminMarketMakerPanel();
+            } catch (e) { alert("Ошибка инициации краха рынка."); }
+        }
+
         window.onload = () => {
+            applyInterfaceThemeStylesMode(); // 🎯 ДОБАВЛЕНО: Применяем тему оформления со старта!
             fetchSochiMarketDataFromServer();
             initInteractiveCanvasHoverTrackingSystem(); 
-            
-            // Котировки, Топ-10 и портфели в SQLite обновляются на экране каждые 5 секунд сами!
             setInterval(fetchSochiMarketDataFromServer, 5000);
         };
+
     </script>
 </body>
 </html>
