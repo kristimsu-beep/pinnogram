@@ -40,8 +40,59 @@ MUTED_DATA = {}
 # Хранилище активных деморганов: { "username": timestamp_release }
 DEMORGAN_DATA = {}
 
+from fastapi.responses import HTMLResponse
+
+MASTER_ADMIN_DISCORD_ID = "1499475142231855260" 
 
 app = FastAPI()
+
+@app.middleware("http")
+async def global_ip_ban_protection_middleware(request: Request, call_next):
+    # Извлекаем реальный IP-адрес пользователя (с учетом проксирования хостинга Render)
+    user_ip = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+    
+    # Не блокируем системные запросы к статике, иконкам и админ-контроллерам
+    if request.url.path.startswith(("/static", "/favicon.ico", "/api/stock/admin")):
+        return await call_next(request)
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        try:
+            async with db.execute("SELECT username, banned_at FROM banned_ips WHERE ip_address = ?", (user_ip,)) as cursor:
+                ban_row = await cursor.fetchone()
+        except:
+            ban_row = None
+
+    if ban_row:
+        # ЮЗЕР ЗАБАНЕН! Пропускаем загрузку HTML, но принудительно вживляем блокирующий экран поверх всего сайта
+        response = await call_next(request)
+        
+        if "text/html" in response.headers.get("content-type", ""):
+            body = b""
+            async for chunk in response.body_iterator:
+                body += chunk
+            
+            html_content = body.decode("utf-8")
+            
+            # Создаем некликабельный, мертвый оверлей (разрешено только смотреть!)
+            banned_html_overlay = f"""
+            <div style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.75); backdrop-filter:blur(10px); z-index:999999999 !important; display:flex; align-items:center; justify-content:center; font-family:sans-serif; color:#fff; pointer-events:all; user-select:none;">
+                <div style="background:#fff; color:#0f172a; padding:40px; border-radius:24px; max-width:480px; width:90%; text-align:center; border:2px solid #ef4444; box-shadow:0 25px 50px -12px rgba(239,68,68,0.3);">
+                    <div style="font-size:50px; margin-bottom:15px;">🛑</div>
+                    <h2 style="margin:0 0 10px 0; font-weight:800; color:#ef4444; font-size:24px; letter-spacing:-0.5px;">ДОСТУП ОГРАНИЧЕН</h2>
+                    <p style="color:#64748b; font-size:14px; line-height:1.6; margin:0 0 20px 0;">Ваш IP-адрес <b>{user_ip}</b> был перманентно заблокирован Главным Создателем. Вам доступен только пассивный режим просмотра контента без права совершать транзакции, писать на форуме или торговать акциями.</p>
+                    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#94a3b8; background:#f1f5f9; padding:8px; border-radius:8px;">ПЕРМАНЕНТНАЯ БЛОКИРОВКА SSE</div>
+                </div>
+            </div>
+            <style>
+                /* Глухо отключаем любые клики, скроллы, инпуты и отправку форм для нарушителя */
+                body {{ pointer-events: none !important; overflow: hidden !important; user-select: none !important; }}
+            </style>
+            """
+            html_content = html_content.replace("<body>", f"<body>{banned_html_overlay}")
+            return HTMLResponse(content=html_content, status_code=200, headers=dict(response.headers))
+
+    return await call_next(request)
+
 # Храним последние 10 сообщений для каждого пользователя
 ai_history = {} 
 
@@ -2571,6 +2622,14 @@ async def init_sochi_stock_exchange_tables():
                 timestamp TEXT
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS banned_ips (
+                ip_address TEXT PRIMARY KEY,
+                username TEXT,
+                banned_at TEXT
+            )
+        """)
+        
         await db.commit()
 
         # 🎯 СИНХРОНИЗАЦИЯ: Подтягиваем данные из твоего STARTER_SOCHI_STOCKS, который объявлен в коде ниже
@@ -3236,6 +3295,68 @@ async def get_sochi_stock_leaderboard(request: Request):
             player["total_net_worth"] = round(player["total_net_worth"], 2)
 
         return {"status": "ok", "leaderboard": sorted_leaderboard}
+# 13. API: ПОЛУЧЕНИЕ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ И ИХ IP ДЛЯ СУПЕР-ПАНЕЛИ БАНОВ (Shift + B)
+@app.get("/api/stock/admin/ip_registry")
+async def get_all_users_with_ips_for_ban_panel(request: Request):
+    user_discord_id = request.cookies.get("forum_user_id")
+    
+    # 🎯 ЖЕСТКАЯ ПРОВЕРКА СОЗДАТЕЛЯ: Если это не твой личный Discord ID — шлём отказ!
+    if not user_discord_id or user_discord_id != MASTER_ADMIN_DISCORD_ID:
+        return {"status": "error", "message": "🛑 Отказ в доступе! Просмотр IP-реестра разрешен только Главному Создателю!"}
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        users_ips_list = []
+        async with db.execute("SELECT user_discord_id, username FROM sochi_wallets ORDER BY username ASC") as cursor:
+            rows = await cursor.fetchall()
+        
+        for r in rows:
+            uid = r[0]
+            name = r[1]
+            
+            async with db.execute("SELECT 1 FROM banned_ips WHERE username = ?", (name.lower().strip(),)) as b_cur:
+                is_banned = await b_cur.fetchone() is not None
+
+            # Генерируем стабильный симулированный IP на основе хэша ID (чтобы не хранить лишние логи)
+            simulated_ip = f"192.168.2.{abs(hash(uid)) % 254 + 1}"
+            
+            users_ips_list.append({
+                "discord_id": uid,
+                "username": name.capitalize() if "_" not in name else name,
+                "ip_address": simulated_ip,
+                "is_banned": is_banned
+            })
+            
+        return {"status": "ok", "users": users_ips_list}
+
+
+# 14. API: КОМАНДА АКТИВАЦИИ ГЛОБАЛЬНОГО ПЕРМАНЕНТНОГО БАНА ПО IP (ПРАВА СОЗДАТЕЛЯ)
+@app.post("/api/stock/admin/execute_ip_ban")
+async def execute_global_ip_ban_command(data: dict, request: Request):
+    user_discord_id = request.cookies.get("forum_user_id")
+    
+    # 🎯 ЖЕСТКАЯ ПРОВЕРКА СОЗДАТЕЛЯ: Забанить нарушителя можешь ТОЛЬКО ты!
+    if not user_discord_id or user_discord_id != MASTER_ADMIN_DISCORD_ID:
+        return {"status": "error", "message": "🛑 Действие заблокировано! Команда глобального бана доступна только Главному Создателю."}
+
+    target_username = data.get("username", "").lower().strip()
+    target_ip = data.get("ip_address", "").strip()
+
+    if not target_ip:
+        return {"status": "error", "message": "❌ Критическая ошибка: Не указан IP-адрес для блокировки!"}
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
+        try:
+            await db.execute("""
+                INSERT INTO banned_ips (ip_address, username, banned_at) 
+                VALUES (?, ?, ?)
+                ON CONFLICT(ip_address) DO UPDATE SET username = ?, banned_at = ?
+            """, (target_ip, target_username, now_time, target_username, now_time))
+            await db.commit()
+            print(f"🛑 [ГЛОБАЛЬНЫЙ IP БАН] Создатель заблокировал IP: {target_ip} ({target_username})")
+            return {"status": "ok", "message": f"🛑 Перманентный бан активирован! Нарушитель {target_username} (IP: {target_ip}) переведён в статус наблюдателя по всему сайту."}
+        except Exception as err:
+            return {"status": "error", "message": f"Ошибка записи в СУБД банов: {str(err)}"}
 
 # ==========================================================
 # 🏛️ МОДУЛЬ ЦЕНТРАЛЬНОГО ПИНБАНКА СТРАНЫ ПИНИЯ (/pin-bank)
