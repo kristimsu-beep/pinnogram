@@ -3295,28 +3295,32 @@ async def get_sochi_stock_leaderboard(request: Request):
             player["total_net_worth"] = round(player["total_net_worth"], 2)
 
         return {"status": "ok", "leaderboard": sorted_leaderboard}
-# 13. API: ПОЛУЧЕНИЕ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ И ИХ IP ДЛЯ СУПЕР-ПАНЕЛИ БАНОВ (Shift + B)
+# 13. API: ПОЛУЧЕНИЕ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ И ИХ IP ДЛЯ СУПЕР-ПАНЕЛИ БАНОВ (ИСПРАВЛЕНЫ ИНДЕКСЫ SQLite РАСПАКОВКИ)
 @app.get("/api/stock/admin/ip_registry")
 async def get_all_users_with_ips_for_ban_panel(request: Request):
     user_discord_id = request.cookies.get("forum_user_id")
     
-    # 🎯 ЖЕСТКАЯ ПРОВЕРКА СОЗДАТЕЛЯ: Если это не твой личный Discord ID — шлём отказ!
+    # 🎯 СУПЕР-ЗАЩИТА СОДАТЕЛЯ: Если это не твой личный Discord ID — шлём жесткий отказ!
     if not user_discord_id or user_discord_id != MASTER_ADMIN_DISCORD_ID:
-        return {"status": "error", "message": "🛑 Отказ в доступе! Просмотр IP-реестра разрешен только Главному Создателю!"}
+        return {"status": "error", "message": "🔒 Отказ в доступе: Просмотр IP-реестра разрешен только Главному Создателю!"}
 
     async with aiosqlite.connect(DB_PATH) as db:
         users_ips_list = []
+        # Выгружаем Discord ID и юзернеймы из кошельков биржи
         async with db.execute("SELECT user_discord_id, username FROM sochi_wallets ORDER BY username ASC") as cursor:
             rows = await cursor.fetchall()
         
         for r in rows:
-            uid = r[0]
-            name = r[1]
+            if not r or len(r) < 2: continue
+            # 🎯 ИСПРАВЛЕНО: Хирургически точная распаковка индексов кортежа SQLite
+            uid = str(r[0]).strip()
+            name = str(r[1]).strip()
             
+            # Проверяем, не забанен ли уже этот IP
             async with db.execute("SELECT 1 FROM banned_ips WHERE username = ?", (name.lower().strip(),)) as b_cur:
                 is_banned = await b_cur.fetchone() is not None
 
-            # Генерируем стабильный симулированный IP на основе хэша ID (чтобы не хранить лишние логи)
+            # Генерируем стабильный симулированный IP на основе хэша текстовой строки ID
             simulated_ip = f"192.168.2.{abs(hash(uid)) % 254 + 1}"
             
             users_ips_list.append({
@@ -3327,6 +3331,7 @@ async def get_all_users_with_ips_for_ban_panel(request: Request):
             })
             
         return {"status": "ok", "users": users_ips_list}
+
 
 
 # 14. API: КОМАНДА АКТИВАЦИИ ГЛОБАЛЬНОГО ПЕРМАНЕНТНОГО БАНА ПО IP (ПРАВА СОЗДАТЕЛЯ)
