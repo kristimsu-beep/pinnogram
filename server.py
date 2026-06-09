@@ -2571,6 +2571,8 @@ async def startup():
         asyncio.create_task(init_admin_chat_db())
         asyncio.create_task(init_sochi_stock_exchange_tables())
         asyncio.create_task(sochi_market_ticker_simulation_loop())
+        asyncio.create_task(sochi_market_boost_dispatcher_loop())
+
 
         print("🚀 Pinnogram Engine: База готова, бот-будильник запущен!")
         TOKEN = os.getenv("KONATA_BOT_TOKEN", "").strip()
@@ -2636,6 +2638,17 @@ async def init_sochi_stock_exchange_tables():
                 banned_at TEXT
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS stock_assets (
+                ticker TEXT PRIMARY KEY,
+                company_name TEXT,
+                current_price REAL,
+                last_change REAL DEFAULT 0.0,
+                description TEXT DEFAULT '',
+                crash_until_ts REAL DEFAULT 0.0,
+                boost_until_ts REAL DEFAULT 0.0 -- Время окончания буста (Unix timestamp)
+            )
+        """)
 
         await db.commit()
 
@@ -2663,7 +2676,51 @@ async def init_sochi_stock_exchange_tables():
         
 import random
 
-# 🎯 ОБНОВЛЕННЫЙ ПУЛЕНЕПРОБИВАЕМЫЙ СИМУЛЯТОР С АВТО-ДОБАВЛЕНИЕМ КОЛОНОК (ФИКС ОШИБКИ 500)
+# 🎯 НОВЫЙ ФОНОВЫЙ ЦИКЛ: АВТОМАТИЧЕСКАЯ ВЫДАЧА БУСТОВ РАЗ В 5 МИНУТ
+async def sochi_market_boost_dispatcher_loop():
+    # Даем серверу 15 секунд на стартовую загрузку таблиц
+    await asyncio.sleep(15)
+    while True:
+        try:
+            current_timestamp = time.time()
+            async with aiosqlite.connect(DB_PATH) as db:
+                # Извлекаем все тикеры акций, которые есть на бирже
+                async with db.execute("SELECT ticker, boost_until_ts FROM stock_assets") as cursor:
+                    all_stocks = await cursor.fetchall()
+                
+                if not all_stocks:
+                    await asyncio.sleep(10)
+                    continue
+                
+                # Выбираем абсолютно случайную акцию из 12 доступных
+                chosen_row = random.choice(all_stocks)
+                chosen_ticker = chosen_row[0]
+                current_boost_until = chosen_row[1] if chosen_row[1] else 0.0
+                
+                # Генерируем случайное время буста от 1 до 30 минут (в секундах)
+                boost_minutes = random.randint(1, 30)
+                boost_seconds = boost_minutes * 60
+                
+                # 🎯 ФИКС ПРОДЛЕНИЯ: Если буст уже активен — прибавляем время, иначе — считаем от текущей секунды
+                if current_timestamp < current_boost_until:
+                    new_boost_until = current_boost_until + boost_seconds
+                    log_msg = f"🔄 Буст акции {chosen_ticker} ПРОДЛЕН на +{boost_minutes} мин.!"
+                else:
+                    new_boost_until = current_timestamp + boost_seconds
+                    log_msg = f"🚀 Акция {chosen_ticker} ПОЛУЧИЛА Маркетинговый БУСТ на {boost_minutes} мин.!"
+                
+                # Записываем таймер буста наружу в СУБД SQLite
+                await db.execute("UPDATE stock_assets SET boost_until_ts = ? WHERE ticker = ?", (new_boost_until, chosen_ticker))
+                await db.commit()
+                print(f"🔥 [ЭКОНОМИКА СОЧИ] {log_msg}")
+                
+            # Засыпаем ровно на 5 минут (300 секунд) до следующей раздачи лотереи пампа!
+            await asyncio.sleep(300)
+        except Exception as e:
+            print(f"⚠️ [STOCK BOOST DISPATCHER ERROR] Сбой диспетчера бустов: {e}")
+            await asyncio.sleep(30)
+
+# 🎯 ОБНОВЛЕННЫЙ ВЕЧНЫЙ СИМУЛЯТОР: С ПОДДЕРЖКОЙ 5-MIN ОБВАЛОВ И МАРКЕТИНГОВЫХ БУСТОВ
 async def sochi_market_ticker_simulation_loop():
     while True:
         try:
@@ -2671,18 +2728,16 @@ async def sochi_market_ticker_simulation_loop():
             current_timestamp = time.time()
             
             async with aiosqlite.connect(DB_PATH) as db:
-                # 🎯 СУПЕР-ФИКС: Проверяем, есть ли колонка crash_until_ts в СУБД SQLite. 
-                # Если её нет (старый файл базы данных), Python сам её допишет без удаления данных!
+                # 🎯 Фикс структуры: проверяем и добавляем колонку boost_until_ts, если её забыли создать
                 async with db.execute("PRAGMA table_info(stock_assets)") as info_cursor:
                     columns = [col[1] for col in await info_cursor.fetchall()]
                 
-                if "crash_until_ts" not in columns:
-                    await db.execute("ALTER TABLE stock_assets ADD COLUMN crash_until_ts REAL DEFAULT 0.0")
+                if "boost_until_ts" not in columns:
+                    await db.execute("ALTER TABLE stock_assets ADD COLUMN boost_until_ts REAL DEFAULT 0.0")
                     await db.commit()
-                    print("🏛️ [СУБД БИРЖИ] Успешно добавлена недостающая колонка crash_until_ts в stock_assets!")
 
-                # Теперь запрос выполнится на 100% идеально и без ошибок 500!
-                async with db.execute("SELECT ticker, current_price, crash_until_ts FROM stock_assets") as cursor:
+                # Тянем тикеры, цены, таймеры обвала и таймеры буста
+                async with db.execute("SELECT ticker, current_price, crash_until_ts, boost_until_ts FROM stock_assets") as cursor:
                     stocks = await cursor.fetchall()
                     
                 now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
@@ -2691,18 +2746,27 @@ async def sochi_market_ticker_simulation_loop():
                     if not r or len(r) < 2: continue
                     ticker = str(r[0]).strip()
                     price = float(r[1]) if r[1] is not None else 100.0
-                    
-                    # Безопасное чтение таймера обвала
                     crash_until = float(r[2]) if (len(r) > 2 and r[2] is not None) else 0.0
+                    boost_until = float(r[3]) if (len(r) > 3 and r[3] is not None) else 0.0
                     
-                    # ПРОВЕРКА ОБВАЛА: Если админ запустил крах по Ctrl + Shift + A
+                    # 1. КРИТИЧЕСКИЙ ОБВАЛ (Приоритет №1)
                     if current_timestamp < crash_until:
-                        # Плавное затяжное падение от -18% до -12% на каждом тике
                         change_percent = random.uniform(-0.18, -0.12)
                         new_price = round(price * (1.0 + change_percent), 2)
-                        if new_price < 1.0: new_price = 1.0 # Защитный лимит (почти до нуля, но не в минус)
+                        if new_price < 1.0: new_price = 1.0 
+                    
+                    # 2. 🚀 АКТИВНЫЙ МАРКЕТИНГОВЫЙ БУСТ (Приоритет №2)
+                    elif current_timestamp < boost_until:
+                        # 85% вероятность сильного роста, 15% — микро-откат назад для реализма
+                        if random.random() < 0.85:
+                            change_percent = random.uniform(0.02, 0.12) # Повышенная тенденция к росту (до +12%)
+                        else:
+                            change_percent = random.uniform(-0.03, -0.01) # Крошечное падение-откат
+                        new_price = round(price * (1.0 + change_percent), 2)
+                        if new_price < 10.0: new_price = 10.0
+                    
+                    # 3. СТАНДАРТНЫЙ РЫНОЧНЫЙ РАНДОМ
                     else:
-                        # Стандартный рыночный рандом с множеством вариаций
                         market_trend = random.choice(["bull", "bear", "flat", "chaos"])
                         if market_trend == "bull": change_percent = random.uniform(0.01, 0.075)
                         elif market_trend == "bear": change_percent = random.uniform(-0.07, -0.01)
@@ -2712,21 +2776,17 @@ async def sochi_market_ticker_simulation_loop():
                         new_price = round(price * (1.0 + change_percent), 2)
                         if new_price < 10.0: new_price = 10.0
 
-                    # Безопасный расчет изменения процента (защита от ZeroDivisionError)
                     last_calc_change = round(((new_price - price) / price) * 100, 2) if price > 0 else 0.0
                     
-                    # Записываем новые котировки в СУБД SQLite
                     await db.execute("UPDATE stock_assets SET current_price = ?, last_change = ? WHERE ticker = ?", 
                                      (new_price, last_calc_change, ticker))
                     await db.execute("INSERT INTO stock_price_history (ticker, price, timestamp) VALUES (?, ?, ?)", 
                                      (ticker, new_price, now_time))
                     
-                # Расширяем лимит хранения истории до 50 000 точек, чтобы графики не обрезались за 5 дней
                 await db.execute("DELETE FROM stock_price_history WHERE id NOT IN (SELECT id FROM stock_price_history ORDER BY id DESC LIMIT 50000)")
                 await db.commit()
-                print(f"📈 [SOCHI MARKET TICK] Успешный тик котировок выполнен в {now_time}")
         except Exception as e:
-            print(f"⚠️ [STOCK CRASH LOOP ERROR] Критический сбой симулятора цен: {e}")
+            print(f"⚠️ [STOCK SIMULATION BOOST ERROR] Критический сбой симулятора цен: {e}")
 
             
 # 12. API: ПУЛЬТ МАРКЕТМЕЙКЕРА ДЛЯ УПРАВЛЕНИЯ КУРСАМИ (ПОВЫСИТЬ / ПОНИЗИТЬ)
@@ -2923,15 +2983,22 @@ async def get_sochi_market_data(request: Request):
             wallet_row = await cursor.fetchone()
             sochi_balance = wallet_row[0] if wallet_row else 1000.0
 
-        # Котировки всех 12 активов
+        # Котировки всех 12 активов (🎯 ДОБАВЛЕНО ПОЛЕ boost_until_ts ДЛЯ НЕОНОВОЙ АНИМАЦИИ КАРТОЧЕК)
         market = []
         prices_map = {}
-        async with db.execute("SELECT ticker, company_name, current_price, last_change, description FROM stock_assets") as cursor:
+        async with db.execute("SELECT ticker, company_name, current_price, last_change, description, boost_until_ts FROM stock_assets") as cursor:
             rows = await cursor.fetchall()
             for r in rows: 
-                market.append({"ticker": r[0], "name": r[1], "price": r[2], "change": r[3], "description": r[4]})
+                market.append({
+                    "ticker": r[0], 
+                    "name": r[1], 
+                    "price": r[2], 
+                    "change": r[3], 
+                    "description": r[4] if r[4] else "Описание компании подготавливается аналитическим отделом SSE.",
+                    "boost_until": r[5] if r[5] else 0.0 # Улетает таймер буста на фронтенд!
+                })
                 prices_map[r[0]] = r[2]
-
+                
         portfolio = {}
         async with db.execute("SELECT ticker, shares_count FROM user_stock_portfolio WHERE user_discord_id = ?", (user_discord_id,)) as cursor:
             rows = await cursor.fetchall()
