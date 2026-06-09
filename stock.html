@@ -520,7 +520,7 @@
         }
 
         // ==========================================================
-        // 📊 3. ДИНАМИЧЕСКИЙ РЕНДЕРИНГ КАРТОЧЕК И ЛИДЕРБОРДА
+        // 📊 3. ОБНОВЛЕННЫЙ РЕНДЕРИНГ КАРТОЧЕК С ЖИВЫМ БУСТ-НЕОНОМ (ФИКС СЛЭШЕЙ)
         // ==========================================================
         function renderSochiMarketCardsShowcase(market, portfolio) {
             const wrapper = document.getElementById("sochi-market-cards-wrapper");
@@ -545,24 +545,25 @@
                 const miniCanvasId = `mini-canvas-${asset.ticker}`;
                 const historyPoints = stockHistoryCache[asset.ticker] || [];
 
+                // 🎯 УБРАНЫ ВСЕ СЛЭШИ: Теперь браузер прочитает переменные идеально!
                 card.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div>
-                            <h3 style="margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.3px;">\${asset.name}</h3>
-                            <span style="font-size: 11px; font-weight: 800; color: var(--text-muted); font-family: monospace;">\${asset.ticker}</span>
+                            <h3 style="margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.3px;">${asset.name}</h3>
+                            <span style="font-size: 11px; font-weight: 800; color: var(--text-muted); font-family: monospace;">${asset.ticker}</span>
                         </div>
                         <div style="text-align: right;">
-                            <div style="font-size: 16px; font-weight: 800;">\${Number(asset.price).toFixed(2)} SC</div>
-                            <div style="font-size: 11px; font-weight: 700; color: \${asset.change >= 0 ? 'var(--bull-green)' : 'var(--bear-red)'}; margin-top: 2px;">
-                                \${changeSign}\${asset.change}%
+                            <div style="font-size: 16px; font-weight: 800;">${Number(asset.price).toFixed(2)} SC</div>
+                            <div style="font-size: 11px; font-weight: 700; color: ${asset.change >= 0 ? 'var(--bull-green)' : 'var(--bear-red)'}; margin-top: 2px;">
+                                ${changeSign}${asset.change}%
                             </div>
                         </div>
                     </div>
                     <div class="mini-canvas-timeline-box">
-                        <canvas id="\${miniCanvasId}"></canvas>
+                        <canvas id="${miniCanvasId}"></canvas>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted); margin-top: 2px; padding-top: 8px; border-top: 1px dashed var(--border-color);">
-                        <span>В portfolio: <b style="color: var(--text-dark);">\${sharesOwned} шт.</b></span>
+                        <span>В portfolio: <b style="color: var(--text-dark);">${sharesOwned} шт.</b></span>
                         <span style="font-weight: 600; color: var(--bull-green); font-size: 11px; text-transform: uppercase;">Аналитика ➔</span>
                     </div>
                 `;
@@ -574,6 +575,7 @@
                 }, 50);
             });
         }
+
 
 
         function calculateAndRenderRichLeaderboard(walletsList) {
