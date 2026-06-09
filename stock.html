@@ -433,39 +433,63 @@
         // ==========================================================
         // ⚙️ 2. ВЕЧНЫЙ ДВИГАТЕЛЬ SSE: ФОНОВЫЙ ОПРОС СЕРВЕРА С ОБНОВЛЕНИЕМ
         // ==========================================================
+        // ==========================================================
+        // ⚙️ 2. ОБНОВЛЕННЫЙ ВЕЧНЫЙ ДВИГАТЕЛЬ SSE: ФОНОВЫЙ ОПРОС С КИБЕР-ФИЛЬТРОМ БАНА
+        // ==========================================================
         async function fetchSochiMarketDataFromServer() {
             try {
+                // Запрашиваем свежие котировки, историю Canvas и топ из СУБД SQLite
                 const res = await fetch(`${API_URL}/api/stock/market`);
                 const data = await res.json();
 
+                // 🎯 КИБЕР-ШЛЮЗ ДИСКОННЕКТА: Если шлюз сервера сообщает, что наш IP забанен — мгновенно гасим сайт и вешаем глухой экран!
+                if (data.status === "banned") {
+                    document.body.innerHTML = `
+                    <div style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15,23,42,0.85); backdrop-filter:blur(10px); z-index:999999999 !important; display:flex; align-items:center; justify-content:center; font-family:sans-serif; color:#fff; pointer-events:all; user-select:none;">
+                        <div style="background:#fff; color:#0f172a; padding:40px; border-radius:24px; max-width:480px; width:90%; text-align:center; border:2px solid var(--bear-red); box-shadow:0 25px 50px -12px rgba(239,68,68,0.3);">
+                            <div style="font-size:50px; margin-bottom:15px;">🛑</div>
+                            <h2 style="margin:0 0 10px 0; font-weight:800; color:var(--bear-red); font-size:24px; letter-spacing:-0.5px;">ДОСТУП ОГРАНИЧЕН</h2>
+                            <p style="color:#64748b; font-size:14px; line-height:1.6; margin:0 0 20px 0;">Ваш IP-адрес <b>\${data.user_ip}</b> был перманентно заблокирован Главным Создателем. Вам доступен только пассивный режим просмотра контента без права совершать транзакции, писать на форуме или торговать акциями.</p>
+                            <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:#94a3b8; background:#f1f5f9; padding:8px; border-radius:8px;">ПЕРМАНЕНТНАЯ БЛОКИРОВКА SSE</div>
+                        </div>
+                    </div>`;
+                    return;
+                }
+
+                // Стандартная страховочная проверка авторизации сессии Discord
                 if (data.status !== "ok") {
                     document.getElementById("sochi-market-cards-wrapper").innerHTML = `
                         <div style="grid-column: 1/-1; text-align: center; color: #ef4444; padding: 40px; font-weight: bold; background: var(--bg-card); border-radius: 12px; border: 1px solid var(--border-color);">
-                            🔒 Доступ заблокирован: ${data.message || "Авторизуйтесь на форуме через Discord!"}
+                            🔒 Доступ заблокирован: \${data.message || "Авторизуйтесь на форуме через Discord!"}
                         </div>
                     `;
                     return;
                 }
 
-                // Обновляем криптокошелек в шапке
+                // Выводим баланс кошелька Сочи-коинов в шапку страницы
                 document.getElementById("sochi-coins-wallet-display").textContent = Number(data.sochi_coins).toFixed(2);
 
+                // Синхронизируем локальный кэш котировок и вековой истории Canvas линий
                 marketDataCache = data.market || [];
                 userPortfolioCache = data.portfolio || {};
                 stockHistoryCache = data.history || {};
 
-                // Отрисовываем 12 карточек акций на главном столе
+                // Отрисовываем 12 карточек акций на главный стол
                 renderSochiMarketCardsShowcase(data.market, data.portfolio);
                 
                 // Рендерим Топ-10 Богатейших майнеров строго по возрастанию капитала
                 calculateAndRenderRichLeaderboard(data.wallets_leaderboard || []);
 
+                // Если открыт полноэкранный терминал — обновляем его показатели на лету
                 if (activeSelectedTicker) {
                     refreshActiveTerminalLabelsOnMarketTick();
                 }
 
-            } catch (e) { console.error("Ошибка котировок SSE:", e); }
+            } catch (e) { 
+                console.error("Ошибка котировок SSE:", e); 
+            }
         }
+
         // ==========================================================
         // 📊 3. ДИНАМИЧЕСКИЙ РЕНДЕРИНГ КАРТОЧЕК И ЛИДЕРБОРДА
         // ==========================================================
@@ -998,14 +1022,16 @@
             } catch (e) { alert("Ошибка инициации краха рынка."); }
         }
         
+        // ==========================================================
+        // 🛡️ ОБНОВЛЕНО: ЛОГИКА СУПЕР-ПАНЕЛИ
+        // ==========================================================
         async function openAdminIpBanPanelDashboard() {
             try {
-                // Запрашиваем IP-реестр. Доступ защищен твоим личным Discord ID на бэкенде!
                 const res = await fetch(`${API_URL}/api/stock/admin/ip_registry`);
                 const data = await res.json();
                 
                 if (data.status !== "ok") {
-                    alert(data.message || "🛑 Ошибка безопасности: Доступ к реестру IP отклонён!");
+                    alert(data.message || "🛑 Доступ к реестру IP отклонён!");
                     return;
                 }
 
@@ -1014,40 +1040,66 @@
                 container.innerHTML = "";
 
                 if (data.users.length === 0) {
-                    container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">В базе кошельков пока нет пользователей</div>`;
+                    container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">Инвесторов в базе нет</div>`;
                 } else {
                     data.users.forEach(user => {
                         const row = document.createElement("div");
-                        row.style.cssText = "background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:14px; display:flex; justify-content:space-between; align-items:center; gap:15px; transition: 0.2s;";
+                        row.style.cssText = "background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:14px; display:flex; justify-content:space-between; align-items:center; gap:15px; margin-bottom:8px;";
                         
-                        // Меняем стиль кнопки и статус, если нарушитель уже заблокирован
+                        // 🎯 ФИКС: Кнопка Разбана (Зелёная) подгружается автоматически, если юзер уже в чёрном списке SQLite
                         const banButtonHtml = user.is_banned 
-                            ? `<button style="background:var(--text-muted); color:#fff; border:none; padding:8px 16px; border-radius:8px; font-weight:700; font-size:12px; cursor:not-allowed;" disabled>🔴 Забанен</button>`
+                            ? `<button onclick="executePermanentIpUnbanActionPipeline('${user.username}')" style="background:var(--bull-green); color:#fff; border:none; padding:8px 16px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer; box-shadow:0 4px 10px rgba(16,185,129,0.15);">🟢 Разбанить</button>`
                             : `<button onclick="executePermanentIpBanActionPipeline('${user.username}', '${user.ip_address}')" style="background:var(--bear-red); color:#fff; border:none; padding:8px 16px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer; box-shadow:0 4px 10px rgba(239,68,68,0.15);">Забанить</button>`;
 
                         row.innerHTML = `
                             <div>
                                 <div style="font-weight:800; font-size:14px; color:var(--text-dark); display:flex; align-items:center; gap:6px;">
-                                    ${user.username} ${user.is_banned ? '<span style="font-size:10px; background:#fee2e2; color:#991b1b; padding:2px 6px; border-radius:4px; font-weight:800;">BLOCKED</span>' : ''}
+                                    ${user.username} ${user.is_banned ? '<span style="font-size:10px; background:#fee2e2; color:#991b1b; padding:2px 6px; border-radius:4px; font-weight:800;">BANNED</span>' : ''}
                                 </div>
-                                <div style="font-size:11px; color:var(--text-muted); font-family:monospace; margin-top:2px;">Discord ID: ${user.discord_id}</div>
-                                <div style="font-size:13px; color:var(--text-dark); font-weight:bold; font-family:monospace; margin-top:4px; display:flex; align-items:center; gap:4px;">
-                                    🌐 IP Протокол: <span style="color:#007aff;">${user.ip_address}</span>
+                                <div style="font-size:11px; color:var(--text-muted); font-family:monospace; margin-top:2px;">ID: ${user.discord_id}</div>
+                                <div style="font-size:13px; color:var(--text-dark); font-weight:bold; font-family:monospace; margin-top:4px;">
+                                    🌐 IP: <span style="color:#007aff;">${user.ip_address}</span>
                                 </div>
                             </div>
-                            <div>
-                                ${banButtonHtml}
-                            </div>
+                            <div>${banButtonHtml}</div>
                         `;
                         container.appendChild(row);
                     });
                 }
-                
-                // Разворачиваем окно кибербезопасности по центру экрана
                 document.getElementById("modal-admin-ip-ban-panel").style.display = "flex";
-            } catch (e) { 
-                alert("🛑 Критическая ошибка: Не удалось считать сетевые протоколы безопасности."); 
-            }
+            } catch (e) { alert("🛑 Ошибка считывания сетевых протоколов СБ."); }
+        }
+
+        function closeAdminIpBanPanelDashboard() { document.getElementById("modal-admin-ip-ban-panel").style.display = "none"; }
+
+        // АСИНХРОННЫЙ КОНВЕЙЕР ИСПОЛНЕНИЯ ГЛОБАЛЬНОГО БАНА ПО IP
+        async function executePermanentIpBanActionPipeline(targetUsername, targetIpAddress) {
+            if (!confirm(`🚨 Запустить перманентный бан для ${targetUsername} (IP: ${targetIpAddress})?`)) return;
+            try {
+                const res = await fetch(`${API_URL}/api/stock/admin/execute_ip_ban`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username: targetUsername, ip_address: targetIpAddress })
+                });
+                const data = await res.json();
+                alert(data.message);
+                if (data.status === "ok") openAdminIpBanPanelDashboard();
+            } catch (e) { alert("Ошибка отправки команды блокировки."); }
+        }
+
+        // 🎯 НОВАЯ АСИНХРОННАЯ ФУНКЦИЯ СТИРАНИЯ ИЗ ЧЕРНОГО СПИСКА (РАЗБАН)
+        async function executePermanentIpUnbanActionPipeline(targetUsername) {
+            if (!confirm(`🟢 Вы уверены, что хотите снять блокировку с пользователя ${targetUsername}?`)) return;
+            try {
+                const res = await fetch(`${API_URL}/api/stock/admin/execute_ip_unban`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username: targetUsername })
+                });
+                const data = await res.json();
+                alert(data.message);
+                if (data.status === "ok") openAdminIpBanPanelDashboard();
+            } catch (e) { alert("Ошибка отправки команды разблокировки."); }
         }
 
         function closeAdminIpBanPanelDashboard() { 
