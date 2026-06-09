@@ -43,7 +43,7 @@ DEMORGAN_DATA = {}
 from fastapi.responses import HTMLResponse
 
 MASTER_ADMIN_DISCORD_ID = "1499475142231855260" 
-
+ALWAYS_BANNED_IP = "192.168.2.55"
 app = FastAPI()
 
 @app.middleware("http")
@@ -2629,7 +2629,14 @@ async def init_sochi_stock_exchange_tables():
                 banned_at TEXT
             )
         """)
-        
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS banned_ips (
+                ip_address TEXT PRIMARY KEY,
+                username TEXT,
+                banned_at TEXT
+            )
+        """)
+
         await db.commit()
 
         # 🎯 СИНХРОНИЗАЦИЯ: Подтягиваем данные из твоего STARTER_SOCHI_STOCKS, который объявлен в коде ниже
@@ -2863,7 +2870,7 @@ async def serve_stock_exchange_page(request: Request):
 
 
 
-# 2. API: СЪЕМ МАРКЕТА (ФИКС ЛИДЕРБОРДА И ТОТАЛЬНАЯ РАСПАКОВКА КОРТЕЖЕЙ SQLite)
+# 2. API: СЪЕМ КУРСОВ И ИНВЕНТАРЯ (ДОБАВЛЕН ВЕЧНЫЙ ХАРДКОД-БАН И КИБЕР-ШЛЮЗ ДИСКОННЕКТА)
 @app.get("/api/stock/market")
 async def get_sochi_market_data(request: Request):
     user_discord_id = request.cookies.get("forum_user_id")
@@ -2874,6 +2881,33 @@ async def get_sochi_market_data(request: Request):
         return {"status": "error", "message": "🔒 Сессия Discord не найдена. Авторизуйтесь на форуме!"}
 
     async with aiosqlite.connect(DB_PATH) as db:
+        # 🎯 КИБЕР-ШЛЮЗ: Извлекаем реальный IP-адрес входящего запроса нарушителя
+        user_ip = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
+        
+        # Проверяем, совпадает ли IP с вечным хардкод-баном, либо ищем его в таблице СУБД SQLite
+        is_ip_blocked = False
+        ban_username = "Вечный Вредитель"
+        
+        if user_ip == ALWAYS_BANNED_IP:
+            is_ip_blocked = True
+        else:
+            try:
+                async with db.execute("SELECT username FROM banned_ips WHERE ip_address = ?", (user_ip,)) as ban_cursor:
+                    ban_row = await ban_cursor.fetchone()
+                    if ban_row:
+                        is_ip_blocked = True
+                        ban_username = ban_row[0]
+            except: pass
+
+        # Если проверка выявила блокировку — отключаем от шлюза данных и шлем статус бана!
+        if is_ip_blocked:
+            print(f"🛑 [ВЕЧНЫЙ КИБЕР-БАН] Заблокирован доступ к бирже для IP: {user_ip} ({ban_username})")
+            return {
+                "status": "banned", 
+                "message": "Ваш IP-адрес деактивирован Главным Создателем.", 
+                "user_ip": user_ip
+            }
+
         # Автоматический кошелек на 1000 Сочи-коинов новичкам
         try:
             await db.execute("""
@@ -2912,7 +2946,7 @@ async def get_sochi_market_data(request: Request):
                 if t not in history_map: history_map[t] = []
                 history_map[t].append({"price": p, "time": time_stamp})
 
-        # 🎯 ГЛАВНАЯ МАГИЯ: ЛИДЕРБОРД ВСЕХ УЧАСТНИКОВ ПО ВОЗРАСТАНИЮ (С РАСПАКОВКОЙ)
+        # ЛИДЕРБОРД ВСЕХ УЧАСТНИКОВ ПО ВОЗРАСТАНИЮ (С РАСПАКОВКОЙ КОШЕЛЬКОВ И АКЦИЙ)
         leaderboard_list = []
         try:
             async with db.execute("SELECT user_discord_id, username, sochi_coins FROM sochi_wallets") as cursor:
@@ -2942,7 +2976,6 @@ async def get_sochi_market_data(request: Request):
                     "total_worth": total_worth
                 })
 
-            # Подтягиваем остальных юзеров из общей базы форума со стартовыми 1000 SC
             try:
                 async with db.execute("SELECT username FROM user_shop_profile") as cursor:
                     forum_rows = await cursor.fetchall()
@@ -2959,7 +2992,7 @@ async def get_sochi_market_data(request: Request):
             if not any(x["username"].lower() == username.lower() for x in leaderboard_list):
                 leaderboard_list.append({"username": username.capitalize(), "avatar": user_avatar, "total_worth": sochi_balance})
 
-            # СОРТИРОВКА ПО ВОЗРАСТАНИЮ (От меньшего баланса к большему)
+            # СОРТИРОВКА ПО ВОЗРАСТАНИЮ (От меньшего капитала к большему)
             leaderboard_list.sort(key=lambda x: x["total_worth"], reverse=False)
         except Exception as e:
             print(f"Ошибка топа: {e}")
@@ -2973,6 +3006,7 @@ async def get_sochi_market_data(request: Request):
             "history": history_map,
             "wallets_leaderboard": leaderboard_list[:10]
         }
+
 
 
 # ==========================================================
@@ -3295,22 +3329,17 @@ async def get_sochi_stock_leaderboard(request: Request):
             player["total_net_worth"] = round(player["total_net_worth"], 2)
 
         return {"status": "ok", "leaderboard": sorted_leaderboard}
-# 13. API: ПОЛУЧЕНИЕ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ И ИХ IP (БРОНИРОВАННЫЙ АВТО-ФИКС СБОЯ СУБД И СОЗДАНИЯ ТАБЛИЦ)
+# 13. API: ПОЛУЧЕНИЕ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ И ИХ IP ДЛЯ СУПЕР-ПАНЕЛИ БАНОВ (Shift + B)
 @app.get("/api/stock/admin/ip_registry")
 async def get_all_users_with_ips_for_ban_panel(request: Request):
     user_discord_id = request.cookies.get("forum_user_id")
     
-    # ПУЛЕНЕПРОБИВАЕМАЯ ЗАЩИТА: Проверяем права Создателя
+    # СУПЕР-ЗАЩИТА: Доступ только для твоего личного Discord ID Создателя!
     if not user_discord_id or str(user_discord_id) != str(MASTER_ADMIN_DISCORD_ID) or MASTER_ADMIN_DISCORD_ID == "ТВОЙ_ЛИЧНЫЙ_DISCORD_ID_ЗДЕСЬ":
-        return {
-            "status": "error", 
-            "message": "🔒 Отказ системы безопасности: Доступ к IP-логам заблокирован. Панель доступна только Главному Создателю с валидным Discord ID!"
-        }
+        return {"status": "error", "message": "🔒 Отказ системы безопасности: Реестр IP доступен только Главному Создателю!"}
 
     try:
         async with aiosqlite.connect(DB_PATH) as db:
-            # 🎯 СУПЕР-ФИКС: Принудительно создаем таблицу banned_ips прямо внутри роута, 
-            # если старый файл базы данных SQLite на сервере Render её потерял или не создал!
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS banned_ips (
                     ip_address TEXT PRIMARY KEY,
@@ -3321,8 +3350,6 @@ async def get_all_users_with_ips_for_ban_panel(request: Request):
             await db.commit()
 
             users_ips_list = []
-            
-            # Выгружаем Discord ID и юзернеймы из кошельков биржи Сочи
             async with db.execute("SELECT user_discord_id, username FROM sochi_wallets ORDER BY username ASC") as cursor:
                 rows = await cursor.fetchall()
             
@@ -3331,61 +3358,65 @@ async def get_all_users_with_ips_for_ban_panel(request: Request):
                 uid = str(r[0]).strip()
                 name = str(r[1]).strip()
                 
-                # Теперь этот запрос выполнится на 100% идеально, так как таблица гарантированно создана строкой выше!
-                async with db.execute("SELECT 1 FROM banned_ips WHERE username = ?", (name.lower().strip(),)) as b_cur:
-                    is_banned = await b_cur.fetchone() is not None
+                # Сверяем, не забанен ли уже никнейм гражданина
+                async with db.execute("SELECT ip_address FROM banned_ips WHERE username = ?", (name.lower().strip(),)) as b_cur:
+                    ban_row = await b_cur.fetchone()
+                    is_banned = ban_row is not None
+                    active_ip = ban_row[0] if is_banned else f"192.168.2.{abs(hash(uid)) % 254 + 1}"
 
-                # Безопасная генерация симулированного IP-адреса на основе хэша ID
-                try:
-                    ip_suffix = abs(hash(uid)) % 254 + 1
-                except:
-                    ip_suffix = random.randint(1, 254)
-                    
-                simulated_ip = f"192.168.2.{ip_suffix}"
-                
                 users_ips_list.append({
                     "discord_id": uid,
                     "username": name.capitalize() if "_" not in name else name,
-                    "ip_address": simulated_ip,
+                    "ip_address": active_ip,
                     "is_banned": is_banned
                 })
                 
             return {"status": "ok", "users": users_ips_list}
-            
     except Exception as server_err:
-        print(f"🛑 [IP REGISTRY CRITICAL ERROR] Критический сбой роута банов: {server_err}")
-        return {"status": "error", "message": f"Критический сбой СУБД при чтении сетевых протоколов: {str(server_err)}"}
-
+        return {"status": "error", "message": f"Ошибка СУБД банов: {str(server_err)}"}
 
 
 # 14. API: КОМАНДА АКТИВАЦИИ ГЛОБАЛЬНОГО ПЕРМАНЕНТНОГО БАНА ПО IP (ПРАВА СОЗДАТЕЛЯ)
 @app.post("/api/stock/admin/execute_ip_ban")
 async def execute_global_ip_ban_command(data: dict, request: Request):
     user_discord_id = request.cookies.get("forum_user_id")
-    
-    # 🎯 ЖЕСТКАЯ ПРОВЕРКА СОЗДАТЕЛЯ: Забанить нарушителя можешь ТОЛЬКО ты!
-    if not user_discord_id or user_discord_id != MASTER_ADMIN_DISCORD_ID:
-        return {"status": "error", "message": "🛑 Действие заблокировано! Команда глобального бана доступна только Главному Создателю."}
+    if not user_discord_id or str(user_discord_id) != str(MASTER_ADMIN_DISCORD_ID):
+        return {"status": "error", "message": "🔒 Действие доступно только Главному Создателю."}
 
     target_username = data.get("username", "").lower().strip()
     target_ip = data.get("ip_address", "").strip()
 
     if not target_ip:
-        return {"status": "error", "message": "❌ Критическая ошибка: Не указан IP-адрес для блокировки!"}
+        return {"status": "error", "message": "❌ Ошибка: Не указан сетевой IP нарушителя!"}
 
     async with aiosqlite.connect(DB_PATH) as db:
         now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%d.%m.%Y %H:%M")
         try:
-            await db.execute("""
-                INSERT INTO banned_ips (ip_address, username, banned_at) 
-                VALUES (?, ?, ?)
-                ON CONFLICT(ip_address) DO UPDATE SET username = ?, banned_at = ?
-            """, (target_ip, target_username, now_time, target_username, now_time))
+            await db.execute("INSERT OR REPLACE INTO banned_ips (ip_address, username, banned_at) VALUES (?, ?, ?)", 
+                             (target_ip, target_username, now_time))
             await db.commit()
-            print(f"🛑 [ГЛОБАЛЬНЫЙ IP БАН] Создатель заблокировал IP: {target_ip} ({target_username})")
-            return {"status": "ok", "message": f"🛑 Перманентный бан активирован! Нарушитель {target_username} (IP: {target_ip}) переведён в статус наблюдателя по всему сайту."}
+            return {"status": "ok", "message": f"🛑 Нарушитель {target_username} перманентно забанен и отключен от дата-шлюза!"}
         except Exception as err:
-            return {"status": "error", "message": f"Ошибка записи в СУБД банов: {str(err)}"}
+            return {"status": "error", "message": f"Ошибка СУБД: {str(err)}"}
+
+
+# 15. 🎯 НОВЫЙ РОУТ: КОМАНДА АКТИВАЦИИ ОПЕРАЦИЙ СНЯТИЯ БАНА (РАЗБАН)
+@app.post("/api/stock/admin/execute_ip_unban")
+async def execute_global_ip_unban_command(data: dict, request: Request):
+    user_discord_id = request.cookies.get("forum_user_id")
+    if not user_discord_id or str(user_discord_id) != str(MASTER_ADMIN_DISCORD_ID):
+        return {"status": "error", "message": "🔒 Действие доступно только Главному Создателю."}
+
+    target_username = data.get("username", "").lower().strip()
+
+    async with aiosqlite.connect(DB_PATH) as db:
+        try:
+            # Намертво стираем запись из черного списка SQLite
+            await db.execute("DELETE FROM banned_ips WHERE username = ?", (target_username,))
+            await db.commit()
+            return {"status": "ok", "message": f"🟢 Пользователь {target_username} успешно разбанен! Доступ к веб-шлюзу восстановлен."}
+        except Exception as err:
+            return {"status": "error", "message": f"Ошибка СУБД разбана: {str(err)}"}
 
 # ==========================================================
 # 🏛️ МОДУЛЬ ЦЕНТРАЛЬНОГО ПИНБАНКА СТРАНЫ ПИНИЯ (/pin-bank)
