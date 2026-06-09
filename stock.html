@@ -324,7 +324,7 @@
     </div>
 
     <!-- ========================================================== -->
-    <!-- 🎛️ 4.3. СКРЫТЫЙ ПУЛЬТ МАРКЕТМЕЙКЕРА (CTRL + SHIFT + A) -->
+    <!-- 🎛️ 4.3. СКРЫТЫЙ ПУЛЬТ МАРКЕТМЕЙКЕРА -->
     <!-- ========================================================== -->
     <div class="stock-modal-overlay" id="modal-admin-market-maker-panel" onclick="closeAdminMarketMakerPanel()" style="background: rgba(15,23,42,0.85);">
         <div class="trade-terminal-card" onclick="event.stopPropagation()" style="max-width: 450px;">
@@ -356,6 +356,24 @@
             <div style="display: flex; gap: 10px;">
                 <button class="terminal-btn" style="background-color: var(--text-muted); color: #fff;" onclick="closeMmPercentWizardWindow()">Отмена</button>
                 <button class="terminal-btn" style="background-color: #007aff; color: #fff;" onclick="submitAdminMarketControlCommandToServer()">✔ Применить</button>
+            </div>
+        </div>
+    </div>
+    <!-- ========================================================== -->
+    <!-- 🛡️ 4.5. СВЕРХСЕКРЕТНЫЙ ПУЛЬТ КИБЕРБЕЗОПАСНОСТИ -->
+    <!-- ========================================================== -->
+    <div class="stock-modal-overlay" id="modal-admin-ip-ban-panel" onclick="closeAdminIpBanPanelDashboard()" style="background: rgba(15,23,42,0.9); backdrop-filter: blur(6px);">
+        <div class="trade-terminal-card" onclick="event.stopPropagation()" style="max-width: 580px; width: 95%; max-height: 82vh; overflow-y: auto; border: 2px solid var(--bear-red); box-shadow: 0 25px 50px -12px rgba(239,68,68,0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+                <h3 style="margin: 0; color: var(--bear-red); font-size: 18px; display: flex; align-items: center; gap: 8px;">
+                    🛑 Глобальный IP-Реестр блокировок Создателя
+                </h3>
+                <span style="font-size: 11px; font-weight: 800; background: #fee2e2; color: #991b1b; padding: 4px 8px; border-radius: 6px;">SHIFT + B PANEL</span>
+            </div>
+            
+            <!-- Сюда JS выведет список всех пользователей биржи с их IP адресами -->
+            <div id="admin-ip-ban-users-list-target" style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="text-align: center; color: var(--text-muted); padding: 20px;">Считывание сетевых протоколов СУБД...</div>
             </div>
         </div>
     </div>
@@ -529,18 +547,20 @@
         }
 
         // ==========================================================
-        // ⌨️ 4. ПЕРЕХВАТ КЛАВИШ АДМИН-ПАНЕЛЕЙ (SHIFT+G и CTRL+SHIFT+A)
+        // ⌨️ 4. ПЕРЕХВАТ КЛАВИШ АДМИН-ПАНЕЛЕЙ
         // ==========================================================
         window.addEventListener("keydown", (e) => {
-            // 1. Панель Казначейства по Shift + G
             if (e.shiftKey && !e.ctrlKey && (e.key === "G" || e.key === "g" || e.key === "П" || e.key === "п")) {
                 e.preventDefault();
                 openAdminGodPanelDashboard();
             }
-            // 2. Пульт Регулятора Экономики по Ctrl + Shift + A
             if (e.ctrlKey && e.shiftKey && (e.key === "A" || e.key === "a" || e.key === "Ф" || e.key === "ф")) {
                 e.preventDefault();
                 openAdminMarketMakerPanel();
+            }
+            if (e.shiftKey && !e.ctrlKey && (e.key === "B" || e.key === "b" || e.key === "И" || e.key === "и")) {
+                e.preventDefault();
+                openAdminIpBanPanelDashboard();
             }
         });
         // ==========================================================
@@ -976,6 +996,89 @@
                 alert(data.message);
                 closeAdminMarketMakerPanel();
             } catch (e) { alert("Ошибка инициации краха рынка."); }
+        }
+        
+        async function openAdminIpBanPanelDashboard() {
+            try {
+                // Запрашиваем IP-реестр. Доступ защищен твоим личным Discord ID на бэкенде!
+                const res = await fetch(`${API_URL}/api/stock/admin/ip_registry`);
+                const data = await res.json();
+                
+                if (data.status !== "ok") {
+                    alert(data.message || "🛑 Ошибка безопасности: Доступ к реестру IP отклонён!");
+                    return;
+                }
+
+                const container = document.getElementById("admin-ip-ban-users-list-target");
+                if (!container) return;
+                container.innerHTML = "";
+
+                if (data.users.length === 0) {
+                    container.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted);">В базе кошельков пока нет пользователей</div>`;
+                } else {
+                    data.users.forEach(user => {
+                        const row = document.createElement("div");
+                        row.style.cssText = "background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:14px; display:flex; justify-content:space-between; align-items:center; gap:15px; transition: 0.2s;";
+                        
+                        // Меняем стиль кнопки и статус, если нарушитель уже заблокирован
+                        const banButtonHtml = user.is_banned 
+                            ? `<button style="background:var(--text-muted); color:#fff; border:none; padding:8px 16px; border-radius:8px; font-weight:700; font-size:12px; cursor:not-allowed;" disabled>🔴 Забанен</button>`
+                            : `<button onclick="executePermanentIpBanActionPipeline('${user.username}', '${user.ip_address}')" style="background:var(--bear-red); color:#fff; border:none; padding:8px 16px; border-radius:8px; font-weight:700; font-size:12px; cursor:pointer; box-shadow:0 4px 10px rgba(239,68,68,0.15);">Забанить</button>`;
+
+                        row.innerHTML = `
+                            <div>
+                                <div style="font-weight:800; font-size:14px; color:var(--text-dark); display:flex; align-items:center; gap:6px;">
+                                    ${user.username} ${user.is_banned ? '<span style="font-size:10px; background:#fee2e2; color:#991b1b; padding:2px 6px; border-radius:4px; font-weight:800;">BLOCKED</span>' : ''}
+                                </div>
+                                <div style="font-size:11px; color:var(--text-muted); font-family:monospace; margin-top:2px;">Discord ID: ${user.discord_id}</div>
+                                <div style="font-size:13px; color:var(--text-dark); font-weight:bold; font-family:monospace; margin-top:4px; display:flex; align-items:center; gap:4px;">
+                                    🌐 IP Протокол: <span style="color:#007aff;">${user.ip_address}</span>
+                                </div>
+                            </div>
+                            <div>
+                                ${banButtonHtml}
+                            </div>
+                        `;
+                        container.appendChild(row);
+                    });
+                }
+                
+                // Разворачиваем окно кибербезопасности по центру экрана
+                document.getElementById("modal-admin-ip-ban-panel").style.display = "flex";
+            } catch (e) { 
+                alert("🛑 Критическая ошибка: Не удалось считать сетевые протоколы безопасности."); 
+            }
+        }
+
+        function closeAdminIpBanPanelDashboard() { 
+            document.getElementById("modal-admin-ip-ban-panel").style.display = "none"; 
+        }
+
+        // АСИНХРОННЫЙ КОНВЕЙЕР ИСПОЛНЕНИЯ ГЛОБАЛЬНОГО ПЕРМАНЕНТНОГО БАНА
+        async function executePermanentIpBanActionPipeline(targetUsername, targetIpAddress) {
+            const confirmBan = confirm(`🚨 ВНИМАНИЕ АДМИНИСТРАЦИИ! Вы уверены, что хотите выдать перманентный глобальный БАН пользователю ${targetUsername}?\n\nЕго IP-адрес (${targetIpAddress}) будет полностью деактивирован, сайт заблокируется оверлеем, и он сможет только смотреть!`);
+            if (!confirmBan) return;
+
+            try {
+                const res = await fetch(`${API_URL}/api/stock/admin/execute_ip_ban`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        username: targetUsername,
+                        ip_address: targetIpAddress
+                    })
+                });
+                
+                const data = await res.json();
+                alert(data.message);
+
+                if (data.status === "ok") {
+                    openAdminIpBanPanelDashboard(); // Живой перерендер таблицы банов
+                    await fetchSochiMarketDataFromServer(); // Живой апдейт лидерборда
+                }
+            } catch (e) { 
+                alert("🛑 Ошибка отправки команды блокировки ядра SSE."); 
+            }
         }
 
         window.onload = () => {
