@@ -147,6 +147,35 @@
             white-space: nowrap;
         }
         
+        @keyframes sseBoostNeonShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .asset-card-boost-active {
+            background: linear-gradient(-45deg, #7c3aed, #ec4899, #c084fc, #f472b6) !important;
+            background-size: 400% 400% !important;
+            animation: sseBoostNeonShift 3s ease infinite !important;
+            border-color: #f472b6 !important;
+            box-shadow: 0 10px 25px rgba(236, 72, 153, 0.25) !important;
+        }
+
+        /* Подкрашиваем тексты внутри забущенной карточки, чтобы они идеально читались на градиенте */
+        .asset-card-boost-active h3, 
+        .asset-card-boost-active div, 
+        .asset-card-boost-active span,
+        .asset-card-boost-active b {
+            color: #ffffff !important;
+        }
+        .asset-card-boost-active span {
+            opacity: 0.9;
+        }
+        .asset-card-boost-active .mini-canvas-timeline-box {
+            background-color: rgba(15, 23, 42, 0.4) !important;
+            border-color: rgba(255, 255, 255, 0.15) !important;
+        }
+
     </style>
 </head>
 <body>
@@ -498,10 +527,18 @@
             if (!wrapper) return;
             wrapper.innerHTML = "";
 
+            // Получаем текущее Unix-время компьютера в секундах для сопоставления с базой
+            const currentTimestamp = Date.now() / 1000;
+
             market.forEach(asset => {
                 const card = document.createElement("div");
                 card.className = "stock-asset-card";
                 card.onclick = () => openFullscreenTradingStationOverlay(asset.ticker);
+
+                // 🎯 СУПЕР-ФИКС: Ловим таймер буста из СУБД SQLite. Если он активен — включаем анимированный градиент!
+                if (asset.boost_until && currentTimestamp < asset.boost_until) {
+                    card.classList.add("asset-card-boost-active");
+                }
 
                 const sharesOwned = portfolio[asset.ticker] || 0;
                 const changeSign = asset.change >= 0 ? "+" : "";
@@ -511,32 +548,33 @@
                 card.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div>
-                            <h3 style="margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.3px;">${asset.name}</h3>
-                            <span style="font-size: 11px; font-weight: 800; color: var(--text-muted); font-family: monospace;">${asset.ticker}</span>
+                            <h3 style="margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.3px;">\${asset.name}</h3>
+                            <span style="font-size: 11px; font-weight: 800; color: var(--text-muted); font-family: monospace;">\${asset.ticker}</span>
                         </div>
                         <div style="text-align: right;">
-                            <div style="font-size: 16px; font-weight: 800;">${Number(asset.price).toFixed(2)} SC</div>
-                            <div style="font-size: 11px; font-weight: 700; color: ${asset.change >= 0 ? 'var(--bull-green)' : 'var(--bear-red)'}; margin-top: 2px;">
-                                ${changeSign}${asset.change}%
+                            <div style="font-size: 16px; font-weight: 800;">\${Number(asset.price).toFixed(2)} SC</div>
+                            <div style="font-size: 11px; font-weight: 700; color: \${asset.change >= 0 ? 'var(--bull-green)' : 'var(--bear-red)'}; margin-top: 2px;">
+                                \${changeSign}\${asset.change}%
                             </div>
                         </div>
                     </div>
                     <div class="mini-canvas-timeline-box">
-                        <canvas id="${miniCanvasId}"></canvas>
+                        <canvas id="\${miniCanvasId}"></canvas>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted); margin-top: 2px; padding-top: 8px; border-top: 1px dashed var(--border-color);">
-                        <span>В portfolio: <b style="color: var(--text-dark);">${sharesOwned} шт.</b></span>
+                        <span>В portfolio: <b style="color: var(--text-dark);">\${sharesOwned} шт.</b></span>
                         <span style="font-weight: 600; color: var(--bull-green); font-size: 11px; text-transform: uppercase;">Аналитика ➔</span>
                     </div>
                 `;
                 wrapper.appendChild(card);
 
-                // Отрисовываем тонкую Canvas превью-линию на карточке стола
+                // Отрисовываем тонкую Canvas превью-линию на холсте карточки стола
                 setTimeout(() => {
                     drawContinuousLineChartOnCanvas(miniCanvasId, historyPoints, asset.change, false);
                 }, 50);
             });
         }
+
 
         function calculateAndRenderRichLeaderboard(walletsList) {
             const container = document.getElementById("sochi-rich-leaderboard-container");
@@ -674,6 +712,19 @@
             if (stockHistoryCache && stockHistoryCache[activeSelectedTicker]) {
                 const historyPoints = stockHistoryCache[activeSelectedTicker] || [];
                 drawContinuousLineChartOnCanvas("fullscreen-main-line-chart-canvas", historyPoints, asset.change, true);
+            }
+                        // 🎯 СУПЕР-ФИКС: Динамическое переключение фона полноэкранного TradingView-окна
+            const currentTimestamp = Date.now() / 1000;
+            const terminalOverlay = document.getElementById("fullscreen-trading-station-overlay");
+            
+            if (terminalOverlay) {
+                if (asset.boost_until && currentTimestamp < asset.boost_until) {
+                    // Если буст идет — заливаем оверлей анимированным градиентом
+                    terminalOverlay.classList.add("asset-card-boost-active");
+                } else {
+                    // Буст кончился или его нет — убираем класс, возвращая стандартный цвет биржи
+                    terminalOverlay.classList.remove("asset-card-boost-active");
+                }
             }
         }
 
