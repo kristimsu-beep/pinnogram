@@ -3295,42 +3295,56 @@ async def get_sochi_stock_leaderboard(request: Request):
             player["total_net_worth"] = round(player["total_net_worth"], 2)
 
         return {"status": "ok", "leaderboard": sorted_leaderboard}
-# 13. API: ПОЛУЧЕНИЕ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ И ИХ IP ДЛЯ СУПЕР-ПАНЕЛИ БАНОВ (ИСПРАВЛЕНЫ ИНДЕКСЫ SQLite РАСПАКОВКИ)
+# 13. API: ПОЛУЧЕНИЕ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ И ИХ IP (УЛЬТИМАТИВНЫЙ ФИКС ОШИБКИ 500 С ОГРАНИЧЕНИЕМ ПРАВ)
 @app.get("/api/stock/admin/ip_registry")
 async def get_all_users_with_ips_for_ban_panel(request: Request):
     user_discord_id = request.cookies.get("forum_user_id")
     
-    # 🎯 СУПЕР-ЗАЩИТА СОДАТЕЛЯ: Если это не твой личный Discord ID — шлём жесткий отказ!
-    if not user_discord_id or user_discord_id != MASTER_ADMIN_DISCORD_ID:
-        return {"status": "error", "message": "🔒 Отказ в доступе: Просмотр IP-реестра разрешен только Главному Создателю!"}
+    # 🎯 ПУЛЕНЕПРОБИВАЕМАЯ ЗАЩИТА: Если ID не совпадает или пустой — возвращаем красивый JSON-отказ, 
+    # а не ломаем бэкенд критической ошибкой 500!
+    if not user_discord_id or str(user_discord_id) != str(MASTER_ADMIN_DISCORD_ID) or MASTER_ADMIN_DISCORD_ID == "ТВОЙ_ЛИЧНЫЙ_DISCORD_ID_ЗДЕСЬ":
+        return {
+            "status": "error", 
+            "message": "🔒 Отказ системы безопасности: Доступ к IP-логам заблокирован. Панель доступна только Главному Создателю с валидным Discord ID!"
+        }
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        users_ips_list = []
-        # Выгружаем Discord ID и юзернеймы из кошельков биржи
-        async with db.execute("SELECT user_discord_id, username FROM sochi_wallets ORDER BY username ASC") as cursor:
-            rows = await cursor.fetchall()
-        
-        for r in rows:
-            if not r or len(r) < 2: continue
-            # 🎯 ИСПРАВЛЕНО: Хирургически точная распаковка индексов кортежа SQLite
-            uid = str(r[0]).strip()
-            name = str(r[1]).strip()
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            users_ips_list = []
             
-            # Проверяем, не забанен ли уже этот IP
-            async with db.execute("SELECT 1 FROM banned_ips WHERE username = ?", (name.lower().strip(),)) as b_cur:
-                is_banned = await b_cur.fetchone() is not None
+            # Выгружаем Discord ID и юзернеймы из кошельков биржи
+            async with db.execute("SELECT user_discord_id, username FROM sochi_wallets ORDER BY username ASC") as cursor:
+                rows = await cursor.fetchall()
+            
+            for r in rows:
+                if not r or len(r) < 2: continue
+                uid = str(r[0]).strip()
+                name = str(r[1]).strip()
+                
+                # Проверяем, не забанен ли уже этот пользователь в СУБД SQLite
+                async with db.execute("SELECT 1 FROM banned_ips WHERE username = ?", (name.lower().strip(),)) as b_cur:
+                    is_banned = await b_cur.fetchone() is not None
 
-            # Генерируем стабильный симулированный IP на основе хэша текстовой строки ID
-            simulated_ip = f"192.168.2.{abs(hash(uid)) % 254 + 1}"
+                # Безопасная генерация симулированного IP-адреса на основе хэша ID
+                try:
+                    ip_suffix = abs(hash(uid)) % 254 + 1
+                except:
+                    ip_suffix = random.randint(1, 254)
+                    
+                simulated_ip = f"192.168.2.{ip_suffix}"
+                
+                users_ips_list.append({
+                    "discord_id": uid,
+                    "username": name.capitalize() if "_" not in name else name,
+                    "ip_address": simulated_ip,
+                    "is_banned": is_banned
+                })
+                
+            return {"status": "ok", "users": users_ips_list}
             
-            users_ips_list.append({
-                "discord_id": uid,
-                "username": name.capitalize() if "_" not in name else name,
-                "ip_address": simulated_ip,
-                "is_banned": is_banned
-            })
-            
-        return {"status": "ok", "users": users_ips_list}
+    except Exception as server_err:
+        print(f"🛑 [IP REGISTRY CRITICAL ERROR] Сбой роута банов: {server_err}")
+        return {"status": "error", "message": "Критический сбой СУБД при чтении сетевых протоколов."}
 
 
 
