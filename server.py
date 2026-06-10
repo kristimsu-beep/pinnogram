@@ -3517,7 +3517,7 @@ async def get_sochi_ai_chat_page():
     return FileResponse("templates/ai.html")
 
 
-# 17. POST /api/ai/message — ОТПРАВКА СООБЩЕНИЯ И ПРОВЕРКА КУКЛОВОДА
+# 17. POST /api/ai/message — ОТПРАВКА СООБЩЕНИЯ (ПУЛЕНЕПРОБИВАЕМЫЙ ФИКС РАСПАКОВКИ И ОШИБКИ 500)
 @app.post("/api/ai/message")
 async def send_message_to_sochi_gpt(data: dict, request: Request):
     session_user = request.cookies.get("sochi_ai_user", "Гость")
@@ -3528,69 +3528,121 @@ async def send_message_to_sochi_gpt(data: dict, request: Request):
         
     now_time = datetime.now(pytz.timezone('Europe/Moscow')).strftime("%H:%M")
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        # 1. Записываем сообщение пользователя
-        await db.execute("INSERT INTO sochi_ai_chats (session_user, sender, message, timestamp) VALUES (?, 'user', ?, ?)", 
-                         (session_user, user_message, now_time))
-        
-        # 2. Проверяем, не перехвачен ли чат Саней/админом
-        async with db.execute("SELECT is_active FROM ai_intercepts WHERE session_user = ?", (session_user,)) as cursor:
-            intercept_row = await cursor.fetchone()
-            is_intercepted = (intercept_row[0] == 1) if intercept_row else False
-            
-        if is_intercepted:
-            # ИИ ОТКЛЮЧЕН: Чат перехвачен тобой вживую, нейросеть молчит!
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            # Подстраховка структуры таблиц
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS sochi_ai_chats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_user TEXT,
+                    sender TEXT,
+                    message TEXT,
+                    timestamp TEXT
+                )
+            """)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS ai_intercepts (
+                    session_user TEXT PRIMARY KEY,
+                    intercepted_by_admin TEXT,
+                    is_active INTEGER DEFAULT 0
+                )
+            """)
             await db.commit()
-            return {"status": "ok", "mode": "admin_active"}
+
+            # 1. Записываем сообщение пользователя в СУБД SQLite
+            await db.execute("INSERT INTO sochi_ai_chats (session_user, sender, message, timestamp) VALUES (?, 'user', ?, ?)", 
+                             (session_user, user_message, now_time))
+            await db.commit()
             
-        # 3. Собираем контекст истории для Llama-3
-        history = []
-        async with db.execute("SELECT sender, message FROM sochi_ai_chats WHERE session_user = ? ORDER BY id ASC LIMIT 10", (session_user,)) as h_cursor:
-            h_rows = await h_cursor.fetchall()
-            for hr in h_rows:
-                history.append({"sender": hr[0], "message": hr[1]})
+            # 2. Проверяем статус перехвата управления (кукловод)
+            async with db.execute("SELECT is_active FROM ai_intercepts WHERE session_user = ?", (session_user,)) as cursor:
+                intercept_row = await cursor.fetchone()
+                is_intercepted = (intercept_row[0] == 1) if intercept_row else False
+                
+            if is_intercepted:
+                return {"status": "ok", "mode": "admin_active"}
+                
+            # 3. Вытаскиваем историю контекста (🎯 ИСПРАВЛЕНО: Чёткая распаковка индексов кортежа!)
+            history = []
+            async with db.execute("SELECT sender, message FROM sochi_ai_chats WHERE session_user = ? ORDER BY id ASC LIMIT 10", (session_user,)) as h_cursor:
+                h_rows = await h_cursor.fetchall()
+                for hr in h_rows:
+                    if hr and len(hr) >= 2:
+                        history.append({"sender": str(hr[0]), "message": str(hr[1])})
 
-        # ИИ ВКЛЮЧЕН: Нейросеть генерирует ответ
-        ai_response = await generate_real_sochi_llm_response(user_message, history)
-        await db.execute("INSERT INTO sochi_ai_chats (session_user, sender, message, timestamp) VALUES (?, 'ai', ?, ?)", 
-                         (session_user, ai_response, now_time))
-        await db.commit()
-        return {"status": "ok", "mode": "llm_active", "ai_text": ai_response}
+            # ИИ ВКЛЮЧЕН: Отправляем запрос в реальную Llama-3.1 нейросеть
+            ai_response = await generate_real_sochi_llm_response(user_message, history)
+            
+            # Записываем ответ ИИ в базу
+            await db.execute("INSERT INTO sochi_ai_chats (session_user, sender, message, timestamp) VALUES (?, 'ai', ?, ?)", 
+                             (session_user, ai_response, now_time))
+            await db.commit()
+            return {"status": "ok", "mode": "llm_active", "ai_text": ai_response}
+            
+    except Exception as e:
+        print(f"🛑 [AI MESSAGE ERROR] Сбой отправки реплики ИИ: {e}")
+        return {"status": "error", "message": f"Ошибка бэкенда чата: {str(e)}"}
 
 
-# 18. GET /api/ai/history — ЗАГРУЗКА ИНДИВИДУАЛЬНОЙ ИСТОРИИ ЧАТА
+# 18. GET /api/ai/history — ЗАГРУЗКА ИСТОРИИ ЧАТА (🎯 ИСПРАВЛЕНО: ТОТАЛЬНЫЙ ФИКС КОРТЕЖЕЙ SQLite)
 @app.get("/api/ai/history")
 async def get_individual_ai_chat_history(request: Request, target_user: str = None):
     session_user = target_user if target_user else request.cookies.get("sochi_ai_user", "Гость")
-    async with aiosqlite.connect(DB_PATH) as db:
-        history = []
-        async with db.execute("SELECT sender, message, timestamp FROM sochi_ai_chats WHERE session_user = ? ORDER BY id ASC", (session_user,)) as cursor:
-            rows = await cursor.fetchall()
-            for r in rows:
-                history.append({"sender": r[0], "message": r[1], "time": r[2]})
-        return {"status": "ok", "history": history}
+    
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS sochi_ai_chats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_user TEXT,
+                    sender TEXT,
+                    message TEXT,
+                    timestamp TEXT
+                )
+            """)
+            await db.commit()
+
+            history = []
+            async with db.execute("SELECT sender, message, timestamp FROM sochi_ai_chats WHERE session_user = ? ORDER BY id ASC", (session_user,)) as cursor:
+                rows = await cursor.fetchall()
+                for r in rows:
+                    if r and len(r) >= 3:
+                        # 🎯 ИСПРАВЛЕНО: Хирургически точный разбор элементов кортежа!
+                        history.append({
+                            "sender": str(r[0]), 
+                            "message": str(r[1]), 
+                            "time": str(r[2])
+                        })
+            return {"status": "ok", "history": history}
+    except Exception as e:
+        print(f"🛑 [AI HISTORY ERROR] Сбой выгрузки истории чата: {e}")
+        return {"status": "error", "message": f"Ошибка СУБД истории: {str(e)}"}
 
 
-# 19. GET /api/ai/admin/dialogs — РЕЕСТР ДЛЯ ПАНЕЛИ SHIFT + T (ПРАВА СОЗДАТЕЛЯ)
+# 19. GET /api/ai/admin/dialogs — РЕЕСТР ДЛЯ ПАНЕЛИ Shift + T (ПРАВА СОЗДАТЕЛЯ)
 @app.get("/api/ai/admin/dialogs")
 async def get_all_active_ai_dialogs_for_admin(request: Request):
     user_discord_id = request.cookies.get("forum_user_id")
     if not user_discord_id or str(user_discord_id) != str(MASTER_ADMIN_DISCORD_ID):
         return {"status": "error", "message": "🔒 Отказ: Роут доступен только Главному Создателю!"}
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT DISTINCT session_user FROM sochi_ai_chats") as cursor:
-            rows = await cursor.fetchall()
-            
-        dialogs = []
-        for r in rows:
-            u_name = r[0]
-            async with db.execute("SELECT is_active FROM ai_intercepts WHERE session_user = ?", (u_name,)) as int_cur:
-                int_row = await int_cur.fetchone()
-                is_active = (int_row[0] == 1) if int_row else False
-            dialogs.append({"username": u_name, "is_intercepted": is_active})
-            
-        return {"status": "ok", "dialogs": dialogs}
+    try:
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute("SELECT DISTINCT session_user FROM sochi_ai_chats") as cursor:
+                rows = await cursor.fetchall()
+                
+            dialogs = []
+            for r in rows:
+                if not r: continue
+                u_name = str(r[0])
+                async with db.execute("SELECT is_active FROM ai_intercepts WHERE session_user = ?", (u_name,)) as int_cur:
+                    int_row = await int_cur.fetchone()
+                    is_active = (int_row[0] == 1) if int_row else False
+                dialogs.append({"username": u_name, "is_intercepted": is_active})
+                
+            return {"status": "ok", "dialogs": dialogs}
+    except Exception as e:
+        return {"status": "error", "message": f"Ошибка СУБД реестра: {str(e)}"}
 
 
 # 20. POST /api/ai/admin/intercept — ВЫКЛЮЧЕНИЕ / ВКЛЮЧЕНИЕ НЕЙРОСЕТИ ДЛЯ ЮЗЕРА
@@ -3601,7 +3653,7 @@ async def admin_intercept_control_toggle(data: dict, request: Request):
         return {"status": "error", "message": "🔒 Отказ прав"}
 
     target_user = data.get("target_user")
-    action = data.get("action") # 'start' или 'stop'
+    action = data.get("action")
 
     async with aiosqlite.connect(DB_PATH) as db:
         if action == "start":
