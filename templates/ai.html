@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сочи-GPT — ИИ Курортной Столицы</title>
+    <style>
+        :root {
+            --bg-sidebar: #171717;
+            --bg-chat: #212121;
+            --bg-input: #2f2f2f;
+            --text-main: #ececec;
+            --text-muted: #b4b4b4;
+            --border-color: #424242;
+            --bear-red: #ef4444;
+            --bull-green: #10b981;
+        }
+
+        body {
+            margin: 0; padding: 0; background-color: var(--bg-chat); color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex; height: 100vh; overflow: hidden;
+        }
+
+        /* БОКОВАЯ ПАНЕЛЬ ИСТОРИИ */
+        .ai-sidebar {
+            width: 260px; background-color: var(--bg-sidebar); border-right: 1px solid var(--border-color);
+            display: flex; flex-direction: column; padding: 12px; box-sizing: border-box; flex-shrink: 0;
+        }
+        @media (max-width: 768px) { .ai-sidebar { display: none; } }
+
+        .new-chat-btn {
+            border: 1px solid var(--border-color); background: transparent; color: var(--text-main);
+            padding: 10px; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: left;
+            display: flex; align-items: center; gap: 8px; font-size: 14px; transition: 0.2s;
+        }
+        .new-chat-btn:hover { background-color: rgba(255,255,255,0.05); }
+
+        /* ОКНО ДИАЛОГОВ */
+        .chat-main-container {
+            flex-grow: 1; display: flex; flex-direction: column; height: 100%; position: relative;
+        }
+
+        .chat-messages-viewport {
+            flex-grow: 1; overflow-y: auto; padding: 40px 20px; box-sizing: border-box;
+            display: flex; flex-direction: column; gap: 24px; align-items: center;
+        }
+
+        .message-row-wrapper { width: 100%; max-width: 720px; display: flex; gap: 16px; font-size: 15px; line-height: 1.6; }
+        .avatar-box { width: 36px; height: 36px; border-radius: 50%; overflow: hidden; flex-shrink: 0; background: #333; }
+        .avatar-box img { width: 100%; height: 100%; object-fit: cover; }
+        
+        .message-content-text { flex-grow: 1; padding-top: 4px; word-break: break-word; white-space: pre-wrap; }
+
+        /* ЭФФЕКТ ПОЛЗУЩЕЙ ПЕЧАТИ БУКВ (КАРЕТКА GPT) */
+        .typing-cursor-indicator::after {
+            content: "●"; color: var(--text-main); animation: blinkCursor 0.6s infinite; margin-left: 2px; font-size: 12px;
+        }
+        @keyframes blinkCursor { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+
+        /* ЗОНА ВВОДА */
+        .input-bar-absolute-anchor {
+            width: 100%; padding: 0 20px 24px 20px; box-sizing: border-box; display: flex; justify-content: center; background: linear-gradient(transparent, var(--bg-chat) 30%);
+        }
+        .input-bar-inner-box {
+            width: 100%; max-width: 720px; background-color: var(--bg-input); border-radius: 16px;
+            padding: 12px 16px; display: flex; align-items: center; gap: 12px; box-sizing: border-box;
+        }
+        .ai-textarea-field {
+            flex-grow: 1; background: transparent; border: none; outline: none; color: var(--text-main);
+            font-size: 15px; resize: none; max-height: 200px; font-family: inherit;
+        }
+
+        /* АБСОЛЮТНОЕ СЛИТНОЕ ЦЕНТРИРОВАНИЕ АДМИН-ОКОН */
+        .stock-modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+            display: none; align-items: center; justify-content: center; z-index: 99999; padding: 20px; box-sizing: border-box;
+        }
+        .trade-terminal-card {
+            background: #2f2f2f; border-radius: 20px; width: 100%; max-width: 460px;
+            padding: 24px; box-sizing: border-box; border: 1px solid var(--border-color);
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); margin: auto; color: var(--text-main);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 1. БОКОВАЯ ПАНЕЛЬ В СТИЛЕ CHATGPT -->
+    <div class="ai-sidebar">
+        <button class="new-chat-btn" onclick="startFreshNewSochiAiSession()">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Новый диалог
+        </button>
+        <div style="margin-top: 20px; font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; padding-left: 4px;">История чатов</div>
+        <div id="sidebar-sessions-history-list" style="display: flex; flex-direction: column; gap: 4px; margin-top: 10px; overflow-y: auto; flex-grow: 1;">
+            <!-- Архивные диалоги подгружаются СУБД автоматичеки -->
+        </div>
+        <div style="border-top: 1px solid var(--border-color); padding-top: 10px; font-size: 13px; color: var(--text-muted); text-align: center; font-weight: 600;">
+            Саня × Сочи РП © 2026
+        </div>
+    </div>
+
+    <!-- 2. ГЛАВНОЕ ОКНО ДИАЛОГОВ -->
+    <div class="chat-main-container">
+        <div style="padding: 14px 24px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: #1a1a1a;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-weight: 800; font-size: 16px; letter-spacing: -0.3px;">Сочи-GPT 3.1</span>
+                <span id="active-chat-user-badge" style="font-size: 11px; font-weight: 800; background: #2f2f2f; color: var(--text-muted); padding: 3px 8px; border-radius: 6px;">Режим: Пользователь</span>
+            </div>
+            <!-- КНОПКА КУКЛОВОДА: Саня или админ отключают маскировку и возвращают ИИ в сеть -->
+            <button id="admin-leave-chat-control-btn" onclick="exitAdminInterceptionModePipeline()" style="display: none; background: var(--bear-red); color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);">
+                🔌 Включить ЛЛМ обратно и выйти
+            </button>
+        </div>
+
+        <!-- Поле рендеринга реплик чата -->
+        <div class="chat-messages-viewport" id="ai-chat-messages-target-viewport">
+            <div style="margin: auto; text-align: center; max-width: 400px; color: var(--text-muted);" id="chat-empty-starter-helper">
+                <div style="font-size: 40px; margin-bottom: 10px;">🌴</div>
+                <h3 style="margin: 0; color: var(--text-main); font-weight: 800;">Добро пожаловать в Сочи!</h3>
+                <p style="font-size: 14px; line-height: 1.5; margin-top: 6px;">Задайте любой вопрос про сервер Сочи РП, устройство Фондовой биржи SSE или Президента Боберстана. ИИ ответит жи есть!</p>
+            </div>
+        </div>
+
+        <!-- Нижняя консоль набора текста -->
+        <div class="input-bar-absolute-anchor">
+            <div class="input-bar-inner-box">
+                <textarea id="ai-user-message-textarea" class="ai-textarea-field" rows="1" placeholder="Спросите Сочи-GPT..." onkeydown="handleAiTextareaKeyPressSubmit(event)"></textarea>
+                <button onclick="submitUserMessageToSochiGptPipeline()" style="background: #fff; color: #000; border: none; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; flex-shrink: 0;">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M15.964.686a.5.5 0 0 0-.65-.65L.767 5.855H.766l-.452.18a.5.5 0 0 0-.082.887l.41.26.001.002 4.995 3.178 3.178 4.995.002.002.26.41a.5.5 0 0 0 .886-.083l6-15Zm-1.833 1.89L6.637 10.07l-.215-.338a.5.5 0 0 0-.154-.154l-.338-.215 7.494-7.494 1.178-.471-.47 1.178Z"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- 🔑 3. ОКНО ПЕРВОЙ АВТОРИЗАЦИИ НИКНЕЙМА -->
+    <div class="stock-modal-overlay" id="modal-ai-auth-wizard" style="display: none; background: rgba(10,10,10,0.85); backdrop-filter: blur(10px);">
+        <div class="trade-terminal-card" style="text-align: center;">
+            <div style="font-size: 40px; margin-bottom: 10px;">🕶️</div>
+            <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 800; letter-spacing: -0.5px;">Добро пожаловать на Сочи РП!</h3>
+            <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin: 0 0 20px 0;">Представьтесь, жи есть! Введите ваш никнейм или имя для сохранения истории разговоров в базу данных.</p>
+            <input type="text" id="ai-auth-username-input" placeholder="Ваш никнейм (например, Саня)" style="width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border-color); background: var(--bg-input); color: #fff; font-size: 15px; font-weight: 700; outline: none; box-sizing: border-box; text-align: center; margin-bottom: 16px;">
+            <button class="terminal-btn" style="background-color: var(--bull-green); color: #fff; border: none; padding: 12px; border-radius: 10px; font-weight: 700; width: 100%; cursor: pointer;" onclick="submitSochiAiGuestAuthRegistration()">✔ Начать общение</button>
+        </div>
+    </div>
+
+    <!-- 🛡️ 4. ПУЛЬТ АДМИНСКОГО КУКЛОВОДСТВА И ДИАЛОГОВ (SHIFT + T) -->
+    <div class="stock-modal-overlay" id="modal-admin-ai-dialogs-panel" onclick="closeAdminAiDialogsPanel()" style="background: rgba(15,23,42,0.85);">
+        <div class="trade-terminal-card" onclick="event.stopPropagation()" style="max-width: 500px; width: 95%;">
+            <div style="border-bottom: 1px dashed var(--border-color); padding-bottom: 12px; margin-bottom: 16px;">
+                <h3 style="margin: 0; color: #007aff; font-size: 18px; display: flex; align-items: center; gap: 8px;">
+                    🕵️‍♂️ Мониторинг диалогов кукловода
+                </h3>
+                <span style="font-size: 11px; font-weight: 800; background: #dbeafe; color: #1e40af; padding: 4px 8px; border-radius: 6px; display: inline-block; margin-top: 4px;">SHIFT + T AI INTERCEPT PANEL</span>
+            </div>
+            <div id="admin-ai-dialogs-list-target-zone" style="display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto;">
+                <div style="text-align: center; color: var(--text-muted); padding: 15px;">Синхронизация ИИ каналов...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ВСПЛЫВАЮЩИЙ ЗВУКОВОЙ СИГНАЛ ПРИ КЛИКАХ И ОТВЕТАХ -->
+    <audio id="audio-click-pop" src="https://mixkit.co" preload="auto"></audio>
+
+    <script>
+        const API_URL = window.location.origin;
+        let activeDialogInterval = null;
+        let currentInterceptionTargetUser = null;
+
+        function getCookieValueByName(name) {
+            const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+            return match ? decodeURIComponent(match) : null;
+        }
+
+        function checkSochiAiSessionAuthorizationState() {
+            const guestUser = getCookieValueByName("sochi_ai_user");
+            if (!guestUser) {
+                document.getElementById("modal-ai-auth-wizard").style.display = "flex";
+            } else {
+                document.getElementById("active-chat-user-badge").textContent = `Режим: ${guestUser}`;
+                loadIndividualChatHistoryTimelineFromServer();
+            }
+        }
+
+        function submitSochiAiGuestAuthRegistration() {
+            const input = document.getElementById("ai-auth-username-input");
+            const rawName = input.value.trim();
+            if (!rawName || rawName.length < 2) { alert("❌ Введите корректное имя!"); return; }
+
+            document.cookie = `sochi_ai_user=${encodeURIComponent(rawName)}; path=/; max-age=${30*24*60*60}`;
+            document.getElementById("modal-ai-auth-wizard").style.display = "none";
+            document.getElementById("audio-click-pop").play().catch(()=>{});
+            checkSochiAiSessionAuthorizationState();
+        }
+
+        function startFreshNewSochiAiSession() {
+            if (confirm("Вы уверены, что хотите начать новый диалог?")) {
+                document.cookie = "sochi_ai_user=; path=/; max-age=0";
+                document.getElementById("ai-chat-messages-target-viewport").innerHTML = "";
+                checkSochiAiSessionAuthorizationState();
+            }
+        }
+
+        async function loadIndividualChatHistoryTimelineFromServer() {
+            const target = currentInterceptionTargetUser ? currentInterceptionTargetUser : "";
+            try {
+                const res = await fetch(`${API_URL}/api/ai/history?target_user=${encodeURIComponent(target)}`);
+                const data = await res.json();
+                
+                const viewport = document.getElementById("ai-chat-messages-target-viewport");
+                if (data.history.length > 0) {
+                    const helper = document.getElementById("chat-empty-starter-helper");
+                    if (helper) helper.remove();
+                    
+                    viewport.innerHTML = "";
+                    data.history.forEach(msg => {
+                        appendMessageBubbleToViewport(msg.sender, msg.message, msg.time, false);
+                    });
+                    viewport.scrollTop = viewport.scrollHeight;
+                }
+            } catch (e) { console.error("Ошибка загрузки истории ИИ:", e); }
+        }
+        // 🎯 ЭФФЕКТ ПОЛЗУЩИХ БУКВ: ПОСИМВОЛЬНЫЙ GPT-ВЫВОД РЕПЛИК НЕЙРОСЕТИ
+        function appendMessageBubbleToViewport(sender, text, time, useTypingAnimation) {
+            const viewport = document.getElementById("ai-chat-messages-target-viewport");
+            const helper = document.getElementById("chat-empty-starter-helper");
+            if (helper) helper.remove();
+
+            const row = document.createElement("div");
+            row.className = "message-row-wrapper";
+            row.style.padding = "10px 0";
+
+            const isAi = (sender === "ai");
+            const avatarUrl = isAi ? "https://ibb.co" : "https://ibb.co";
+            
+            row.innerHTML = `
+                <div class="avatar-box"><img src="${avatarUrl}"></div>
+                <div class="message-content-text">
+                    <div style="font-weight: 800; font-size: 13px; color: ${isAi ? '#10b981':'#007aff'}; margin-bottom: 4px;">
+                        ${isAi ? 'Сочи-GPT' : 'Вы'} <span style="font-weight:500; color:var(--text-muted); font-size:11px; margin-left:6px;">${time}</span>
+                    </div>
+                    <div class="text-body-node ${isAi && useTypingAnimation ? 'typing-cursor-indicator' : ''}"></div>
+                </div>
+            `;
+            viewport.appendChild(row);
+            viewport.scrollTop = viewport.scrollHeight;
+
+            const textContainer = row.querySelector(".text-body-node");
+
+            if (isAi && useTypingAnimation) {
+                let charIndex = 0;
+                function typeNextCharacterPointer() {
+                    if (charIndex < text.length) {
+                        textContainer.textContent += text.charAt(charIndex);
+                        charIndex++;
+                        viewport.scrollTop = viewport.scrollHeight;
+                        setTimeout(typeNextCharacterPointer, Math.random() * 20 + 10);
+                    } else {
+                        textContainer.classList.remove("typing-cursor-indicator");
+                    }
+                }
+                typeNextCharacterPointer();
+            } else {
+                textContainer.textContent = text;
+            }
+        }
+
+        // ОТПРАВКА ТЕКСТА И ОБРАБОТКА ШЛЮЗА КУКЛОВОДА
+        async function submitUserMessageToSochiGptPipeline() {
+            const textarea = document.getElementById("ai-user-message-textarea");
+            const text = textarea.value.trim();
+            if (!text) return;
+
+            textarea.value = "";
+            const nowTime = new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+            
+            // Если вы перехватили чат — отправляем реплику от лица ИИ, нейросеть молчит!
+            if (currentInterceptionTargetUser) {
+                appendMessageBubbleToViewport("ai", text, nowTime, false);
+                await fetch(`${API_URL}/api/ai/admin/send_as_ai`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ target_user: currentInterceptionTargetUser, message: text })
+                });
+                return;
+            }
+
+            appendMessageBubbleToViewport("user", text, nowTime, false);
+
+            try {
+                const res = await fetch(`${API_URL}/api/ai/message`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message: text })
+                });
+                const data = await res.json();
+                
+                if (data.mode === "llm_active") {
+                    document.getElementById("audio-click-pop").play().catch(()=>{});
+                    appendMessageBubbleToViewport("ai", data.ai_text, nowTime, true);
+                }
+            } catch (e) { console.error("Ошибка отправки реплики:", e); }
+        }
+
+        function handleAiTextareaKeyPressSubmit(e) {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submitUserMessageToSochiGptPipeline();
+            }
+        }
+
+        // СЕКРЕТНЫЙ СЛУШАТЕЛЬ ПАНЕЛИ ДИАЛОГОВ (SHIFT + T)
+        window.addEventListener("keydown", (e) => {
+            if (e.shiftKey && (e.key === "T" || e.key === "t" || e.key === "Е" || e.key === "е")) {
+                e.preventDefault();
+                openAdminAiDialogsPanel();
+            }
+        });
+
+        async function openAdminAiDialogsPanel() {
+            try {
+                const res = await fetch(`${API_URL}/api/ai/admin/dialogs`);
+                const data = await res.json();
+                if (data.status !== "ok") { alert(data.message); return; }
+
+                const zone = document.getElementById("admin-ai-dialogs-list-target-zone");
+                zone.innerHTML = "";
+
+                data.dialogs.forEach(dialog => {
+                    const row = document.createElement("div");
+                    row.style.cssText = "background:#1e1e1e; border:1px solid var(--border-color); border-radius:10px; padding:12px; display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom: 6px;";
+                    
+                    const btnStyle = dialog.is_intercepted ? `background:var(--bear-red); color:#fff;` : `background:#007aff; color:#fff;`;
+                        
+                    row.innerHTML = `
+                        <div>
+                            <div style="font-weight:800; font-size:14px;">Пользователь: <span style="color:#10b981;">${dialog.username}</span></div>
+                            <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Статус ЛЛМ: ${dialog.is_intercepted ? '⚠️ ОТКЛЮЧЕНА':'🟢 Активна'}</div>
+                        </div>
+                        <button onclick="enterAdminInterceptionModePipeline('${dialog.username}')" style="${btnStyle} border:none; padding:6px 12px; border-radius:6px; font-weight:700; font-size:12px; cursor:pointer;">
+                            ${dialog.is_intercepted ? 'Войти в слежение' : 'Перехватить чат'}
+                        </button>
+                    `;
+                    zone.appendChild(row);
+                });
+
+                document.getElementById("modal-admin-ai-dialogs-panel").style.display = "flex";
+            } catch (e) { alert("Ошибка выгрузки ИИ-каналов."); }
+        }
+
+        function closeAdminAiDialogsPanel() { document.getElementById("modal-admin-ai-dialogs-panel").style.display = "none"; }
+
+        // ПЕРЕХВАТ УПРАВЛЕНИЯ: Отключаем ЛЛМ для игрока и входим кукловодом
+        async function enterAdminInterceptionModePipeline(username) {
+            try {
+                const res = await fetch(`${API_URL}/api/ai/admin/intercept`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ target_user: username, action: "start" })
+                });
+                const data = await res.json();
+                alert(data.message);
+
+                if (data.status === "ok") {
+                    currentInterceptionTargetUser = username;
+                    closeAdminAiDialogsPanel();
+                    
+                    document.getElementById("active-chat-user-badge").textContent = `КУКЛОВОД СЛЕЖЕННЯ ЗА: ${username.toUpperCase()}`;
+                    document.getElementById("active-chat-user-badge").style.cssText = "font-size: 11px; font-weight: 800; background: #7f1d1d; color: #fca5a5; padding: 3px 8px; border-radius: 6px;";
+                    document.getElementById("admin-leave-chat-control-btn").style.display = "block";
+                    
+                    loadIndividualChatHistoryTimelineFromServer();
+                    
+                    if (activeDialogInterval) clearInterval(activeDialogInterval);
+                    activeDialogInterval = setInterval(loadIndividualChatHistoryTimelineFromServer, 1500);
+                }
+            } catch (e) { alert("Ошибка перехвата канала."); }
+        }
+
+        // ВЫХОД КУКЛОВОДА: Очищаем сессию и возвращаем ИИ в сеть для пользователя
+        async function exitAdminInterceptionModePipeline() {
+            if (!currentInterceptionTargetUser) return;
+            try {
+                const res = await fetch(`${API_URL}/api/ai/admin/intercept`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ target_user: currentInterceptionTargetUser, action: "stop" })
+                });
+                const data = await res.json();
+                alert(data.message);
+
+                if (data.status === "ok") {
+                    if (activeDialogInterval) clearInterval(activeDialogInterval);
+                    currentInterceptionTargetUser = null;
+                    document.getElementById("admin-leave-chat-control-btn").style.display = "none";
+                    document.getElementById("ai-chat-messages-target-viewport").innerHTML = "";
+                    checkSochiAiSessionAuthorizationState();
+                }
+            } catch (e) { alert("Ошибка освобождения канала ИИ."); }
+        }
+
+        window.onload = () => {
+            checkSochiAiSessionAuthorizationState();
+            setInterval(loadIndividualChatHistoryTimelineFromServer, 5000);
+        };
+    </script>
+</body>
+</html>
