@@ -2685,7 +2685,7 @@ MASTER_ADMIN_DISCORD_ID = "1499475142231855260"
 HF_TOKEN = os.environ.get("SOCHI_LLM_KEY", "")
 
 # Снайперская ссылка на бесплатный Inference-API шлюз умной модели Llama-3.1
-HF_API_URL = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3.1-8B-Instruct"
+HF_API_URL = "https://router.huggingface.co/models/meta-llama/Meta-Llama-3.1-8B-Instruct"
 
 async def generate_real_sochi_llm_response(user_message: str, chat_history_context: list) -> str:
     system_prompt = (
