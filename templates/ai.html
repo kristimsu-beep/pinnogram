@@ -168,8 +168,19 @@
         let currentInterceptionTargetUser = null;
 
         function getCookieValueByName(name) {
-            const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-            return match ? decodeURIComponent(match) : null;
+            const nameEQ = name + "=";
+            const ca = document.cookie.split(';');
+            for (let i = 0; i < ca.length; i++) {
+                let c = ca[i];
+                while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+                if (c.indexOf(nameEQ) === 0) {
+                    let val = decodeURIComponent(c.substring(nameEQ.length, c.length));
+                    // Защитный барьер: отсекаем возможные дубликаты куки, возвращая только первое имя
+                    if (val.includes(",")) val = val.split(",")[0].trim();
+                    return val;
+                }
+            }
+            return null;
         }
 
         function checkSochiAiSessionAuthorizationState() {
