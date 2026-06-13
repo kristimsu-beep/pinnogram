@@ -2582,6 +2582,158 @@ async def startup():
             except Exception as e:
                 print(f"🛑 [KONATA START ERROR] Ошибка запуска бота: {e}")
 
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+from typing import List, Optional
+
+# Инициализация таблиц GOZON в общей базе данных
+def init_gozon_db():
+    conn = sqlite3.connect("forum.db")
+    cursor = conn.cursor()
+    
+    # Таблица пользователей GOZON (сохраняется при деплое)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS gozon_users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL
+    )""")
+    
+    # Таблица товаров
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS gozon_products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        price REAL NOT NULL,
+        quantity INTEGER NOT NULL
+    )""")
+    
+    # Таблица заказов
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS gozon_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL,
+        items TEXT NOT NULL, -- JSON строка со списком товаров
+        total_price REAL NOT NULL,
+        lat REAL,
+        lng REAL,
+        status TEXT DEFAULT 'pending' -- pending, accepted, confirmed, cancelled, completed
+    )""")
+    
+    # Заполняем витрину стартовыми товарами, если их еще нет
+    cursor.execute("SELECT COUNT(*) FROM gozon_products")
+    if cursor.fetchone()[0] == 0:
+        products = [
+            ("Пинийский Смартфон X", "Флагманский телефон с поддержкой SSE приложений и ИИ Сочи-GPT.", 49990.0, 15),
+            ("Курортный Худи GOZON", "Теплый оверзайз худи в сине-голубых тонах маркетплейса.", 3500.0, 50),
+            ("Энергетик 'Сочинский Вайб'", "Упаковка 12 шт. Дает +100% к продуктивности кодинга.", 1200.0, 100),
+            ("Механическая Клавиатура", "Синие свичи, RGB подсветка, идеальна для торговли на SSE.", 6800.0, 8)
+        ]
+        cursor.executemany("INSERT INTO gozon_products (name, description, price, quantity) VALUES (?, ?, ?, ?)", products)
+        
+    conn.commit()
+    conn.close()
+
+# Запускаем создание таблиц при инициализации модуля
+init_gozon_db()
+
+# --- Pydantic Схемы данных ---
+class GozonAuth(BaseModel):
+    username: str
+    password: str
+
+class OrderItem(BaseModel):
+    id: int
+    name: str
+    price: float
+    count: int
+
+class GozonOrderCreate(BaseModel):
+    username: str
+    items: List[OrderItem]
+    total_price: float
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
+# --- API ЭНДПОИНТЫ ДЛЯ GOZON ---
+
+@app.post("/api/gozon/register")
+def gozon_register(data: GozonAuth):
+    conn = sqlite3.connect("forum.db")
+    cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT INTO gozon_users (username, password) VALUES (?, ?)", (data.username, data.password))
+        conn.commit()
+        return {"status": "success", "message": "Регистрация успешна!"}
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=400, detail="Этот логин уже занят")
+    finally:
+        conn.close()
+
+@app.post("/api/gozon/login")
+def gozon_login(data: GozonAuth):
+    conn = sqlite3.connect("forum.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT password FROM gozon_users WHERE username = ?", (data.username,))
+    user = cursor.fetchone()
+    conn.close()
+    if user and user[0] == data.password:
+        return {"status": "success", "username": data.username}
+    raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+
+@app.get("/api/gozon/products")
+def gozon_get_products():
+    conn = sqlite3.connect("forum.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, description, price, quantity FROM gozon_products")
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"id": r[0], "name": r[1], "description": r[2], "price": r[3], "quantity": r[4]} for r in rows]
+
+@app.post("/api/gozon/orders")
+def gozon_create_order(order: GozonOrderCreate):
+    conn = sqlite3.connect("forum.db")
+    cursor = conn.cursor()
+    # Фикс: принудительно переводим объекты Pydantic в dict для JSON-дампа
+    items_json = json.dumps([item.dict() for item in order.items], ensure_ascii=False)
+    cursor.execute(
+        "INSERT INTO gozon_orders (username, items, total_price, lat, lng) VALUES (?, ?, ?, ?, ?)",
+        (order.username, items_json, order.total_price, order.lat, order.lng)
+    )
+    conn.commit()
+    conn.close()
+    return {"status": "success", "message": "Заказ оформлен!"}
+
+@app.get("/api/gozon/orders")
+def gozon_get_orders():
+    conn = sqlite3.connect("forum.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, username, items, total_price, lat, lng, status FROM gozon_orders")
+    rows = cursor.fetchall()
+    conn.close()
+    return [{
+        "id": r[0], "username": r[1], "items": json.loads(r[2]),
+        "total_price": r[3], "lat": r[4], "lng": r[5], "status": r[6]
+    } for r in rows]
+
+@app.post("/api/gozon/orders/{order_id}/status")
+def gozon_update_order_status(order_id: int, payload: dict):
+    new_status = payload.get("status") # accepted, confirmed, cancelled, completed
+    conn = sqlite3.connect("forum.db")
+    cursor = conn.cursor()
+    cursor.execute("UPDATE gozon_orders SET status = ? WHERE id = ?", (new_status, order_id))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "new_status": new_status}
+
+# Главный роут витрины GOZON
+@app.get("/gozon", response_class=HTMLResponse)
+async def gozon_page(request: Request):
+    return HTML_GOZON_FRONTEND
+HTML_GOZON_FRONTEND = """
+
 # 1. СУБД: ОБНОВЛЕННАЯ ИНИЦИАЛИЗАЦИЯ (ДОБАВЛЕНЫ ПОЛЯ 5-МИНУТНОГО КРАХА И ПОДДЕРЖКА ВНЕШНЕГО РЕЕСТРА)
 async def init_sochi_stock_exchange_tables():
     async with aiosqlite.connect(DB_PATH) as db:
