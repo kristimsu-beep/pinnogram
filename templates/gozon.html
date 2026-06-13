@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Пинийский Маркетплейс GOZON</title>
+    <!-- Подключаем алерты и сочные иконки -->
+    <script src="https://jsdelivr.net"></script>
+    <link rel="stylesheet" href="https://cloudflare.com">
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Roboto, sans-serif; }
+        body {
+            background: linear-gradient(135deg, #0d1b2a 0%, #1b263b 50%, #415a77 100%);
+            color: #f8f9fa; min-height: 100vh; overflow-x: hidden;
+        }
+        /* Шапка в синих тонах маркетплейса */
+        header {
+            background: rgba(27, 38, 59, 0.85); backdrop-filter: blur(10px);
+            padding: 15px 5%; position: sticky; top: 0; z-index: 100;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 2px solid #00b4d8; box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .logo { font-size: 28px; font-weight: 800; color: #00b4d8; text-transform: uppercase; letter-spacing: 2px; }
+        .logo span { color: #f72585; }
+        .nav-icons { display: flex; gap: 25px; align-items: center; }
+        .icon-btn { position: relative; font-size: 22px; color: #f8f9fa; cursor: pointer; transition: 0.3s; }
+        .icon-btn:hover { color: #00b4d8; transform: scale(1.1); }
+        .badge {
+            position: absolute; top: -8px; right: -10px; background: #f72585; color: white;
+            border-radius: 50%; padding: 2px 6px; font-size: 11px; font-weight: bold; transition: 0.2s;
+        }
+        /* Витрина карточек */
+        .container { max-width: 1200px; margin: 40px auto; padding: 0 20px; }
+        .products-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 30px; }
+        .product-card {
+            background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px; padding: 20px; transition: 0.4s;
+            display: flex; flex-direction: column; justify-content: space-between; backdrop-filter: blur(5px);
+        }
+        .product-card:hover {
+            transform: translateY(-8px); border-color: #00b4d8;
+            box-shadow: 0 10px 25px rgba(0, 180, 216, 0.2);
+        }
+        .product-title { font-size: 20px; font-weight: 600; margin-bottom: 10px; color: #90e0ef; }
+        .product-desc { font-size: 14px; color: #e2e8f0; margin-bottom: 15px; line-height: 1.4; flex-grow: 1; }
+        .product-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; }
+        .product-price { font-size: 22px; font-weight: 700; color: #00b4d8; }
+        /* Кнопки */
+        .btn {
+            background: linear-gradient(90deg, #0077b6, #00b4d8); color: white; border: none;
+            padding: 10px 18px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.3s;
+        }
+        .btn:hover { background: linear-gradient(90deg, #00b4d8, #f72585); transform: scale(1.05); }
+        /* Модальные окна */
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background: #1b263b; border: 2px solid #00b4d8; border-radius: 20px;
+            padding: 30px; width: 90%; max-width: 550px; position: relative; max-height: 85vh; overflow-y: auto;
+        }
+        .close-modal { position: absolute; top: 15px; right: 20px; font-size: 24px; cursor: pointer; color: #a2a2a2; }
+        .close-modal:hover { color: #f72585; }
+        .auth-box h2 { text-align: center; margin-bottom: 20px; color: #00b4d8; }
+        .auth-box input {
+            width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px;
+            border: 1px solid #415a77; background: #0d1b2a; color: white;
+        }
+        .cart-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .geo-indicator { font-size: 13px; color: #2a9d8f; margin: 10px 0; display: flex; align-items: center; gap: 6px; }
+    </style>
+</head>
+<body>
+
+    <!-- ШАПКА И ИКОНКИ -->
+    <header>
+        <div class="logo">GO<span>ZON</span></div>
+        <div id="userInfo" style="font-size: 14px; color: #90e0ef;"></div>
+        <div class="nav-icons">
+            <div class="icon-btn" onclick="toggleModal('notificationsModal')">
+                <i class="fa-solid fa-bell"></i>
+                <div class="badge" id="notifBadge" style="display: none;">0</div>
+            </div>
+            <div class="icon-btn" onclick="openCartModal()">
+                <i class="fa-solid fa-cart-shopping"></i>
+                <div class="badge" id="cartBadge" style="display: none;">0</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- СЕТКА ДЛЯ КАРТОЧЕК ТОВАРОВ -->
+    <div class="container">
+        <div class="products-grid" id="productsContainer"></div>
+    </div>
+
+    <!-- ОКНО РЕГИСТРАЦИИ И ВХОДА -->
+    <div id="authModal" class="modal" style="display: flex;">
+        <div class="modal-content auth-box">
+            <h2>Вход в GOZON</h2>
+            <input type="text" id="authUser" placeholder="Ваш логин">
+            <input type="password" id="authPass" placeholder="Пароль">
+            <button class="btn" style="width: 100%; margin-bottom: 10px;" onclick="handleAuth(true)">Войти</button>
+            <button class="btn" style="width: 100%; background: #415a77;" onclick="handleAuth(false)">Зарегистрироваться</button>
+        </div>
+    </div>
+
+    <!-- ОКНО КОРЗИНЫ -->
+    <div id="cartModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="toggleModal('cartModal')">&times;</span>
+            <h2 style="color: #00b4d8; margin-bottom: 15px;"><i class="fa-solid fa-basket-shopping"></i> Ваша корзина</h2>
+            <div id="cartItemsList"></div>
+            <!-- Сюда подтягиваются GPS данные телефона -->
+            <div class="geo-indicator" id="geoStatus"><i class="fa-solid fa-location-crosshairs"></i> Ожидание геолокации...</div>
+            <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
+                <h3>Итого: <span id="cartTotalSum" style="color:#f72585;">0</span> ₽</h3>
+                <button class="btn" onclick="submitOrder()">Оплатить заказ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ТУТ МЫ ОСТАНОВИЛИСЬ, СЮДА ДОПИШЕМ ОСТАЛЬНЫЕ ОКНА И СКРИПТЫ -->
+    <!-- ОКНО ПОДРОБНОСТЕЙ ТОВАРА -->
+    <div id="productDetailModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="toggleModal('productDetailModal')">&times;</span>
+            <h2 id="detailTitle" style="color: #90e0ef; margin-bottom: 15px;"></h2>
+            <p id="detailDesc" style="line-height: 1.5; margin-bottom: 20px;"></p>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span id="detailPrice" style="font-size: 24px; font-weight: bold; color: #00b4d8;"></span>
+                <button class="btn" id="detailAddBtn">Добавить в корзину</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ОКНО УВЕДОМЛЕНИЙ -->
+    <div id="notificationsModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="toggleModal('notificationsModal')">&times;</span>
+            <h2 style="color: #00b4d8; margin-bottom: 15px;"><i class="fa-solid fa-bell"></i> Уведомления</h2>
+            <div id="notifList" style="display: flex; flex-direction: column; gap: 10px;">
+                <p style="color: #a2a2a2; font-style: italic;">Уведомлений пока нет</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- СКРЫТОЕ ОКНО КУРЬЕРА (CTRL + O) -->
+    <div id="courierModal" class="modal">
+        <div class="modal-content" style="max-width: 750px;">
+            <span class="close-modal" onclick="toggleModal('courierModal')">&times;</span>
+            <h2 style="color: #f72585; margin-bottom: 15px;"><i class="fa-solid fa-truck-delivery"></i> Панель обработки заказов (Админ/Курьер)</h2>
+            <div id="courierOrdersList"></div>
+        </div>
+    </div>
+    <script>
+        let currentUser = null; let productsData = []; let cart = {};
+        let userLocation = { lat: null, lng: null }; let localNotifications = [];
+
+        // 🛰️ АВТОЗАПРОС ГЕОЛОКАЦИИ ПО ТЕЛЕФОНУ
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    userLocation.lat = pos.coords.latitude; userLocation.lng = pos.coords.longitude;
+                    const el = document.getElementById('geoStatus');
+                    if(el) el.innerHTML = `<i class="fa-solid fa-location-dot"></i> Доставка настроена по геопозиции телефона`;
+                },
+                () => {
+                    userLocation.lat = 43.5855; userLocation.lng = 39.7231; // Центр Сочи по дефолту
+                    const el = document.getElementById('geoStatus');
+                    if(el) el.innerHTML = `<i class="fa-solid fa-map-pin"></i> Доставка настроена на Центральный Склад`;
+                }
+            );
+        }
+
+        function toggleModal(id) {
+            const m = document.getElementById(id); m.style.display = (m.style.display === 'flex') ? 'none' : 'flex';
+        }
+
+        // 🔒 АВТОРИЗАЦИЯ И СОХРАНЕНИЕ ПОЛЬЗОВАТЕЛЯ
+        async function handleAuth(isLogin) {
+            const username = document.getElementById('authUser').value.trim();
+            const password = document.getElementById('authPass').value.trim();
+            if(!username || !password) return Swal.fire("Ошибка", "Заполните все поля!", "error");
+            
+            const url = isLogin ? '/api/gozon/login' : '/api/gozon/register';
+            try {
+                const res = await fetch(url, {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username, password})
+                });
+                const data = await res.json();
+                if(!res.ok) throw new Error(data.detail || "Ошибка");
+                
+                currentUser = username;
+                document.getElementById('authModal').style.display = 'none';
+                document.getElementById('userInfo').innerText = `👤 ${currentUser}`;
+                Swal.fire("Отлично!", "Вход выполнен успешно", "success");
+                loadProducts(); startNotificationPolling();
+            } catch(e) { Swal.fire("Сбой", e.message, "error"); }
+        }
+
+        // 📦 ЗАГРУЗКА СПИСКА ТОВАРОВ С БЭКЕНДА
+        async function loadProducts() {
+            const res = await fetch('/api/gozon/products'); productsData = await res.json();
+            const container = document.getElementById('productsContainer'); container.innerHTML = '';
+            productsData.forEach(p => {
+                container.innerHTML += `
+                    <div class="product-card">
+                        <div><div class="product-title">${p.name}</div><div class="product-desc">${p.description}</div></div>
+                        <div class="product-footer"><div class="product-price">${p.price} ₽</div><button class="btn" onclick="openDetail(${p.id})">О товаре</button></div>
+                    </div>`;
+            });
+        }
+
+        // 🔍 ОКНО ПОДРОБНОСТЕЙ ТОВАРА
+        function openDetail(id) {
+            const p = productsData.find(item => item.id === id); if(!p) return;
+            document.getElementById('detailTitle').innerText = p.name;
+            document.getElementById('detailDesc').innerText = p.description;
+            document.getElementById('detailPrice').innerText = `${p.price} ₽`;
+            document.getElementById('detailAddBtn').onclick = () => { addToCart(p.id); toggleModal('productDetailModal'); };
+            toggleModal('productDetailModal');
+        }
+
+        // 🛒 УПРАВЛЕНИЕ КОРЗИНОЙ С КРАСНЫМ ИНДИКАТОРОМ
+        function addToCart(id) { 
+            cart[id] = (cart[id] || 0) + 1; 
+            updateCartBadges(); 
+            Swal.fire({ title: "В корзине!", text: "Товар добавлен успешно", icon: "success", timer: 700, showConfirmButton: false }); 
+        }
+        
+        function removeFromCart(id) { 
+            if(cart[id]) { cart[id]--; if(cart[id] === 0) delete cart[id]; } 
+            updateCartBadges(); openCartModal(); 
+        }
+        
+        function updateCartBadges() {
+            const totalItems = Object.values(cart).reduce((a, b) => a + b, 0); const badge = document.getElementById('cartBadge');
+            if(totalItems > 0) { badge.innerText = totalItems; badge.style.display = 'block'; } else { badge.style.display = 'none'; }
+        }
+
+        function openCartModal() {
+            const list = document.getElementById('cartItemsList'); list.innerHTML = ''; let total = 0;
+            Object.keys(cart).forEach(id => {
+                const p = productsData.find(item => item.id == id);
+                if(p) {
+                    const cost = p.price * cart[id]; total += cost;
+                    list.innerHTML += `
+                        <div class="cart-item">
+                            <div><span style="font-weight:600; color:#90e0ef;">${p.name}</span><br><span style="font-size:13px; color:#a2a2a2;">${p.price} ₽ х ${cart[id]} шт.</span></div>
+                            <div style="display:flex; align-items:center; gap:10px;"><span style="font-weight:bold; color:#00b4d8;">${cost} ₽</span><button class="btn" style="padding:4px 10px; background:#f72585;" onclick="removeFromCart(${p.id})">&times;</button></div>
+                        </div>`;
+                }
+            });
+            if(Object.keys(cart).length === 0) list.innerHTML = '<p style="text-align:center; color:#a2a2a2; padding:20px 0;">В вашей корзине пусто</p>';
+            document.getElementById('cartTotalSum').innerText = total;
+            const m = document.getElementById('cartModal'); if(m.style.display !== 'flex') m.style.display = 'flex';
+        }
+
+        // 💳 ОПЛАТА И ОТПРАВКА С ГЕО ДАННЫМИ
+        async function submitOrder() {
+            const itemsArray = []; let total = 0;
+            Object.keys(cart).forEach(id => {
+                const p = productsData.find(item => item.id == id);
+                if(p) { itemsArray.push({ id: p.id, name: p.name, price: p.price, count: cart[id] }); total += p.price * cart[id]; }
+            });
+            if(itemsArray.length === 0) return Swal.fire("Внимание", "Корзина пуста!", "warning");
+            const res = await fetch('/api/gozon/orders', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ username: currentUser, items: itemsArray, total_price: total, lat: userLocation.lat, lng: userLocation.lng })
+            });
+            if(res.ok) { cart = {}; updateCartBadges(); toggleModal('cartModal'); Swal.fire("Успешно!", "Заказ отправлен курьерам.", "success"); }
+        }
+
+        // 🚚 КУРЬЕРСКИЙ ПЕРЕХВАТ CTRL + O
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key.toLowerCase() === 'o') { e.preventDefault(); loadCourierOrders(); const m = document.getElementById('courierModal'); m.style.display = 'flex'; }
+        });
+
+        async function loadCourierOrders() {
+            const res = await fetch('/api/gozon/orders'); const orders = await res.json();
+            const list = document.getElementById('courierOrdersList'); list.innerHTML = '';
+            orders.reverse().forEach(o => {
+                const itemsStr = o.items.map(i => `${i.name} (${i.count}шт)`).join(', ');
+                let statusColor = o.status === 'accepted' ? '#2196f3' : (o.status === 'confirmed' ? '#4caf50' : (o.status === 'cancelled' ? '#f44336' : '#ffb703'));
+                list.innerHTML += `
+                    <div style="background:rgba(255,255,255,0.03); border:1px solid #415a77; padding:15px; border-radius:10px; margin-bottom:15px;">
+                        <div style="display:flex; margin-bottom:10px;"><strong>Заказ №${o.id} от ${o.username}</strong><span style="color:${statusColor}; font-weight:bold; margin-left:auto;">[${o.status.toUpperCase()}]</span></div>
+                        <div style="font-size:14px; margin-bottom:8px;">🛒 Содержимое: <span style="color:#90e0ef;">${itemsStr}</span></div>
+                        <div style="font-size:14px; margin-bottom:10px;">💰 Сумма: <span style="color:#00b4d8; font-weight:bold;">${o.total_price} ₽</span></div>
+                        <div style="display:flex; gap:10px; margin-top:10px;">
+                            <button class="btn" style="padding:6px 12px; font-size:13px;" onclick="viewOrderRoute(${o.id}, ${o.lat}, ${o.lng})">Взять заказ</button>
+                            <button class="btn" style="padding:6px 12px; font-size:13px; background:#4caf50;" onclick="changeStatus(${o.id}, 'confirmed')">Подтвердить</button>
+                            <button class="btn" style="padding:6px 12px; font-size:13px; background:#f44336;" onclick="changeStatus(${o.id}, 'cancelled')">Отменить</button>
+                        </div>
+                    </div>`;
+            });
+        }
+        // 🗺️ СИМУЛЯЦИЯ И РАСЧЁТ МАРШРУТА ДО КЛИЕНТА ДЛЯ КУРЬЕРА
+        function viewOrderRoute(id, lat, lng) {
+            let routeText = "Точка доставки установлена по умолчанию.";
+            if(lat && lng && userLocation.lat) {
+                // Вычисляем примерное расстояние по формуле гипотенузы
+                const dist = Math.sqrt(Math.pow(lat - userLocation.lat, 2) + Math.pow(lng - userLocation.lng, 2)) * 111;
+                routeText = `Дистанция до покупателя: ~${dist.toFixed(2)} км. Маршрут построен: через Курортный проспект.`;
+            }
+            Swal.fire({ 
+                title: `Заказ №${id}`, 
+                text: routeText, 
+                icon: "info", 
+                showCancelButton: true, 
+                confirmButtonText: "Принять в работу", 
+                cancelButtonText: "Назад" 
+            }).then((r) => { 
+                if (r.isConfirmed) changeStatus(id, 'accepted'); 
+            });
+        }
+        // 🔄 ОБНОВЛЕНИЕ СТАТУСА ЗАКАЗА НА СЕРВЕРЕ (КУРЬЕР / АДМИН)
+        async function changeStatus(id, newStatus) {
+            try {
+                const res = await fetch(`/api/gozon/orders/${id}/status`, { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({status: newStatus}) 
+                });
+                if(res.ok) { 
+                    Swal.fire("Готово", "Статус заказа успешно обновлен", "success"); 
+                    loadCourierOrders(); 
+                } else {
+                    Swal.fire("Ошибка", "Не удалось обновить статус", "error");
+                }
+            } catch(e) {
+                Swal.fire("Сбой", "Ошибка соединения с сервером", "error");
+            }
+        }
+        // 🔔 ЖИВОЙ ПОЛЛИНГ УВЕДОМЛЕНИЙ (ОПРОС СЕРВЕРА КРАЗ В 4 СЕКУНДЫ)
+        let lastOrdersState = [];
+        function startNotificationPolling() {
+            setInterval(async () => {
+                if(!currentUser) return;
+                try {
+                    const res = await fetch('/api/gozon/orders');
+                    const orders = await res.json();
+                    
+                    // Фильтруем только заказы текущего авторизованного пользователя
+                    const myOrders = orders.filter(o => o.username === currentUser);
+                    
+                    myOrders.forEach(mo => {
+                        const match = lastOrdersState.find(lo => lo.id === mo.id);
+                        if(match && match.status !== mo.status) {
+                            // Статус на бэкенде изменился! Формируем уведомление
+                            let text = `Заказ №${mo.id}: ` + 
+                                (mo.status === 'accepted' ? "🚚 Курьер уже взял ваш заказ на выполнение!" : 
+                                (mo.status === 'confirmed' ? "✅ Успешно доставлен и подтвержден!" : 
+                                "❌ Был отменен курьерской службой."));
+                            
+                            // Добавляем в начало массива уведомлений
+                            localNotifications.unshift({ text, time: new Date().toLocaleTimeString() });
+                            updateNotificationsUI();
+                        }
+                    });
+                    
+                    lastOrdersState = myOrders;
+                } catch (e) {
+                    console.error("Ошибка опроса статусов заказов:", e);
+                }
+            }, 4000);
+        }
+
+        // 🖼️ ОБНОВЛЕНИЕ ИНТЕРФЕЙСА ПАНЕЛИ УВЕДОМЛЕНИЙ И ЗНАЧКА BELL
+        function updateNotificationsUI() {
+            const badge = document.getElementById('notifBadge');
+            const list = document.getElementById('notifList');
+            
+            if(localNotifications.length > 0) {
+                // Подсвечиваем число уведомлений на значке колокольчика
+                badge.innerText = localNotifications.length;
+                badge.style.display = 'block';
+                list.innerHTML = '';
+                
+                // Рендерим уведомления списком сверху вниз
+                localNotifications.forEach(n => {
+                    list.innerHTML += `
+                        <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; border-left:4px solid #00b4d8;">
+                            <div style="font-size:14px;">${n.text}</div>
+                            <div style="font-size:11px; color:#a2a2a2; text-align:right; margin-top:5px;">${n.time}</div>
+                        </div>
+                    `;
+                });
+            }
+        }
+    </script>
+</body>
+</html>
