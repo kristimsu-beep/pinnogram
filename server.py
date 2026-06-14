@@ -2728,11 +2728,12 @@ def gozon_update_order_status(order_id: int, payload: dict):
     conn.close()
     return {"status": "success", "new_status": new_status}
 
-# Главный роут витрины GOZON
+# Главный роут витрины GOZON — загружает внешний HTML из папки templates
 @app.get("/gozon", response_class=HTMLResponse)
 async def gozon_page(request: Request):
-    return HTML_GOZON_FRONTEND
-HTML_GOZON_FRONTEND = """
+    # Метод подгружает файл templates/gozon.html, который ты создал по частям
+    return templates.TemplateResponse("gozon.html", {"request": request})
+
 
 # 1. СУБД: ОБНОВЛЕННАЯ ИНИЦИАЛИЗАЦИЯ (ДОБАВЛЕНЫ ПОЛЯ 5-МИНУТНОГО КРАХА И ПОДДЕРЖКА ВНЕШНЕГО РЕЕСТРА)
 async def init_sochi_stock_exchange_tables():
