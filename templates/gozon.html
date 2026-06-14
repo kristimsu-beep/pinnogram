@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Пинийский Маркетплейс GOZON</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.12.0/sweetalert2.all.min.js">
+    
+    <!-- 🌟 СВЕРХСТАБИЛЬНЫЕ ССЫЛКИ ДЛЯ КРАСИВЫХ ОКОН И ИКОНОК (ИСПРАВЛЕНО!) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.12.0/sweetalert2.all.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.12.0/sweetalert2.min.css">
+    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Roboto, sans-serif; }
         body {
@@ -20,8 +24,13 @@
         .logo { font-size: 28px; font-weight: 800; color: #00b4d8; text-transform: uppercase; letter-spacing: 2px; }
         .logo span { color: #f72585; }
         .nav-icons { display: flex; gap: 25px; align-items: center; }
-        .icon-btn { position: relative; font-size: 22px; color: #f8f9fa; cursor: pointer; transition: 0.3s; }
-        .icon-btn:hover { color: #00b4d8; transform: scale(1.1); }
+        
+        /* Кнопки в шапке (с гарантированной видимостью) */
+        .icon-btn { position: relative; font-size: 24px; color: #f8f9fa !important; cursor: pointer; transition: 0.3s; display: inline-block; }
+        .icon-btn i { color: #f8f9fa !important; }
+        .icon-btn:hover { color: #00b4d8 !important; transform: scale(1.1); }
+        .icon-btn:hover i { color: #00b4d8 !important; }
+        
         .badge {
             position: absolute; top: -8px; right: -10px; background: #f72585; color: white;
             border-radius: 50%; padding: 2px 6px; font-size: 11px; font-weight: bold; transition: 0.2s;
@@ -46,6 +55,8 @@
             padding: 10px 18px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.3s;
         }
         .btn:hover { background: linear-gradient(90deg, #00b4d8, #f72585); transform: scale(1.05); }
+        
+        /* Стандартные модалки */
         .modal {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center;
@@ -54,8 +65,27 @@
             background: #1b263b; border: 2px solid #00b4d8; border-radius: 20px;
             padding: 30px; width: 90%; max-width: 550px; position: relative; max-height: 85vh; overflow-y: auto;
         }
-        .close-modal { position: absolute; top: 15px; right: 20px; font-size: 24px; cursor: pointer; color: #a2a2a2; }
-        .close-modal:hover { color: #f72585; }
+        
+        /* 🔥 КРУТАЯ ПОЛНОЭКРАННАЯ МОДАЛКА ДЛЯ КАРТОЧКИ ТОВАРА */
+        .full-modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: linear-gradient(135deg, #060b14 0%, #0d1b2a 60%, #1b263b 100%);
+            z-index: 2000; justify-content: center; align-items: center; padding: 40px;
+        }
+        .full-modal-content {
+            width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 25px;
+            position: relative; animation: fadeIn 0.4s ease-out;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        
+        .full-detail-title { font-size: clamp(32px, 5vw, 48px); font-weight: 800; color: #90e0ef; letter-spacing: 1px; line-height: 1.2; text-shadow: 0 4px 15px rgba(0, 180, 216, 0.3); }
+        .full-detail-desc { font-size: 18px; color: #e2e8f0; line-height: 1.8; padding: 25px; background: rgba(255,255,255,0.03); border-left: 5px solid #f72585; border-radius: 8px; }
+        .full-detail-footer { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 25px; margin-top: 15px; }
+        .full-detail-price { font-size: 36px; font-weight: 800; color: #00b4d8; text-shadow: 0 0 10px rgba(0, 180, 216, 0.4); }
+        .full-btn-buy { font-size: 20px; padding: 15px 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(247, 37, 133, 0.3); }
+
+        .close-modal { position: absolute; top: 15px; right: 20px; font-size: 32px; cursor: pointer; color: #a2a2a2; transition: 0.2s; }
+        .close-modal:hover { color: #f72585; transform: rotate(90deg); }
         .auth-box h2 { text-align: center; margin-bottom: 20px; color: #00b4d8; }
         .auth-box input {
             width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px;
@@ -74,11 +104,13 @@
         <div class="logo">GO<span>ZON</span></div>
         <div id="userInfo" style="font-size: 14px; color: #90e0ef;"></div>
         <div class="nav-icons">
-            <div class="icon-btn" onclick="toggleModal('notificationsModal')">
+            <!-- Кнопка Уведомлений -->
+            <div class="icon-btn" onclick="toggleModal('notificationsModal')" title="Уведомления">
                 <i class="fa-solid fa-bell"></i>
                 <div class="badge" id="notifBadge" style="display: none;">0</div>
             </div>
-            <div class="icon-btn" onclick="openCartModal()">
+            <!-- Кнопка Корзины -->
+            <div class="icon-btn" onclick="openCartModal()" title="Корзина">
                 <i class="fa-solid fa-cart-shopping"></i>
                 <div class="badge" id="cartBadge" style="display: none;">0</div>
             </div>
@@ -88,7 +120,7 @@
     <div class="container">
         <div class="products-grid" id="productsContainer"></div>
     </div>
-    <!-- ОКНО РЕГИСТРАЦИИ И ВХОДА (ПО УМОЛЧАНИЮ СКРЫТО, СКРИПТ САМ ВКЛЮЧИТ ЕСЛИ НАДО) -->
+    <!-- ОКНО РЕГИСТРАЦИИ И ВХОДА -->
     <div id="authModal" class="modal" style="display: none;">
         <div class="modal-content auth-box">
             <h2>Вход в GOZON</h2>
@@ -99,15 +131,15 @@
         </div>
     </div>
 
-    <!-- ОКНО ПОДРОБНОСТЕЙ ТОВАРА -->
-    <div id="productDetailModal" class="modal">
-        <div class="modal-content">
+    <!-- 🔥 КРУТОЕ ПОЛНОЕКРАННОЕ ОКНО ДЛЯ ДЕТАЛЬНОГО ПРОСМОТРА ТОВАРА -->
+    <div id="productDetailModal" class="full-modal">
+        <div class="full-modal-content">
             <span class="close-modal" onclick="toggleModal('productDetailModal')">&times;</span>
-            <h2 id="detailTitle" style="color: #90e0ef; margin-bottom: 15px;"></h2>
-            <p id="detailDesc" style="line-height: 1.5; margin-bottom: 20px;"></p>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span id="detailPrice" style="font-size: 24px; font-weight: bold; color: #00b4d8;"></span>
-                <button class="btn" id="detailAddBtn">Добавить в корзину</button>
+            <h2 id="detailTitle" class="full-detail-title"></h2>
+            <div id="detailDesc" class="full-detail-desc"></div>
+            <div class="full-detail-footer">
+                <span id="detailPrice" class="full-detail-price"></span>
+                <button class="btn full-btn-buy" id="detailAddBtn">Добавить в корзину</button>
             </div>
         </div>
     </div>
@@ -137,7 +169,7 @@
         </div>
     </div>
 
-    <!-- СКРЫТОЕ ОКНО КУРЬЕРА (ОТКРОЕТСЯ ПО CTRL + D) -->
+    <!-- СКРЫТОЕ ОКНО КУРЬЕРА (ТЕПЕРЬ ПО CTRL + B) -->
     <div id="courierModal" class="modal">
         <div class="modal-content" style="max-width: 750px;">
             <span class="close-modal" onclick="toggleModal('courierModal')">&times;</span>
@@ -149,7 +181,7 @@
         let currentUser = null; let productsData = []; let cart = {};
         let userLocation = { lat: null, lng: null }; let localNotifications = [];
 
-        // 🛰️ АВТОЗАПРОС ГЕОЛОКАЦИИ ПО ТЕЛЕФОНУ
+        // 🛰️ АВТОЗАПРОС ГЕОЛОКАЦИИ ПО ТЕЛЕФОНУ И БРАУЗЕРУ
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
@@ -158,19 +190,19 @@
                     if(el) el.innerHTML = `<i class="fa-solid fa-location-dot"></i> Доставка настроена по геопозиции телефона`;
                 },
                 () => {
-                    userLocation.lat = 43.5855; userLocation.lng = 39.7231; // Центр Сочи
+                    userLocation.lat = 43.5855; userLocation.lng = 39.7231; // Центр Сочи по умолчанию
                     const el = document.getElementById('geoStatus');
                     if(el) el.innerHTML = `<i class="fa-solid fa-map-pin"></i> Доставка настроена на Центральный Склад`;
                 }
             );
         }
 
-        // 🔒 ПРОВЕРКА ЛОКАЛЬНОЙ СЕССИИ ПОЛЬЗОВАТЕЛЯ ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+        // 🔒 АВТОМАТИЧЕСКАЯ ИНИЦИАЛИЗАЦИЯ И СОХРАНЕНИЕ СЕССИИ
         window.addEventListener('DOMContentLoaded', () => {
             const savedUser = localStorage.getItem('gozon_logged_user');
             if (savedUser) {
                 currentUser = savedUser;
-                document.getElementById('userInfo').innerText = `👤 ${currentUser}`;
+                document.getElementById('userInfo').innerText = `👤 Пользователь: ${currentUser}`;
                 loadProducts(); 
                 startNotificationPolling();
             } else {
@@ -182,11 +214,11 @@
             const m = document.getElementById(id); m.style.display = (m.style.display === 'flex') ? 'none' : 'flex';
         }
 
-        // 🔑 АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ С ФИКСАЦИЕЙ В ЛОКАЛЬНОЙ ПАМЯТИ
+        // 🔑 ОБРАБОТЧИК АВТОРЫЗАЦИИ С КРАСИВЫМИ ОКНАМИ SWAL (ЧЕРЕЗ CLOUDFLARE)
         async function handleAuth(isLogin) {
             const username = document.getElementById('authUser').value.trim();
             const password = document.getElementById('authPass').value.trim();
-            if(!username || !password) return alert("Заполните все поля!");
+            if(!username || !password) return Swal.fire("Ошибка", "Заполните все поля!", "error");
             
             const url = isLogin ? '/api/gozon/login' : '/api/gozon/register';
             try {
@@ -195,19 +227,19 @@
                     body: JSON.stringify({username, password})
                 });
                 const data = await res.json();
-                if(!res.ok) throw new Error(data.detail || "Ошибка");
+                if(!res.ok) throw new Error(data.detail || "Ошибка операции");
                 
                 currentUser = username;
-                localStorage.setItem('gozon_logged_user', currentUser); // Сохраняем логин навсегда
+                localStorage.setItem('gozon_logged_user', currentUser); // Сохраняем сессию игрока
                 document.getElementById('authModal').style.display = 'none';
-                document.getElementById('userInfo').innerText = `👤 ${currentUser}`;
-                alert(isLogin ? "Вы успешно вошли в систему!" : "Регистрация успешна! Теперь нажмите кнопку 'Войти'.");
+                document.getElementById('userInfo').innerText = `👤 Пользователь: ${currentUser}`;
+                Swal.fire("Успешно!", isLogin ? "Вы вошли в маркетплейс!" : "Регистрация успешна! Нажмите Войти.", "success");
                 loadProducts(); 
                 startNotificationPolling();
-            } catch(e) { alert(e.message); }
+            } catch(e) { Swal.fire("Ошибка", e.message, "error"); }
         }
 
-        // 📦 СКАЧИВАНИЕ СПИСКА ТОВАРОВ И ОТРИСОВКА СИНЕЙ ВИТРИНЫ
+        // 📦 СКАЧИВАНИЕ СПИСКА ТОВАРОВ И РЕНДЕР КАРТОЧЕК НА ВИТРИНУ
         async function loadProducts() {
             try {
                 const res = await fetch('/api/gozon/products'); 
@@ -228,21 +260,29 @@
                             </div>
                         </div>`;
                 });
-            } catch(e) { console.error("Ошибка загрузки витрины:", e); }
+            } catch(e) { console.error("Сбой загрузки витрины товаров:", e); }
         }
 
+        // 🔍 ОТКРЫТИЕ ОКНА ТОВАРА НА ВЕСЬ ЭКРАН (ПОЛНОЭКРАННЫЙ РЕЖИМ)
         function openDetail(id) {
             const p = productsData.find(item => item.id === id); if(!p) return;
             document.getElementById('detailTitle').innerText = p.name;
             document.getElementById('detailDesc').innerText = p.description;
             document.getElementById('detailPrice').innerText = `${p.price} ₽`;
-            document.getElementById('detailAddBtn').onclick = () => { addToCart(p.id); toggleModal('productDetailModal'); };
+            
+            // Навешиваем событие клика на кнопку корзины внутри полноэкранного окна
+            document.getElementById('detailAddBtn').onclick = () => { 
+                addToCart(p.id); 
+                toggleModal('productDetailModal'); 
+            };
             toggleModal('productDetailModal');
         }
 
+        // 🛒 ДОБАВЛЕНИЕ И УДАЛЕНИЕ ИЗ КОРЗИНЫ С ИНДИКАТОРАМИ НАВЕРХУ
         function addToCart(id) { 
             cart[id] = (cart[id] || 0) + 1; 
             updateCartBadges(); 
+            Swal.fire({ title: "Добавлено!", text: "Товар перемещен в вашу корзину", icon: "success", timer: 900, showConfirmButton: false }); 
         }
         
         function removeFromCart(id) { 
@@ -270,29 +310,30 @@
                         </div>`;
                 }
             });
-            if(Object.keys(cart).length === 0) list.innerHTML = '<p style="text-align:center; color:#a2a2a2; padding:20px 0;">В вашей корзине пусто</p>';
+            if(Object.keys(cart).length === 0) list.innerHTML = '<p style="text-align:center; color:#a2a2a2; padding:20px 0;">Ваша корзина пуста</p>';
             document.getElementById('cartTotalSum').innerText = total;
             const m = document.getElementById('cartModal'); if(m.style.display !== 'flex') m.style.display = 'flex';
         }
 
+        // 💳 ОПЛАТА И ПЕРЕДАЧА GPS КООРДИНАТ НА СЕРВЕР
         async function submitOrder() {
             const itemsArray = []; let total = 0;
             Object.keys(cart).forEach(id => {
                 const p = productsData.find(item => item.id == id);
                 if(p) { itemsArray.push({ id: p.id, name: p.name, price: p.price, count: cart[id] }); total += p.price * cart[id]; }
             });
-            if(itemsArray.length === 0) return alert("Корзина пуста!");
+            if(itemsArray.length === 0) return Swal.fire("Внимание", "Добавьте товары в корзину!", "warning");
             
             const res = await fetch('/api/gozon/orders', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ username: currentUser, items: itemsArray, total_price: total, lat: userLocation.lat, lng: userLocation.lng })
             });
-            if(res.ok) { cart = {}; updateCartBadges(); toggleModal('cartModal'); alert("Заказ успешно оформлен!"); }
+            if(res.ok) { cart = {}; updateCartBadges(); toggleModal('cartModal'); Swal.fire("Заказ оплачен!", "Курьеры получили точку доставки.", "success"); }
         }
 
-        // 🎯 СЛУШАТЕЛЬ ХОТКЕЯ CTRL + D ДЛЯ ОТКРЫТИЯ ПАНЕЛИ КУРЬЕРОВ
+        // 🎯 СЛУШАТЕЛЬ ОБНОВЛЕННОГО ХОТКЕЯ CTRL + B ДЛЯ ПАНЕЛИ КУРЬЕРОВ
         document.addEventListener('keydown', function(e) {
-            if (e.ctrlKey && e.key.toLowerCase() === 'd') { 
+            if (e.ctrlKey && e.key.toLowerCase() === 'b') { 
                 e.preventDefault(); 
                 loadCourierOrders(); 
                 const m = document.getElementById('courierModal'); 
@@ -323,20 +364,27 @@
                 });
             } catch(e) { console.error("Ошибка загрузки заказов курьера:", e); }
         }
-
-        // 🗺️ РАСЧЁТ ДИСТАНЦИИ И ОТОБРАЖЕНИЕ МАРШРУТА ДО КЛИЕНТА
+        // 🗺️ РАСЧЁТ ДИСТАНЦИИ И СТРОИТЕЛЬСТВО МАРШРУТА ДО КЛИЕНТА ДЛЯ КУРЬЕРА
         function viewOrderRoute(id, lat, lng) {
             let routeText = "Точка доставки установлена по умолчанию.";
             if(lat && lng && userLocation.lat) {
+                // Точная тригонометрическая симуляция расстояния
                 const dist = Math.sqrt(Math.pow(lat - userLocation.lat, 2) + Math.pow(lng - userLocation.lng, 2)) * 111;
-                routeText = `Дистанция до покупателя: ~${dist.toFixed(2)} км. Маршрут построен: через Курортный проспект.`;
+                routeText = `Дистанция до покупателя составляет примерно ~${dist.toFixed(2)} км. Маршрут успешно построен: через Курортный проспект.`;
             }
-            if (confirm(`Заказ №${id}\n\n${routeText}\n\nПринять этот заказ в работу?`)) {
-                changeStatus(id, 'accepted');
-            }
+            Swal.fire({
+                title: `Обработка заказа №${id}`,
+                text: routeText,
+                icon: "info",
+                showCancelButton: true,
+                confirmButtonText: "Принять в работу",
+                cancelButtonText: "Назад"
+            }).then((result) => {
+                if (result.isConfirmed) changeStatus(id, 'accepted');
+            });
         }
 
-        // 🔄 ОБНОВЛЕНИЕ СТАТУСА НА БЭКЕНДЕ С ОБЫЧНЫМ ALERT
+        // 🔄 СМЕНА СТАТУСА НА БЭКЕНДЕ С КРАСИВЫМ СОВРЕМЕННЫМ SWAL ВСПЛЫВАНИЕМ
         async function changeStatus(id, newStatus) {
             try {
                 const res = await fetch(`/api/gozon/orders/${id}/status`, { 
@@ -345,13 +393,14 @@
                     body: JSON.stringify({status: newStatus}) 
                 });
                 if(res.ok) { 
-                    alert("Статус заказа успешно обновлен!"); 
+                    Swal.fire("Успешно!", `Заказ №${id} переведен в статус ${newStatus.toUpperCase()}`, "success"); 
                     loadCourierOrders(); 
+                } else {
+                    Swal.fire("Ошибка", "Не удалось изменить статус заказа", "error");
                 }
             } catch(e) { console.error("Ошибка обновления статуса:", e); }
         }
-
-        // 🔔 НЕПРЕРЫВНЫЙ ОПРОС СТАТУСОВ ДЛЯ ПОКУПАТЕЛЯ
+        // 🔔 ЖИВОЙ ЖУРНАЛ СТАТУСОВ ДЛЯ ПОКУПАТЕЛЯ (АВТО-ОПРОС КАЖДЫЕ 4 СЕКУНДЫ)
         let lastOrdersState = [];
         function startNotificationPolling() {
             setInterval(async () => {
@@ -359,12 +408,20 @@
                 try {
                     const res = await fetch('/api/gozon/orders'); 
                     const orders = await res.json();
+                    
+                    // Фильтруем только заказы текущего авторизованного пользователя
                     const myOrders = orders.filter(o => o.username === currentUser);
                     
                     myOrders.forEach(mo => {
                         const match = lastOrdersState.find(lo => lo.id === mo.id);
                         if(match && match.status !== mo.status) {
-                            let text = `Заказ №${mo.id}: ` + (mo.status === 'accepted' ? "🚚 Курьер уже взял ваш заказ на выполнение!" : (mo.status === 'confirmed' ? "✅ Успешно доставлен и подтвержден!" : "❌ Был отменен курьерской службой."));
+                            // Если статус изменился, формируем сочное уведомление
+                            let text = `Заказ №${mo.id}: ` + 
+                                (mo.status === 'accepted' ? "🚚 Курьер уже взял ваш заказ на выполнение!" : 
+                                (mo.status === 'confirmed' ? "✅ Успешно доставлен и подтвержден!" : 
+                                "❌ Был отменен курьерской службой."));
+                            
+                            // Закидываем наверх списка уведомлений
                             localNotifications.unshift({ text, time: new Date().toLocaleTimeString() }); 
                             updateNotificationsUI();
                         }
@@ -378,12 +435,20 @@
         function updateNotificationsUI() {
             const badge = document.getElementById('notifBadge'); 
             const list = document.getElementById('notifList');
+            
             if(localNotifications.length > 0) {
+                // Выводим количество на колокольчик
                 badge.innerText = localNotifications.length; 
                 badge.style.display = 'block'; 
                 list.innerHTML = '';
+                
+                // Генерируем плашки уведомлений с синей границей
                 localNotifications.forEach(n => { 
-                    list.innerHTML += `<div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; border-left:4px solid #00b4d8; margin-bottom:10px;"><div>${n.text}</div><div style="font-size:11px; color:#a2a2a2; text-align:right;">${n.time}</div></div>`; 
+                    list.innerHTML += `
+                        <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; border-left:4px solid #00b4d8; margin-bottom:10px;">
+                            <div>${n.text}</div>
+                            <div style="font-size:11px; color:#a2a2a2; text-align:right; margin-top:5px;">${n.time}</div>
+                        </div>`; 
                 });
             }
         }
