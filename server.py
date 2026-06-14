@@ -2731,11 +2731,19 @@ def gozon_update_order_status(order_id: int, payload: dict):
     conn.close()
     return {"status": "success", "new_status": new_status}
 
-# Главный роут витрины GOZON — загружает внешний HTML из папки templates
+import aiofiles
+
+# Переписанный, независимый роут маркетплейса GOZON
 @app.get("/gozon", response_class=HTMLResponse)
 async def gozon_page(request: Request):
-    # Метод подгружает файл templates/gozon.html, который ты создал по частям
-    return templates.TemplateResponse("gozon.html", {"request": request})
+    try:
+        # Читаем файл шаблона напрямую из папки templates
+        async with aiofiles.open("templates/gozon.html", mode="r", encoding="utf-8") as f:
+            html_content = await f.read()
+        return HTMLResponse(content=html_content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка загрузки шаблона gozon.html: {str(e)}")
+
 
 
 # 1. СУБД: ОБНОВЛЕННАЯ ИНИЦИАЛИЗАЦИЯ (ДОБАВЛЕНЫ ПОЛЯ 5-МИНУТНОГО КРАХА И ПОДДЕРЖКА ВНЕШНЕГО РЕЕСТРА)
