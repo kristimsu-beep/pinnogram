@@ -2586,6 +2586,9 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List, Optional
+import json
+import sqlite3
+
 
 # Инициализация таблиц GOZON в общей базе данных
 def init_gozon_db():
