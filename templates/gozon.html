@@ -92,15 +92,21 @@
 </head>
 <body>
 
+    <!-- ОБНОВЛЕННАЯ ШАПКА: ТРИ УДОБНЫЕ КНОПКИ ДЛЯ СМАРТФОНОВ И ПК -->
     <header>
         <div class="logo">GO<span>ZON</span></div>
         <div id="userInfo" style="font-size: 14px; color: #90e0ef;"></div>
         <div class="nav-icons">
-            <!-- Текстовые супер-надежные эмодзи кнопок вместо ломающихся шрифтов -->
+            <!-- 1. Кнопка Заказов (Курьерская панель, доступна с телефона!) -->
+            <div class="icon-btn" onclick="openCourierPanelFromBtn()" title="Панель курьера">
+                📦
+            </div>
+            <!-- 2. Кнопка Уведомлений -->
             <div class="icon-btn" onclick="toggleModal('notificationsModal')" title="Уведомления">
                 🔔
                 <div class="badge" id="notifBadge" style="display: none;">0</div>
             </div>
+            <!-- 3. Кнопка Корзины -->
             <div class="icon-btn" onclick="openCartModal()" title="Корзина">
                 🛒
                 <div class="badge" id="cartBadge" style="display: none;">0</div>
@@ -371,6 +377,11 @@
                         </div>`;
                 });
             } catch(e) { console.error("Ошибка загрузки заказов курьера:", e); }
+        }
+        function openCourierPanelFromBtn() {
+            loadCourierOrders(); // Скачиваем актуальные заказы с сервера
+            const m = document.getElementById('courierModal');
+            if (m) m.style.display = 'flex'; // Показываем модальное окно курьера
         }
 
         // 🗺️ РАСКРЫТИЕ НАВИГАТОРА И ОТРИСОВКА ЖИВОЙ КАРТЫ ПРЯМО НА ПЛАШКЕ ЗАКАЗА
