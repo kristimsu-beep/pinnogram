@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Пинийские Неоновые Шахматы | GOZON</title>
+    
+    <script src="https://cloudflare.com"></script>
+    <link rel="stylesheet" href="https://cloudflare.com">
+    
+    <script src="https://cloudflare.com"></script>
+    <link rel="stylesheet" href="https://cloudflare.com">
+    <script src="https://jquery.com"></script>
+    <script src="https://cloudflare.com"></script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Roboto, sans-serif; }
+        body {
+            background: linear-gradient(135deg, #0d1b2a 0%, #1b263b 50%, #415a77 100%);
+            color: #f8f9fa; min-height: 100vh; overflow-x: hidden;
+        }
+        header {
+            background: rgba(27, 38, 59, 0.85); backdrop-filter: blur(10px);
+            padding: 15px 5%; display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 2px solid #00b4d8; box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .logo { font-size: 28px; font-weight: 800; color: #00b4d8; text-transform: uppercase; letter-spacing: 2px; cursor: pointer; }
+        .logo span { color: #f72585; }
+        
+        .main-layout { max-width: 1200px; margin: 30px auto; padding: 0 20px; display: flex; gap: 30px; flex-wrap: wrap; justify-content: center; }
+        .board-section { flex: 1; min-width: 320px; max-width: 500px; text-align: center; }
+        .sidebar-section { flex: 1; min-width: 320px; max-width: 400px; display: flex; flex-direction: column; gap: 20px; }
+        
+        #myBoard {
+            width: 100%; border: 4px solid #00b4d8; border-radius: 8px;
+            box-shadow: 0 0 25px rgba(0, 180, 216, 0.4); margin-top: 15px;
+        }
+        
+        .btn {
+            background: linear-gradient(90deg, #0077b6, #00b4d8); color: white; border: none;
+            padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.3s;
+            font-size: 16px; box-shadow: 0 4px 15px rgba(0, 180, 216, 0.3);
+        }
+        .btn:hover { background: linear-gradient(90deg, #00b4d8, #f72585); transform: scale(1.05); }
+        .btn:disabled { background: #415a77; cursor: not-allowed; transform: none; box-shadow: none; }
+        
+        .panel {
+            background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255,255,255,0.1);
+            padding: 15px; border-radius: 12px; backdrop-filter: blur(5px);
+        }
+        .highlight-text { color: #90e0ef; font-weight: bold; }
+        .vs-text { color: #f72585; font-weight: bold; font-size: 18px; margin: 10px 0; text-align: center; }
+        
+        .chat-history { height: 180px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 14px; text-align: left; }
+        .chat-msg { margin-bottom: 8px; line-height: 1.4; }
+        .chat-input-row { display: flex; gap: 8px; }
+        .chat-input-row input { flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #415a77; background: #0d1b2a; color: white; }
+        
+        .moves-container { height: 120px; overflow-y: auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; font-size: 14px; font-family: monospace; }
+        .move-line { color: #94a3b8; }
+        .move-white { color: #fff; font-weight: bold; }
+        .move-black { color: #00b4d8; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo" onclick="window.location.href='/'">GO<span>ZON</span></div>
+        <div id="userInfo" style="font-size: 14px; color: #90e0ef;">👤 Загрузка сессии...</div>
+    </header>
+
+    <div class="main-layout">
+        <!-- ЛЕВАЯ СЕКЦИЯ: ДОСКА И ПОДБОР -->
+        <div class="board-section">
+            <h2>♟️ Кибер-Шахматы Онлайн</h2>
+            
+            <div class="panel" style="margin-top: 15px;">
+                <button id="searchBtn" class="btn" onclick="startMatchmaking()">Искать игру онлайн 🌐</button>
+                <div id="gameStatus" style="margin-top: 10px; font-style: italic; color: #e2e8f0;">Нажмите кнопку для поиска соперника</div>
+                <div id="vsPanel" class="vs-text" style="display: none;"></div>
+            </div>
+
+            <div id="myBoard"></div>
+        </div>
+
+        <!-- ПРАВАЯ СЕКЦИЯ: ЧАТ И СЧЕТЧИК ХОДОВ -->
+        <div class="sidebar-section">
+            <!-- БЛОК ИСТОРИИ ХОДОВ -->
+            <div class="panel">
+                <h3 style="color: #90e0ef; margin-bottom: 10px; font-size: 16px; text-align: left;">📝 История ходов</h3>
+                <div class="moves-container" id="movesLog"></div>
+            </div>
+
+            <!-- БЛОК ИГРОВОГО ЧАТА -->
+            <div class="panel" style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+                <h3 style="color: #f72585; margin-bottom: 10px; font-size: 16px; text-align: left;">💬 Чат партии</h3>
+                <div>
+                    <div class="chat-history" id="chatBox">
+                        <p style="color: #64748b; font-style: italic;">Подключитесь к игре, чтобы активировать чат...</p>
+                    </div>
+                    <div class="chat-input-row">
+                        <input type="text" id="chatInput" placeholder="Напишите сообщение..." onkeydown="if(event.key==='Enter') sendChatMessage()" disabled>
+                        <button class="btn" id="sendChatBtn" style="padding: 10px 15px;" onclick="sendChatMessage()" disabled>✉️</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        let currentUser = null;
+        let ws = null;
+        let board = null;
+        let game = new Chess();
+        let playerColor = null;
+        let currentGameId = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedUser = localStorage.getItem('gozon_logged_user');
+            if (savedUser) {
+                currentUser = savedUser;
+                document.getElementById('userInfo').innerText = `👤 Игрок: ${currentUser}`;
+            } else {
+                Swal.fire("Внимание", "Пожалуйста, авторизуйтесь на главной странице сайта!", "warning").then(() => {
+                    window.location.href = '/';
+                });
+            }
+            board = Chessboard('myBoard', 'start');
+        });
+
+        function startMatchmaking() {
+            document.getElementById('searchBtn').disabled = true;
+            document.getElementById('gameStatus').innerText = "Подключение к серверу подбора игроков...";
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+            const wsUrl = `${protocol}${window.location.host}/ws/chess/${encodeURIComponent(currentUser)}`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onmessage = function(event) {
+                const msg = JSON.parse(event.data);
+                
+                if (msg.type === 'waiting') {
+                    document.getElementById('gameStatus').innerHTML = `⏳ <span class="highlight-text">${msg.message}</span>`;
+                }
+                
+                if (msg.type === 'start') {
+                    currentGameId = msg.game_id;
+                    playerColor = msg.color;
+                    game.load(msg.fen);
+                    
+                    document.getElementById('gameStatus').innerText = "Игра началась!";
+                    const vsPanel = document.getElementById('vsPanel');
+                    vsPanel.style.display = 'block';
+                    vsPanel.innerHTML = `Вы (<span style="color:#00b4d8">${playerColor === 'white' ? 'Белые' : 'Черные'}</span>) против <span style="color:#f72585">${msg.opponent}</span>`;
+                    
+                    document.getElementById('chatInput').disabled = false;
+                    document.getElementById('sendChatBtn').disabled = false;
+                    document.getElementById('chatBox').innerHTML = `<p style="color: #2a9d8f; text-align: center;">--- Чат активирован ---</p>`;
+                    document.getElementById('movesLog').innerHTML = '';
+
+                    board = Chessboard('myBoard', {
+                        draggable: true,
+                        position: 'start',
+                        orientation: playerColor,
+                        onDragStart: onDragStart,
+                        onDrop: onDrop
+                    });
+                    
+                    Swal.fire("Игра найдена!", `Вы играете за ${playerColor === 'white' ? 'БЕЛЫХ' : 'ЧЕРНЫХ'}.`, "success");
+                    updateStatusText();
+                }
+                
+                if (msg.type === 'move') {
+                    game.move(msg.move);
+                    board.position(game.fen());
+                    
+                    appendMoveToLog(msg.move_num, msg.move, msg.mover_color);
+                    updateStatusText();
+                    
+                    if (msg.is_checkmate) {
+                        Swal.fire("Конец игры!", "Объявлен шах и мат!", "info");
+                        resetToLobby();
+                    } else if (msg.is_draw) {
+                        Swal.fire("Ничья!", "Партия завершилась вничью.", "info");
+                        resetToLobby();
+                    }
+                }
+
+                if (msg.type === 'chat') {
+                    const chatBox = document.getElementById('chatBox');
+                    const isMe = msg.sender === currentUser;
+                    const color = isMe ? '#00b4d8' : '#f72585';
+                    chatBox.innerHTML += `<div class="chat-msg"><b style="color: ${color}">${msg.sender}:</b> ${msg.text}</div>`;
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+                
+                if (msg.type === 'opponent_left') {
+                    Swal.fire("Победа!", "Соперник покинул игру. Вам засчитана техническая победа!", "success");
+                    resetToLobby();
+                }
+            };
+            
+            ws.onclose = function() { resetToLobby(); };
+        }
+
+        function onDragStart (source, piece, position, orientation) {
+            if (game.game_over()) return false;
+            if ((playerColor === 'white' && game.turn() === 'b') || (playerColor === 'black' && game.turn() === 'w')) return false;
+            if ((playerColor === 'white' && piece.search(/^b/) !== -1) || (playerColor === 'black' && piece.search(/^w/) !== -1)) return false;
+        }
+
+        function onDrop (source, target) {
+            let move = game.move({ from: source, to: target, promotion: 'q' });
+            if (move === null) return 'snapback';
+
+            ws.send(JSON.stringify({
+                type: 'move',
+                game_id: currentGameId,
+                color: playerColor,
+                move: move.san
+            }));
+        }
+
+        function appendMoveToLog(moveNum, moveSan, color) {
+            const log = document.getElementById('movesLog');
+            if (color === 'white') {
+                log.innerHTML += `<div class="move-line">${moveNum}.</div><div class="move-white">${moveSan}</div><div class="move-black" id="black-move-${moveNum}">...</div>`;
+            } else {
+                const blackSlot = document.getElementById(`black-move-${moveNum}`);
+                if (blackSlot) blackSlot.innerText = moveSan;
+            }
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+            
+            ws.send(JSON.stringify({
+                type: "chat",
+                game_id: currentGameId,
+                text: text
+            }));
+            input.value = '';
+        }
+
+        function updateStatusText() {
+            if (game.game_over()) return;
+            let whosTurn = game.turn() === 'w' ? 'белых' : 'черных';
+            if (game.turn() === playerColor) {
+                document.getElementById('gameStatus').innerHTML = `🔴 <span class="highlight-text" style="color:#00b4d8">Ваш ход!</span>`;
+            } else {
+                document.getElementById('gameStatus').innerText = `⏳ Ход соперника (${whosTurn})...`;
+            }
+        }
+
+        function resetToLobby() {
+            document.getElementById('searchBtn').disabled = false;
+            document.getElementById('chatInput').disabled = true;
+            document.getElementById('sendChatBtn').disabled = true;
+            document.getElementById('gameStatus').innerText = "Нажмите кнопку для поиска соперника";
+            document.getElementById('vsPanel').style.display = 'none';
+            board = Chessboard('myBoard', 'start');
+            game = new Chess();
+        }
+    </script>
+</body>
+</html>
