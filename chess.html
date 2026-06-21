@@ -117,11 +117,14 @@
         let currentUser = null;
         let ws = null;
         let board = null;
-        let game = new Chess();
+        let game = null; // Оставляем пустым для безопасности
         let playerColor = null;
         let currentGameId = null;
 
+        // 1. ИНИЦИАЛИЗАЦИЯ И СБОРКА СЕССИИ
         window.addEventListener('DOMContentLoaded', () => {
+            game = new Chess(); // Создаем движок правил только после загрузки всех библиотек
+            
             const savedUser = localStorage.getItem('gozon_logged_user');
             if (savedUser) {
                 currentUser = savedUser;
@@ -131,12 +134,15 @@
                     window.location.href = '/';
                 });
             }
-        board = Chessboard('myBoard', {
-            position: 'start',
-            pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
-        });
+            
+            // Стартовая доска с картинками из интернета
+            board = Chessboard('myBoard', {
+                position: 'start',
+                pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
+            });
+        }); // ТЕПЕРЬ ВСЕ СКОБКИ ЗАКРЫТЫ ИДЕАЛЬНО!
 
-
+        // 2. ПОДБОР ИГРОКОВ ОНЛАЙН И ВЕБСОКЕТЫ
         function startMatchmaking() {
             document.getElementById('searchBtn').disabled = true;
             document.getElementById('gameStatus').innerText = "Подключение к серверу подбора игроков...";
@@ -145,6 +151,13 @@
             const wsUrl = `${protocol}${window.location.host}/ws/chess/${encodeURIComponent(currentUser)}`;
             
             ws = new WebSocket(wsUrl);
+            
+            // Пингуем сервер каждые 30 секунд, чтобы Render не закрывал соединение
+            setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: "ping" }));
+                }
+            }, 30000);
             
             ws.onmessage = function(event) {
                 const msg = JSON.parse(event.data);
@@ -168,10 +181,12 @@
                     document.getElementById('chatBox').innerHTML = `<p style="color: #2a9d8f; text-align: center;">--- Чат активирован ---</p>`;
                     document.getElementById('movesLog').innerHTML = '';
 
+                    // Интерактивная доска мультиплеера с картинками
                     board = Chessboard('myBoard', {
                         draggable: true,
                         position: 'start',
                         orientation: playerColor,
+                        pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
                         onDragStart: onDragStart,
                         onDrop: onDrop
                     });
@@ -213,6 +228,7 @@
             ws.onclose = function() { resetToLobby(); };
         }
 
+        // 3. ПРАВИЛА ПЕРЕДВИЖЕНИЯ ФИГУР
         function onDragStart (source, piece, position, orientation) {
             if (game.game_over()) return false;
             if ((playerColor === 'white' && game.turn() === 'b') || (playerColor === 'black' && game.turn() === 'w')) return false;
@@ -231,6 +247,7 @@
             }));
         }
 
+        // 4. ЖУРНАЛ ХОДОВ И ЧАТ ПАРТИИ
         function appendMoveToLog(moveNum, moveSan, color) {
             const log = document.getElementById('movesLog');
             if (color === 'white') {
@@ -272,7 +289,6 @@
             document.getElementById('gameStatus').innerText = "Нажмите кнопку для поиска соперника";
             document.getElementById('vsPanel').style.display = 'none';
             
-            // Исправленный сброс доски с подгрузкой картинок фигур из интернета
             board = Chessboard('myBoard', {
                 position: 'start',
                 pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
