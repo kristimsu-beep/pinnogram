@@ -15,4 +15,4 @@ asyncpg
 disnake==2.7.0
 Pillow==10.2.0
 requests
-python-chess==1.10.0
+chess==1.10.1
