@@ -2589,6 +2589,142 @@ from typing import List, Optional
 import json
 import sqlite3
 
+import chess  # библиотека для валидации ходов на бэкенде
+
+# Роут для отдачи самой страницы шахмат
+@app.get("/chess", response_class=HTMLResponse)
+async def get_chess_page():
+    for path in ["chess.html", "templates/chess.html"]:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
+    return HTMLResponse("Файл chess.html не найден", status_code=404)
+
+
+# Класс управления онлайн-матчмейкингом и комнатами
+class ChessMatchmaker:
+    def __init__(self):
+        self.waiting_player: Optional[WebSocket] = None
+        self.waiting_username: Optional[str] = None
+        self.active_games = {} # { game_id: { "white": ws, "black": ws, "board": chess.Board(), "white_name": str, "black_name": str } }
+
+    async def connect_player(self, websocket: WebSocket, username: str):
+        await websocket.accept()
+        
+        # Если никто не ждет игру, ставим текущего игрока в очередь
+        if not self.waiting_player or self.waiting_player.client_state == WebSocketState.DISCONNECTED:
+            self.waiting_player = websocket
+            self.waiting_username = username
+            await websocket.send_json({"type": "waiting", "message": "Ожидание соперника..."})
+        else:
+            # Если есть игрок в очереди — создаем игру
+            game_id = str(uuid.uuid4())
+            white_ws = self.waiting_player
+            black_ws = websocket
+            white_name = self.waiting_username
+            black_name = username
+            
+            self.active_games[game_id] = {
+                "white": white_ws,
+                "black": black_ws,
+                "white_name": white_name,
+                "black_name": black_name,
+                "board": chess.Board()
+            }
+            
+            # Сбрасываем очередь
+            self.waiting_player = None
+            self.waiting_username = None
+            
+            # Уведомляем обоих игроков о старте
+            await white_ws.send_json({
+                "type": "start", 
+                "game_id": game_id, 
+                "color": "white", 
+                "opponent": black_name,
+                "fen": chess.STARTING_FEN
+            })
+            await black_ws.send_json({
+                "type": "start", 
+                "game_id": game_id, 
+                "color": "black", 
+                "opponent": white_name,
+                "fen": chess.STARTING_FEN
+            })
+
+    async def handle_move(self, game_id: str, color: str, move_san: str):
+        if game_id not in self.active_games:
+            return
+            
+        game = self.active_games[game_id]
+        board = game["board"]
+        
+        # Проверяем, чей сейчас ход по правилам шахмат
+        current_turn = "white" if board.turn == chess.WHITE else "black"
+        if color != current_turn:
+            return # Игрок пытается ходить не в свой ход
+
+        try:
+            # Проверяем легальность хода и совершаем его на сервере
+            move = board.parse_san(move_san)
+            if move in board.legal_moves:
+                board.push(move)
+                
+                # Пересылаем ход оппоненту
+                opponent_ws = game["black"] if color == "white" else game["white"]
+                
+                payload = {
+                    "type": "move",
+                    "move": move_san,
+                    "fen": board.board_fen(),
+                    "is_checkmate": board.is_checkmate(),
+                    "is_draw": board.is_game_over() and not board.is_checkmate()
+                }
+                
+                await opponent_ws.send_json(payload)
+                
+                # Если игра окончена, удаляем комнату
+                if board.is_game_over():
+                    del self.active_games[game_id]
+        except Exception as e:
+            print(f"Ошибка валидации хода: {e}")
+
+    def disconnect(self, websocket: WebSocket):
+        if self.waiting_player == websocket:
+            self.waiting_player = None
+            self.waiting_username = None
+            
+        # Если игрок вышел во время активной партии
+        for game_id, game in list(self.active_games.items()):
+            if game["white"] == websocket or game["black"] == websocket:
+                # Оповещаем оставшегося игрока
+                other_ws = game["black"] if game["white"] == websocket else game["white"]
+                try:
+                    asyncio.create_task(other_ws.send_json({"type": "opponent_left", "message": "Соперник покинул игру."}))
+                except:
+                    pass
+                del self.active_games[game_id]
+
+matchmaker = ChessMatchmaker()
+
+# WebSocket эндпоинт для игры в шахматы
+@app.websocket("/ws/chess/{username}")
+async def chess_websocket_endpoint(websocket: WebSocket, username: str):
+    await matchmaker.connect_player(websocket, username)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            message = json.loads(data)
+            
+            if message.get("type") == "move":
+                await matchmaker.handle_move(
+                    game_id=message["game_id"],
+                    color=message["color"],
+                    move_san=message["move"]
+                )
+    except WebSocketDisconnect:
+        matchmaker.disconnect(websocket)
+
 
 # Инициализация таблиц GOZON в общей базе данных
 def init_gozon_db():
