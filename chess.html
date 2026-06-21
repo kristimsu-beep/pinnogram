@@ -271,7 +271,12 @@
             document.getElementById('sendChatBtn').disabled = true;
             document.getElementById('gameStatus').innerText = "Нажмите кнопку для поиска соперника";
             document.getElementById('vsPanel').style.display = 'none';
-            board = Chessboard('myBoard', 'start');
+            
+            // Исправленный сброс доски с подгрузкой картинок фигур из интернета
+            board = Chessboard('myBoard', {
+                position: 'start',
+                pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
+            });
             game = new Chess();
         }
     </script>
