@@ -131,8 +131,11 @@
                     window.location.href = '/';
                 });
             }
-            board = Chessboard('myBoard', 'start');
+        board = Chessboard('myBoard', {
+            position: 'start',
+            pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
         });
+
 
         function startMatchmaking() {
             document.getElementById('searchBtn').disabled = true;
