@@ -135,12 +135,15 @@
                 });
             }
             
-            // Стартовая доска с картинками из интернета
             board = Chessboard('myBoard', {
                 position: 'start',
-                pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
+                pieceTheme: function (piece) {
+                    if (piece === 'wN') return '/img/chess/wN.png';
+                    return 'https://chessboardjs.com/img/chesspieces/wikipedia/' + piece + '.png';
+                }
             });
         }); // ТЕПЕРЬ ВСЕ СКОБКИ ЗАКРЫТЫ ИДЕАЛЬНО!
+
 
         // 2. ПОДБОР ИГРОКОВ ОНЛАЙН И ВЕБСОКЕТЫ
         function startMatchmaking() {
@@ -181,12 +184,15 @@
                     document.getElementById('chatBox').innerHTML = `<p style="color: #2a9d8f; text-align: center;">--- Чат активирован ---</p>`;
                     document.getElementById('movesLog').innerHTML = '';
 
-                    // Интерактивная доска мультиплеера с картинками
+                    // Интерактивная доска мультиплеера с кастомным конем
                     board = Chessboard('myBoard', {
                         draggable: true,
                         position: 'start',
                         orientation: playerColor,
-                        pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
+                        pieceTheme: function (piece) {
+                            if (piece === 'wN') return '/img/chess/wN.png';
+                            return 'https://chessboardjs.com/img/chesspieces/wikipedia/' + piece + '.png';
+                        },
                         onDragStart: onDragStart,
                         onDrop: onDrop
                     });
@@ -289,12 +295,17 @@
             document.getElementById('gameStatus').innerText = "Нажмите кнопку для поиска соперника";
             document.getElementById('vsPanel').style.display = 'none';
             
+            // Сброс доски с сохранением кастомного мраморного коня
             board = Chessboard('myBoard', {
                 position: 'start',
-                pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
+                pieceTheme: function (piece) {
+                    if (piece === 'wN') return '/img/chess/wN.png';
+                    return 'https://chessboardjs.com/img/chesspieces/wikipedia/' + piece + '.png';
+                }
             });
             game = new Chess();
         }
+
     </script>
 </body>
 </html>
