@@ -131,6 +131,7 @@ if not os.path.exists(static_path):
 # Теперь FastAPI без ошибок смонтирует её для раздачи скриншотов обращений!
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 app.mount("/files", StaticFiles(directory=UPLOAD_DIR), name="files")
+app.mount("/img", StaticFiles(directory="img"), name="img")
 
 # Раздача Service Worker (ОБЯЗАТЕЛЬНО для уведомлений)
 @app.get("/sw.js")
