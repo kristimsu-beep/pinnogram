@@ -154,8 +154,8 @@
             drawnItems = new L.FeatureGroup();
             map.addLayer(drawnItems);
 
-            // 📐 ПОДКЛЮЧАЕМ ИНСТРУМЕНТ РИСОВАНИЯ (ИСПРАВЛЕННЫЙ ВЫЗОВ С МАЛЕНЬКОЙ БУКВЫ)
-            const drawControl = L.Control.Draw({
+            // 📐 ПОДКЛЮЧАЕМ ИНСТРУМЕНТ РИСОВАНИЯ (КЛАССИЧЕСКИЙ ВАРИАНТ ДЛЯ CDNJS)
+            const drawControl = new L.Control.Draw({
                 draw: {
                     polygon: {
                         allowIntersection: false, // Линии границ не могут пересекать сами себя
@@ -168,6 +168,7 @@
                 edit: { featureGroup: drawnItems, remove: false, edit: false }
             });
             map.addControl(drawControl);
+
 
 
             // 🌟 ИСПРАВЛЕНО: Заменили сломанный L.Draw.Event.CREATED на рабочую строку 'draw:created'
