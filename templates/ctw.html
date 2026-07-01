@@ -153,8 +153,8 @@
             drawnItems = new L.FeatureGroup();
             map.addLayer(drawnItems);
 
-            // Подключаем инструмент Leaflet.Draw (только полигоны для зажатия и обводки пальцем/мышкой)
-            const drawControl = new L.Control.Draw({
+            // 📐 ПОДКЛЮЧАЕМ ИНСТРУМЕНТ РИСОВАНИЯ (ИСПРАВЛЕННЫЙ ВЫЗОВ С МАЛЕНЬКОЙ БУКВЫ)
+            const drawControl = L.Control.draw({
                 draw: {
                     polygon: {
                         allowIntersection: false, // Линии границ не могут пересекать сами себя
@@ -167,6 +167,7 @@
                 edit: { featureGroup: drawnItems, remove: false, edit: false }
             });
             map.addControl(drawControl);
+
 
             // 🌟 ИСПРАВЛЕНО: Заменили сломанный L.Draw.Event.CREATED на рабочую строку 'draw:created'
             map.on('draw:created', function (e) {
