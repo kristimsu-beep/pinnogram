@@ -168,8 +168,8 @@
             });
             map.addControl(drawControl);
 
-            // Ловим момент, когда ты закончил обводить территорию на карте
-            map.on(L.Draw.Event.CREATED, function (e) {
+            // 🌟 ИСПРАВЛЕНО: Заменили сломанный L.Draw.Event.CREATED на рабочую строку 'draw:created'
+            map.on('draw:created', function (e) {
                 const layer = e.layer;
                 
                 // Если ты чертишь в первый раз — это твоя стартовая страна
@@ -184,6 +184,7 @@
                     handleExpansion(layer);
                 }
             });
+
         }
         // 📥 2. ОБРАБОТКА ЗАГРУЗКИ ФАЙЛА ФЛАГА НА БЕЛОЕ ПОЛОТНО
         function previewFlag(event) {
