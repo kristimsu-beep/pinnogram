@@ -216,13 +216,15 @@
             const bounds = L.latLngBounds(allPoints);
             const center = bounds.getCenter();
 
-            // Создаем иконку твоего флага
+            // Создаем иконку твоего флага с чёткими размерами (ИСПРАВЛЕНО!)
             const flagIcon = L.icon({
                 iconUrl: base64Flag,
-                iconSize:, // Размер флага по центру страны
-                iconAnchor:,
+                iconSize:[60, 40],   // Ширина флага 60px, высота 40px
+                iconAnchor:[30, 20], // Точка привязки — ровно центр флага
                 className: 'country-flag-icon'
             });
+
+
             
             // Ставим маркер флага с эффектом прозрачности 0.45, как ты и просил!
             L.marker(center, { icon: flagIcon, opacity: 0.45, interactive: false }).addTo(map);
