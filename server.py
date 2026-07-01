@@ -2582,6 +2582,44 @@ async def startup():
                 print("🦊 [KONATA] Фоновый процесс бота успешно инициализирован в СУБД!")
             except Exception as e:
                 print(f"🛑 [KONATA START ERROR] Ошибка запуска бота: {e}")
+# ==========================================================
+# 🎖️ МОДУЛЬ СТРАТЕГИЧЕСКОЙ ИГРЫ "CONQUER THE WORLD" (CTW)
+# ==========================================================
+import json
+import sqlite3
+import aiofiles
+from fastapi import Request, HTTPException
+from fastapi.responses import HTMLResponse
+
+def init_ctw_db():
+    conn = sqlite3.connect("forum.db")
+    cursor = conn.cursor()
+    
+    # Таблица для сохранения созданных государств
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS ctw_countries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        capital TEXT NOT NULL,
+        flag_data TEXT, -- Флаг в формате Base64 строки
+        population INTEGER DEFAULT 1,
+        cities_json TEXT DEFAULT '[]' -- Координаты и названия городов
+    )""")
+    conn.commit()
+    conn.close()
+
+# Запускаем создание таблиц для игры
+init_ctw_db()
+
+# Роут для загрузки страницы игры из папки templates
+@app.get("/ctw", response_class=HTMLResponse)
+async def ctw_page(request: Request):
+    try:
+        async with aiofiles.open("templates/ctw.html", mode="r", encoding="utf-8") as f:
+            html_content = await f.read()
+        return HTMLResponse(content=html_content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка загрузки игры ctw.html: {str(e)}")
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
