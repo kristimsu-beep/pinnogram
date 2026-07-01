@@ -9,9 +9,9 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
-    <!-- 📐 2. ПЛАГИН РИСОВАНИЯ: Стили и пропущенный скрипт Leaflet.Draw (ДОБАВИЛИ!) -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.draw@1.0.4/dist/leaflet.draw.css"/>
-    <script src="https://unpkg.com/leaflet.draw@1.0.4/dist/leaflet.draw.js"></script>
+    <!-- 📐 2. ПЛАГИН РИСОВАНИЯ: Перевели на сверхстабильный CDN от Cloudflare! -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
     
     <!-- 🌟 3. ОКНА ОПОВЕЩЕНИЙ: Стили и скрипт логики SweetAlert2 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.12.0/sweetalert2.min.css"/>
@@ -19,6 +19,7 @@
     
     <!-- 🎨 4. ГРАФИКА: Шрифты иконок Font Awesome -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+
 
 
     <style>
@@ -154,7 +155,7 @@
             map.addLayer(drawnItems);
 
             // 📐 ПОДКЛЮЧАЕМ ИНСТРУМЕНТ РИСОВАНИЯ (ИСПРАВЛЕННЫЙ ВЫЗОВ С МАЛЕНЬКОЙ БУКВЫ)
-            const drawControl = L.Control.draw({
+            const drawControl = L.Control.Draw({
                 draw: {
                     polygon: {
                         allowIntersection: false, // Линии границ не могут пересекать сами себя
