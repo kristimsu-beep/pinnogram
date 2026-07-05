@@ -19,20 +19,16 @@
     
     <!-- 🎨 4. ГРАФИКА: Шрифты иконок Font Awesome -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
-
-
-
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Courier New', Courier, monospace; }
         body { background: #060b14; color: #f8f9fa; overflow: hidden; height: 100vh; }
         
-        /* Спутниковая карта на весь экран */
         #map { width: 100vw; height: 100vh; z-index: 1; }
 
-        /* Верхняя панель статистики (Диктаторский HUD) */
+        /* Верхняя панель HUD */
         .dictator-hud {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-            background: rgba(6, 11, 20, 0.85); border: 2px solid #ff2a2a;
+            background: rgba(6, 11, 20, 0.9); border: 2px solid #ff2a2a;
             box-shadow: 0 0 20px rgba(255, 42, 42, 0.4); border-radius: 12px;
             padding: 15px 30px; z-index: 1000; display: flex; gap: 40px;
             backdrop-filter: blur(10px); pointer-events: none;
@@ -41,7 +37,7 @@
         .hud-stat label { font-size: 12px; color: #888; text-transform: uppercase; display: block; margin-bottom: 5px; }
         .hud-stat span { font-size: 22px; font-weight: bold; color: #ff2a2a; text-shadow: 0 0 8px rgba(255,42,42,0.6); }
 
-        /* Центрированное окно создания флага и государства */
+        /* Окно создания флага и государства */
         .setup-modal {
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: #0d1117; border: 3px solid #ff2a2a; border-radius: 16px;
@@ -54,7 +50,6 @@
             border: 1px solid #ff2a2a; background: #161b22; color: white; font-size: 16px;
         }
         
-        /* Белое полотно для загрузки флага */
         .flag-canvas {
             width: 100%; height: 150px; background: white; border: 2px dashed #ff2a2a;
             margin-bottom: 20px; border-radius: 8px; display: flex; justify-content: center;
@@ -69,18 +64,36 @@
         }
         .btn:hover { background: #b30000; box-shadow: 0 0 15px #ff2a2a; }
         
-        /* Неоновые текстовые метки названий городов над точками */
+        /* Текстовые метки */
         .city-label {
             background: transparent !important; border: none !important;
             color: #ffffff !important; font-weight: bold !important;
             text-shadow: 0 0 5px #000000, 0 0 5px #ff2a2a !important; font-size: 12px !important;
         }
         .capital-label { color: #ff2a2a !important; font-size: 15px !important; text-transform: uppercase; }
+        .airport-label { color: #00ffff !important; font-size: 13px !important; text-shadow: 0 0 5px #000, 0 0 5px #00ffff !important; }
+
+        /* Карточка аэропорта в правом нижнем углу */
+        .airport-card {
+            position: fixed; bottom: 20px; right: 20px;
+            background: rgba(13, 17, 23, 0.95); border: 2px solid #00ffff;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3); border-radius: 12px;
+            padding: 15px; width: 280px; z-index: 1000; display: none;
+            backdrop-filter: blur(10px);
+        }
+        .airport-card h4 { color: #00ffff; margin-bottom: 8px; font-size: 14px; text-transform: uppercase; }
+        .airport-card p { font-size: 13px; color: #ccc; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        .airport-card .flag-mini { width: 35px; height: 22px; object-fit: cover; border: 1px solid #444; border-radius: 3px; }
+        .airport-card .close-card { position: absolute; top: 8px; right: 10px; color: #888; cursor: pointer; font-size: 14px; }
+        .airport-card .close-card:hover { color: #fff; }
+
+        /* Стили для анимации самолетика */
+        .plane-icon { font-size: 24px; text-shadow: 0 0 8px rgba(255,255,255,0.8); transition: transform 0.1s linear; }
     </style>
 </head>
 <body>
 
-    <!-- ВЕРХНЯЯ ПАНЕЛЬ СТАТИСТИКИ (ДИКТАТОРСКИЙ HUD) -->
+    <!-- ВЕРХНЯЯ ПАНЕЛЬ СТАТИСТИКИ HUD -->
     <div class="dictator-hud" id="gameHud" style="display: none;">
         <div class="hud-stat">
             <label>Государство</label>
@@ -105,60 +118,103 @@
         <input type="text" id="countryName" placeholder="Название страны">
         <input type="text" id="capitalName" placeholder="Название столицы">
         
-        <!-- Белое полотно для загрузки государственного флага -->
         <div class="flag-canvas" onclick="document.getElementById('flagInput').click()">
             <span id="flagPlaceholder">Кликни, чтобы вставить флаг</span>
             <img id="flagPreview" alt="Флаг">
         </div>
-        
-        <!-- Скрытый инпут для выбора файла флага -->
         <input type="file" id="flagInput" accept="image/*" style="display: none;" onchange="previewFlag(event)">
         
         <button class="btn" onclick="confirmStateCreation()">Утвердить Границы</button>
     </div>
+
+    <!-- ИНФО-КАРТОЧКА АЭРОПОРТА -->
+    <div class="airport-card" id="airportCard">
+        <span class="close-card" onclick="document.getElementById('airportCard').style.display='none'">✕</span>
+        <h4>✈️ Аэропорт Взлёта</h4>
+        <p id="apCardName">Название аэропорта</p>
+        <p>Владелец: <img id="apCardFlag" class="flag-mini" src="" alt=""> <span id="apCardCountry">Страна</span></p>
+    </div>
     <script>
-        // Игровые переменные глобального масштаба
+        // Игровые и сетевые переменные
+        const clientId = "user_" + Math.random().toString(36).substring(2, 11);
+        let ws;
         let map;
         let drawnItems;
         let playerCountry = null;
         let base64Flag = "";
-        let cities = []; // Массив всех городов на карте мира
-        let totalPopulation = 1;
-        let army = 0;
-        let borderLayers = []; // Хранилище всех твоих захваченных областей
+        
+        // Локальные хранилища элементов ИГРОКА
+        let myCities = [];     // { id, name, lat, lng, population, type }
+        let myAirports = [];   // { id, name, lat, lng }
+        let borderLayers = []; // Ссылки на слои полигонов игрока
+        
+        // Переменные для режима авиарейсов
+        let flightSelectionMode = false;
+        let flightSourceAirportId = null;
 
-        // Старт игры сразу после загрузки страницы в браузере
+        // Глобальные хранилища маркеров и слоёв ВСЕХ игроков (для синхронизации)
+        // Структура: { id_объекта: L.marker / L.polygon }
+        let worldMarkers = {};
+        let worldPolygons = {};
+
+        // Инициализация при загрузке
         window.addEventListener('DOMContentLoaded', () => {
             initGameMap();
-            // Сразу открываем окно создания страны поверх карты
+            connectWebSocket();
             document.getElementById('setupModal').style.display = 'block';
         });
 
-        // 🗺️ 1. ЗАПУСК СПУТНИКОВОЙ КАРТЫ МИРА И ИНСТРУМЕНТОВ РИСОВАНИЯ
+        // 📡 1. ПОДКЛЮЧЕНИЕ К WEBSOCKET СЕРВЕРУ
+        function connectWebSocket() {
+            // Вычисляем протокол (ws:// или wss:// для безопасного соединения на Render)
+            const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+            const wsUrl = wsProtocol + window.location.host + "/ctw/ws/" + clientId;
+            
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => console.log("Успешное WebSocket соединение. ID:", clientId);
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                
+                if (msg.type === "sync_world") {
+                    // Метод синхронизации всех государств, городов и аэропортов на карте
+                    syncWorldState(msg.players);
+                } else if (msg.type === "spawn_plane") {
+                    // Метод запуска самолётика у всех игроков на экранах
+                    animatePlaneFlight(msg);
+                }
+            };
+
+            ws.onclose = () => {
+                console.log("Соединение разорвано. Переподключение...");
+                setTimeout(connectWebSocket, 3000);
+            };
+        }
+
+        // 🗺️ 2. ЗАПУСК СПУТНИКОВОЙ КАРТЫ МИРА И ИНСТРУМЕНТОВ РИСОВАНИЯ
         function initGameMap() {
-            // Центрируем камеру на карте мира
             map = L.map('map', {
                 center: [20.0, 0.0],
                 zoom: 2,
                 minZoom: 2,
                 maxZoom: 10,
-                doubleClickZoom: false // Отключаем стандартный зум, он нам нужен для постройки городов!
+                doubleClickZoom: false // Отключаем зум, чтобы строить города по двойному клику
             });
 
-            // Подгружаем текстуры реальных спутниковых снимков Земли
+            // Намертво отлаженная спутниковая подложка ArcGIS
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Tiles &copy; Esri &mdash; Спутниковые снимки планеты Земля'
             }).addTo(map);
 
-            // Создаем специальную группу для хранения твоих неоновых границ
             drawnItems = new L.FeatureGroup();
             map.addLayer(drawnItems);
 
-            // 📐 ПОДКЛЮЧАЕМ ИНСТРУМЕНТ РИСОВАНИЯ (КЛАССИЧЕСКИЙ ВАРИАНТ ДЛЯ CDNJS)
+            // Панель обводки границ (только полигоны)
             const drawControl = new L.Control.Draw({
                 draw: {
                     polygon: {
-                        allowIntersection: false, // Линии границ не могут пересекать сами себя
+                        allowIntersection: false,
                         showArea: true,
                         drawError: { color: '#b30000', message: 'Границы не должны пересекаться!' },
                         shapeOptions: { color: '#ff2a2a', weight: 3, fillOpacity: 0.2, fillColor: '#ff2a2a' }
@@ -169,27 +225,27 @@
             });
             map.addControl(drawControl);
 
-
-
-            // 🌟 ИСПРАВЛЕНО: Заменили сломанный L.Draw.Event.CREATED на рабочую строку 'draw:created'
+            // Обработка завершения обводки полигона
             map.on('draw:created', function (e) {
                 const layer = e.layer;
                 
-                // Если ты чертишь в первый раз — это твоя стартовая страна
                 if (!playerCountry) {
+                    // Если это самый первый полигон — фиксируем стартовую зону
                     drawnItems.addLayer(layer);
                     borderLayers.push(layer);
-                    // Окрашиваем в яркий неоново-красный диктаторский цвет
                     layer.setStyle({ color: '#ff2a2a', weight: 4, fillColor: '#ff2a2a', fillOpacity: 0.15 });
-                    Swal.fire("Границы очерчены!", "Теперь загрузи флаг и заполни данные государства.", "success");
+                    Swal.fire("Границы очерчены!", "Теперь заполните данные о своей стране.", "success");
                 } else {
-                    // Если страна уже есть — это попытка расширения и захвата земель!
+                    // Если страна уже есть — это попытка военного расширения
                     handleExpansion(layer);
                 }
             });
 
+            // Навешиваем обработчики кликов для постройки инфраструктуры
+            setupMapClickHandlers();
         }
-        // 📥 2. ОБРАБОТКА ЗАГРУЗКИ ФАЙЛА ФЛАГА НА БЕЛОЕ ПОЛОТНО
+
+        // Вспомогательный метод перевода картинки флага в строку Base64
         function previewFlag(event) {
             const input = event.target;
             const reader = new FileReader();
@@ -202,221 +258,551 @@
             };
             if(input.files && input.files[0]) reader.readAsDataURL(input.files[0]);
         }
-
-        // 🎖️ 3. УТВЕРЖДЕНИЕ ГОСУДАРСТВА И ОТРИСОВКА ПОЛУПРОЗРАЧНОГО ФЛАГА
+        // 🎖️ 3. УТВЕРЖДЕНИЕ ГОСУДАРСТВА
         function confirmStateCreation() {
             const name = document.getElementById('countryName').value.trim();
             const capital = document.getElementById('capitalName').value.trim();
             
             if (!name || !capital) return Swal.fire("Внимание", "Укажите название страны и столицы!", "warning");
-            if (borderLayers.length === 0) return Swal.fire("Внимание", "Сначала выделите область на карте инструментами полигона!", "warning");
-            if (!base64Flag) return Swal.fire("Внимание", "Загрузите государственный флаг на белое полотно!", "warning");
+            if (borderLayers.length === 0) return Swal.fire("Внимание", "Сначала выделите область на карте!", "warning");
+            if (!base64Flag) return Swal.fire("Внимание", "Загрузите государственный флаг!", "warning");
+
+            // Извлекаем геометрию полигона для отправки на сервер
+            const geometry = borderLayers[0].getLatLngs()[0].map(p => ({lat: p.lat, lng: p.lng}));
 
             playerCountry = { name, capital, flag: base64Flag };
 
-            // Прячем окно ввода и открываем верхнюю панель диктатора HUD
             document.getElementById('setupModal').style.display = 'none';
             document.getElementById('gameHud').style.display = 'flex';
             document.getElementById('hudCountryName').innerText = name;
 
-            // Находим географический центр твоих стартовых границ, чтобы повесить флаг
-            let allPoints = [];
-            borderLayers.forEach(layer => {
-                const latlngs = layer.getLatLngs()[0];
-                latlngs.forEach(p => allPoints.push(p));
-            });
-            const bounds = L.latLngBounds(allPoints);
-            const center = bounds.getCenter();
-
-            // Создаем иконку твоего флага с чёткими размерами (ИСПРАВЛЕНО!)
-            const flagIcon = L.icon({
-                iconUrl: base64Flag,
-                iconSize:[60, 40],   // Ширина флага 60px, высота 40px
-                iconAnchor:[30, 20], // Точка привязки — ровно центр флага
-                className: 'country-flag-icon'
-            });
-
-
-            
-            // Ставим маркер флага с эффектом прозрачности 0.45, как ты и просил!
-            L.marker(center, { icon: flagIcon, opacity: 0.45, interactive: false }).addTo(map);
+            // Отправляем пакет создания страны в онлайн-эфир
+            ws.send(json.stringify({
+                type: "create_country",
+                name: name,
+                capital: capital,
+                flag: base64Flag,
+                geometry: geometry
+            }));
 
             Swal.fire({
-                title: `Держава ${name} официально основана!`,
-                text: "Теперь дважды кликните мышкой (или дважды быстро тыкните по экрану телефона) строго внутри ваших неоновых границ, чтобы основать Столицу!",
+                title: `Держава ${name} основана!`,
+                text: "Дважды нажмите на экран внутри границ, чтобы заложить Столицу. Трижды быстро нажмите, чтобы построить Аэропорт ✈️!",
                 icon: "success"
             });
 
-            // Навешиваем слушатель двойного клика для постройки городов, который активируется после создания страны
-            setupDblClickBuilding();
             // Запускаем демографический рандом размножения
             startDemographicSimulation();
         }
 
-        // 🏙️ 4. ЛОГИКА ПОСТРОЙКИ СТОЛИЦЫ И ГОРОДОВ ПО ДВОЙНОМУ НАЖАТИЮ
-        function setupDblClickBuilding() {
-            map.on('dblclick', function(e) {
-                if (!playerCountry) return;
+        // 🏙️ 4. ЛОГИКА ОБРАБОТКИ МНОЖЕСТВЕННЫХ КЛИКОВ (ДВОЙНОЙ И ТРОЙНОЙ ТАП)
+        function setupMapClickHandlers() {
+            let clickCount = 0;
+            let clickTimer = null;
 
-                // Проверяем, попал ли двойной тап внутрь наших неоновых границ
-                let insideMyBorders = false;
-                borderLayers.forEach(layer => {
-                    if (isPointInPolygon(e.latlng, layer)) {
-                        insideMyBorders = true;
-                    }
-                });
-
-                // Проверяем, есть ли уже столица в массиве городов
-                const hasCapital = cities.some(c => c.type === 'capital');
+            map.on('click', function(e) {
+                if (!playerCountry) return; // Не даем строить, пока нет страны
                 
-                if (!hasCapital) {
-                    if (!insideMyBorders) {
-                        return Swal.fire("Ошибка", "Столица должна быть построена строго внутри ваших стартовых неоновых границ!", "error");
-                    }
-                    // Первое двойное нажатие внутри границ ставит столицу
-                    createCityOnMap(e.latlng, playerCountry.capital, 'capital');
-                } else {
-                    // Последующие двойные нажатия — ввод имени обычного города
-                    // Можно ставить и за пределами границ, чтобы искусственно усилить другие регионы!
-                    Swal.fire({
-                        title: 'Основать новое поселение',
-                        input: 'text',
-                        inputPlaceholder: 'Введите название города',
-                        showCancelButton: true,
-                        confirmButtonText: 'Построить',
-                        cancelButtonText: 'Отмена'
-                    }).then((result) => {
-                        if (result.isConfirmed && result.value.trim() !== "") {
-                            createCityOnMap(e.latlng, result.value.trim(), 'city');
+                clickCount++;
+                
+                if (clickCount === 1) {
+                    clickTimer = setTimeout(function() {
+                        clickCount = 0; // Одиночный клик сбрасываем, он нужен для перемещения карты
+                    }, 400); 
+                } else if (clickCount === 2) {
+                    // Ждем еще немного на случай третьего клика
+                    setTimeout(function() {
+                        if (clickCount === 2) {
+                            clickCount = 0;
+                            handleDoubleClick(e.latlng);
                         }
-                    });
+                    }, 100);
+                } else if (clickCount === 3) {
+                    clearTimeout(clickTimer);
+                    clickCount = 0;
+                    handleTripleClick(e.latlng);
                 }
             });
         }
-        // 🏙️ 5. РЕНДЕРИНГ ГОРОДА ИЛИ СТОЛИЦЫ НА САТЕЛЛИТ-КАРТЕ
-        function createCityOnMap(latlng, cityName, type) {
-            // Изначально население столицы больше (500), городов — рандом (50-250)
-            const initialPop = type === 'capital' ? 500 : Math.floor(Math.random() * 200) + 50;
-            
-            // Выбираем неоновый стиль: столица подсвечивается красным, города — белым
-            const labelClass = type === 'capital' ? 'city-label capital-label' : 'city-label';
-            const prefix = type === 'capital' ? '⭐ ' : '🏙️ ';
-            
-            // Создаем невидимый маркер точки, чтобы выводить только сочное текстовое название над ней
-            const marker = L.marker(latlng, { interactive: false }).addTo(map);
-            marker.bindTooltip(`${prefix}${cityName} (${initialPop} чел)`, {
-                permanent: true,
-                direction: 'top',
-                className: labelClass,
-                offset: [0, -10]
-            }).openTooltip();
 
-            // Сохраняем город в общую базу данных фронтенда
-            cities.push({
-                id: Date.now(),
-                name: cityName,
+        // 🏙️ Двойной клик — Постройка городов
+        function handleDoubleClick(latlng) {
+            let insideMyBorders = isPointInMyBorders(latlng);
+            const hasCapital = myCities.some(c => c.type === 'capital');
+
+            if (!hasCapital) {
+                if (!insideMyBorders) {
+                    return Swal.fire("Ошибка", "Столица должна быть построена строго внутри ваших границ!", "error");
+                }
+                // Первая постройка — Столица
+                addCityLocal(latlng, playerCountry.capital, 'capital', 500);
+            } else {
+                // Последующие — обычные города (можно и вне страны, чтобы усилить других)
+                Swal.fire({
+                    title: 'Основать новое поселение',
+                    input: 'text',
+                    inputPlaceholder: 'Введите название города',
+                    showCancelButton: true,
+                    confirmButtonText: 'Построить'
+                }).then((result) => {
+                    if (result.isConfirmed && result.value.trim() !== "") {
+                        addCityLocal(latlng, result.value.trim(), 'city', Math.floor(Math.random() * 200) + 50);
+                    }
+                });
+            }
+        }
+
+        // ✈️ Тройной клик — Постройка аэропорта
+        function handleTripleClick(latlng) {
+            if (!isPointInMyBorders(latlng)) {
+                return Swal.fire("Ошибка", "Аэропорты можно возводить только на суверенной территории вашей страны!", "error");
+            }
+
+            Swal.fire({
+                title: 'Построить Аэропорт ✈️',
+                input: 'text',
+                inputPlaceholder: 'Введите название аэропорта',
+                showCancelButton: true,
+                confirmButtonText: 'Возвести'
+            }).then((result) => {
+                if (result.isConfirmed && result.value.trim() !== "") {
+                    myAirports.push({
+                        id: "ap_" + Date.now(),
+                        name: result.value.trim(),
+                        lat: latlng.lat,
+                        lng: latlng.lng
+                    });
+                    sendInfrastructureUpdate();
+                }
+            });
+        }
+
+        // Проверка вхождения точки в свои границы
+        function isPointInMyBorders(latlng) {
+            let inside = false;
+            borderLayers.forEach(layer => {
+                if (isPointInPolygon(latlng, layer)) inside = true;
+            });
+            return inside;
+        }
+
+        // Добавление города в локальный массив и запуск пуша на сервер
+        function addCityLocal(latlng, name, type, population) {
+            myCities.push({
+                id: "city_" + Date.now(),
+                name: name,
                 lat: latlng.lat,
                 lng: latlng.lng,
-                population: initialPop,
-                marker: marker,
+                population: population,
                 type: type
             });
-
-            updateGlobalStats();
+            sendInfrastructureUpdate();
         }
 
-        // 📈 6. ОБНОВЛЕНИЕ HUD СТАТИСТИКИ НАСЕЛЕНИЯ И 10% АРМИИ
-        function updateGlobalStats() {
-            totalPopulation = cities.reduce((sum, c) => sum + c.population, 0);
-            if (totalPopulation < 1) totalPopulation = 1; // Защита от деления на 0
+        // Отправка текущей инфры игрока в WebSocket канал
+        function sendInfrastructureUpdate() {
+            const totalPop = myCities.reduce((sum, c) => sum + c.population, 0) || 1;
             
-            // Твоё условие: Армия всегда равняется ровно 10% от общего населения страны
-            army = Math.floor(totalPopulation * 0.10);
+            // Обновляем циферки в своём HUD локально
+            document.getElementById('hudPopulation').innerText = totalPop.toLocaleString();
+            document.getElementById('hudArmy').innerText = Math.floor(totalPop * 0.10).toLocaleString();
 
-            document.getElementById('hudPopulation').innerText = totalPopulation.toLocaleString();
-            document.getElementById('hudArmy').innerText = army.toLocaleString();
+            ws.send(json.stringify({
+                type: "update_infrastructure",
+                cities: myCities,
+                airports: myAirports,
+                total_population: totalPop
+            }));
+        }
+        // 🌍 5. РЕАКТИВНАЯ СИНХРОНИЗАЦИЯ ВСЕГО МИРА С СЕРВЕРА
+        function syncWorldState(players) {
+            // Набор ID элементов, которые всё ещё живы на сервере
+            let activeElementIds = new Set();
+
+            // Перебираем всех игроков, прилетевших из сокета
+            for (let pid in players) {
+                const pData = players[pid];
+                if (!pData.country) continue;
+
+                const isMe = (pid === clientId);
+                // Твоё условие: твоя страна — неоново-красная (#ff2a2a), чужие — сине-фиолетовые (#8a2be2)
+                const stateColor = isMe ? '#ff2a2a' : '#8a2be2';
+
+                // --- Синхронизация границ государства ---
+                const polyId = "poly_" + pid;
+                activeElementIds.add(polyId);
+
+                if (!worldPolygons[polyId]) {
+                    // Создаем полигон соседа/игрока, если его ещё нет на нашей карте
+                    const latlngs = pData.country.geometry.map(pt => [pt.lat, pt.lng]);
+                    const polygonLayer = L.polygon(latlngs, {
+                        color: stateColor,
+                        weight: 4,
+                        fillColor: stateColor,
+                        fillOpacity: 0.15
+                    }).addTo(map);
+                    
+                    worldPolygons[polyId] = polygonLayer;
+                } else {
+                    // Если полигон уже есть — просто страхуем цвет
+                    worldPolygons[polyId].setStyle({ color: stateColor, fillColor: stateColor });
+                }
+
+                // --- Синхронизация Городов державы ---
+                pData.cities.forEach(city => {
+                    const markerId = city.id;
+                    activeElementIds.add(markerId);
+
+                    const prefix = city.type === 'capital' ? '⭐ ' : '🏙️ ';
+                    const labelClass = city.type === 'capital' ? 'city-label capital-label' : 'city-label';
+                    const tooltipText = `${prefix}${city.name} (${city.population} чел)`;
+
+                    if (!worldMarkers[markerId]) {
+                        // Создаем маркер города на карте
+                        const marker = L.marker([city.lat, city.lng], { interactive: true }).addTo(map);
+                        marker.bindTooltip(tooltipText, {
+                            permanent: true, direction: 'top', className: labelClass, offset: [0, -10]
+                        }).openTooltip();
+
+                        // Твоё условие: Клик по городу/флагу открывает живое окно с флагом и населением
+                        marker.on('click', function(e) {
+                            L.DomEvent.stopPropagation(e);
+                            showCountryLiveCard(pData.country, pid);
+                        });
+
+                        worldMarkers[markerId] = marker;
+                    } else {
+                        // Обновляем текст тултипа (население тикает в реальном времени!)
+                        worldMarkers[markerId].setTooltipContent(tooltipText);
+                        
+                        // Если открыто окно этого игрока — обновляем цифры прямо внутри Swal без перезакрытия!
+                        if (Swal.isVisible() && Swal.getPopup().getAttribute('data-pid') === pid) {
+                            const popEl = document.getElementById('swalLivePop');
+                            if (popEl) popEl.innerText = city.population.toLocaleString();
+                        }
+                    }
+                });
+
+                // --- Синхронизация Аэропортов державы ---
+                pData.airports.forEach(ap => {
+                    const markerId = ap.id;
+                    activeElementIds.add(markerId);
+
+                    if (!worldMarkers[markerId]) {
+                        // Создаем кастомный маркер самолётика для аэропорта
+                        const apMarker = L.marker([ap.lat, ap.lng], { interactive: true }).addTo(map);
+                        apMarker.bindTooltip(`✈️ ${ap.name}`, {
+                            permanent: true, direction: 'bottom', className: 'city-label airport-label', offset: [0, 10]
+                        }).openTooltip();
+
+                        // Обработчики кликов по аэропорту
+                        apMarker.on('click', function(e) {
+                            L.DomEvent.stopPropagation(e);
+                            handleAirportClick(ap, pData.country, isMe);
+                        });
+
+                        apMarker.on('dblclick', function(e) {
+                            L.DomEvent.stopPropagation(e);
+                            handleAirportDoubleClick(ap, isMe);
+                        });
+
+                        worldMarkers[markerId] = apMarker;
+                    }
+                });
+            }
+
+            // Стираем с карты все маркеры и границы игроков, которые вышли из игры (чистка ОЗУ)
+            for (let id in worldMarkers) {
+                if (!activeElementIds.has(id)) {
+                    map.removeLayer(worldMarkers[id]);
+                    delete worldMarkers[id];
+                }
+            }
+            for (let id in worldPolygons) {
+                if (!activeElementIds.has(id)) {
+                    map.removeLayer(worldPolygons[id]);
+                    delete worldPolygons[id];
+                }
+            }
         }
 
-        // 🧬 7. АЛГОРИТМ ДЕМОГРАФИИ: ЕЖЕСЕКУНДНЫЙ РОСТ ИЛИ УПАДОК НАСЕЛЕНИЯ
+        // 📊 6. ВСПЛЫВАЮЩЕЕ ЖИВОЕ ОКНО ДЕРЖАВЫ (КЛИК ПО ФЛАГУ/ГОРОДУ)
+        function showCountryLiveCard(country, pid) {
+            Swal.fire({
+                title: country.name,
+                html: `
+                    <div style="text-align:center;">
+                        <img src="${country.flag}" style="width:180px; height:110px; object-fit:cover; border:2px solid #ff2a2a; border-radius:8px; margin-bottom:15px;">
+                        <p style="font-size:16px; color:#fff;">Столица: <strong style="color:#ff2a2a;">${country.capital}</strong></p>
+                        <p style="font-size:18px; color:#ccc; margin-top:10px;">Общее население:<br>
+                            <span id="swalLivePop" style="font-size:26px; font-weight:bold; color:#ff2a2a; text-shadow:0 0 10px rgba(255,42,42,0.5);">${country.population.toLocaleString()}</span> чел.
+                        </p>
+                    </div>
+                `,
+                showConfirmButton: false,
+                background: '#0d1117',
+                color: '#fff',
+                didOpen: () => {
+                    // Маркируем окно ID игрока, чтобы обновлять цифры на лету из сокета
+                    Swal.getPopup().setAttribute('data-pid', pid);
+                }
+            });
+        }
+        // ✈️ 7. ЛОГИКА ОДИНОЧНОГО КЛИКА ПО АЭРОПОРТУ (ИНФО-КАРТОЧКА В УГЛУ)
+        function handleAirportClick(airport, country, isMe) {
+            const card = document.getElementById('airportCard');
+            document.getElementById('apCardName').innerText = `✈️ ${airport.name}`;
+            document.getElementById('apCardFlag').src = country.flag;
+            document.getElementById('apCardCountry').innerText = country.name;
+            
+            // Если аэропорт наш — подсвечиваем карточку голубым, если чужой — фиолетовым
+            card.style.borderColor = isMe ? '#00ffff' : '#8a2be2';
+            card.style.boxShadow = isMe ? '0 0 20px rgba(0, 255, 255, 0.3)' : '0 0 20px rgba(138, 43, 226, 0.3)';
+            card.style.display = 'block';
+        }
+
+        // 🚀 8. ДВОЙНОЙ КЛИК ПО АЭРОПОРТУ (ВКЛЮЧЕНИЕ РЕЖИМА ПОЛЁТА)
+        function handleAirportDoubleClick(airport, isMe) {
+            if (!isMe) return Swal.fire("Доступ ограничен", "Вы можете запускать авиарейсы только из собственных аэропортов!", "warning");
+
+            flightSelectionMode = true;
+            flightSourceAirportId = airport.id;
+
+            Swal.fire({
+                title: "Режим полёта активирован ✈️",
+                text: `Выбран аэропорт вылета: "${airport.name}". Теперь просто кликните один раз по любому ДРУГОМУ аэропорту на карте мира, чтобы запустить туда самолёт!`,
+                icon: "info",
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 4500
+            });
+        }
+
+        // Обработка клика по второму аэропорту для фиксации маршрута
+        function handleAirportClick(airport, country, isMe) {
+            // Если включен режим выбора точки для полета
+            if (flightSelectionMode) {
+                if (airport.id === flightSourceAirportId) {
+                    flightSelectionMode = false;
+                    return Swal.fire("Отмена рейса", "Нельзя запустить самолёт в тот же самый аэропорт!", "warning");
+                }
+
+                // Находим координаты исходного аэропорта игрока
+                const sourceAp = myAirports.find(a => a.id === flightSourceAirportId);
+                if (!sourceAp) return;
+
+                flightSelectionMode = false;
+
+                // Отправляем пакет взлёта самолёта в WebSocket эфир для всех игроков
+                ws.send(JSON.stringify({
+                    type: "launch_plane",
+                    id: "plane_" + Date.now(),
+                    from_airport: sourceAp.name,
+                    to_airport: airport.name,
+                    flag: playerCountry.flag,
+                    country_name: playerCountry.name,
+                    start_lat: sourceAp.lat,
+                    start_lng: sourceAp.lng,
+                    end_lat: airport.lat,
+                    end_lng: airport.lng
+                }));
+                return;
+            }
+
+            // Обычное поведение: показ инфо-карточки в правом нижнем углу
+            const card = document.getElementById('airportCard');
+            document.getElementById('apCardName').innerText = `✈️ ${airport.name}`;
+            document.getElementById('apCardFlag').src = country.flag;
+            document.getElementById('apCardCountry').innerText = country.name;
+            
+            card.style.borderColor = isMe ? '#00ffff' : '#8a2be2';
+            card.style.boxShadow = isMe ? '0 0 20px rgba(0, 255, 255, 0.3)' : '0 0 20px rgba(138, 43, 226, 0.3)';
+            card.style.display = 'block';
+        }
+
+        // ✈️ 9. АНИМАЦИЯ ПОЛЁТА САМОЛЁТИКА СО СКОРОСТЬЮ 50 КМ/СЕК ДЛЯ ВСЕХ ИГРОКОВ
+        function animatePlaneFlight(planeData) {
+            const startLatLng = L.latLng(planeData.start_lat, planeData.start_lng);
+            const endLatLng = L.latLng(planeData.end_lat, planeData.end_lng);
+            
+            // Высчитываем точную дистанцию между аэропортами на реальной сфере Земли (в метрах)
+            const distanceInMeters = startLatLng.distanceTo(endLatLng);
+            const distanceInKm = distanceInMeters / 1000;
+
+            // Твоё условие: скорость самолёта примерно 50 км на карте в секунду
+            const speedKmPerSecond = 50;
+            const totalDurationSeconds = Math.max(2, distanceInKm / speedKmPerSecond); // Полёт длится минимум 2 секунды
+            const totalSteps = totalDurationSeconds * 20; // 20 обновлений кадра в секунду для плавности
+
+            // Создаем маркер самолёта с кастомным стилем эмодзи
+            const planeIcon = L.divIcon({
+                html: `<div class="plane-icon">✈️</div>`,
+                className: 'custom-plane-container',
+                iconSize: [30, 30]
+            });
+
+            const planeMarker = L.marker(startLatLng, { icon: planeIcon, interactive: true }).addTo(map);
+
+            // Считаем угол направления полета (чтобы развернуть нос самолёта по курсу)
+            const angle = Math.atan2(endLatLng.lng - startLatLng.lng, endLatLng.lat - startLatLng.lat) * (180 / Math.PI);
+            setTimeout(() => {
+                const el = planeMarker.getElement();
+                if (el) el.style.transform += ` rotate(${angle - 45}deg)`;
+            }, 100);
+
+            // Клик по летящему самолёту открывает плашку с деталями рейса державы!
+            planeMarker.on('click', function(e) {
+                L.DomEvent.stopPropagation(e);
+                Swal.fire({
+                    title: `✈️ Воздушное Судно: Рейс`,
+                    html: `
+                        <div style="text-align:center;">
+                            <img src="${planeData.flag}" style="width:120px; height:75px; object-fit:cover; border:2px solid #00ffff; border-radius:6px; margin-bottom:15px;">
+                            <p style="font-size:15px; color:#fff;">Принадлежность: <strong>${planeData.country_name}</strong></p>
+                            <hr style="border-color:#444; margin:15px 0;">
+                            <p style="font-size:14px; color:#ccc;">Откуда: <span style="color:#00ffff;">${planeData.from_airport}</span></p>
+                            <p style="font-size:14px; color:#ccc; margin-top:5px;">Куда: <span style="color:#00ffff;">${planeData.to_airport}</span></p>
+                        </div>
+                    `,
+                    showConfirmButton: false,
+                    background: '#0d1117',
+                    color: '#fff'
+                });
+            });
+
+            // Пошаговый цикл линейной интерполяции полёта (передвижение по пикселям тайлов)
+            let step = 0;
+            const flightInterval = setInterval(() => {
+                step++;
+                const ratio = step / totalSteps;
+
+                if (ratio >= 1) {
+                    // Самолёт прилетел — стираем его маркер с карты
+                    clearInterval(flightInterval);
+                    map.removeLayer(planeMarker);
+                } else {
+                    // Пересчитываем промежуточные координаты Lat/Lng на лету
+                    const currentLat = planeData.start_lat + (planeData.end_lat - planeData.start_lat) * ratio;
+                    const currentLng = planeData.start_lng + (planeData.end_lng - planeData.start_lng) * ratio;
+                    planeMarker.setLatLng([currentLat, currentLng]);
+                }
+            }, 50); // Шаг анимации каждые 50 миллисекунд
+        }
+
+        // 🧬 10. ЕЖЕСЕКУНДНЫЙ РОСТ ИЛИ УПАДОК НАСЕЛЕНИЯ СОБСТВЕННЫХ ГОРОДОВ И ПУШ НА СЕРВЕР
         function startDemographicSimulation() {
             setInterval(() => {
-                cities.forEach(city => {
-                    // 55% шанс за демографический рост, 45% за падение численности
+                if (myCities.length === 0) return;
+
+                myCities.forEach(city => {
                     const isGrowing = Math.random() > 0.45;
-                    // Динамический коэффициент изменения от 1% до 5%
                     const factor = (Math.random() * 4 + 1) / 100;
                     
                     if (isGrowing) {
                         city.population += Math.floor(city.population * factor) + 1;
                     } else {
                         city.population -= Math.floor(city.population * factor);
-                        if (city.population < 1) city.population = 1; // Город не может умереть до 0 человек
+                        if (city.population < 1) city.population = 1;
                     }
-
-                    // Перерисовываем текст над городами с новыми показателями на лету
-                    const prefix = city.type === 'capital' ? '⭐ ' : '🏙️ ';
-                    city.marker.setTooltipContent(`${prefix}${city.name} (${city.population} чел)`);
                 });
 
-                updateGlobalStats();
-            }, 3000); // Расчет демографии происходит каждые 3 секунды
+                sendInfrastructureUpdate();
+            }, 3000); // Синхронизируем и симулируем демографию каждые 3 секунды
         }
-
-        // ⚔️ 8. МЕХАНИКА ЗАХВАТА И АННЕКСИИ НОВЫХ ЗЕМЕЛЬ ПОЛИГОНОМ
+        // ⚔️ 11. ОНЛАЙН ВОЕННЫЙ ЗАХВАТ ЧУЖИХ ГОРОДОВ И АЭРОПОРТОВ С СЕРВЕРА
         function handleExpansion(layer) {
+            // 1. Вычисляем текущую военную мощь игрока (10% от собственного населения)
+            const currentTotalPop = myCities.reduce((sum, c) => sum + c.population, 0) || 1;
+            const myArmy = Math.floor(currentTotalPop * 0.10);
+
             let enemyCitiesInArea = [];
+            let enemyAirportsInArea = [];
             let totalEnemyPopulation = 0;
+            let targetPlayerId = null;
 
-            // Сканируем все существующие города на карте мира
-            cities.forEach(city => {
-                const cityLatLng = L.latLng(city.lat, city.lng);
-                
-                // Проверяем, попал ли город в только что очерченную новую область
-                if (isPointInPolygon(cityLatLng, layer)) {
-                    // Проверяем, не принадлежит ли этот город нам уже по старым границам
-                    let alreadyMine = false;
-                    borderLayers.forEach(myLayer => {
-                        if (isPointInPolygon(cityLatLng, myLayer)) alreadyMine = true;
-                    });
+            // 2. Сканируем все живые маркеры на карте мира, прилетевшие из сокета
+            for (let markerId in worldMarkers) {
+                const marker = worldMarkers[markerId];
+                const markerLatLng = marker.getLatLng();
 
-                    if (!alreadyMine) {
-                        enemyCitiesInArea.push(city);
-                        totalEnemyPopulation += city.population;
+                // Проверяем, попал ли маркер внутрь только что очерченного полигона
+                if (isPointInPolygon(markerLatLng, layer)) {
+                    // Проверяем, не принадлежит ли этот маркер нам локально
+                    const isMyCity = myCities.some(c => c.id === markerId);
+                    const isMyAp = myAirports.some(a => a.id === markerId);
+
+                    if (!isMyCity && !isMyAp) {
+                        // Элемент чужой! Ищем, какому конкретно игроку (сессии) он принадлежит
+                        // Для этого запрашиваем данные из глобального стейта, который мы отрисовали
+                        // Находим ID жертвы по префиксам или метаданным маркера
+                        if (markerId.startsWith("city_") || markerId.startsWith("ap_")) {
+                            // Добавляем в списки на аннексию
+                            if (markerId.startsWith("city_")) {
+                                enemyCitiesInArea.push(markerId);
+                                // Пытаемся считать население города из его тултипа
+                                const tooltipContent = marker.getTooltip().getContent();
+                                const popMatch = tooltipContent.match(/\((\d+[\s\d]*)\s*чел\)/);
+                                if (popMatch) {
+                                    totalEnemyPopulation += parseInt(popMatch[1].replace(/\s/g, ''), 10);
+                                }
+                            } else if (markerId.startsWith("ap_")) {
+                                enemyAirportsInArea.push(markerId);
+                            }
+                            
+                            // Запоминаем ID игрока-цели (жертвы), у которого отжимаем элементы
+                            if (marker.options && marker.options.ownerId) {
+                                targetPlayerId = marker.options.ownerId;
+                            }
+                        }
                     }
                 }
-            });
+            }
 
-            // Твоё главное условие: если армия игрока сильнее суммарного населения городов в зоне — захват успешен
-            if (army >= totalEnemyPopulation) {
+            // 3. Проверка условия захвата: армия агрессора должна быть больше населения городов в зоне
+            if (myArmy >= totalEnemyPopulation) {
+                // ПРИОБРЕТЕНИЕ ЗЕМЕЛЬ: Добавляем полигон в состав своего государства
                 drawnItems.addLayer(layer);
                 borderLayers.push(layer);
-                
-                // Красим захваченную область в неоново-красный цвет твоей империи
                 layer.setStyle({ color: '#ff2a2a', weight: 4, fillColor: '#ff2a2a', fillOpacity: 0.15 });
 
-                Swal.fire({
-                    title: "Земли присоединены! 🎖️",
-                    text: `Ваша армия сокрушила сопротивление! Очерченная область аннексирована. Захвачено городов: ${enemyCitiesInArea.length}. Население империи увеличилось на +${totalEnemyPopulation} чел!`,
-                    icon: "success"
-                });
-                
-                updateGlobalStats();
+                // Если мы реально накрыли чью-то инфраструктуру, шлем сокет-пакет на аннексию
+                if (enemyCitiesInArea.length > 0 || enemyAirportsInArea.length > 0) {
+                    ws.send(JSON.stringify({
+                        type: "annex_territory",
+                        target_player_id: targetPlayerId,
+                        city_ids: enemyCitiesInArea,
+                        airport_ids: enemyAirportsInArea
+                    }));
+                    
+                    Swal.fire({
+                        title: "Территория аннексирована! 🎖️",
+                        text: `Ваша армия сокрушила оборону врага! Захвачено чужих городов: ${enemyCitiesInArea.length}, аэропортов: ${enemyAirportsInArea.length}. Население в зоне (${totalEnemyPopulation} чел) подчинено в реальном времени!`,
+                        icon: "success"
+                    });
+                } else {
+                    // Если выделили просто пустую нейтральную землю на карте мира
+                    Swal.fire("Земли расширены! 📈", "Вы успешно закрепили за собой новые нейтральные территории.", "success");
+                }
+
+                // Синхронизируем обновленные данные с сервером
+                sendInfrastructureUpdate();
             } else {
-                // Поражение: населения в городах оказалось больше, чем армия диктатора
-                map.removeLayer(layer); // Моментально стираем неудавшуюся границу с карты
+                // ПОРАЖЕНИЕ: Удаляем неудачный контур атаки с карты
+                map.removeLayer(layer);
                 Swal.fire({
-                    title: "Атака захлебнулась! 🛑",
-                    text: `Вам не хватает военной мощи для аннексии! Суммарное население городов в этой зоне (${totalEnemyPopulation} чел) превосходит численность вашей армии (${army} бойцов). Срочно развивайте демографию в тылу!`,
+                    title: "Атака отбита! 🛑",
+                    text: `Вам не хватает военной мощи для аннексии соседа! Население городов в этой зоне (${totalEnemyPopulation} чел) превосходит силы вашей армии (${myArmy} бойцов). Развивайте демографию в тылу!`,
                     icon: "error"
                 });
             }
         }
 
-        // 🧮 9. МАТЕМАТИЧЕСКАЯ ФУНКЦИЯ ПРОВЕРКИ ТОЧКИ ВНУТРИ ПОЛИГОНА (Ray-Casting Algorithm)
+        // 🧮 12. МАТЕМАТИЧЕСКАЯ ФУНКЦИЯ ПРОВЕРКИ ТОЧКИ ВНУТРИ ПОЛИГОНА (Ray-Casting Algorithm)
         function isPointInPolygon(latlng, layer) {
             let polygon = layer.getLatLngs();
-            // Раскрываем массивы Leaflet в зависимости от вложенности полигона
-            if (polygon.length > 0 && Array.isArray(polygon[0])) {
+            // Раскрываем вложенные массивы геометрии Leaflet полигонов
+            if (polygon && polygon[0] && Array.isArray(polygon[0])) {
                 polygon = polygon[0];
             }
             
