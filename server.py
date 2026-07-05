@@ -2583,35 +2583,18 @@ async def startup():
             except Exception as e:
                 print(f"🛑 [KONATA START ERROR] Ошибка запуска бота: {e}")
 # ==========================================================
-# 🎖️ МОДУЛЬ СТРАТЕГИЧЕСКОЙ ИГРЫ "CONQUER THE WORLD" (CTW)
+# 🎖️ ОНЛАЙН-ДВИЖЕК СТРАТЕГИИ "CONQUER THE WORLD ONLINE" (CTW)
 # ==========================================================
 import json
-import sqlite3
+import asyncio
 import aiofiles
-from fastapi import Request, HTTPException
+from fastapi import Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
-def init_ctw_db():
-    conn = sqlite3.connect("forum.db")
-    cursor = conn.cursor()
-    
-    # Таблица для сохранения созданных государств
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS ctw_countries (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL,
-        capital TEXT NOT NULL,
-        flag_data TEXT, -- Флаг в формате Base64 строки
-        population INTEGER DEFAULT 1,
-        cities_json TEXT DEFAULT '[]' -- Координаты и названия городов
-    )""")
-    conn.commit()
-    conn.close()
+# Глобальное хранилище активных сессий онлайн-игры в ОЗУ
+# Структура: { client_id: { "websocket": ws, "country": {...}, "cities": [...], "airports": [...] } }
+ctw_sessions = {}
 
-# Запускаем создание таблиц для игры
-init_ctw_db()
-
-# Роут для загрузки страницы игры из папки templates
 @app.get("/ctw", response_class=HTMLResponse)
 async def ctw_page(request: Request):
     try:
@@ -2619,7 +2602,118 @@ async def ctw_page(request: Request):
             html_content = await f.read()
         return HTMLResponse(content=html_content)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка загрузки игры ctw.html: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ошибка загрузки ctw.html: {str(e)}")
+
+# Рассылка игровых данных всем онлайн-игрокам одновременно
+async def broadcast_ctw_state():
+    if not ctw_sessions:
+        return
+    
+    # Формируем карту мира со всеми живыми державами
+    world_state = {}
+    for cid, data in ctw_sessions.items():
+        if data.get("country"):
+            world_state[cid] = {
+                "country": data["country"],
+                "cities": data["cities"],
+                "airports": data["airports"]
+            }
+            
+    payload = json.dumps({"type": "sync_world", "players": world_state}, ensure_ascii=False)
+    
+    # Рассылаем пакет по сокетам
+    dead_clients = []
+    for cid, data in ctw_sessions.items():
+        try:
+            await data["websocket"].send_text(payload)
+        except Exception:
+            dead_clients.append(cid)
+            
+    for cid in dead_clients:
+        if cid in ctw_sessions:
+            del ctw_sessions[cid]
+
+# 📡 Главный WebSocket роут для живого обмена данными
+@app.websocket("/ctw/ws/{client_id}")
+async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
+    await websocket.accept()
+    
+    # Регистрируем нового игрока в ОЗУ
+    ctw_sessions[client_id] = {
+        "websocket": websocket,
+        "country": None,
+        "cities": [],
+        "airports": []
+    }
+    
+    try:
+        while True:
+            # Слушаем входящие пакеты от конкретного игрока
+            raw_data = await websocket.receive_text()
+            msg = json.loads(raw_data)
+            
+            if msg["type"] == "create_country":
+                ctw_sessions[client_id]["country"] = {
+                    "name": msg["name"],
+                    "capital": msg["capital"],
+                    "flag": msg["flag"],
+                    "geometry": msg["geometry"], # Координаты неоновых границ
+                    "population": 1
+                }
+                await broadcast_ctw_state()
+                
+            elif msg["type"] == "update_infrastructure":
+                # Обновление списка городов, населения и аэропортов игрока
+                if client_id in ctw_sessions and ctw_sessions[client_id]["country"]:
+                    ctw_sessions[client_id]["cities"] = msg["cities"]
+                    ctw_sessions[client_id]["airports"] = msg["airports"]
+                    ctw_sessions[client_id]["country"]["population"] = msg["total_population"]
+                    await broadcast_ctw_state()
+                    
+            elif msg["type"] == "launch_plane":
+                # Самолётик взлетел! Транслируем полёт абсолютно всем на карте
+                plane_payload = json.dumps({
+                    "type": "spawn_plane",
+                    "id": msg["id"],
+                    "from_airport": msg["from_airport"],
+                    "to_airport": msg["to_airport"],
+                    "flag": msg["flag"],
+                    "country_name": msg["country_name"],
+                    "start_lat": msg["start_lat"],
+                    "start_lng": msg["start_lng"],
+                    "end_lat": msg["end_lat"],
+                    "end_lng": msg["end_lng"]
+                }, ensure_ascii=False)
+                
+                for cid, data in ctw_sessions.items():
+                    try:
+                        await data["websocket"].send_text(plane_payload)
+                    except Exception:
+                        pass
+                        
+            elif msg["type"] == "annex_territory":
+                # Механика отжатия земель у соседа в реальном времени
+                target_player_id = msg["target_player_id"]
+                if target_player_id in ctw_sessions:
+                    # Удаляем захваченные города/аэропорты у жертвы
+                    annexed_city_ids = msg["city_ids"]
+                    annexed_airport_ids = msg["airport_ids"]
+                    
+                    ctw_sessions[target_player_id]["cities"] = [c for c in ctw_sessions[target_player_id]["cities"] if c["id"] not in annexed_city_ids]
+                    ctw_sessions[target_player_id]["airports"] = [a for a in ctw_sessions[target_player_id]["airports"] if a["id"] not in annexed_airport_ids]
+                    
+                    await broadcast_ctw_state()
+
+    except WebSocketDisconnect:
+        # 🛑 Твоё условие: если кто-то закрыл вкладку или перезагрузил — стираем его мгновенно из ОЗУ!
+        if client_id in ctw_sessions:
+            del ctw_sessions[client_id]
+        # Оповещаем оставшихся игроков, чтобы стереть контуры ушедшего с их экранов
+        await broadcast_ctw_state()
+    except Exception:
+        if client_id in ctw_sessions:
+            del ctw_sessions[client_id]
+        await broadcast_ctw_state()
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
