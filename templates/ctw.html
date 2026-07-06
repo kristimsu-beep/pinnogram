@@ -1126,41 +1126,49 @@
             // Автоматически прокручиваем чат вниз к самому свежему сообщению
             container.scrollTop = container.scrollHeight;
         }
-                // 🪖 20. ЗАПУСК ОПРАВДАНИЯ ВОЕННЫХ ЦЕЛЕЙ
+        // 🪖 20. ЗАПУСК ОПРАВДАНИЯ ВОЕННЫХ ЦЕЛЕЙ С ПРЕДОХРАНИТЕЛЕМ
         function startJustifyingWarOnline(targetId, targetName) {
             if (!playerCountry) return;
             
-            // Отправляем пакет на бэкенд, сервер оповестит жертву по центру экрана
-            ws.send(JSON.stringify({
-                type: "start_justifying",
-                target_id: targetId,
-                my_country_name: playerCountry.name
-            }));
-
-            Swal.fire("Оправдание начато! 🎯", `Вы начали фабрикацию претензий против державы "${targetName}". Дождитесь окончания 30-секундного таймера в карточке её городов, чтобы нанести удар!`, "info");
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: "start_justifying",
+                    target_id: targetId,
+                    my_country_name: playerCountry.name
+                }));
+                Swal.fire("Оправдание начато! 🎯", `Вы начали фабрикацию претензий против державы "${targetName}". Дождитесь окончания 30-секундного таймера в карточке её городов, чтобы нанести удар!`, "info");
+            } else {
+                Swal.fire("Сбой сети", "Не удалось начать оправдание: соединение с сервером восстанавливается...", "error");
+            }
         }
 
-        // 🪖 21. ОФИЦИАЛЬНОЕ ОБЪЯВЛЕНИЕ ВОЙНЫ СОСЕДУ
+        // 🪖 21. ОФИЦИАЛЬНОЕ ОБЪЯВЛЕНИЕ ВОЙНЫ СОСЕДУ С ПРЕДОХРАНИТЕЛЕМ
         function declareWarOnline(targetId, targetName) {
-            ws.send(JSON.stringify({
-                type: "declare_war",
-                target_id: targetId,
-                my_country_name: playerCountry.name
-            }));
-
-            Swal.close(); // Закрываем карточку
-            Swal.fire("ВОЙНА ОБЪЯВЛЕНА! 🪖", `Вы официально объявили войну государству "${targetName}"! Ваши неоновые лассо теперь могут аннексировать их города и аэропорты!`, "error");
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: "declare_war",
+                    target_id: targetId,
+                    my_country_name: playerCountry.name
+                }));
+                Swal.close();
+                Swal.fire("ВОЙНА ОБЪЯВЛЕНА! 🪖", `Вы официально объявили войну государству "${targetName}"! Ваши неоновые лассо теперь могут аннексировать их города и аэропорты!`, "error");
+            } else {
+                Swal.fire("Сбой сети", "Не удалось объявить войну: потеряно соединение с сервером...", "error");
+            }
         }
 
-        // 🏳️ 22. ПРЕДЛОЖЕНИЕ МИРНОГО ДОГОВОРА ОППОНЕНТУ
+        // 🏳️ 22. ПРЕДЛОЖЕНИЕ МИРНОГО ДОГОВОРА ОППОНЕНТУ С ПРЕДОХРАНИТЕЛЕМ (ИСПРАВЛЕНО!)
         function proposePeaceOnline(targetId, targetName) {
-            ws.send(JSON.stringify({
-                type: "propose_peace",
-                target_id: targetId,
-                my_country_name: playerCountry.name
-            }));
-
-            Swal.fire("Дипломатия 🏳️", `Вы направили предложение о мире правительству страны "${targetName}". Ожидайте их решения.`, "info");
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: "propose_peace",
+                    target_id: targetId,
+                    my_country_name: playerCountry.name
+                }));
+                Swal.fire("Дипломатия 🏳️", `Вы направили предложение о мире правительству страны "${targetName}". Ожидайте их решения.`, "info");
+            } else {
+                Swal.fire("Сбой сети", "Не удалось предложить мир: потеряно соединение с сервером...", "error");
+            }
         }
     </script>
 </body>
