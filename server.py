@@ -2591,9 +2591,13 @@ import aiofiles
 from fastapi import Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
-# Глобальное хранилище активных сессий онлайн-игры в ОЗУ
-# Структура: { client_id: { "websocket": ws, "country": {...}, "cities": [...], "airports": [...] } }
+# Активные сессии в сети прямо сейчас
+# { client_id: { "websocket": ws, "country": {...}, "cities": [...], "airports": [...] } }
 ctw_sessions = {}
+
+# Защитный архив для удержания стран (Disconnect Recovery)
+# { client_id: { "country": {...}, "cities": [...], "airports": [...], "task": asyncio.Task } }
+ctw_recovery_storage = {}
 
 @app.get("/ctw", response_class=HTMLResponse)
 async def ctw_page(request: Request):
@@ -2604,24 +2608,28 @@ async def ctw_page(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка загрузки ctw.html: {str(e)}")
 
-# Рассылка игровых данных всем онлайн-игрокам одновременно
+# Рассылка таблицы лидеров и карты мира всем игрокам одновременно
 async def broadcast_ctw_state():
-    if not ctw_sessions:
-        return
-    
-    # Формируем карту мира со всеми живыми державами
+    # Формируем полный стейт мира
     world_state = {}
-    for cid, data in ctw_sessions.items():
-        if data.get("country"):
-            world_state[cid] = {
-                "country": data["country"],
-                "cities": data["cities"],
-                "airports": data["airports"]
-            }
+    
+    # Объединяем активных игроков и тех, кто в режиме ожидания 1 минуты
+    all_client_ids = set(list(ctw_sessions.keys()) + list(ctw_recovery_storage.keys()))
+    
+    for cid in all_client_ids:
+        # Пытаемся взять живые данные или данные из архива восстановления
+        data = ctw_sessions.get(cid) or ctw_recovery_storage.get(cid)
+        if not data:
+            continue
+            
+        world_state[cid] = {
+            "country": data.get("country"),
+            "cities": data.get("cities", []),
+            "airports": data.get("airports", [])
+        }
             
     payload = json.dumps({"type": "sync_world", "players": world_state}, ensure_ascii=False)
     
-    # Рассылаем пакет по сокетам
     dead_clients = []
     for cid, data in ctw_sessions.items():
         try:
@@ -2633,22 +2641,54 @@ async def broadcast_ctw_state():
         if cid in ctw_sessions:
             del ctw_sessions[cid]
 
-# 📡 Главный WebSocket роут для живого обмена данными
+# Фоновый таймер на 60 секунд для удаления империи при выходе
+async def launch_disconnect_timer(client_id: str):
+    try:
+        await asyncio.sleep(60) # Условие: ждём ровно 1 минуту
+        # Если спустя минуту игрок так и не переподключился (его нет в активных)
+        if client_id not in ctw_sessions:
+            if client_id in ctw_recovery_storage:
+                del ctw_recovery_storage[client_id]
+            await broadcast_ctw_state()
+            print(f"⏰ Минута истекла. Империя {client_id} полностью стёрта с карты.")
+    except asyncio.CancelledError:
+        print(f"⚡ Таймер сброса для {client_id} отменён! Диктатор вернулся в сеть.")
+
+# Главный WebSocket канал
 @app.websocket("/ctw/ws/{client_id}")
 async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
     await websocket.accept()
     
-    # Регистрируем нового игрока в ОЗУ
-    ctw_sessions[client_id] = {
-        "websocket": websocket,
-        "country": None,
-        "cities": [],
-        "airports": []
-    }
+    # ПРОВЕРКА RECONNECT: если диктатор перезагрузил страницу в течение 1 минуты
+    recovered_data = ctw_recovery_storage.get(client_id)
+    if recovered_data:
+        # Отменяем фоновый таймер уничтожения страны
+        if recovered_data.get("task"):
+            recovered_data["task"].cancel()
+            
+        ctw_sessions[client_id] = {
+            "websocket": websocket,
+            "country": recovered_data.get("country"),
+            "cities": recovered_data.get("cities", []),
+            "airports": recovered_data.get("airports", [])
+        }
+        # Убираем из буфера восстановления, так как сессия снова активна
+        del ctw_recovery_storage[client_id]
+        print(f"🔄 Диктатор {client_id} успешно восстановил свою сессию!")
+    else:
+        # Новый игрок, зашедший впервые
+        ctw_sessions[client_id] = {
+            "websocket": websocket,
+            "country": None,
+            "cities": [],
+            "airports": []
+        }
+    
+    # Сразу обновляем лидерборд у всех, чтобы показать нового игрока (или вернувшегося)
+    await broadcast_ctw_state()
     
     try:
         while True:
-            # Слушаем входящие пакеты от конкретного игрока
             raw_data = await websocket.receive_text()
             msg = json.loads(raw_data)
             
@@ -2657,13 +2697,12 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
                     "name": msg["name"],
                     "capital": msg["capital"],
                     "flag": msg["flag"],
-                    "geometry": msg["geometry"], # Координаты неоновых границ
+                    "geometry": msg["geometry"],
                     "population": 1
                 }
                 await broadcast_ctw_state()
                 
             elif msg["type"] == "update_infrastructure":
-                # Обновление списка городов, населения и аэропортов игрока
                 if client_id in ctw_sessions and ctw_sessions[client_id]["country"]:
                     ctw_sessions[client_id]["cities"] = msg["cities"]
                     ctw_sessions[client_id]["airports"] = msg["airports"]
@@ -2671,7 +2710,6 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
                     await broadcast_ctw_state()
                     
             elif msg["type"] == "launch_plane":
-                # Самолётик взлетел! Транслируем полёт абсолютно всем на карте
                 plane_payload = json.dumps({
                     "type": "spawn_plane",
                     "id": msg["id"],
@@ -2692,24 +2730,41 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
                         pass
                         
             elif msg["type"] == "annex_territory":
-                # Механика отжатия земель у соседа в реальном времени
                 target_player_id = msg["target_player_id"]
-                if target_player_id in ctw_sessions:
-                    # Удаляем захваченные города/аэропорты у жертвы
+                # Проверяем как в живых, так и в буфере удержания
+                target_data = ctw_sessions.get(target_player_id) or ctw_recovery_storage.get(target_player_id)
+                if target_data:
                     annexed_city_ids = msg["city_ids"]
                     annexed_airport_ids = msg["airport_ids"]
                     
-                    ctw_sessions[target_player_id]["cities"] = [c for c in ctw_sessions[target_player_id]["cities"] if c["id"] not in annexed_city_ids]
-                    ctw_sessions[target_player_id]["airports"] = [a for a in ctw_sessions[target_player_id]["airports"] if a["id"] not in annexed_airport_ids]
+                    target_data["cities"] = [c for c in target_data["cities"] if c["id"] not in annexed_city_ids]
+                    target_data["airports"] = [a for a in target_data["airports"] if a["id"] not in annexed_airport_ids]
                     
                     await broadcast_ctw_state()
 
     except WebSocketDisconnect:
-        # 🛑 Твоё условие: если кто-то закрыл вкладку или перезагрузил — стираем его мгновенно из ОЗУ!
+        print(f"🛑 Сокет игрока {client_id} закрылся (Выход/Перезагрузка).")
         if client_id in ctw_sessions:
+            current_data = ctw_sessions[client_id]
+            
+            if current_data.get("country"):
+                # У игрока была создана империя! Отправляем её в архив удержания на 1 минуту
+                ctw_recovery_storage[client_id] = {
+                    "country": current_data["country"],
+                    "cities": current_data["cities"],
+                    "airports": current_data["airports"],
+                    "task": None
+                }
+                # Запускаем асинхронный таймер удаления
+                loop = asyncio.get_event_loop()
+                task = loop.create_task(launch_disconnect_timer(client_id))
+                ctw_recovery_storage[client_id]["task"] = task
+            
+            # Удаляем из списка прямых подключений
             del ctw_sessions[client_id]
-        # Оповещаем оставшихся игроков, чтобы стереть контуры ушедшего с их экранов
+            
         await broadcast_ctw_state()
+        
     except Exception:
         if client_id in ctw_sessions:
             del ctw_sessions[client_id]
