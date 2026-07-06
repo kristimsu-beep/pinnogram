@@ -2591,13 +2591,16 @@ import aiofiles
 from fastapi import Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
-# Активные сессии в сети: { client_id: { "websocket": ws, "country": {...}, "cities": [...], "airports": [...] } }
+# Активные онлайн-сессии в сети прямо сейчас
+# { client_id: { "websocket": ws, "country": {...}, "cities": [...], "airports": [...] } }
 ctw_sessions = {}
 
-# Буфер удержания при дисконнекте на 1 минуту
+# Защитный буфер архивации империй для удержания стран на 1 минуту при перезагрузке
+# { client_id: { "country": {...}, "cities": [...], "airports": [...], "task": asyncio.Task } }
 ctw_recovery_storage = {}
 
-# Дипломатическая матрица: { "wars": [ {"aggressor": id, "defender": id, "status": "justifying"|"at_war"} ] }
+# Дипломатическая матрица глобальных отношений: 
+# [ {"aggressor": id, "defender": id, "status": "justifying"|"at_war"} ]
 ctw_diplomacy = []
 
 @app.get("/ctw", response_class=HTMLResponse)
@@ -2609,9 +2612,10 @@ async def ctw_page(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка загрузки ctw.html: {str(e)}")
 
-# Живая рассылка стейта мира
+# Живая рассылка стейта мира, лидерборда и дипломатии всем игрокам одновременно
 async def broadcast_ctw_state():
     world_state = {}
+    # Объединяем активных диктаторов и тех, кто перезагружает вкладку прямо сейчас
     all_client_ids = set(list(ctw_sessions.keys()) + list(ctw_recovery_storage.keys()))
     
     for cid in all_client_ids:
@@ -2631,45 +2635,62 @@ async def broadcast_ctw_state():
     
     dead_clients = []
     for cid, data in ctw_sessions.items():
-        try: await data["websocket"].send_text(payload)
-        except Exception: dead_clients.append(cid)
+        try: 
+            await data["websocket"].send_text(payload)
+        except Exception: 
+            dead_clients.append(cid)
+            
     for cid in dead_clients:
         if cid in ctw_sessions: del ctw_sessions[cid]
 
+# Фоновый асинхронный таймер удержания империи (условие: 60 секунд)
 async def launch_disconnect_timer(client_id: str):
     try:
-        await asyncio.sleep(60)
+        await asyncio.sleep(60) # Ждём ровно 1 минуту
+        # Если спустя минуту диктатор так и не переподключился к сокету
         if client_id not in ctw_sessions:
-            if client_id in ctw_recovery_storage: del ctw_recovery_storage[client_id]
-            # Зачищаем дипломатию ушедшего
+            if client_id in ctw_recovery_storage: 
+                del ctw_recovery_storage[client_id]
+            # Полностью вычищаем все войны и союзы ушедшего
             global ctw_diplomacy
             ctw_diplomacy = [w for w in ctw_diplomacy if w["aggressor"] != client_id and w["defender"] != client_id]
             await broadcast_ctw_state()
-    except asyncio.CancelledError: pass
+            print(f"⏰ Минута истекла. Держава {client_id} навсегда стёрта с карты.")
+    except asyncio.CancelledError:
+        print(f"⚡ Диктатор {client_id} вернулся в сеть! Сброс империи отменён.")
 
+# Главный WebSocket-маршрутизатор
 @app.websocket("/ctw/ws/{client_id}")
 async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
     await websocket.accept()
     
+    # ПРОВЕРКА RECONNECT RECOVERY WINDOW
     recovered_data = ctw_recovery_storage.get(client_id)
     if recovered_data:
-        if recovered_data.get("task"): recovered_data["task"].cancel()
+        # Игрок успел обновить страницу в течение минуты! Глушим таймер удаления
+        if recovered_data.get("task"): 
+            recovered_data["task"].cancel()
+            
         ctw_sessions[client_id] = {
-            "websocket": websocket, "country": recovered_data.get("country"),
-            "cities": recovered_data.get("cities", []), "airports": recovered_data.get("airports", [])
+            "websocket": websocket, 
+            "country": recovered_data.get("country"),
+            "cities": recovered_data.get("cities", []), 
+            "airports": recovered_data.get("airports", [])
         }
         del ctw_recovery_storage[client_id]
+        print(f"🔄 Диктатор {client_id} бесшовно восстановил сессию!")
     else:
+        # Совершенно новое подключение на карту мира
         ctw_sessions[client_id] = {"websocket": websocket, "country": None, "cities": [], "airports": []}
     
     await broadcast_ctw_state()
-    
     try:
         while True:
+            # Бесконечно слушаем входящие пакеты от конкретного игрока
             raw_data = await websocket.receive_text()
             msg = json.loads(raw_data)
             
-            # --- 🛠️ СИСТЕМНЫЕ МЕХАНИКИ ---
+            # --- 🛠️ 1. БАЗОВЫЕ МЕХАНИКИ ОСНОВАНИЯ ---
             if msg["type"] == "create_country":
                 ctw_sessions[client_id]["country"] = {
                     "name": msg["name"], "capital": msg["capital"], "flag": msg["flag"], "geometry": msg["geometry"], "population": 1
@@ -2683,26 +2704,28 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
                     ctw_sessions[client_id]["country"]["population"] = msg["total_population"]
                     await broadcast_ctw_state()
 
-            # --- 💬 Roblox ЧАТ ---
+            # --- 💬 2. ROBLOX ГЛОБАЛЬНЫЙ ЧАТ ---
             elif msg["type"] == "chat_message":
                 sender_data = ctw_sessions.get(client_id)
+                # Автоматически генерируем тэг страны перед сообщением [франция]
                 tag = f"[{sender_data['country']['name']}]" if sender_data and sender_data.get("country") else "[Гость]"
                 chat_payload = json.dumps({
                     "type": "add_chat_line",
                     "text": f"{tag}: {msg['text']}"
                 }, ensure_ascii=False)
+                # Рассылаем абсолютно всем игрокам в сети
                 for cid, data in ctw_sessions.items():
                     try: await data["websocket"].send_text(chat_payload)
                     except Exception: pass
 
-            # --- 🪖 ДИПЛОМАТИЯ И ОПРАВДАНИЕ ВОЙНЫ ---
+            # --- 🪖 3. ДИПЛОМАТИЯ И ТАЙМЕРЫ ОПРАВДЫВАНИЯ ---
             elif msg["type"] == "start_justifying":
-                # Проверяем, нет ли уже отношений
+                # Страхуемся от дубликатов оправданий цели войны
                 exists = any(w for w in ctw_diplomacy if w["aggressor"] == client_id and w["defender"] == msg["target_id"])
                 if not exists:
                     ctw_diplomacy.append({"aggressor": client_id, "defender": msg["target_id"], "status": "justifying"})
                     await broadcast_ctw_state()
-                    # Оповещаем жертву лично по центру экрана
+                    # Моментально оповещаем жертву лично по центру экрана
                     target_ws = ctw_sessions.get(msg["target_id"])
                     if target_ws:
                         try:
@@ -2714,11 +2737,12 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
                         except Exception: pass
 
             elif msg["type"] == "declare_war":
+                # Переводим статус дипломатии в режим активной войны
                 for w in ctw_diplomacy:
                     if w["aggressor"] == client_id and w["defender"] == msg["target_id"]:
                         w["status"] = "at_war"
                 await broadcast_ctw_state()
-                # Оповещаем жертву о начале войны
+                # Оповещаем жертву, что на неё официально напали
                 target_ws = ctw_sessions.get(msg["target_id"])
                 if target_ws:
                     try:
@@ -2730,7 +2754,7 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
                     except Exception: pass
 
             elif msg["type"] == "propose_peace":
-                # Пересылаем предложение оппоненту
+                # Пересылаем ультиматум-предложение о перемирии оппоненту
                 target_ws = ctw_sessions.get(msg["target_id"])
                 if target_ws:
                     try:
@@ -2743,14 +2767,14 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
 
             elif msg["type"] == "accept_peace":
                 global ctw_diplomacy
-                # Полностью аннулируем военный статус между двумя странами
+                # Полностью аннулируем военный статус между двумя диктаторами
                 ctw_diplomacy = [w for w in ctw_diplomacy if not (
                     (w["aggressor"] == client_id and w["defender"] == msg["from_id"]) or
                     (w["aggressor"] == msg["from_id"] and w["defender"] == client_id)
                 )]
                 await broadcast_ctw_state()
 
-            # --- ✈️ АВИАЦИЯ ---
+            # --- ✈️ 4. АВИАЦИЯ И ПОЛЁТЫ САМОЛЁТОВ ---
             elif msg["type"] == "launch_plane":
                 plane_payload = json.dumps({
                     "type": "spawn_plane", "id": msg["id"], "from_airport": msg["from_airport"], "to_airport": msg["to_airport"],
@@ -2761,7 +2785,7 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
                     try: await data["websocket"].send_text(plane_payload)
                     except Exception: pass
                         
-            # --- ⚔️ АННЕКСИЯ (С ФИКСОМ БАГА ПЕРЕДАЧИ СОБСТВЕННОСТИ!) ---
+            # --- ⚔️ 5. АННЕКСИЯ (ИСПРАВЛЕНА ПЕРЕДАЧА СОБСТВЕННОСТИ ГОРОДОВ!) ---
             elif msg["type"] == "annex_territory":
                 target_player_id = msg["target_player_id"]
                 target_data = ctw_sessions.get(target_player_id) or ctw_recovery_storage.get(target_player_id)
@@ -2771,10 +2795,10 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
                     annexed_city_ids = msg["city_ids"]
                     annexed_airport_ids = msg["airport_ids"]
                     
-                    # 🌟 Вырезаем города у жертвы и ДОБАВЛЯЕМ их агрессору со сменой владельца
+                    # 🌟 ФИКС: Вырезаем города у соседа и ДОБАВЛЯЕМ их агрессору со сменой владельца в ОЗУ
                     for city in target_data["cities"]:
                         if city["id"] in annexed_city_ids:
-                            # Корректируем тип: захваченная столица соседа становится обычным твоим городом
+                            # Захваченная столица соседа на твоей карте превращается в твой обычный город
                             city["type"] = "city"
                             my_data["cities"].append(city)
                     target_data["cities"] = [c for c in target_data["cities"] if c["id"] not in annexed_city_ids]
@@ -2785,7 +2809,7 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
                             my_data["airports"].append(ap)
                     target_data["airports"] = [a for a in target_data["airports"] if a["id"] not in annexed_airport_ids]
                     
-                    # Автоматически пересчитываем население обеих стран, чтобы HUD и графики обновились
+                    # Автоматически пересчитываем население обеих стран для HUD
                     my_data["country"]["population"] = sum(c["population"] for c in my_data["cities"])
                     target_data["country"]["population"] = sum(c["population"] for c in target_data["cities"]) if target_data["cities"] else 1
                     
@@ -2798,25 +2822,18 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
             if current_data.get("country"):
                 # У игрока была создана империя! Отправляем её в архив удержания на 1 минуту
                 ctw_recovery_storage[client_id] = {
-                    "country": current_data["country"],
-                    "cities": current_data["cities"],
-                    "airports": current_data["airports"],
-                    "task": None
+                    "country": current_data["country"], "cities": current_data["cities"], "airports": current_data["airports"], "task": None
                 }
-                # Запускаем асинхронный таймер удаления
                 loop = asyncio.get_event_loop()
                 task = loop.create_task(launch_disconnect_timer(client_id))
                 ctw_recovery_storage[client_id]["task"] = task
-            
-            # Удаляем из списка прямых подключений
             del ctw_sessions[client_id]
-            
         await broadcast_ctw_state()
         
     except Exception:
-        if client_id in ctw_sessions:
-            del ctw_sessions[client_id]
+        if client_id in ctw_sessions: del ctw_sessions[client_id]
         await broadcast_ctw_state()
+
 
                     
 
