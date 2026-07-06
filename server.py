@@ -2716,58 +2716,59 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
                     try: await data["websocket"].send_text(chat_payload)
                     except Exception: pass
 
-            # --- 🪖 ДИПЛОМАТИЯ И ТАЙМЕРЫ ОПРАВДЫВАНИЯ ---
+            # --- 🪖 3. ДИПЛОМАТИЯ И ТАЙМЕРЫ ОПРАВДЫВАНИЯ (УЛЬТИМАТИВНЫЙ ФИКС!) ---
             elif msg["type"] == "start_justifying":
-                exists = any(w for w in ctw_diplomacy if w["aggressor"] == client_id and w["defender"] == msg["target_id"])
-                if not exists:
-                    ctw_diplomacy.append({"aggressor": client_id, "defender": msg["target_id"], "status": "justifying"})
+                target_id = msg.get("target_id")
+                if target_id:
+                    exists = any(w for w in ctw_diplomacy if w["aggressor"] == client_id and w["defender"] == target_id)
+                    if not exists:
+                        ctw_diplomacy.append({"aggressor": client_id, "defender": target_id, "status": "justifying"})
+                        await broadcast_ctw_state()
+                        
+                        target_session = ctw_sessions.get(target_id)
+                        if isinstance(target_session, dict) and target_session.get("websocket"):
+                            try:
+                                await target_session["websocket"].send_text(json.dumps({
+                                    "type": "notify_alert",
+                                    "title": "⚠️ Угроза войны!",
+                                    "text": f"Государство '{msg['my_country_name']}' начало оправдание военных целей против вас! У вас есть 30 секунд на подготовку!"
+                                }, ensure_ascii=False))
+                            except Exception: pass
+
+            elif msg["type"] == "declare_war":
+                target_id = msg.get("target_id")
+                if target_id:
+                    for w in ctw_diplomacy:
+                        if w["aggressor"] == client_id and w["defender"] == target_id:
+                            w["status"] = "at_war"
                     await broadcast_ctw_state()
                     
-                    # 🌟 ФИКС: Вытаскиваем словарь сессии жертвы
-                    target_session = ctw_sessions.get(msg["target_id"])
-                    # Проверяем, что жертва онлайн и у неё есть сокет
-                    if target_session and target_session.get("websocket"):
+                    target_session = ctw_sessions.get(target_id)
+                    if isinstance(target_session, dict) and target_session.get("websocket"):
                         try:
-                            # Отправляем пакет уведомления строго в её сокет-соединение
                             await target_session["websocket"].send_text(json.dumps({
                                 "type": "notify_alert",
-                                "title": "⚠️ Угроза войны!",
-                                "text": f"Государство '{msg['my_country_name']}' начало оправдание военных целей против вас! У вас есть 30 секунд на подготовку!"
+                                "title": "🛑 ВОЙНА ОБЪЯВЛЕНА!",
+                                "text": f"Внимание! Держава '{msg['my_country_name']}' официально объявила вам ВОЙНУ! Их армия перешла границу!"
                             }, ensure_ascii=False))
                         except Exception: pass
 
-            elif msg["type"] == "declare_war":
-                for w in ctw_diplomacy:
-                    if w["aggressor"] == client_id and w["defender"] == msg["target_id"]:
-                        w["status"] = "at_war"
-                await broadcast_ctw_state()
-                
-                # 🌟 ФИКС: Вытаскиваем словарь сессии жертвы при объявлении войны
-                target_session = ctw_sessions.get(msg["target_id"])
-                if target_session and target_session.get("websocket"):
-                    try:
-                        await target_session["websocket"].send_text(json.dumps({
-                            "type": "notify_alert",
-                            "title": "🛑 ВОЙНА ОБЪЯВЛЕНА!",
-                            "text": f"Внимание! Держава '{msg['my_country_name']}' официально объявила вам ВОЙНУ! Их армия перешла границу!"
-                        }, ensure_ascii=False))
-                    except Exception: pass
-
             elif msg["type"] == "propose_peace":
-                # Пересылаем ультиматум-предложение о перемирии оппоненту
-                target_ws = ctw_sessions.get(msg["target_id"])
-                if target_ws:
-                    try:
-                        await target_ws["websocket"].send_text(json.dumps({
-                            "type": "peace_request",
-                            "from_id": client_id,
-                            "from_name": msg["my_country_name"]
-                        }, ensure_ascii=False))
-                    except Exception: pass
+                target_id = msg.get("target_id")
+                if target_id:
+                    target_session = ctw_sessions.get(target_id)
+                    if isinstance(target_session, dict) and target_session.get("websocket"):
+                        try:
+                            await target_session["websocket"].send_text(json.dumps({
+                                "type": "peace_request",
+                                "from_id": client_id,
+                                "from_name": msg["my_country_name"]
+                            }, ensure_ascii=False))
+                        except Exception: pass
 
             elif msg["type"] == "accept_peace":
-                # Полностью аннулируем военный статус между двумя диктаторами
-                ctw_diplomacy = [w for w in ctw_diplomacy if not (
+                # 🌟 ИСПРАВЛЕНО: Перезаписываем глобальный массив через срез [:] без падения сервера!
+                ctw_diplomacy[:] = [w for w in ctw_diplomacy if not (
                     (w["aggressor"] == client_id and w["defender"] == msg["from_id"]) or
                     (w["aggressor"] == msg["from_id"] and w["defender"] == client_id)
                 )]
