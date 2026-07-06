@@ -2716,18 +2716,20 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
                     try: await data["websocket"].send_text(chat_payload)
                     except Exception: pass
 
-            # --- 🪖 3. ДИПЛОМАТИЯ И ТАЙМЕРЫ ОПРАВДЫВАНИЯ ---
+            # --- 🪖 ДИПЛОМАТИЯ И ТАЙМЕРЫ ОПРАВДЫВАНИЯ ---
             elif msg["type"] == "start_justifying":
-                # Страхуемся от дубликатов оправданий цели войны
                 exists = any(w for w in ctw_diplomacy if w["aggressor"] == client_id and w["defender"] == msg["target_id"])
                 if not exists:
                     ctw_diplomacy.append({"aggressor": client_id, "defender": msg["target_id"], "status": "justifying"})
                     await broadcast_ctw_state()
-                    # Моментально оповещаем жертву лично по центру экрана
-                    target_ws = ctw_sessions.get(msg["target_id"])
-                    if target_ws:
+                    
+                    # 🌟 ФИКС: Вытаскиваем словарь сессии жертвы
+                    target_session = ctw_sessions.get(msg["target_id"])
+                    # Проверяем, что жертва онлайн и у неё есть сокет
+                    if target_session and target_session.get("websocket"):
                         try:
-                            await target_ws["websocket"].send_text(json.dumps({
+                            # Отправляем пакет уведомления строго в её сокет-соединение
+                            await target_session["websocket"].send_text(json.dumps({
                                 "type": "notify_alert",
                                 "title": "⚠️ Угроза войны!",
                                 "text": f"Государство '{msg['my_country_name']}' начало оправдание военных целей против вас! У вас есть 30 секунд на подготовку!"
@@ -2735,16 +2737,16 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
                         except Exception: pass
 
             elif msg["type"] == "declare_war":
-                # Переводим статус дипломатии в режим активной войны
                 for w in ctw_diplomacy:
                     if w["aggressor"] == client_id and w["defender"] == msg["target_id"]:
                         w["status"] = "at_war"
                 await broadcast_ctw_state()
-                # Оповещаем жертву, что на неё официально напали
-                target_ws = ctw_sessions.get(msg["target_id"])
-                if target_ws:
+                
+                # 🌟 ФИКС: Вытаскиваем словарь сессии жертвы при объявлении войны
+                target_session = ctw_sessions.get(msg["target_id"])
+                if target_session and target_session.get("websocket"):
                     try:
-                        await target_ws["websocket"].send_text(json.dumps({
+                        await target_session["websocket"].send_text(json.dumps({
                             "type": "notify_alert",
                             "title": "🛑 ВОЙНА ОБЪЯВЛЕНА!",
                             "text": f"Внимание! Держава '{msg['my_country_name']}' официально объявила вам ВОЙНУ! Их армия перешла границу!"
