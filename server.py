@@ -2649,11 +2649,9 @@ async def launch_disconnect_timer(client_id: str):
         await asyncio.sleep(60) # Ждём ровно 1 минуту
         # Если спустя минуту диктатор так и не переподключился к сокету
         if client_id not in ctw_sessions:
-            if client_id in ctw_recovery_storage: 
-                del ctw_recovery_storage[client_id]
-            # Полностью вычищаем все войны и союзы ушедшего
-            global ctw_diplomacy
-            ctw_diplomacy = [w for w in ctw_diplomacy if w["aggressor"] != client_id and w["defender"] != client_id]
+            if client_id in ctw_recovery_storage: del ctw_recovery_storage[client_id]
+            # Фильтруем массив напрямую, Python разрешает это без слова global
+            ctw_diplomacy[:] = [w for w in ctw_diplomacy if w["aggressor"] != client_id and w["defender"] != client_id]
             await broadcast_ctw_state()
             print(f"⏰ Минута истекла. Держава {client_id} навсегда стёрта с карты.")
     except asyncio.CancelledError:
@@ -2766,7 +2764,6 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
                     except Exception: pass
 
             elif msg["type"] == "accept_peace":
-                global ctw_diplomacy
                 # Полностью аннулируем военный статус между двумя диктаторами
                 ctw_diplomacy = [w for w in ctw_diplomacy if not (
                     (w["aggressor"] == client_id and w["defender"] == msg["from_id"]) or
