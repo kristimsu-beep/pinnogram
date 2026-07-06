@@ -112,9 +112,60 @@
         .leaderboard-header { display: flex; justify-content: space-between; font-size: 11px; color: rgba(255,255,255,0.6); font-weight: bold; text-transform: uppercase; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 4px; }
         .leaderboard-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: rgba(30, 30, 30, 0.4); border-radius: 4px; font-size: 13px; color: #fff; font-weight: 500; }
         .leaderboard-row.me { background: rgba(255, 200, 0, 0.15); border: 1px solid rgba(255,200,0,0.3); color: #ffcc00; }
+        
+        .roblox-chat-btn {
+            position: fixed; top: 15px; left: 70px; width: 45px; height: 45px;
+            background: rgba(25, 25, 25, 0.85); border: 2px solid rgba(255,255,255,0.15);
+            border-radius: 50%; z-index: 1500; cursor: pointer; display: flex;
+            justify-content: center; align-items: center; transition: 0.2s ease-in-out;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5); backdrop-filter: blur(5px);
+            color: white; font-size: 18px;
+        }
+        .roblox-chat-btn:hover { background: rgba(45, 45, 45, 0.95); border-color: rgba(255,255,255,0.4); transform: scale(1.05); }
+
+        .roblox-chat-box {
+            position: fixed; top: 75px; left: 15px; width: 320px; height: 220px;
+            background: rgba(15, 15, 15, 0.55); border-radius: 6px; z-index: 1500;
+            padding: 8px; display: none; flex-direction: column; gap: 6px;
+            backdrop-filter: blur(6px); box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .chat-messages-scroll {
+            flex: 1; overflow-y: auto; display: flex; flex-direction: column;
+            gap: 4px; padding-right: 4px; font-size: 13px; color: #fff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+        }
+        .chat-messages-scroll::-webkit-scrollbar { width: 4px; }
+        .chat-messages-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+        
+        .chat-input-row { display: flex; gap: 4px; }
+        .chat-input-row input {
+            flex: 1; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 4px; padding: 6px 10px; color: white; font-size: 13px;
+        }
+        .chat-input-row input:focus { border-color: rgba(255,255,255,0.4); outline: none; }
+        .chat-send-btn {
+            background: rgba(255,255,255,0.15); border: none; color: white;
+            padding: 0 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;
+        }
+        .chat-send-btn:hover { background: rgba(255,255,255,0.3); }
     </style>
 </head>
 <body>
+    <div class="roblox-chat-btn" onclick="toggleRobloxChat()">
+        <i class="fas fa-comment-alt"></i>
+    </div>
+
+    <div class="roblox-chat-box" id="robloxChatBox">
+        <div class="chat-messages-scroll" id="chatMessagesContainer">
+            <div style="color: rgba(255,255,255,0.5); font-size: 11px;">Система: Добро пожаловать в глобальный чат!</div>
+        </div>
+        <div class="chat-input-row">
+            <input type="text" id="chatInputField" placeholder="Нажмите Enter для отправки..." onkeydown="if(event.key==='Enter') sendChatMessageToServer()">
+            <button class="chat-send-btn" onclick="sendChatMessageToServer()">ОК</button>
+        </div>
+    </div>
+
     <div class="roblox-btn" onclick="toggleRobloxLeaderboard()">
         <div class="roblox-logo-tilt"></div>
     </div>
@@ -192,6 +243,7 @@
         // Ключом будет уникальный ID объекта на карте (например, 'city_171982312')
         let worldMarkers = {};
         let worldPolygons = {};
+        let currentDiplomacy = [];
 
         // Запуск игры сразу после загрузки страницы в браузере
         window.addEventListener('DOMContentLoaded', () => {
@@ -214,15 +266,47 @@
             };
 
             ws.onmessage = (event) => {
-                // Принимаем пакеты данных от сервера в реальном времени
                 const msg = JSON.parse(event.data);
                 
                 if (msg.type === "sync_world") {
-                    // Метод синхронизации карты мира (напишем в следующих частях)
-                    syncWorldState(msg.players);
+                    // Синхронизация карты мира (передаём и данные дипломатии!)
+                    syncWorldState(msg.players, msg.diplomacy);
                 } else if (msg.type === "spawn_plane") {
-                    // Метод отрисовки летящего самолётика (напишем в следующих частях)
                     animatePlaneFlight(msg);
+                } else if (msg.type === "add_chat_line") {
+                    // 🌟 1. Добавляем строку в чат
+                    appendLineToRobloxChat(msg.text);
+                } else if (msg.type === "notify_alert") {
+                    // 🌟 2. Оповещения об оправдании или начале войны по центру экрана
+                    Swal.fire({
+                        title: msg.title,
+                        text: msg.text,
+                        icon: "warning",
+                        background: '#0d1117',
+                        color: '#fff',
+                        confirmButtonColor: '#ff2a2a'
+                    });
+                } else if (msg.type === "peace_request") {
+                    // 🌟 3. Окно предложения мира от противника
+                    Swal.fire({
+                        title: "🏳️ Предложение о Мире",
+                        text: `Государство "${msg.from_name}" предлагает вам прекратить войну и заключить мирный договор. Вы согласны?`,
+                        icon: "question",
+                        showCancelButton: true,
+                        confirmButtonText: "Принять Мир",
+                        cancelButtonText: "Продолжить Войну",
+                        background: '#0d1117',
+                        color: '#fff',
+                        confirmButtonColor: '#00ffff',
+                        cancelButtonColor: '#ff2a2a'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            ws.send(JSON.stringify({
+                                type: "accept_peace",
+                                from_id: msg.from_id
+                            }));
+                        }
+                    });
                 }
             };
 
@@ -285,6 +369,43 @@
 
             // Запускаем перехват кликов для будущих построек (города, аэропорты)
             setupMapClickHandlers();
+                        // ✈️ ПОСТРОЙКА АЭРОПОРТА ПО НАЖАТИЮ НА ПРАВУЮ КНОПКУ МЫШИ (ПКМ)
+            map.on('contextmenu', function(e) {
+                // 1. Блокируем стандартное контекстное меню браузера, чтобы оно не мешало
+                if (e.originalEvent) {
+                    e.originalEvent.preventDefault();
+                }
+
+                if (!playerCountry) return; // Пока страны нет — строить нельзя
+
+                // 2. Твоё условие: Проверяем, суверенная ли это территория
+                if (!isPointInMyBorders(e.latlng)) {
+                    return Swal.fire("Ошибка", "Аэропорты можно возводить только на суверенной территории вашей страны!", "error");
+                }
+
+                // 3. Открываем сочное окно ввода названия аэропорта
+                Swal.fire({
+                    title: 'Построить Аэропорт ✈️',
+                    input: 'text',
+                    inputPlaceholder: 'Введите название аэропорта',
+                    showCancelButton: true,
+                    confirmButtonText: 'Возвести',
+                    cancelButtonText: 'Отмена',
+                    background: '#0d1117',
+                    color: '#fff'
+                }).then((result) => {
+                    if (result.isConfirmed && result.value.trim() !== "") {
+                        myAirports.push({
+                            id: "ap_" + Date.now(),
+                            name: result.value.trim(),
+                            lat: e.latlng.lat,
+                            lng: e.latlng.lng
+                        });
+                        // Отправляем пакет обновления на сервер
+                        sendInfrastructureUpdate();
+                    }
+                });
+            });
         }
 
         // Вспомогательный метод перевода файла флага в строку Base64
@@ -473,10 +594,13 @@
             }));
         }
         // 🌍 8. РЕАКТИВНАЯ СИНХРОНИЗАЦИЯ ВСЕГО МИРА С СЕРВЕРА
-        function syncWorldState(players) {
-            
-            updateRobloxLeaderboardUI(players);
+        function syncWorldState(players, diplomacy) {
+            // Запоминаем текущую дипломатическую матрицу от сервера в глобальную переменную
+            if (diplomacy) currentDiplomacy = diplomacy;
 
+            // Обновляем лидерборд Roblox на лету!
+            updateRobloxLeaderboardUI(players);
+            
             let activeElementIds = new Set();
 
             for (let pid in players) {
@@ -575,8 +699,36 @@
             }
         }
 
-        // 📊 9. ВСПЛЫВАЮЩЕЕ ЖИВОЕ ОКНО ДЕРЖАВЫ (КЛИК ПО ФЛАГУ)
+        // 📊 9. ВСПЛЫВАЮЩЕЕ ЖИВОЕ ОКНО ДЕРЖАВЫ С ДИПЛОМАТИЧЕСКИМ ИНТЕРФЕЙСОМ И ТАЙМЕРОМ
         function showCountryLiveCard(country, pid) {
+            const isMe = (pid === clientId);
+            
+            // Проверяем текущий дипломатический статус отношений с этой страной
+            // Ищем запись, где мы агрессор, а эта страна — защитник
+            let dipRelation = currentDiplomacy.find(w => w.aggressor === clientId && w.defender === pid);
+            // Ищем зеркальную запись на случай, если они воюют с нами
+            let mirrorRelation = currentDiplomacy.find(w => w.aggressor === pid && w.defender === clientId);
+
+            let dipStatus = "peace"; // По умолчанию — мирное время
+            if (dipRelation) dipStatus = dipRelation.status; // 'justifying' или 'at_war'
+            if (mirrorRelation && mirrorRelation.status === 'at_war') dipStatus = 'at_war';
+
+            // Генерируем HTML-код для кнопок в зависимости от статуса
+            let dipButtonsHtml = "";
+
+            if (!isMe) {
+                if (dipStatus === "peace") {
+                    // Кнопка оправдания войны, если мы в мире
+                    dipButtonsHtml = `<button class="btn" style="background:#ffcc00; color:#000; margin-top:15px; font-size:15px;" onclick="startJustifyingWarOnline('${pid}', '${country.name}')">🎯 Оправдать цель войны</button>`;
+                } else if (dipStatus === "justifying") {
+                    // Заблокированная серая кнопка с таймером (условие: 30 секунд)
+                    dipButtonsHtml = `<button id="diploTimerBtn" class="btn" style="background:#555; color:#aaa; margin-top:15px; font-size:14px; cursor:not-allowed;" disabled>⏳ Оправдание: 30 сек</button>`;
+                } else if (dipStatus === "at_war") {
+                    // Если уже воюем — даём кнопку предложить мир
+                    dipButtonsHtml = `<button class="btn" style="background:#00ffff; color:#000; margin-top:15px; font-size:15px;" onclick="proposePeaceOnline('${pid}', '${country.name}')">🏳️ Предложить мир</button>`;
+                }
+            }
+
             Swal.fire({
                 title: country.name,
                 html: `
@@ -586,17 +738,44 @@
                         <p style="font-size:18px; color:#ccc; margin-top:10px;">Общее население:<br>
                             <span id="swalLivePop" style="font-size:26px; font-weight:bold; color:#ff2a2a; text-shadow:0 0 10px rgba(255,42,42,0.5);">${country.population.toLocaleString()}</span> чел.
                         </p>
+                        <div id="diplomacyButtonsContainer">${dipButtonsHtml}</div>
                     </div>
                 `,
                 showConfirmButton: false,
                 background: '#0d1117',
                 color: '#fff',
                 didOpen: () => {
-                    // Запоминаем ID, чтобы обновлять цифры в реальном времени из функции синхронизации
                     Swal.getPopup().setAttribute('data-pid', pid);
+
+                    // Если статус 'justifying' — запускаем 30-секундный таймер в реальном времени!
+                    if (dipStatus === "justifying") {
+                        let timeLeft = 30; // Твоё условие: ровно 30 секунд
+                        const timerInterval = setInterval(() => {
+                            timeLeft--;
+                            const timerBtn = document.getElementById('diploTimerBtn');
+                            
+                            // Защита: если игрок успел закрыть Swal окно до конца отсчета
+                            if (!timerBtn) {
+                                clearInterval(timerInterval);
+                                return;
+                            }
+
+                            if (timeLeft <= 0) {
+                                clearInterval(timerInterval);
+                                // Срок истёк — серая кнопка превращается в сочную красную кнопку «Объявить войну»
+                                const container = document.getElementById('diplomacyButtonsContainer');
+                                if (container) {
+                                    container.innerHTML = `<button class="btn" style="background:#ff2a2a; color:#fff; margin-top:15px; font-size:15px; animation: pulse 1s infinite;" onclick="declareWarOnline('${pid}', '${country.name}')">🪖 ОБЪЯВИТЬ ВОЙНУ</button>`;
+                                }
+                            } else {
+                                timerBtn.innerText = `⏳ Оправдание: ${timeLeft} сек`;
+                            }
+                        }, 1000);
+                    }
                 }
             });
         }
+
         // ✈️ 10. ТАП ПО АЭРОПОРТУ: ИНФО-КАРТОЧКА В УГЛУ И РЕЖИМ ЗАПУСКА ПОЛЁТА
         function handleAirportClick(airport, country, isMe) {
             // Если включен режим выбора точки для полета (после первого тапа по своему аэропорту)
@@ -737,7 +916,6 @@
             }, 3000);
         }
 
-        // ⚔️ 13. ОНЛАЙН ВОЕННЫЙ ЗАХВАТ ЧУЖИХ ГОРОДОВ И АЭРОПОРТОВ С СЕРВЕРА
         // ⚔️ 10. ОНЛАЙН ВОЕННЫЙ ЗАХВАТ ЧУЖИХ ГОРОДОВ И АЭРОПОРТОВ С СЕРВЕРА
         function handleExpansion(layer) {
             const currentTotalPop = myCities.reduce((sum, c) => sum + c.population, 0) || 1;
@@ -757,28 +935,44 @@
                     const isMyAp = myAirports.some(a => a.id === markerId);
 
                     if (!isMyCity && !isMyAp) {
+                        // 🌟 Находим, кому принадлежит этот маркер
+                        const ownerId = marker.options ? marker.options.ownerId : null;
+                        
+                        // 🌟 Проверяем, объявлена ли война этому владельцу
+                        let warRelation = currentDiplomacy.find(w => 
+                            (w.aggressor === clientId && w.defender === ownerId && w.status === "at_war") ||
+                            (w.aggressor === ownerId && w.defender === clientId && w.status === "at_war")
+                        );
+
                         if (markerId.startsWith("city_")) {
-                            enemyCitiesInArea.push(markerId);
-                            
-                            // Получаем текстовое содержимое тултипа
-                            const tooltipContent = marker.getTooltip().getContent();
-                            // Регулярное выражение для поиска цифр населения
-                            const popMatch = tooltipContent.match(/\((\d+[\s\d]*)\s*чел\)/);
-                            
-                            // 🌟 ИСПРАВЛЕНО: Извлекаем строку из первой группы массива popMatch[1]
-                            if (popMatch && popMatch[1]) {
-                                const popString = popMatch[1].replace(/\s/g, ''); // Чистим пробелы
-                                totalEnemyPopulation += parseInt(popString, 10);
+                            // Твоё условие: Без объявленной войны чужие города отжать нельзя!
+                            if (!warRelation && ownerId) {
+                                map.removeLayer(layer);
+                                return Swal.fire("Дипломатический запрет 🛑", "Вы не можете аннексировать чужие города в мирное время! Сначала обоснуйте цели и официально объявите войну этой державе!", "warning");
                             }
-                            
-                            if (marker.options && marker.options.ownerId) targetPlayerId = marker.options.ownerId;
+
+                            enemyCitiesInArea.push(markerId);
+                            const tooltipContent = marker.getTooltip().getContent();
+                            const popMatch = tooltipContent.match(/\((\d+[\s\d]*)\s*чел\)/);
+                            if (popMatch && popMatch[1]) {
+                                totalEnemyPopulation += parseInt(popMatch[1].replace(/\s/g, ''), 10);
+                            }
+                            if (ownerId) targetPlayerId = ownerId;
+
                         } else if (markerId.startsWith("ap_")) {
+                            // Твоё условие: Без объявленной войны чужие аэропорты отжать нельзя!
+                            if (!warRelation && ownerId) {
+                                map.removeLayer(layer);
+                                return Swal.fire("Дипломатический запрет 🛑", "Аннексия чужих стратегических аэропортов заблокирована в мирное время!", "warning");
+                            }
+
                             enemyAirportsInArea.push(markerId);
-                            if (marker.options && marker.options.ownerId) targetPlayerId = marker.options.ownerId;
+                            if (ownerId) targetPlayerId = ownerId;
                         }
                     }
                 }
             }
+
 
             if (myArmy >= totalEnemyPopulation) {
                 drawnItems.addLayer(layer);
@@ -875,6 +1069,97 @@
                 `;
                 container.appendChild(row);
             }
+        }
+        // 💬 17. ОТКРЫТИЕ И ЗАКРЫТИЕ ОКНА ЧАТА ROBLOX
+        function toggleRobloxChat() {
+            const chatBox = document.getElementById('robloxChatBox');
+            if (chatBox.style.display === 'none' || chatBox.style.display === '') {
+                chatBox.style.display = 'flex';
+                // Автоматически фокусируемся на поле ввода при открытии чата, как в играх
+                document.getElementById('chatInputField').focus();
+            } else {
+                chatBox.style.display = 'none';
+            }
+        }
+
+        // 💬 18. ОТПРАВКА СООБЩЕНИЯ В ЧАТ НА СЕРВЕР ЧЕРЕЗ WEBSOCKET
+        function sendChatMessageToServer() {
+            const inputField = document.getElementById('chatInputField');
+            const messageText = inputField.value.trim();
+            
+            if (messageText === "") return; // Пустые сообщения не шлём
+
+            // Отправляем сырой текст на бэкенд, сервер сам прикрутит тэг страны [Франция]
+            ws.send(JSON.stringify({
+                type: "chat_message",
+                text: messageText
+            }));
+
+            // Очищаем поле ввода для следующего сообщения
+            inputField.value = "";
+        }
+
+        // 💬 19. ДОБАВЛЕНИЕ НОВОЙ СТРОКИ В ЧАТ-БОКС (ВЫЗЫВАЕТСЯ ПРИ ПОЛУЧЕНИИ ПАКЕТА)
+        function appendLineToRobloxChat(fullText) {
+            const container = document.getElementById('chatMessagesContainer');
+            
+            const messageEl = document.createElement('div');
+            messageEl.style.marginBottom = '2px';
+            
+            // Красиво подсвечиваем тэг государства жирным
+            if (fullText.startsWith("[")) {
+                const closeBracketIndex = fullText.indexOf("]");
+                if (closeBracketIndex !== -1) {
+                    const tag = fullText.substring(0, closeBracketIndex + 1);
+                    const rest = fullText.substring(closeBracketIndex + 1);
+                    messageEl.innerHTML = `<strong style="color: #ffcc00; text-shadow: 0 0 3px rgba(255,204,0,0.4);">${tag}</strong>${rest}`;
+                } else {
+                    messageEl.innerText = fullText;
+                }
+            } else {
+                messageEl.innerText = fullText;
+            }
+
+            container.appendChild(messageEl);
+            
+            // Автоматически прокручиваем чат вниз к самому свежему сообщению
+            container.scrollTop = container.scrollHeight;
+        }
+                // 🪖 20. ЗАПУСК ОПРАВДАНИЯ ВОЕННЫХ ЦЕЛЕЙ
+        function startJustifyingWarOnline(targetId, targetName) {
+            if (!playerCountry) return;
+            
+            // Отправляем пакет на бэкенд, сервер оповестит жертву по центру экрана
+            ws.send(JSON.stringify({
+                type: "start_justifying",
+                target_id: targetId,
+                my_country_name: playerCountry.name
+            }));
+
+            Swal.fire("Оправдание начато! 🎯", `Вы начали фабрикацию претензий против державы "${targetName}". Дождитесь окончания 30-секундного таймера в карточке её городов, чтобы нанести удар!`, "info");
+        }
+
+        // 🪖 21. ОФИЦИАЛЬНОЕ ОБЪЯВЛЕНИЕ ВОЙНЫ СОСЕДУ
+        function declareWarOnline(targetId, targetName) {
+            ws.send(JSON.stringify({
+                type: "declare_war",
+                target_id: targetId,
+                my_country_name: playerCountry.name
+            }));
+
+            Swal.close(); // Закрываем карточку
+            Swal.fire("ВОЙНА ОБЪЯВЛЕНА! 🪖", `Вы официально объявили войну государству "${targetName}"! Ваши неоновые лассо теперь могут аннексировать их города и аэропорты!`, "error");
+        }
+
+        // 🏳️ 22. ПРЕДЛОЖЕНИЕ МИРНОГО ДОГОВОРА ОППОНЕНТУ
+        function proposePeaceOnline(targetId, targetName) {
+            ws.send(JSON.stringify({
+                type: "propose_peace",
+                target_id: targetId,
+                my_country_name: playerCountry.name
+            }));
+
+            Swal.fire("Дипломатия 🏳️", `Вы направили предложение о мире правительству страны "${targetName}". Ожидайте их решения.`, "info");
         }
     </script>
 </body>
