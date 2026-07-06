@@ -238,7 +238,7 @@
                 center: [20.0, 0.0],
                 zoom: 2,
                 minZoom: 2,
-                maxZoom: 14, 
+                maxZoom: 17, 
                 doubleClickZoom: false
             });
 
@@ -738,6 +738,7 @@
         }
 
         // ⚔️ 13. ОНЛАЙН ВОЕННЫЙ ЗАХВАТ ЧУЖИХ ГОРОДОВ И АЭРОПОРТОВ С СЕРВЕРА
+        // ⚔️ 10. ОНЛАЙН ВОЕННЫЙ ЗАХВАТ ЧУЖИХ ГОРОДОВ И АЭРОПОРТОВ С СЕРВЕРА
         function handleExpansion(layer) {
             const currentTotalPop = myCities.reduce((sum, c) => sum + c.population, 0) || 1;
             const myArmy = Math.floor(currentTotalPop * 0.10);
@@ -758,11 +759,18 @@
                     if (!isMyCity && !isMyAp) {
                         if (markerId.startsWith("city_")) {
                             enemyCitiesInArea.push(markerId);
+                            
+                            // Получаем текстовое содержимое тултипа
                             const tooltipContent = marker.getTooltip().getContent();
+                            // Регулярное выражение для поиска цифр населения
                             const popMatch = tooltipContent.match(/\((\d+[\s\d]*)\s*чел\)/);
-                            if (popMatch) {
-                                totalEnemyPopulation += parseInt(popMatch.replace(/\s/g, ''), 10);
+                            
+                            // 🌟 ИСПРАВЛЕНО: Извлекаем строку из первой группы массива popMatch[1]
+                            if (popMatch && popMatch[1]) {
+                                const popString = popMatch[1].replace(/\s/g, ''); // Чистим пробелы
+                                totalEnemyPopulation += parseInt(popString, 10);
                             }
+                            
                             if (marker.options && marker.options.ownerId) targetPlayerId = marker.options.ownerId;
                         } else if (markerId.startsWith("ap_")) {
                             enemyAirportsInArea.push(markerId);
@@ -778,7 +786,6 @@
                 layer.setStyle({ color: '#ff2a2a', weight: 4, fillColor: '#ff2a2a', fillOpacity: 0.15 });
 
                 if (enemyCitiesInArea.length > 0 || enemyAirportsInArea.length > 0) {
-                    // Твоё условие: Захватываем территории, города и аэропорты соседа в реальном времени!
                     ws.send(JSON.stringify({
                         type: "annex_territory",
                         target_player_id: targetPlayerId,
@@ -797,6 +804,7 @@
                 Swal.fire("Атака отбита! 🛑", `Вам не хватает военной мощи! Население врага в зоне (${totalEnemyPopulation} чел) превосходит силы вашей армии (${myArmy} бойцов).`, "error");
             }
         }
+
         // 🧮 14. МАТЕМАТИЧЕСКАЯ ФУНКЦИЯ ПРОВЕРКИ ТОЧКИ ВНУТРИ ПОЛИГОНА (Ray-Casting Algorithm)
         function isPointInPolygon(latlng, layer) {
             let polygon = layer.getLatLngs();
