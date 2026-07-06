@@ -73,7 +73,7 @@
         .capital-label { color: #ff2a2a !important; font-size: 15px !important; text-transform: uppercase; }
         .airport-label { color: #00ffff !important; font-size: 13px !important; text-shadow: 0 0 5px #000, 0 0 5px #00ffff !important; }
 
-        /* Карточка аэропорта в правом нижнем углу */
+        
         .airport-card {
             position: fixed; bottom: 20px; right: 20px;
             background: rgba(13, 17, 23, 0.95); border: 2px solid #00ffff;
@@ -87,11 +87,46 @@
         .airport-card .close-card { position: absolute; top: 8px; right: 10px; color: #888; cursor: pointer; font-size: 14px; }
         .airport-card .close-card:hover { color: #fff; }
 
-        /* Стили для анимации самолетика */
+        
         .plane-icon { font-size: 24px; text-shadow: 0 0 8px rgba(255,255,255,0.8); transition: transform 0.1s linear; }
+                
+        .roblox-btn {
+            position: fixed; top: 15px; left: 15px; width: 45px; height: 45px;
+            background: rgba(25, 25, 25, 0.85); border: 2px solid rgba(255,255,255,0.15);
+            border-radius: 50%; z-index: 1500; cursor: pointer; display: flex;
+            justify-content: center; align-items: center; transition: 0.2s ease-in-out;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5); backdrop-filter: blur(5px);
+        }
+        .roblox-btn:hover { background: rgba(45, 45, 45, 0.95); border-color: rgba(255,255,255,0.4); transform: scale(1.05); }
+        .roblox-logo-tilt { width: 18px; height: 18px; background: #ffffff; transform: rotate(-15deg); border-radius: 3px; position: relative; }
+        .roblox-logo-tilt::after { content: ''; position: absolute; top: 5px; left: 5px; width: 8px; height: 8px; background: rgba(25, 25, 25, 1); border-radius: 1px; }
+
+        
+        .roblox-leaderboard {
+            position: fixed; top: 15px; right: 15px; width: 280px;
+            background: rgba(15, 15, 15, 0.65); border-radius: 8px; z-index: 1500;
+            padding: 10px; display: flex; flex-direction: column; gap: 4px;
+            backdrop-filter: blur(8px); box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.05); transition: transform 0.3s cubic-bezier(0.1, 0.9, 0.2, 1), opacity 0.2s;
+        }
+        .leaderboard-header { display: flex; justify-content: space-between; font-size: 11px; color: rgba(255,255,255,0.6); font-weight: bold; text-transform: uppercase; padding-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 4px; }
+        .leaderboard-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: rgba(30, 30, 30, 0.4); border-radius: 4px; font-size: 13px; color: #fff; font-weight: 500; }
+        .leaderboard-row.me { background: rgba(255, 200, 0, 0.15); border: 1px solid rgba(255,200,0,0.3); color: #ffcc00; }
     </style>
 </head>
 <body>
+    <div class="roblox-btn" onclick="toggleRobloxLeaderboard()">
+        <div class="roblox-logo-tilt"></div>
+    </div>
+
+    <!-- ТАБЛИЦА ИГРОКОВ (LEADERBOARD) В СТИЛЕ ROBLOX -->
+    <div class="roblox-leaderboard" id="robloxBoard">
+        <div class="leaderboard-header">
+            <span>Игрок / Страна</span>
+            <span>Армия</span>
+        </div>
+        <div id="leaderboardPlayersContainer"></div>
+    </div>
 
     <!-- ВЕРХНЯЯ ПАНЕЛЬ СТАТИСТИКИ HUD -->
     <div class="dictator-hud" id="gameHud" style="display: none;">
@@ -198,13 +233,13 @@
         }
         // 🗺️ 2. ЗАПУСК СПУТНИКОВОЙ КАРТЫ МИРА И ИНСТРУМЕНТОВ РИСОВАНИЯ
         function initGameMap() {
-            // Центрируем камеру на средних координатах планеты
+            // Увеличили максимальный зум для глубокого приближения спутника
             map = L.map('map', {
                 center: [20.0, 0.0],
                 zoom: 2,
                 minZoom: 2,
-                maxZoom: 10,
-                doubleClickZoom: false // Отключаем зум, он нам нужен для постройки городов!
+                maxZoom: 14, 
+                doubleClickZoom: false
             });
 
             // Подгружаем текстуры реальных спутниковых снимков Земли (ArcGIS)
@@ -439,7 +474,9 @@
         }
         // 🌍 8. РЕАКТИВНАЯ СИНХРОНИЗАЦИЯ ВСЕГО МИРА С СЕРВЕРА
         function syncWorldState(players) {
-            // Набор ID элементов, которые всё ещё активны в онлайн-сессии
+            
+            updateRobloxLeaderboardUI(players);
+
             let activeElementIds = new Set();
 
             for (let pid in players) {
@@ -629,12 +666,18 @@
 
             const planeMarker = L.marker(startLatLng, { icon: planeIcon }).addTo(map);
 
-            // Разворачиваем нос самолетика по вектору траектории
-            const angle = Math.atan2(endLatLng.lng - startLatLng.lng, endLatLng.lat - startLatLng.lat) * (180 / Math.PI);
+            // 🌟 ИСПРАВЛЕНО: Рассчитываем точный угол наклона по оси Y и X Меркатора
+            // Добавляем +90 или -90 градусов коррекции, чтобы носик эмодзи ✈️ смотрел строго в точку прилёта
+            const angle = Math.atan2(endLatLng.lat - startLatLng.lat, endLatLng.lng - startLatLng.lng) * (180 / Math.PI);
+            
             setTimeout(() => {
                 const el = planeMarker.getElement();
-                if (el) el.style.transform += ` rotate(${angle - 45}deg)`;
+                if (el) {
+                    // Чистый разворот графического контейнера видеокартой по вектору движения
+                    el.style.transform += ` rotate(${-angle + 90}deg)`;
+                }
             }, 100);
+
 
             // Твоё условие: При нажатии на любой из летящих самолетов выплывает панель с флагом и аэропортами
             planeMarker.on('click', function(e) {
@@ -782,6 +825,48 @@
                 if (intersect) inside = !inside;
             }
             return inside;
+        }
+                // 📋 15. ПЕРЕКЛЮЧЕНИЕ ВИДИМОСТИ ЛИДЕРБОРДА ROBLOX
+        function toggleRobloxLeaderboard() {
+            const board = document.getElementById('robloxBoard');
+            if (board.style.display === 'none') {
+                board.style.display = 'flex';
+                board.style.opacity = '1';
+            } else {
+                board.style.display = 'none';
+                board.style.opacity = '0';
+            }
+        }
+
+        // 📋 16. ДИНАМИЧЕСКИЙ РЕНДЕРИНГ ТАБЛИЦЫ ИГРОКОВ (ВЫЗЫВАЕТСЯ ИЗ СИНХРОНИЗАЦИИ)
+        function updateRobloxLeaderboardUI(players) {
+            const container = document.getElementById('leaderboardPlayersContainer');
+            container.innerHTML = ""; // Очищаем старые строки
+
+            for (let pid in players) {
+                const pData = players[pid];
+                const isMe = (pid === clientId);
+                
+                // Создаем строку для таблицы
+                const row = document.createElement('div');
+                row.className = isMe ? 'leaderboard-row me' : 'leaderboard-row';
+
+                let displayName = "Гость (Подключение)";
+                let displayArmy = "N/A"; // Твоё условие для игроков без страны
+
+                // Если игрок уже создал империю
+                if (pData.country) {
+                    displayName = pData.country.name;
+                    const totalPop = pData.cities.reduce((sum, c) => sum + c.population, 0) || 1;
+                    displayArmy = Math.floor(totalPop * 0.10).toLocaleString();
+                }
+
+                row.innerHTML = `
+                    <span class="name">${isMe ? '👉 ' : ''}${displayName}</span>
+                    <span class="stat">${displayArmy}</span>
+                `;
+                container.appendChild(row);
+            }
         }
     </script>
 </body>
