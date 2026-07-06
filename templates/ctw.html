@@ -663,22 +663,18 @@
                     }
                 });
 
-                // --- НАХОДИМ СИНХРОНИЗАЦИЮ АЭРОПОРТОВ В СВОЕМ КОДЕ ---
+                // --- Синхронизация Аэропортов ---
                 pData.airports.forEach(ap => {
                     const markerId = ap.id;
                     activeElementIds.add(markerId);
 
                     if (!worldMarkers[markerId]) {
                         const apMarker = L.marker([ap.lat, ap.lng], { ownerId: pid }).addTo(map);
-                        
-                        // 🌟 ИСПРАВЛЕНО: Прописали четкие квадратные скобки [0, 10] для сдвига текста под иконку!
                         apMarker.bindTooltip(`✈️ ${ap.name}`, {
-                            permanent: true, 
-                            direction: 'bottom', 
-                            className: 'city-label airport-label', 
-                            offset: [0, 10] 
+                            permanent: true, direction: 'bottom', className: 'city-label airport-label', offset: [0, 10]
                         }).openTooltip();
 
+                        // Навешиваем клик (показ инфо-карточки и выбор маршрута)
                         apMarker.on('click', function(e) {
                             L.DomEvent.stopPropagation(e);
                             handleAirportClick(ap, pData.country, isMe);
@@ -687,7 +683,7 @@
                         worldMarkers[markerId] = apMarker;
                     }
                 });
-
+            }
 
             // Твоё условие: Если кто-то закрывает страницу — стираем его элементы с карты (очистка ОЗУ)
             for (let id in worldMarkers) {
