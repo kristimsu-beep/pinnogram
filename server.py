@@ -2572,6 +2572,7 @@ async def startup():
         asyncio.create_task(init_admin_chat_db())
         asyncio.create_task(init_sochi_stock_exchange_tables())
         asyncio.create_task(sochi_market_ticker_simulation_loop())
+        asyncio.create_task(start_global_economic_loop())
 
         print("🚀 Pinnogram Engine: База готова, бот-будильник запущен!")
         TOKEN = os.getenv("KONATA_BOT_TOKEN", "").strip()
@@ -2642,6 +2643,42 @@ async def broadcast_ctw_state():
             
     for cid in dead_clients:
         if cid in ctw_sessions: del ctw_sessions[cid]
+# 💰 ГЛОБАЛЬНЫЙ ТАЙМЕР ЭКОНОМИКИ (Деньги каждые 5 сек, Ракеты каждые 30 сек)
+async def start_global_economic_loop():
+    tick_count = 0
+    while True:
+        await asyncio.sleep(5)
+        tick_count += 5
+        
+        updated = False
+        for cid, data in list(ctw_sessions.items()):
+            if not data.get("country") or not data.get("cities"): continue
+                
+            country = data["country"]
+            # Считаем общее число заводов по всем городам диктатора
+            total_factories = sum(c.get("factories", 0) for c in data["cities"])
+            slider_missiles = country.get("slider_missiles", 0)
+            
+            # Условие: высчитываем пропорции ползунков
+            missile_factories = min(total_factories, slider_missiles)
+            profit_factories = total_factories - missile_factories
+            
+            # Начисление прибыли: +100 монет за завод каждые 5 секунд
+            earnings = profit_factories * 100
+            country["money"] = country.get("money", 10000) + earnings
+            country["total_factories"] = total_factories
+            
+            # Начисление ракет: +1 ракета от каждого завода каждые 30 секунд
+            if tick_count % 30 == 0 and missile_factories > 0:
+                country["missiles"] = country.get("missiles", 0) + missile_factories
+                
+            updated = True
+            
+        if updated:
+            await broadcast_ctw_state()
+            
+        if tick_count >= 30: tick_count = 0
+
 
 # Фоновый асинхронный таймер удержания империи (условие: 60 секунд)
 async def launch_disconnect_timer(client_id: str):
@@ -2688,19 +2725,58 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
             raw_data = await websocket.receive_text()
             msg = json.loads(raw_data)
             
-            # --- 🛠️ 1. БАЗОВЫЕ МЕХАНИКИ ОСНОВАНИЯ ---
             if msg["type"] == "create_country":
+                # Твоё условие: 10к монет, 0 ракет, 10 заводов, ползунок прибыли на максимум
                 ctw_sessions[client_id]["country"] = {
-                    "name": msg["name"], "capital": msg["capital"], "flag": msg["flag"], "geometry": msg["geometry"], "population": 1
+                    "name": msg["name"], "capital": msg["capital"], "flag": msg["flag"], "geometry": msg["geometry"],
+                    "population": 500, "money": 10000, "missiles": 0, "total_factories": 10,
+                    "slider_profit": 10, "slider_missiles": 0
                 }
+                # Твоё условие: Стартовые 10 заводов закладываются строго в Столицу
+                ctw_sessions[client_id]["cities"] = [{
+                    "id": "city_capital_" + str(int(asyncio.get_event_loop().time())),
+                    "name": msg["capital"], "lat": msg["geometry"]["lat"], "lng": msg["geometry"]["lng"],
+                    "population": 500, "type": "capital", "factories": 10
+                }]
                 await broadcast_ctw_state()
-                
+
             elif msg["type"] == "update_infrastructure":
                 if client_id in ctw_sessions and ctw_sessions[client_id]["country"]:
                     ctw_sessions[client_id]["cities"] = msg["cities"]
                     ctw_sessions[client_id]["airports"] = msg["airports"]
                     ctw_sessions[client_id]["country"]["population"] = msg["total_population"]
                     await broadcast_ctw_state()
+            # --- ⚙️ ОБНОВЛЕНИЕ ПОЛЗУНКОВ ПРОМЫШЛЕННОСТИ ---
+            elif msg["type"] == "update_industry_sliders":
+                if client_id in ctw_sessions and ctw_sessions[client_id]["country"]:
+                    country = ctw_sessions[client_id]["country"]
+                    country["slider_profit"] = msg["slider_profit"]
+                    country["slider_missiles"] = msg["slider_missiles"]
+                    await broadcast_ctw_state()
+
+            # --- 🏗️ СТРОИТЕЛЬСТВО ЗАВОДОВ С СЕРВЕРНЫМ РАСЧЁТОМ ЦЕНЫ ---
+            elif msg["type"] == "build_factory":
+                if client_id in ctw_sessions and ctw_sessions[client_id]["country"]:
+                    country = ctw_sessions[client_id]["country"]
+                    cities = ctw_sessions[client_id]["cities"]
+                    
+                    total_f = sum(c.get("factories", 0) for c in cities)
+                    # Твоё условие: Цена возрастает на 200 монет за каждый имеющийся завод
+                    cost = 2000 + (total_f * 200)
+                    
+                    if country["money"] >= cost:
+                        for city in cities:
+                            if city["id"] == msg["city_id"]:
+                                current_f = city.get("factories", 0)
+                                # Твоё условие: максимум в столице 20, в городах 10
+                                max_allowed = 20 if city["type"] == "capital" else 10
+                                
+                                if current_f < max_allowed:
+                                    city["factories"] = current_f + 1
+                                    country["money"] -= cost
+                                    country["total_factories"] = total_f + 1
+                                    await broadcast_ctw_state()
+                                    break
 
             # --- 💬 2. ROBLOX ГЛОБАЛЬНЫЙ ЧАТ ---
             elif msg["type"] == "chat_message":
@@ -2809,12 +2885,48 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
                             my_data["airports"].append(ap)
                     target_data["airports"] = [a for a in target_data["airports"] if a["id"] not in annexed_airport_ids]
                     
-                    # Автоматически пересчитываем население обеих стран для HUD
+                    # Автоматически пересчитываем население И ЗАВОДЫ обеих стран для HUD
                     my_data["country"]["population"] = sum(c["population"] for c in my_data["cities"])
+                    my_data["country"]["total_factories"] = sum(c.get("factories", 0) for c in my_data["cities"])
                     target_data["country"]["population"] = sum(c["population"] for c in target_data["cities"]) if target_data["cities"] else 1
+                    target_data["country"]["total_factories"] = sum(c.get("factories", 0) for c in target_data["cities"]) if target_data["cities"] else 0
                     
                     await broadcast_ctw_state()
-
+            # --- 🚀 РАКЕТНЫЙ УДАР ПО ИНФРАСТРУКТУРЕ ---
+            elif msg["type"] == "fire_missile_strike":
+                if client_id in ctw_sessions and ctw_sessions[client_id]["country"]:
+                    country = ctw_sessions[client_id]["country"]
+                    if country.get("missiles", 0) > 0:
+                        country["missiles"] -= 1 # Списываем ракету
+                        
+                        target_id = msg["target_owner_id"]
+                        obj_id = msg["object_id"]
+                        
+                        target_data = ctw_sessions.get(target_id) or ctw_recovery_storage.get(target_id)
+                        if target_data:
+                            # Твоё условие: если ракетой ударили по аэропорту, он стирается
+                            if obj_id.startswith("ap_"):
+                                target_data["airports"] = [a for a in target_data["airports"] if a["id"] != obj_id]
+                            # Твоё условие: если ракетой ударили по городу, часть заводов (половина) уничтожается
+                            elif obj_id.startswith("city_"):
+                                for city in target_data["cities"]:
+                                    if city["id"] == obj_id:
+                                        destroyed = max(1, city.get("factories", 0) // 2)
+                                        city["factories"] = max(0, city.get("factories", 0) - destroyed)
+                                        break
+                                        
+                            target_data["country"]["total_factories"] = sum(c.get("factories", 0) for c in target_data["cities"])
+                            
+                        # Публикуем новость о ядерном ударе в Roblox-чат для всех игроков
+                        chat_payload = json.dumps({
+                            "type": "add_chat_line",
+                            "text": f"☢️ СИСТЕМА: Ракета державы [{country['name']}] успешно поразила стратегический объект противника!"
+                        }, ensure_ascii=False)
+                        for cid, data in ctw_sessions.items():
+                            try: await data["websocket"].send_text(chat_payload)
+                            except Exception: pass
+                            
+                        await broadcast_ctw_state()
     except WebSocketDisconnect:
         print(f"🛑 Сокет игрока {client_id} закрылся (Выход/Перезагрузка).")
         if client_id in ctw_sessions:
