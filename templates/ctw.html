@@ -150,6 +150,27 @@
             padding: 0 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;
         }
         .chat-send-btn:hover { background: rgba(255,255,255,0.3); }
+
+        .roblox-panorama-btn {
+            position: fixed; top: 15px; left: 125px; width: 45px; height: 45px;
+            background: rgba(25, 25, 25, 0.85); border: 2px solid rgba(255,255,255,0.15);
+            border-radius: 50%; z-index: 1500; cursor: pointer; display: flex;
+            justify-content: center; align-items: center; transition: 0.2s ease-in-out;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5); backdrop-filter: blur(5px);
+            color: white; font-size: 18px;
+        }
+        .roblox-panorama-btn:hover { background: rgba(45, 45, 45, 0.95); border-color: rgba(255,255,255,0.4); transform: scale(1.05); }
+
+        body {
+            perspective: 1000px; /* Задаем глубину 3D-пространства */
+        }
+
+        /* КЛАСС КЛАССИЧЕСКОГО 3D ОБЗОРА ВДАЛЬ */
+        #map.panorama-3d-active {
+            transform: rotateX(45deg) translateY(-8%) scale(1.1); /* Наклоняем карту на 45 градусов к горизонту */
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+            border-top: 1px solid rgba(255,42,42,0.3);
+        }
     </style>
 </head>
 <body>
@@ -165,6 +186,10 @@
             <input type="text" id="chatInputField" placeholder="Нажмите Enter для отправки..." onkeydown="if(event.key==='Enter') sendChatMessageToServer()">
             <button class="chat-send-btn" onclick="sendChatMessageToServer()">ОК</button>
         </div>
+    </div>
+
+    <div class="roblox-panorama-btn" onclick="toggle3DPanoramaView()" title="Обзор панорамы">
+        <i class="fas fa-mountain"></i>
     </div>
 
     <div class="roblox-btn" onclick="toggleRobloxLeaderboard()">
@@ -1169,6 +1194,33 @@
             } else {
                 Swal.fire("Сбой сети", "Не удалось предложить мир: потеряно соединение с сервером...", "error");
             }
+        }
+                // 🗺️ 27. ВСПЛЫВАЮЩИЙ КУРСОР И ПЕРЕКЛЮЧЕНИЕ 3D ПАНОРАМЫ
+        function toggle3DPanoramaView() {
+            const mapEl = document.getElementById('map');
+            if (!mapEl) return;
+
+            // Тогглим (включаем/выключаем) CSS-класс наклона
+            mapEl.classList.toggle('panorama-3d-active');
+
+            // Принудительно заставляем Leaflet пересчитать свои размеры в новом 3D-пространстве
+            setTimeout(() => {
+                map.invalidateSize();
+            }, 300);
+
+            // Выводим красивое игровое уведомление
+            const isActive = mapEl.classList.contains('panorama-3d-active');
+            Swal.fire({
+                title: isActive ? "Режим Панорамы 🏔️" : "Режим Спутника 🛰️",
+                text: isActive ? "Камера опущена к земле. Вы смотрите на горизонт своей империи!" : "Камера возвращена на орбиту. Вид строго сверху.",
+                icon: "success",
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 2500,
+                background: '#0d1117',
+                color: '#fff'
+            });
         }
     </script>
 </body>
