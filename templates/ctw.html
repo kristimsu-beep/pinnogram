@@ -171,6 +171,29 @@
             box-shadow: 0 20px 50px rgba(0,0,0,0.8);
             border-top: 1px solid rgba(255,42,42,0.3);
         }
+        /* ⚙️ ИКОНКА ПРОМЫШЛЕННОСТИ СВЕРХУ СЛЕВА */
+        .roblox-industry-btn {
+            position: fixed; top: 15px; left: 180px; width: 45px; height: 45px;
+            background: rgba(25, 25, 25, 0.85); border: 2px solid rgba(255,255,255,0.15);
+            border-radius: 50%; z-index: 1500; cursor: pointer; display: flex;
+            justify-content: center; align-items: center; transition: 0.2s ease-in-out;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5); backdrop-filter: blur(5px);
+            color: white; font-size: 18px;
+        }
+        .roblox-industry-btn:hover { background: rgba(45, 45, 45, 0.95); border-color: rgba(255,255,255,0.4); transform: scale(1.05); }
+
+        /* 📊 ОКНО УПРАВЛЕНИЯ ПОЛЗУНКАМИ ПРОМЫШЛЕННОСТИ */
+        .roblox-industry-box {
+            position: fixed; top: 75px; left: 15px; width: 320px;
+            background: rgba(15, 15, 15, 0.65); border-radius: 6px; z-index: 1500;
+            padding: 15px; display: none; flex-direction: column; gap: 15px;
+            backdrop-filter: blur(8px); box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.05); color: #fff;
+        }
+        .roblox-industry-box h3 { font-size: 14px; text-transform: uppercase; color: #ffcc00; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; }
+        .slider-group { display: flex; flex-direction: column; gap: 5px; }
+        .slider-group label { font-size: 12px; color: #ccc; display: flex; justify-content: space-between; }
+        .slider-group input[type="range"] { width: 100%; cursor: pointer; accent-color: #ffcc00; }
     </style>
 </head>
 <body>
@@ -204,8 +227,27 @@
         </div>
         <div id="leaderboardPlayersContainer"></div>
     </div>
+    
+    <div class="roblox-industry-btn" onclick="toggleRobloxIndustryBox()" title="Промышленность и заводы">
+        <i class="fas fa-industry"></i>
+    </div>
 
-    <!-- ВЕРХНЯЯ ПАНЕЛЬ СТАТИСТИКИ HUD -->
+    <!-- ОКНО УПРАВЛЕНИЯ ЗАВОДАМИ ROBLOX STYLE -->
+    <div class="roblox-industry-box" id="robloxIndustryBox">
+        <h3>🏭 Распределение Заводов</h3>
+        
+        <div class="slider-group">
+            <label><span>💰 На прибыль (+100$):</span> <strong id="sliderProfitVal">10</strong></label>
+            <input type="range" id="industrySliderProfit" min="0" max="10" value="10" oninput="handleIndustrySliders('profit')">
+        </div>
+
+        <div class="slider-group">
+            <label><span>🚀 На ракеты (1 шт / 30с):</span> <strong id="sliderMissilesVal">0</strong></label>
+            <input type="range" id="industrySliderMissiles" min="0" max="10" value="0" oninput="handleIndustrySliders('missiles')">
+        </div>
+    </div>
+
+    <!-- ВЕРХНЯЯ ПАНЕЛЬ СТАТИСТИКИ HUD С ЭКОНОМИКОЙ -->
     <div class="dictator-hud" id="gameHud" style="display: none;">
         <div class="hud-stat">
             <label>Государство</label>
@@ -219,7 +261,20 @@
             <label>Армия (10%)</label>
             <span id="hudArmy">0</span>
         </div>
+        <div class="hud-stat">
+            <label>Бюджет 💰</label>
+            <span id="hudMoney" style="color: #ffcc00; text-shadow: 0 0 8px rgba(255,204,0,0.5);">10,000</span>
+        </div>
+        <div class="hud-stat">
+            <label>Заводы 🏭</label>
+            <span id="hudFactories" style="color: #00ffff; text-shadow: 0 0 8px rgba(0,255,255,0.5);">10</span>
+        </div>
+        <div class="hud-stat">
+            <label>Ядерный Арсенал 🚀</label>
+            <span id="hudMissiles" style="color: #ff2a2a; text-shadow: 0 0 8px rgba(255,42,42,0.5);">0</span>
+        </div>
     </div>
+
 
     <!-- ПОЛНОЭКРАННЫЙ БЛОК ДЛЯ СПУТНИКОВОЙ КАРТЫ -->
     <div id="map"></div>
@@ -270,6 +325,7 @@
         let worldMarkers = {};
         let worldPolygons = {};
         let currentDiplomacy = [];
+        let factoryBuildCooldowns = {};
 
         // Запуск игры сразу после загрузки страницы в браузере
         window.addEventListener('DOMContentLoaded', () => {
@@ -619,7 +675,7 @@
                 total_population: totalPop
             }));
         }
-        // 🌍 8. РЕАКТИВНАЯ СИНХРОНИЗАЦИЯ ВСЕГО МИРА С СЕРВЕРА
+        // 🌍 8. РЕАКТИВНАЯ СИНХРОНИЗАЦИЯ ВСЕГО МИРА С СЕРВЕРА С УЧЕТОМ ВОЕННОЙ ЭКОНОМИКИ
         function syncWorldState(players, diplomacy) {
             // Запоминаем текущую дипломатическую матрицу от сервера в глобальную переменную
             if (diplomacy) currentDiplomacy = diplomacy;
@@ -634,8 +690,25 @@
                 if (!pData.country) continue;
 
                 const isMe = (pid === clientId);
-                // Твоё условие: твоя страна — красная (#ff2a2a), чужие — сине-фиолетовые (#8a2be2)
                 const stateColor = isMe ? '#ff2a2a' : '#8a2be2';
+
+                // 🌟 СИНХРОНИЗАЦИЯ НАШИХ ЭКОНОМИЧЕСКИХ СЧЕТЧИКОВ В ВЕРХНИЙ HUD И ПОЛЗУНКОВ
+                if (isMe) {
+                    myCities = pData.cities || [];
+                    myAirports = pData.airports || [];
+
+                    document.getElementById('hudMoney').innerText = (pData.country.money || 0).toLocaleString();
+                    document.getElementById('hudFactories').innerText = (pData.country.total_factories || 0).toLocaleString();
+                    document.getElementById('hudMissiles').innerText = (pData.country.missiles || 0).toLocaleString();
+                    
+                    const totalFact = myCities.reduce((sum, c) => sum + (c.factories || 0), 0) || 10;
+                    const pSlider = document.getElementById('industrySliderProfit');
+                    const mSlider = document.getElementById('industrySliderMissiles');
+                    if (pSlider && mSlider) {
+                        pSlider.max = totalFact;
+                        mSlider.max = totalFact;
+                    }
+                }
 
                 // --- Синхронизация полигонов границ ---
                 const polyId = "poly_" + pid;
@@ -661,26 +734,47 @@
 
                     const prefix = city.type === 'capital' ? '⭐ ' : '🏙️ ';
                     const labelClass = city.type === 'capital' ? 'city-label capital-label' : 'city-label';
-                    const tooltipText = `${prefix}${city.name} (${city.population} чел)`;
+                    
+                    // Добавляем отображение заводов прямо в парящую надпись города на карте!
+                    const factCount = city.factories || 0;
+                    const tooltipText = `${prefix}${city.name} (${city.population} чел) [🏭 ${factCount}]`;
 
                     if (!worldMarkers[markerId]) {
-                        // Создаем маркер и привязываем метаданные владельца ownerId
                         const marker = L.marker([city.lat, city.lng], { ownerId: pid }).addTo(map);
                         marker.bindTooltip(tooltipText, {
                             permanent: true, direction: 'top', className: labelClass, offset: [0, -10]
                         }).openTooltip();
 
-                        // Твоё условие: При нажатии на город/флаг выплывает окно с флагом, названием и населением
+                        // 🌟 КЛИК ПО ГОРОДУ: Разделение на свой ВПК и чужую дипломатию
                         marker.on('click', function(e) {
                             L.DomEvent.stopPropagation(e);
-                            showCountryLiveCard(pData.country, pid);
+                            
+                            if (isMe) {
+                                // Если город наш — открываем меню промышленности с кулдауном 5 секунд!
+                                const liveCity = myCities.find(c => c.id === city.id) || city;
+                                const maxF = (city.type === 'capital') ? 20 : 10;
+                                Swal.fire({
+                                    title: `🏙️ Управление городом: ${city.name}`,
+                                    html: `
+                                        <p style="font-size:15px; color:#ccc;">Статус: <strong>${city.type === 'capital' ? '⭐ СТОЛИЦА' : 'Провинция'}</strong></p>
+                                        <p style="font-size:16px; color:#fff; margin-top:10px;">Промышленность: <strong style="color:#00ffff;">${liveCity.factories || 0} / ${maxF}</strong> заводов.</p>
+                                        <hr style="border-color:#444; margin:15px 0;">
+                                        <button class="btn" style="background:#00ffff; color:#000; font-size:14px;" onclick="buildFactoryInCityOnline('${city.id}', '${city.name}', '${city.type}')">制造 🏗️ Построить завод</button>
+                                    `,
+                                    showConfirmButton: false,
+                                    background: '#0d1117',
+                                    color: '#fff'
+                                });
+                            } else {
+                                // Если город чужой — вызываем окно дипломатии, куда зашьем кнопку ракетного удара!
+                                showCountryLiveCard(pData.country, pid, city.id, city.name);
+                            }
                         });
 
                         worldMarkers[markerId] = marker;
                     } else {
                         worldMarkers[markerId].setTooltipContent(tooltipText);
                         
-                        // Твоё условие: Данные о населении меняются на лету прямо в открытом окне соседа!
                         if (Swal.isVisible() && Swal.getPopup().getAttribute('data-pid') === pid) {
                             const popEl = document.getElementById('swalLivePop');
                             if (popEl) popEl.innerText = city.population.toLocaleString();
@@ -699,10 +793,9 @@
                             permanent: true, direction: 'bottom', className: 'city-label airport-label', offset: [0, 10]
                         }).openTooltip();
 
-                        // Навешиваем клик (показ инфо-карточки и выбор маршрута)
                         apMarker.on('click', function(e) {
                             L.DomEvent.stopPropagation(e);
-                            handleAirportClick(ap, pData.country, isMe);
+                            handleAirportClick(ap, pData.country, isMe, pid); // Добавили передачу pid владельца
                         });
 
                         worldMarkers[markerId] = apMarker;
@@ -710,7 +803,6 @@
                 });
             }
 
-            // Твоё условие: Если кто-то закрывает страницу — стираем его элементы с карты (очистка ОЗУ)
             for (let id in worldMarkers) {
                 if (!activeElementIds.has(id)) {
                     map.removeLayer(worldMarkers[id]);
@@ -725,33 +817,35 @@
             }
         }
 
-        // 📊 9. ВСПЛЫВАЮЩЕЕ ЖИВОЕ ОКНО ДЕРЖАВЫ С ДИПЛОМАТИЧЕСКИМ ИНТЕРФЕЙСОМ И ТАЙМЕРОМ
-        function showCountryLiveCard(country, pid) {
+        // 📊 9. ВСПЛЫВАЮЩЕЕ ЖИВОЕ ОКНО ДЕРЖАВЫ С РАКЕТНЫМ ОТСЕКОМ
+        function showCountryLiveCard(country, pid, cityId, cityName) {
             const isMe = (pid === clientId);
             
-            // Проверяем текущий дипломатический статус отношений с этой страной
-            // Ищем запись, где мы агрессор, а эта страна — защитник
             let dipRelation = currentDiplomacy.find(w => w.aggressor === clientId && w.defender === pid);
-            // Ищем зеркальную запись на случай, если они воюют с нами
             let mirrorRelation = currentDiplomacy.find(w => w.aggressor === pid && w.defender === clientId);
 
-            let dipStatus = "peace"; // По умолчанию — мирное время
-            if (dipRelation) dipStatus = dipRelation.status; // 'justifying' или 'at_war'
+            let dipStatus = "peace"; 
+            if (dipRelation) dipStatus = dipRelation.status; 
             if (mirrorRelation && mirrorRelation.status === 'at_war') dipStatus = 'at_war';
 
-            // Генерируем HTML-код для кнопок в зависимости от статуса
             let dipButtonsHtml = "";
 
             if (!isMe) {
                 if (dipStatus === "peace") {
-                    // Кнопка оправдания войны, если мы в мире
                     dipButtonsHtml = `<button class="btn" style="background:#ffcc00; color:#000; margin-top:15px; font-size:15px;" onclick="startJustifyingWarOnline('${pid}', '${country.name}')">🎯 Оправдать цель войны</button>`;
                 } else if (dipStatus === "justifying") {
-                    // Заблокированная серая кнопка с таймером (условие: 30 секунд)
                     dipButtonsHtml = `<button id="diploTimerBtn" class="btn" style="background:#555; color:#aaa; margin-top:15px; font-size:14px; cursor:not-allowed;" disabled>⏳ Оправдание: 30 сек</button>`;
                 } else if (dipStatus === "at_war") {
-                    // Если уже воюем — даём кнопку предложить мир
-                    dipButtonsHtml = `<button class="btn" style="background:#00ffff; color:#000; margin-top:15px; font-size:15px;" onclick="proposePeaceOnline('${pid}', '${country.name}')">🏳️ Предложить мир</button>`;
+                    dipButtonsHtml = `
+                        <button class="btn" style="background:#00ffff; color:#000; margin-top:15px; font-size:15px;" onclick="proposePeaceOnline('${pid}', '${country.name}')">🏳️ Предложить мир</button>
+                    `;
+                    
+                    // 🌟 Твоё условие: если идёт война и это чужой город, даём кнопку запуска ракеты!
+                    if (cityId) {
+                        dipButtonsHtml += `
+                            <button class="btn" style="background:#ff2a2a; color:#fff; margin-top:10px; font-size:14px; box-shadow: 0 0 10px #ff2a2a;" onclick="fireMissileStrikeOnline('${pid}', '${cityId}', '${cityName}')">💥 ЗАПУСТИТЬ РАКЕТУ</button>
+                        `;
+                    }
                 }
             }
 
@@ -764,6 +858,7 @@
                         <p style="font-size:18px; color:#ccc; margin-top:10px;">Общее население:<br>
                             <span id="swalLivePop" style="font-size:26px; font-weight:bold; color:#ff2a2a; text-shadow:0 0 10px rgba(255,42,42,0.5);">${country.population.toLocaleString()}</span> чел.
                         </p>
+                        <p style="font-size:14px; color:#aaa; margin-top:5px;">Всего заводов в стране: <strong style="color:#00ffff;">${country.total_factories || 0}</strong> 🏭</p>
                         <div id="diplomacyButtonsContainer">${dipButtonsHtml}</div>
                     </div>
                 `,
@@ -773,25 +868,19 @@
                 didOpen: () => {
                     Swal.getPopup().setAttribute('data-pid', pid);
 
-                    // Если статус 'justifying' — запускаем 30-секундный таймер в реальном времени!
                     if (dipStatus === "justifying") {
-                        let timeLeft = 30; // Твоё условие: ровно 30 секунд
+                        let timeLeft = 30; 
                         const timerInterval = setInterval(() => {
                             timeLeft--;
                             const timerBtn = document.getElementById('diploTimerBtn');
-                            
-                            // Защита: если игрок успел закрыть Swal окно до конца отсчета
-                            if (!timerBtn) {
-                                clearInterval(timerInterval);
-                                return;
-                            }
+                            if (!timerBtn) { clearInterval(timerInterval); return; }
 
                             if (timeLeft <= 0) {
                                 clearInterval(timerInterval);
-                                // Срок истёк — серая кнопка превращается в сочную красную кнопку «Объявить войну»
                                 const container = document.getElementById('diplomacyButtonsContainer');
                                 if (container) {
-                                    container.innerHTML = `<button class="btn" style="background:#ff2a2a; color:#fff; margin-top:15px; font-size:15px; animation: pulse 1s infinite;" onclick="declareWarOnline('${pid}', '${country.name}')">🪖 ОБЪЯВИТЬ ВОЙНУ</button>`;
+                                    let activeWarHtml = `<button class="btn" style="background:#ff2a2a; color:#fff; margin-top:15px; font-size:15px;" onclick="declareWarOnline('${pid}', '${country.name}')">🪖 ОБЪЯВИТЬ ВОЙНУ</button>`;
+                                    container.innerHTML = activeWarHtml;
                                 }
                             } else {
                                 timerBtn.innerText = `⏳ Оправдание: ${timeLeft} сек`;
@@ -802,9 +891,8 @@
             });
         }
 
-        // ✈️ 10. ТАП ПО АЭРОПОРТУ: ИНФО-КАРТОЧКА В УГЛУ И РЕЖИМ ЗАПУСКА ПОЛЁТА
-        function handleAirportClick(airport, country, isMe) {
-            // Если включен режим выбора точки для полета (после первого тапа по своему аэропорту)
+        // ✈️ 7. ЛОГИКА ТАПА ПО АЭРОПОРТУ (С КНОПКОЙ УНИЧТОЖЕНИЯ ВПП)
+        function handleAirportClick(airport, country, isMe, ownerId) {
             if (flightSelectionMode) {
                 if (airport.id === flightSourceAirportId) {
                     flightSelectionMode = false;
@@ -816,39 +904,44 @@
 
                 flightSelectionMode = false;
 
-                // Взлёт самолёта транслируется всем игрокам через заглавный JSON!
-                ws.send(JSON.stringify({
-                    type: "launch_plane",
-                    id: "plane_" + Date.now(),
-                    from_airport: sourceAp.name,
-                    to_airport: airport.name,
-                    flag: playerCountry.flag,
-                    country_name: playerCountry.name,
-                    start_lat: sourceAp.lat,
-                    start_lng: sourceAp.lng,
-                    end_lat: airport.lat,
-                    end_lng: airport.lng
-                }));
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: "launch_plane", id: "plane_" + Date.now(), from_airport: sourceAp.name, to_airport: airport.name,
+                        flag: playerCountry.flag, country_name: playerCountry.name,
+                        start_lat: sourceAp.lat, start_lng: sourceAp.lng, end_lat: airport.lat, end_lng: airport.lng
+                    }));
+                }
                 return;
             }
 
-            // Твоё условие: При нажатии на аэропорт высвечивается карточка в правом нижнем углу
             const card = document.getElementById('airportCard');
-            document.getElementById('apCardName').innerText = `✈️ ${airport.name}`;
+            
+            // Проверяем статус войны для ракетного удара по чужому аэропорту
+            let warRelation = currentDiplomacy.find(w => 
+                (w.aggressor === clientId && w.defender === ownerId && w.status === "at_war") ||
+                (w.aggressor === ownerId && w.defender === clientId && w.status === "at_war")
+            );
+
+            let strikeBtnHtml = "";
+            if (!isMe && warRelation) {
+                // Если идёт война — генерируем красную кнопку обстрела прямо внутрь угловой плашки!
+                strikeBtnHtml = `<button class="btn" style="background:#ff2a2a; color:#fff; font-size:11px; padding:4px 8px; margin-top:5px; height:auto; width:auto;" onclick="fireMissileStrikeOnline('${ownerId}', '${airport.id}', '${airport.name}')">💥 Ударить ракетой</button>`;
+            }
+
+            document.getElementById('apCardName').innerHTML = `✈️ ${airport.name} ${strikeBtnHtml}`;
             document.getElementById('apCardFlag').src = country.flag;
             document.getElementById('apCardCountry').innerText = country.name;
             
-            // Если наш — голубая неоновая рамка, если чужой — фиолетовая
             card.style.borderColor = isMe ? '#00ffff' : '#8a2be2';
             card.style.boxShadow = isMe ? '0 0 20px rgba(0, 255, 255, 0.3)' : '0 0 20px rgba(138, 43, 226, 0.3)';
             card.style.display = 'block';
 
-            // Твоё условие: При двойном нажатии (или втором тапе) включается режим выбора точки для полета
             if (isMe) {
                 flightSelectionMode = true;
                 flightSourceAirportId = airport.id;
             }
         }
+
 
         // ✈️ 11. АНИМАЦИЯ ПОЛЁТА САМОЛЁТИКА СО СКОРОСТЬЮ 50 КМ/СЕК
         function animatePlaneFlight(planeData) {
@@ -1221,6 +1314,82 @@
                 background: '#0d1117',
                 color: '#fff'
             });
+        }
+        // ⚙️ 27. ОТКРЫТИЕ И ЗАКРЫТИЕ ОКНА ПРОМЫШЛЕННОСТИ
+        function toggleRobloxIndustryBox() {
+            const box = document.getElementById('robloxIndustryBox');
+            if (!box) return;
+            box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'flex' : 'none';
+        }
+
+        // ⚙️ 28. УМНОЕ РАСПРЕДЕЛЕНИЕ ПОЛЗУНКОВ ПРОМЫШЛЕННОСТИ (ROBLOX STYLE)
+        function handleIndustrySliders(changedType) {
+            // Вычисляем, сколько всего заводов сейчас есть у игрока
+            const totalMyFact = myCities.reduce((sum, c) => sum + (c.factories || 0), 0) || 10;
+            
+            const profitSlider = document.getElementById('industrySliderProfit');
+            const missilesSlider = document.getElementById('industrySliderMissiles');
+            
+            let pVal = parseInt(profitSlider.value, 10);
+            let mVal = parseInt(missilesSlider.value, 10);
+
+            // Динамически обновляем лимиты (max) ползунков, чтобы они соответствовали числу заводов
+            profitSlider.max = totalMyFact;
+            missilesSlider.max = totalMyFact;
+
+            // Твоё условие: если сумма превышает максимум, балансируем ползунки в зависимости от того, какой двигаем
+            if (pVal + mVal > totalMyFact) {
+                if (changedType === 'profit') {
+                    mVal = totalMyFact - pVal;
+                    missilesSlider.value = mVal;
+                } else {
+                    pVal = totalMyFact - mVal;
+                    profitSlider.value = pVal;
+                }
+            } else {
+                // Если заводы простаивают (сумма меньше максимума), автоматически докидываем остатки на прибыль
+                if (changedType === 'missiles') {
+                    pVal = totalMyFact - mVal;
+                    profitSlider.value = pVal;
+                } else {
+                    mVal = totalMyFact - pVal;
+                    missilesSlider.value = mVal;
+                }
+            }
+
+            // Обновляем текстовые цифры в интерфейсе
+            document.getElementById('sliderProfitVal').innerText = pVal;
+            document.getElementById('sliderMissilesVal').innerText = mVal;
+
+            // Шлём изменения пропорций на сокет-сервер
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: "update_industry_sliders",
+                    slider_profit: pVal,
+                    slider_missiles: mVal
+                }));
+            }
+        }
+        // 🚀 30. КОРРЕКТНЫЙ ЗАПУСК РАКЕТНОГО УДАРА ПО СОКЕТУ
+        function fireMissileStrikeOnline(targetOwnerId, objectId, objectName) {
+            // Проверяем по HUD-интерфейсу, есть ли у нас ракеты в запасе
+            const currentMissiles = parseInt(document.getElementById('hudMissiles').innerText, 10) || 0;
+            
+            if (currentMissiles <= 0) {
+                return Swal.fire("Ядерный голод! 🛑", "У вашей страны нет готовых ракет! Переведите ползунки в панели 'Промышленность' на производство ракет и подождите 30 секунд.", "error");
+            }
+
+            // Шлем пакет детонации на сервер
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: "fire_missile_strike",
+                    target_owner_id: targetOwnerId,
+                    object_id: objectId
+                }));
+
+                Swal.close(); // Закрываем карточки
+                Swal.fire("Ракета запущена! 🚀", `Межконтинентальный снаряд успешно отправлен по цели "${objectName}". Результаты разрушений мгновенно отобразятся у всех игроков в чате и на карте мира!`, "success");
+            }
         }
     </script>
 </body>
