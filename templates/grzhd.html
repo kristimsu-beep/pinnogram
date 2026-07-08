@@ -153,7 +153,93 @@
             <div class="info-card">
                 <h1>Гражданские Авиалинии G/D</h1>
                 <p>Добро пожаловать в единую навигационную экосистему G/D Airlines. Наш сервис объединяет пилотов и диспетчеров, позволяя регистрировать кастомные борта, планировать рейсы по Самарской области и отслеживать перемещение воздушных судов в реальном времени с точностью до метра.</p>
-              
+                <img src="https://icons8.com" style="width:150px; margin-bottom:10px;" alt="">
+            </div>
+        </div>
+
+        <!-- Вкладка 2: Работа (Лицензирование самолётов) -->
+        <div id="tab_work" class="app-tab-page">
+            <div class="info-card" id="registerPlaneCard">
+                <h2 class="form-title" style="text-align:center;">Лицензирование Пилотов</h2>
+                <p>Станьте частью команды G/D. После прохождения удалённой регистрации вам будет автоматически присвоен персональный бортовой номер гражданской авиации стандарта GD0X.</p>
+                <button class="btn-gd" onclick="requestPlaneRegistration()"><i class="fas fa-id-card"></i> Создать свой самолёт</button>
+            </div>
+            <div class="info-card" id="alreadyRegisteredCard" style="display:none;">
+                <i class="fas fa-check-circle" style="color:var(--blue-accent); font-size:48px; margin-bottom:15px;"></i>
+                <h2>Ваш борт успешно зарегистрирован!</h2>
+                <p style="margin-top:10px; font-size:18px;">Бортовой номер судна: <strong id="myPlaneNumberTag" style="color:var(--blue-accent);">GD--</strong></p>
+                <p style="color:var(--gray-text); font-size:14px;">Вам открыты специализированные разделы "Создание рейса" и "Мои рейсы" в верхнем меню управления.</p>
+            </div>
+        </div>
+
+        <!-- Вкладка 3: Создание нового рейса -->
+        <div id="tab_create" class="app-tab-page">
+            <div class="info-card" style="text-align:left; max-width:550px;">
+                <h2 class="form-title"><i class="fas fa-paper-plane" style="color:var(--blue-accent);"></i> Диспетчерский План Полёта</h2>
+                <div class="form-group">
+                    <label>Точка вылета (Ближайшие к вам по GPS)</label>
+                    <select id="flightFromSelect" onchange="handleDepartureAirportChange()">
+                        <option value="">Ожидание геопозиции смартфона...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Точка прилёта (Остальные аэропорты коридора)</label>
+                    <select id="flightToSelect" disabled>
+                        <option value="">Сначала выберите точку вылета</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Время вылета</label>
+                    <input type="time" id="flightTimeInput">
+                </div>
+                <button class="btn-gd" id="confirmFlightBtn" style="width:100%; justify-content:center; margin-top:10px;" onclick="publishNewFlightSchedule()" disabled><i class="fas fa-check"></i> Утвердить и Опубликовать рейс</button>
+            </div>
+        </div>
+
+        <!-- Вкладка 4: Мои рейсы -->
+        <div id="tab_my" class="app-tab-page">
+            <h2 class="form-title" style="max-width:800px; margin:0 auto 20px auto;">Бортовой журнал пилота</h2>
+            <div class="flights-list" id="myFlightsListContainer">
+                <div style="text-align:center; color:var(--gray-text); padding:20px;">У вас пока нет запланированных рейсов.</div>
+            </div>
+        </div>
+
+        <!-- Вкладка 5: Полноэкранный FlightRadar на Спутнике Esri -->
+        <div id="tab_map" class="app-tab-page" style="padding:0;">
+            <div id="flightRadarMap"></div>
+        </div>
+
+        <!-- Вкладка 6: Глобальное табло всех рейсов -->
+        <div id="tab_all" class="app-tab-page">
+            <h2 class="form-title" style="max-width:800px; margin:0 auto 20px auto;">Глобальное табло рейсов G/D Airlines</h2>
+            <div class="flights-list" id="allFlightsListContainer">
+                <div style="text-align:center; color:var(--gray-text); padding:20px;">Рейсы в системе не найдены.</div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Нижняя инфо-плашка FlightRadar24 при клике на борт -->
+    <div class="radar-bottom-panel" id="radarPanel">
+        <span class="panel-close" onclick="closeRadarBottomPanel()">✕</span>
+        <div style="display:flex; align-items:center; gap:12px;">
+            <span class="plane-tag" id="panelPlaneNumber" style="font-size:15px; padding:6px 12px;">GD01</span>
+            <span class="status-badge active" style="font-size:10px;">В Полёте</span>
+        </div>
+        <hr style="border:none; border-top:1px solid var(--border-color); margin:5px 0;">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0;">
+            <div style="text-align:left;">
+                <div style="font-size:11px; color:var(--gray-text); text-transform:uppercase; font-weight:700;">Пункт вылета</div>
+                <div id="panelFromAirport" style="font-size:16px; font-weight:700; color:var(--navy-dark);">---</div>
+            </div>
+            <i class="fas fa-long-arrow-alt-right" style="color:var(--blue-accent); font-size:20px;"></i>
+            <div style="text-align:right;">
+                <div style="font-size:11px; color:var(--gray-text); text-transform:uppercase; font-weight:700;">Пункт назначения</div>
+                <div id="panelToAirport" style="font-size:16px; font-weight:700; color:var(--navy-dark);">---</div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Инициализация глобальных переменных гражданской авиации
         const grzhdClientId = "pilot_" + Math.random().toString(36).substring(2, 11);
@@ -167,7 +253,9 @@
         let activeWatchId = null; // Ссылка на непрерывный GPS-трекер телефона
         let currentActiveFlightId = null; // ID выполняемого в данный момент рейса
 
-        // Глобальные массивы для отрисовки карты слежки
+        // Глобальные массивы и словари для отрисовки карты слежки
+        let grzhd_flights = [];
+        let grzhd_planes = {};
         let radarMarkers = {};  // { flight_id: L.marker }
         let radarPolylines = {}; // { flight_id: { corridor: L.polyline, track: L.polyline } }
 
@@ -177,7 +265,6 @@
             connectGrzhdWebSocket();
             requestUserBrowserLocation(); // Сразу запрашиваем GPS для фильтрации точек вылета
         });
-
         // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ
         function connectGrzhdWebSocket() {
             const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
