@@ -2946,8 +2946,149 @@ async def ctw_websocket_endpoint(websocket: WebSocket, client_id: str):
         if client_id in ctw_sessions: del ctw_sessions[client_id]
         await broadcast_ctw_state()
 
+# ==========================================================
+# ✈️ МОДУЛЬ "ГРАЖДАНСКИЕ АВИАЛИНИИ" С ЖИВЫМ FLIGHTRADAR24
+# ==========================================================
+import json
+import asyncio
+import aiofiles
+from math import radians, cos, sin, asin, sqrt
+from fastapi import Request, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
 
-                    
+# 🗺️ 1. БАЗОВЫЙ СЛОВАРЬ АЭРОПОРТОВ С КООРДИНАТАМИ (Самарская область)
+GRZHD_AIRPORTS = {
+    "GRZHD": {"name": "7А Гражданский", "lat": 52.778718, "lng": 49.698091},
+    "KRN": {"name": "Корона", "lat": 52.777094, "lng": 49.683814},
+    "OZR": {"name": "Озерно", "lat": 52.772260, "lng": 49.689991},
+    "POL": {"name": "Поле", "lat": 52.780357, "lng": 49.701070}
+}
+
+# Структура базы данных в ОЗУ авиалиний
+grzhd_connections = {} # { client_id: WebSocket }
+grzhd_planes = {}      # { plane_id: { "owner_id": cid, "number": "GD01" } }
+grzhd_flights = []     # [ { "id": "f1", "plane_id": "...", "number": "GD01", "from": "KRN", "to": "POL", "time": "...", "status": "ожидание"|"активен"|"завершён", "history": [[lat, lng]...] } ]
+
+# Формула Гаверсинуса для поиска двух ближайших аэропортов к пилоту
+def get_distance_km(lat1, lon1, lat2, lon2):
+    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+    dlon = lon2 - lon1 
+    dlat = lat2 - lat1 
+    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+    return 2 * asin(sqrt(a)) * 6371
+
+@app.get("/grzhd", response_class=HTMLResponse)
+async def grzhd_page(request: Request):
+    try:
+        async with aiofiles.open("templates/grzhd.html", mode="r", encoding="utf-8") as f:
+            return HTMLResponse(content=await f.read())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка загрузки grzhd.html: {str(e)}")
+
+# Глобальная рассылка авиационного стейта всем наблюдателям
+async def broadcast_grzhd_state():
+    if not grzhd_connections: return
+    payload = json.dumps({
+        "type": "sync_flights",
+        "flights": grzhd_flights,
+        "planes": grzhd_planes
+    }, ensure_ascii=False)
+    
+    dead_clients = []
+    for cid, ws in grzhd_connections.items():
+        try: await ws.send_text(payload)
+        except Exception: dead_clients.append(cid)
+    for cid in dead_clients:
+        if cid in grzhd_connections: del grzhd_connections[cid]
+
+# 📡 Главный WebSocket роут слежки и навигации
+@app.websocket("/grzhd/ws/{client_id}")
+async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
+    await websocket.accept()
+    grzhd_connections[client_id] = websocket
+    
+    # Сразу отправляем новичку список аэропортов и текущих рейсов
+    await websocket.send_text(json.dumps({
+        "type": "init_airports",
+        "airports": GRZHD_AIRPORTS,
+        "flights": grzhd_flights,
+        "planes": grzhd_planes
+    }, ensure_ascii=False))
+    
+    try:
+        while True:
+            raw_data = await websocket.receive_text()
+            msg = json.loads(raw_data)
+            
+            # --- 🛫 РЕГИСТРАЦИЯ САМОЛЁТА ---
+            if msg["type"] == "register_plane":
+                count = len(grzhd_planes) + 1
+                plane_num = f"GD0{count}" if count < 10 else f"GD{count}"
+                plane_id = f"plane_{client_id}"
+                
+                grzhd_planes[plane_id] = {
+                    "owner_id": client_id,
+                    "number": plane_num
+                }
+                await websocket.send_text(json.dumps({"type": "plane_registered", "plane_id": plane_id, "number": plane_num}, ensure_ascii=False))
+                await broadcast_grzhd_state()
+
+            # --- 📍 ПОИСК БЛИЖАЙШИХ АЭРОПОРТОВ ПО GPS ---
+            elif msg["type"] == "request_nearest_airports":
+                lat, lng = msg["lat"], msg["lng"]
+                # Считаем расстояния до всех 4 точек
+                sorted_ap = sorted(
+                    GRZHD_AIRPORTS.items(),
+                    key=lambda item: get_distance_km(lat, lng, item[1]["lat"], item[1]["lng"])
+                )
+                # Берем только 2 самые близкие точки вылета
+                nearest = dict(sorted_ap[:2])
+                await websocket.send_text(json.dumps({"type": "nearest_airports_response", "airports": nearest}, ensure_ascii=False))
+
+            # --- 📅 ПУБЛИКАЦИЯ РЕЙСА ---
+            elif msg["type"] == "create_flight":
+                flight_id = f"flight_{int(asyncio.get_event_loop().time())}"
+                grzhd_flights.append({
+                    "id": flight_id,
+                    "plane_id": msg["plane_id"],
+                    "number": msg["number"],
+                    "from_code": msg["from"],
+                    "to_code": msg["to"],
+                    "time": msg["time"],
+                    "status": "ожидание",
+                    "history": [] # Хранилище пройденных GPS-пикселей трека
+                })
+                await broadcast_grzhd_state()
+
+            # --- ⏱️ УПРАВЛЕНИЕ СТАТУСАМИ (СТАРТ, ЗАДЕРЖКА, ФИНИШ) ---
+            elif msg["type"] == "change_status":
+                fid = msg["flight_id"]
+                new_status = msg["status"]
+                for f in grzhd_flights:
+                    if f["id"] == fid:
+                        f["status"] = new_status
+                        if new_status == "задержка":
+                            f["time"] = msg["new_time"]
+                        break
+                await broadcast_grzhd_state()
+
+            # --- 📡 ЖИВОЙ GPS-ТРЕКИНГ ПИЛОТА С СМАРТФОНА ---
+            elif msg["type"] == "update_gps_position":
+                fid = msg["flight_id"]
+                lat, lng = msg["lat"], msg["lng"]
+                for f in grzhd_flights:
+                    # Набиваем историю координат только если полет АКТИВЕН
+                    if f["id"] == fid and f["status"] == "активен":
+                        # Защита от дублей: пишем координату, если трек пуст или точка изменилась
+                        if not f["history"] or f["history"][-1] != [lat, lng]:
+                            f["history"].append([lat, lng])
+                        break
+                # Мгновенно рассылаем новые пиксельные координаты FlightRadar трекерам
+                await broadcast_grzhd_state()
+
+    except WebSocketDisconnect:
+        if client_id in grzhd_connections:
+            del grzhd_connections[client_id]
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
