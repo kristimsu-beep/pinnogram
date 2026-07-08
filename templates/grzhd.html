@@ -308,7 +308,7 @@
                 maxZoom: 19 // Твоё условие: спутник с зумом 19!
             });
 
-            L.tileLayer('https://arcgisonline.com{z}/{y}/{x}', {
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Tiles &copy; Esri &mdash; Гражданская Авиация G/D'
             }).addTo(radarMap);
         }
@@ -332,15 +332,35 @@
             }
         }
 
-        // 📍 4. ЗАПРОС ГЕОЛОКАЦИИ ПОЛЬЗОВАТЕЛЯ ДЛЯ ФИЛЬТРАЦИИ АЭРОПОРТОВ
+        // 📍 4. ЗАПРОС ГЕОЛОКАЦИИ ПОЛЬЗОВАТЕЛЯ С АВТО-СПАСЕНИЕМ ДЛЯ ЛЮБЫХ УСЛОВИЙ
         function requestUserBrowserLocation() {
+            // Резервная функция: если GPS заблокирован, принудительно открываем пилоту все 4 полосы
+            const loadAllDefaultAirports = () => {
+                console.log("✈️ Резервный режим: выводим все доступные аэропорты G/D Airlines.");
+                const fromSelect = document.getElementById('flightFromSelect');
+                if (!fromSelect) return;
+                
+                fromSelect.innerHTML = '<option value="">-- Выберите точку вылета --</option>';
+                const backupList = [
+                    {code: "GRZHD", name: "GRZHD 7А Гражданский"},
+                    {code: "KRN", name: "KRN Корона"},
+                    {code: "OZR", name: "OZR Озерно"},
+                    {code: "POL", name: "POL Поле"}
+                ];
+                backupList.forEach(ap => {
+                    const option = document.createElement('option');
+                    option.value = ap.code;
+                    option.innerText = ap.name;
+                    fromSelect.appendChild(option);
+                });
+            };
+
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     (position) => {
                         const lat = position.coords.latitude;
                         const lng = position.coords.longitude;
                         
-                        // Шлём координаты на сервер, чтобы он по Гаверсинусу нашёл 2 ближайших аэропорта
                         if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
                             grzhdWs.send(JSON.stringify({
                                 type: "request_nearest_airports",
@@ -348,20 +368,18 @@
                                 lng: lng
                             }));
                         } else {
-                            // Если сокет ещё не открылся, повторяем через секунду
+                            // Если сокет ещё подключается, мягко повторяем попытку через секунду
                             setTimeout(() => { requestUserBrowserLocation(); }, 1000);
                         }
                     },
                     (error) => {
-                        console.warn("Доступ к GPS отклонён или недоступен. Выводим дефолтные аэропорты.");
-                        // В случае отказа — выведем первые два аэропорта по умолчанию
-                        let defaultNearest = [
-                            {code: "GRZHD", name: "7А Гражданский"},
-                            {code: "KRN", name: "Корона"}
-                        ];
-                        renderNearestDepartureAirports(defaultNearest);
+                        console.warn("🛑 Браузер заблокировал GPS (требуется HTTPS). Включаем аварийный список.");
+                        loadAllDefaultAirports();
                     }
                 );
+            } else {
+                console.warn("🛑 Браузер в принципе не поддерживает геолокацию. Включаем аварийный список.");
+                loadAllDefaultAirports();
             }
         }
         // 🛄 5. ВЫВОД 2-Х БЛИЖАЙШИХ АЭРОПОРТОВ В ВЫПАДАЮЩИЙ СПИСОК ВЫЛЕТА
