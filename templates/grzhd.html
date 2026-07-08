@@ -383,40 +383,41 @@
             });
         }
 
-        // 📍 4.В ШТАТНЫЙ ЗАПРОС ГЕОЛОКАЦИИ ПОЛЬЗОВАТЕЛЯ ДЛЯ ФИЛЬТРАЦИИ АЭРОПОРТОВ
-        function requestUserBrowserLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-                        
-                        if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
-                            grzhdWs.send(JSON.stringify({
-                                type: "request_nearest_airports",
-                                lat: lat,
-                                lng: lng
-                            }));
-                        } else {
-                            setTimeout(() => { requestUserBrowserLocation(); }, 1000);
-                        }
-                    },
-                    (error) => {
-                        loadAllDefaultAirportsBackup();
-                    }
-                );
-            } else {
-                loadAllDefaultAirportsBackup();
-            }
-        }
-        // 🛄 5. ВЫВОД 2-Х БЛИЖАЙШИХ АЭРОПОРТОВ В ВЫПАДАЮЩИЙ СПИСОК ВЫЛЕТА
-        function renderNearestDepartureAirports(nearestAirports) {
+        // 🌟 1. АВТОНОМНЫЙ РЕЗЕРВНЫЙ СПИСОК (ВЫЗЫВАЕТСЯ ПРИ СБОЕ ИЛИ ПРИ СТАРТЕ)
+        function loadAllDefaultAirportsBackup() {
+            console.log("✈️ Запуск автономной отрисовки аэропортов Самарского коридора.");
             const fromSelect = document.getElementById('flightFromSelect');
             if (!fromSelect) return;
             
             fromSelect.innerHTML = '<option value="">-- Выберите точку вылета --</option>';
             
-            // Заполняем строго двумя ближайшими точками по условию
+            // Жестко фиксируем эталонные коды, совпадающие с бэкендом server.py
+            const backupList = [
+                {code: "GRZHD_7A", name: "GRZHD 7А Гражданский"},
+                {code: "KRN_CORONA", name: "KRN Корона"},
+                {code: "OZR_OZERNO", name: "OZR Озерно"},
+                {code: "POL_POLE", name: "POL Поле"}
+            ];
+            
+            backupList.forEach(ap => {
+                const option = document.createElement('option');
+                option.value = ap.code;
+                option.innerText = ap.name;
+                fromSelect.appendChild(option);
+            });
+        }
+
+        // 🌟 2. ВЫВОД БЛИЖАЙШИХ АЭРОПОРТОВ С АВТО-ПРЕДОХРАНИТЕЛЕМ ОТ ПУСТОТЫ
+        function renderNearestDepartureAirports(nearestAirports) {
+            const fromSelect = document.getElementById('flightFromSelect');
+            if (!fromSelect) return;
+            
+            // Предохранитель: если сервер прислал пустой массив, просто загружаем полный резервный список
+            if (!nearestAirports || nearestAirports.length === 0) {
+                return loadAllDefaultAirportsBackup();
+            }
+            
+            fromSelect.innerHTML = '<option value="">-- Выберите точку вылета --</option>';
             nearestAirports.forEach(ap => {
                 const option = document.createElement('option');
                 option.value = ap.code;
@@ -425,7 +426,7 @@
             });
         }
 
-        // 🔄 6. ОБРАБОТКА ВЫБОРА ТОЧКИ ВЫЛЕТА (ВЫВОДИМ ВСЕ ОСТАЛЬНЫЕ НАПРАВЛЕНИЯ)
+        // 🌟 3. УМНЫЙ ОБРАБОТЧИК: ПРЕДОСТАВЛЯЕТ ВСЕ ОСТАЛЬНЫЕ ТОЧКИ (БЕЗ УЧАСТИЯ СЕРВЕРА!)
         function handleDepartureAirportChange() {
             const fromSelect = document.getElementById('flightFromSelect');
             const toSelect = document.getElementById('flightToSelect');
@@ -436,26 +437,34 @@
             if (!selectedFrom) {
                 toSelect.innerHTML = '<option value="">Сначала выберите точку вылета</option>';
                 toSelect.disabled = true;
-                confirmBtn.disabled = true;
+                if (confirmBtn) confirmBtn.disabled = true;
                 return;
             }
 
-            // Твоё условие: Предоставить все остальные точки, не учитывая точку вылета
+            // Твоё условие: Предоставить все остальные точки не учитывая точку вылета
             toSelect.innerHTML = '<option value="">-- Выберите точку прилёта --</option>';
             
-            for (let code in globalAirports) {
+            // Полная статическая база для фильтрации на лету во фронтенде
+            const staticAirportsData = {
+                "GRZHD_7A": "GRZHD 7А Гражданский",
+                "KRN_CORONA": "KRN Корона",
+                "OZR_OZERNO": "OZR Озерно",
+                "POL_POLE": "POL Поле"
+            };
+            
+            for (let code in staticAirportsData) {
+                // Если код аэропорта не равен выбранному в первом списке — выводим его!
                 if (code !== selectedFrom) {
                     const option = document.createElement('option');
                     option.value = code;
-                    option.innerText = globalAirports[code].name;
+                    option.innerText = staticAirportsData[code];
                     toSelect.appendChild(option);
                 }
             }
             
             toSelect.disabled = false;
-            confirmBtn.disabled = false; // Активируем кнопку публикации
+            if (confirmBtn) confirmBtn.disabled = false; // Разблокируем финальную кнопку
         }
-
         // 🛫 7. РЕГИСТРАЦИЯ САМОЛЁТА НА СЕРВЕРЕ (ПОЛУЧЕНИЕ GD-НОМЕРА)
         function requestPlaneRegistration() {
             if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
