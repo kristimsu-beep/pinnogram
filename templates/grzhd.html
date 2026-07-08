@@ -394,11 +394,16 @@
             renderGlobalFlightsTable(flights);
             updateFlightRadarMapLayers(flights);
         }
-
-        // 📋 11. ОТРИСОВКА БОРТОВОГО ЖУРНАЛА ПИЛОТА ("МОИ РЕЙСЫ")
+        // 📋 11. ИСПРАВЛЕННАЯ ОТРИСОВКА БОРТОВОГО ЖУРНАЛА ПИЛОТА ("МОИ РЕЙСЫ")
         function renderMyFlightsJournal(flights) {
             const container = document.getElementById('myFlightsListContainer');
             if (!container) return;
+
+            // Если рейсов вообще нет в системе — сразу выводим заглушку
+            if (!flights || !Array.isArray(flights) || flights.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:var(--gray-text); padding:20px;">У вас пока нет запланированных рейсов.</div>';
+                return;
+            }
 
             // Отбираем только невыполненные рейсы, созданные текущим пилотом
             const myUnfinishedFlights = flights.filter(f => f.plane_id === myPlaneId && f.status !== "завершён");
@@ -408,13 +413,12 @@
                 return;
             }
 
-            container.innerHTML = "";
+            container.innerHTML = ""; // Зачищаем старый контент
             myUnfinishedFlights.forEach(f => {
                 const row = document.createElement('div');
                 row.className = 'flight-row';
 
                 let actionButtonHtml = "";
-                // Управляем кнопками действий организатора рейса
                 if (f.status === "ожидание" || f.status === "задержанка") {
                     actionButtonHtml = `
                         <button class="btn-gd" style="background:#16a34a; font-size:12px; padding:6px 12px;" onclick="startActiveFlight('${f.id}')"><i class="fas fa-play"></i> Начать рейс</button>
@@ -436,33 +440,32 @@
                     <div class="flight-time-status">
                         <span class="time-badge"><i class="far fa-clock"></i> ${f.time}</span>
                         <span class="status-badge ${f.status === 'ожидание' ? 'waiting' : (f.status === 'активен' ? 'active' : 'delayed')}">${f.status}</span>
-                        <div style="margin-left:10px;">${actionButtonHtml}</div>
+                        <div style="margin-left:10px; display:inline-block;">${actionButtonHtml}</div>
                     </div>
                 `;
                 container.appendChild(row);
             });
         }
 
-        // 📋 12. ГЛОБАЛЬНОЕ ТАБЛО РЕЙСОВ ДЛЯ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
+        // 📋 12. ИСПРАВЛЕННОЕ ГЛОБАЛЬНОЕ ТАБЛО РЕЙСОВ ДЛЯ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
         function renderGlobalFlightsTable(flights) {
             const container = document.getElementById('allFlightsListContainer');
             if (!container) return;
 
-            if (flights.length === 0) {
+            if (!flights || !Array.isArray(flights) || flights.length === 0) {
                 container.innerHTML = '<div style="text-align:center; color:var(--gray-text); padding:20px;">Рейсы в системе не найдены.</div>';
                 return;
             }
 
-            // Твоё условие: сортировка строго в порядке "ожидание" -> "активен" -> "завершён"
+            // Защитная сортировка: "ожидание" -> "активен" -> "завершён"
             const statusOrder = { "ожидание": 1, "задержанка": 2, "активен": 3, "завершён": 4 };
-            const sortedFlights = [...flights].sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+            const sortedFlights = [...flights].sort((a, b) => (statusOrder[a.status] || 99) - (statusOrder[b.status] || 99));
 
-            container.innerHTML = "";
+            container.innerHTML = ""; // Очищаем плашку ожидания
             sortedFlights.forEach(f => {
                 const row = document.createElement('div');
                 row.className = 'flight-row';
 
-                // Для завершённых рейсов даём кнопку ускоренного воспроизведения Playback!
                 let playbackBtnHtml = "";
                 if (f.status === "завершён" && f.history && f.history.length > 0) {
                     playbackBtnHtml = `<button class="btn-gd" style="background:#475569; font-size:12px; padding:6px 12px; margin-left:10px;" onclick="runFlightPlayback('${f.id}')"><i class="fas fa-history"></i> Playback</button>`;
@@ -472,7 +475,7 @@
                     <div class="flight-info-main">
                         <span class="plane-tag">${f.number}</span>
                         <div class="route-path">
-                            <span title="${f.from_name}">${f.from_code}</span> <i class="fas fa-long-arrow-alt-right"></i> <span title="${f.to_name}">${f.to_code}</span>
+                            <span>${f.from_code}</span> <i class="fas fa-long-arrow-alt-right"></i> <span>${f.to_code}</span>
                         </div>
                     </div>
                     <div class="flight-time-status">
