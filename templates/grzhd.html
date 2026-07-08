@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Гражданские Авиалинии G/D</title>
+    
+    <!-- Полный рабочий набор CDN импортов (Leaflet, SweetAlert2, FontAwesome) -->
+    <link rel="stylesheet" href="https://unpkg.com"/>
+    <script src="https://unpkg.com"></script>
+    <link rel="stylesheet" href="https://cloudflare.com"/>
+    <script src="https://cloudflare.com"></script>
+    <link rel="stylesheet" href="https://cloudflare.com"/>
+
+    <style>
+        /* Строгий чистый авиационный дизайн: Белый базовый, синие акценты */
+        :root {
+            --primary-white: #ffffff;
+            --secondary-bg: #f4f6fa;
+            --navy-dark: #0a192f;
+            --navy-light: #1b3a6b;
+            --blue-accent: #0066cc;
+            --gray-text: #666666;
+            --border-color: #e2e8f0;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; }
+        body { background: var(--secondary-bg); color: var(--navy-dark); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* Верхнее навигационное меню в стиле Roblox Leaderboards / Меню переключения */
+        .airlines-nav {
+            background: var(--primary-white); border-bottom: 2px solid var(--border-color);
+            display: flex; justify-content: space-between; align-items: center; padding: 0 30px; height: 70px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); z-index: 1000;
+        }
+        .logo-block { display: flex; align-items: center; gap: 12px; }
+        /* Красивый кастомный шрифт для эмблемы G/D */
+        .logo-text { font-family: 'Georgia', serif; font-weight: 900; font-size: 28px; color: var(--navy-dark); letter-spacing: -1px; }
+        .logo-subtitle { font-size: 13px; color: var(--blue-accent); text-transform: uppercase; font-weight: bold; letter-spacing: 1px; }
+
+        .nav-tabs { display: flex; gap: 8px; height: 100%; align-items: center; }
+        .nav-tab-btn {
+            background: transparent; border: none; color: var(--gray-text); font-size: 14px; font-weight: 600;
+            padding: 10px 18px; border-radius: 6px; cursor: pointer; transition: 0.2s ease-in-out;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .nav-tab-btn:hover { background: var(--secondary-bg); color: var(--navy-dark); }
+        .nav-tab-btn.active { background: var(--navy-dark); color: var(--primary-white); box-shadow: 0 4px 10px rgba(10,25,47,0.3); }
+
+        /* Контейнер для динамических страниц-вкладок */
+        .main-content { flex: 1; position: relative; width: 100vw; height: calc(100vh - 70px); }
+        .app-tab-page {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--secondary-bg); padding: 40px; overflow-y: auto; display: none;
+        }
+        .app-tab-page.active { display: block; }
+
+        /* Полноэкранный контейнер для Спутника 19 уровня */
+        #flightRadarMap { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+
+        /* Базовые стили карточек и кнопок (Бело-синий лаконичный стиль) */
+        .info-card {
+            background: var(--primary-white); border-radius: 12px; border: 1px solid var(--border-color);
+            padding: 30px; max-width: 650px; margin: 0 auto; box-shadow: 0 10px 25px rgba(0,0,0,0.03);
+            text-align: center;
+        }
+        .info-card h1 { font-size: 32px; margin-bottom: 12px; font-weight: 800; color: var(--navy-dark); }
+        .info-card p { color: var(--gray-text); line-height: 1.6; margin-bottom: 25px; font-size: 15px; }
+        
+        .form-title { font-size: 24px; font-weight: 700; color: var(--navy-dark); margin-bottom: 20px; text-align: left; }
+        .form-group { display: flex flex-direction: column; gap: 6px; text-align: left; margin-bottom: 15px; }
+        .form-group label { font-size: 13px; font-weight: 700; color: var(--navy-light); text-transform: uppercase; }
+        .form-group select, .form-group input {
+            width: 100%; padding: 12px; border-radius: 6px; border: 2px solid var(--border-color);
+            font-size: 15px; background: var(--primary-white); color: var(--navy-dark); outline: none; transition: 0.2s;
+        }
+        .form-group select:focus, .form-group input:focus { border-color: var(--blue-accent); }
+
+        .btn-gd {
+            background: var(--blue-accent); color: var(--primary-white); border: none; padding: 12px 24px;
+            border-radius: 6px; font-size: 16px; font-weight: 700; cursor: pointer; transition: 0.2s;
+            display: inline-flex; align-items: center; gap: 10px; box-shadow: 0 4px 12px rgba(0,102,204,0.2);
+        }
+        .btn-gd:hover { background: var(--navy-light); transform: translateY(-1px); box-shadow: 0 6px 15px rgba(0,102,204,0.3); }
+        .btn-gd:disabled { background: #cbd5e1; color: #94a3b8; cursor: not-allowed; box-shadow: none; transform: none; }
+
+        /* Стилизация списков рейсов (Авиа-расписание) */
+        .flights-list { display: flex; flex-direction: column; gap: 12px; max-width: 800px; margin: 0 auto; }
+        .flight-row {
+            background: var(--primary-white); border: 1px solid var(--border-color); border-radius: 8px;
+            padding: 15px 20px; display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.01); transition: 0.2s;
+        }
+        .flight-row:hover { border-color: var(--blue-accent); transform: translateX(2px); }
+        .flight-info-main { display: flex; align-items: center; gap: 20px; }
+        .plane-tag { background: var(--secondary-bg); border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; color: var(--navy-light); }
+        .route-path { font-size: 15px; font-weight: 600; color: var(--navy-dark); display: flex; align-items: center; gap: 10px; }
+        .route-path i { color: var(--blue-accent); font-size: 12px; }
+        .flight-time-status { display: flex; align-items: center; gap: 15px; }
+        .time-badge { font-size: 14px; font-weight: 600; color: var(--gray-text); }
+        
+        /* Статусы рейсов */
+        .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+        .status-badge.waiting { background: #fef3c7; color: #d97706; }
+        .status-badge.active { background: #dcfce7; color: #16a34a; animation: pulseGlow 1.5s infinite; }
+        .status-badge.delayed { background: #fee2e2; color: #dc2626; }
+        .status-badge.finished { background: #f1f5f9; color: #475569; }
+
+        /* Нижняя инфо-панель FlightRadar при клике на самолёт */
+        .radar-bottom-panel {
+            position: fixed; bottom: -150px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 500px; background: rgba(255,255,255,0.95); border: 1px solid var(--border-color);
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.1); border-radius: 16px 16px 12px 16px;
+            padding: 20px; z-index: 1200; display: flex; flex-direction: column; gap: 10px;
+            backdrop-filter: blur(10px); transition: bottom 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+        }
+        .radar-bottom-panel.show { bottom: 20px; }
+        .panel-close { position: absolute; top: 12px; right: 15px; cursor: pointer; color: var(--gray-text); }
+
+        @keyframes pulseGlow {
+            0% { opacity: 0.7; box-shadow: 0 0 0 0 rgba(22,163,74,0.4); }
+            70% { opacity: 1; box-shadow: 0 0 0 8px rgba(22,163,74,0); }
+            100% { opacity: 0.7; box-shadow: 0 0 0 0 rgba(22,163,74,0); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ВЕРХНЯЯ АВИАЦИОННАЯ ПАНЕЛЬ С ТЭГАМИ В СТИЛЕ ROBLOX -->
+    <header class="airlines-nav">
+        <div class="logo-block">
+            <span class="logo-text">G/D</span>
+            <div style="display:flex; flex-direction:column;">
+                <span style="font-weight:800; font-size:16px; letter-spacing:-0.5px;">Airlines</span>
+                <span class="logo-subtitle">Гражданские Авиалинии</span>
+            </div>
+        </div>
+        <nav class="nav-tabs">
+            <button class="nav-tab-btn active" onclick="switchAirlinesTab('main')"><i class="fas fa-plane-departure"></i> Главная</button>
+            <button class="nav-tab-btn" onclick="switchAirlinesTab('work')"><i class="fas fa-briefcase"></i> Работа</button>
+            <button class="nav-tab-btn" id="navCreateFlight" style="display:none;" onclick="switchAirlinesTab('create')"><i class="fas fa-calendar-plus"></i> Создание рейса</button>
+            <button class="nav-tab-btn" id="navMyFlights" style="display:none;" onclick="switchAirlinesTab('my')"><i class="fas fa-tasks"></i> Мои рейсы</button>
+            <button class="nav-tab-btn" onclick="switchAirlinesTab('map')"><i class="fas fa-map-marked-alt"></i> Карта</button>
+            <button class="nav-tab-btn" onclick="switchAirlinesTab('all')"><i class="fas fa-list-ul"></i> Рейсы</button>
+        </nav>
+    </header>
+
+    <!-- ОСНОВНОЙ КОНТЕЙНЕР ДЛЯ СТРАНИЦ -->
+    <main class="main-content">
+        
+        <!-- Вкладка 1: Главная страница -->
+        <div id="tab_main" class="app-tab-page active">
+            <div class="info-card">
+                <h1>Гражданские Авиалинии G/D</h1>
+                <p>Добро пожаловать в единую навигационную экосистему G/D Airlines. Наш сервис объединяет пилотов и диспетчеров, позволяя регистрировать кастомные борта, планировать рейсы по Самарской области и отслеживать перемещение воздушных судов в реальном времени с точностью до метра.</p>
+              
+<script>
+        // Инициализация глобальных переменных гражданской авиации
+        const grzhdClientId = "pilot_" + Math.random().toString(36).substring(2, 11);
+        let grzhdWs;
+        let radarMap;
+        
+        let globalAirports = {}; // База всех 4-х аэропортов с сервера
+        let myPlaneId = null;     // ID нашего самолёта (если создан)
+        let myPlaneNumber = null; // Номер GD0X
+        
+        let activeWatchId = null; // Ссылка на непрерывный GPS-трекер телефона
+        let currentActiveFlightId = null; // ID выполняемого в данный момент рейса
+
+        // Глобальные массивы для отрисовки карты слежки
+        let radarMarkers = {};  // { flight_id: L.marker }
+        let radarPolylines = {}; // { flight_id: { corridor: L.polyline, track: L.polyline } }
+
+        // Запуск при загрузке страницы
+        window.addEventListener('DOMContentLoaded', () => {
+            initRadarMap();
+            connectGrzhdWebSocket();
+            requestUserBrowserLocation(); // Сразу запрашиваем GPS для фильтрации точек вылета
+        });
+
+        // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ
+        function connectGrzhdWebSocket() {
+            const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+            const wsUrl = protocol + window.location.host + "/grzhd/ws/" + grzhdClientId;
+            
+            grzhdWs = new WebSocket(wsUrl);
+
+            grzhdWs.onopen = () => console.log("Диспетчерская вышка подключена. ID сессии:", grzhdClientId);
+
+            grzhdWs.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                
+                if (msg.type === "init_airports") {
+                    globalAirports = msg.airports;
+                    // Синхронизируем карту и списки расписания
+                    syncAirlinesData(msg.flights, msg.planes);
+                } else if (msg.type === "sync_flights") {
+                    syncAirlinesData(msg.flights, msg.planes);
+                } else if (msg.type === "plane_registered") {
+                    myPlaneId = msg.plane_id;
+                    myPlaneNumber = msg.number;
+                    activatePilotInterface(msg.number);
+                } else if (msg.type === "nearest_airports_response") {
+                    renderNearestDepartureAirports(msg.airports);
+                }
+            };
+
+            grzhdWs.onclose = () => {
+                console.log("Потеря связи с авиасервером. Реконнект через 3 секунды...");
+                setTimeout(connectGrzhdWebSocket, 3000);
+            };
+        }
+
+        // 🗺️ 2. ЗАПУСК ВЫСОКОТОЧНОЙ СПУТНИКОВОЙ КАРТЫ С ЗУМОМ 19
+        function initRadarMap() {
+            // Центрируем камеру по умолчанию на Самарской области (Красноармейский район)
+            radarMap = L.map('flightRadarMap', {
+                center: [52.777, 49.690],
+                zoom: 14,
+                minZoom: 2,
+                maxZoom: 19 // Твоё условие: спутник с зумом 19!
+            });
+
+            L.tileLayer('https://arcgisonline.com{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Гражданская Авиация G/D'
+            }).addTo(radarMap);
+        }
+
+        // ⚙️ 3. ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК В СТИЛЕ ROBLOX
+        function switchAirlinesTab(tabName) {
+            // Гасим все страницы
+            document.querySelectorAll('.app-tab-page').forEach(page => page.classList.remove('active'));
+            document.querySelectorAll('.nav-tab-btn').forEach(btn => btn.classList.remove('active'));
+            
+            // Включаем нужную страницу
+            const targetPage = document.getElementById('tab_' + tabName);
+            if (targetPage) targetPage.classList.add('active');
+            
+            // Подсвечиваем кнопку навигации
+            event.currentTarget.classList.add('active');
+
+            // Если переключились на карту — принудительно заставляем Leaflet перерисовать пиксели тайлов
+            if (tabName === 'map') {
+                setTimeout(() => { radarMap.invalidateSize(); }, 200);
+            }
+        }
+
+        // 📍 4. ЗАПРОС ГЕОЛОКАЦИИ ПОЛЬЗОВАТЕЛЯ ДЛЯ ФИЛЬТРАЦИИ АЭРОПОРТОВ
+        function requestUserBrowserLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        
+                        // Шлём координаты на сервер, чтобы он по Гаверсинусу нашёл 2 ближайших аэропорта
+                        if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                            grzhdWs.send(JSON.stringify({
+                                type: "request_nearest_airports",
+                                lat: lat,
+                                lng: lng
+                            }));
+                        } else {
+                            // Если сокет ещё не открылся, повторяем через секунду
+                            setTimeout(() => { requestUserBrowserLocation(); }, 1000);
+                        }
+                    },
+                    (error) => {
+                        console.warn("Доступ к GPS отклонён или недоступен. Выводим дефолтные аэропорты.");
+                        // В случае отказа — выведем первые два аэропорта по умолчанию
+                        let defaultNearest = [
+                            {code: "GRZHD", name: "7А Гражданский"},
+                            {code: "KRN", name: "Корона"}
+                        ];
+                        renderNearestDepartureAirports(defaultNearest);
+                    }
+                );
+            }
+        }
+        // 🛄 5. ВЫВОД 2-Х БЛИЖАЙШИХ АЭРОПОРТОВ В ВЫПАДАЮЩИЙ СПИСОК ВЫЛЕТА
+        function renderNearestDepartureAirports(nearestAirports) {
+            const fromSelect = document.getElementById('flightFromSelect');
+            if (!fromSelect) return;
+            
+            fromSelect.innerHTML = '<option value="">-- Выберите точку вылета --</option>';
+            
+            // Заполняем строго двумя ближайшими точками по условию
+            nearestAirports.forEach(ap => {
+                const option = document.createElement('option');
+                option.value = ap.code;
+                option.innerText = ap.name;
+                fromSelect.appendChild(option);
+            });
+        }
+
+        // 🔄 6. ОБРАБОТКА ВЫБОРА ТОЧКИ ВЫЛЕТА (ВЫВОДИМ ВСЕ ОСТАЛЬНЫЕ НАПРАВЛЕНИЯ)
+        function handleDepartureAirportChange() {
+            const fromSelect = document.getElementById('flightFromSelect');
+            const toSelect = document.getElementById('flightToSelect');
+            const confirmBtn = document.getElementById('confirmFlightBtn');
+            
+            const selectedFrom = fromSelect.value;
+            
+            if (!selectedFrom) {
+                toSelect.innerHTML = '<option value="">Сначала выберите точку вылета</option>';
+                toSelect.disabled = true;
+                confirmBtn.disabled = true;
+                return;
+            }
+
+            // Твоё условие: Предоставить все остальные точки, не учитывая точку вылета
+            toSelect.innerHTML = '<option value="">-- Выберите точку прилёта --</option>';
+            
+            for (let code in globalAirports) {
+                if (code !== selectedFrom) {
+                    const option = document.createElement('option');
+                    option.value = code;
+                    option.innerText = globalAirports[code].name;
+                    toSelect.appendChild(option);
+                }
+            }
+            
+            toSelect.disabled = false;
+            confirmBtn.disabled = false; // Активируем кнопку публикации
+        }
+
+        // 🛫 7. РЕГИСТРАЦИЯ САМОЛЁТА НА СЕРВЕРЕ (ПОЛУЧЕНИЕ GD-НОМЕРА)
+        function requestPlaneRegistration() {
+            if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                grzhdWs.send(JSON.stringify({
+                    type: "register_plane"
+                }));
+            } else {
+                Swal.fire("Ошибка связи", "Диспетчерская вышка временно недоступна.", "error");
+            }
+        }
+
+        // 🎛️ 8. АКТИВАЦИЯ ИНТЕРФЕЙСА ПИЛОТА (ОТКРЫВАЕМ НОВЫЕ РАЗДЕЛЫ)
+        function activatePilotInterface(planeNumber) {
+            // Прячем кнопку создания самолёта, выводим карточку с номером GD0X
+            document.getElementById('registerPlaneCard').style.display = 'none';
+            const regCard = document.getElementById('alreadyRegisteredCard');
+            regCard.style.display = 'block';
+            document.getElementById('myPlaneNumberTag').innerText = planeNumber;
+
+            // Твоё условие: открываем новые разделы "Создание рейса" и "Мои рейсы" в меню
+            document.getElementById('navCreateFlight').style.display = 'flex';
+            document.getElementById('navMyFlights').style.display = 'flex';
+            
+            Swal.fire({
+                title: "Самолёт зарегистрирован! ✈️",
+                text: `Вам присвоен бортовой номер ${planeNumber}. Разделы планирования рейсов разблокированы в верхнем меню.`,
+                icon: "success"
+            });
+        }
+
+        // 📅 9. СОХРАНЕНИЕ И ПУБЛИКАЦИЯ РЕЙСА В РАСПИСАНИЕ
+        function publishNewFlightSchedule() {
+            const fromCode = document.getElementById('flightFromSelect').value;
+            const toCode = document.getElementById('flightToSelect').value;
+            const timeVal = document.getElementById('flightTimeInput').value;
+
+            if (!fromCode || !toCode || !timeVal) {
+                return Swal.fire("План полёта пуст", "Заполните точку вылета, прилёта и время отправления!", "warning");
+            }
+
+            if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                // Публикуем на сервер
+                grzhdWs.send(JSON.stringify({
+                    type: "create_flight",
+                    plane_id: myPlaneId,
+                    number: myPlaneNumber,
+                    from: fromCode,
+                    to: toCode,
+                    time: timeVal
+                }));
+
+                Swal.fire("Рейс опубликован! 📅", `Рейс ${myPlaneNumber} из "${globalAirports[fromCode].name}" в "${globalAirports[toCode].name}" успешно внесён в глобальное табло.`, "success");
+                
+                // Очищаем форму создания
+                document.getElementById('flightFromSelect').value = "";
+                document.getElementById('flightToSelect').innerHTML = '<option value="">Сначала выберите точку вылета</option>';
+                document.getElementById('flightToSelect').disabled = true;
+                document.getElementById('flightTimeInput').value = "";
+                document.getElementById('confirmFlightBtn').disabled = true;
+                
+                // Переключаем пилота в его бортовой журнал
+                switchAirlinesTab('my');
+            }
+                }
+        // 📋 10. СИНХРОНИЗАЦИЯ ВСЕХ ТАБЛИЦ И ОТРИСОВКА КАРТЫ FLIGHTRADAR24
+        function syncAirlinesData(flights, planes) {
+            renderMyFlightsJournal(flights);
+            renderGlobalFlightsTable(flights);
+            updateFlightRadarMapLayers(flights);
+        }
+
+        // 📋 11. ОТРИСОВКА БОРТОВОГО ЖУРНАЛА ПИЛОТА ("МОИ РЕЙСЫ")
+        function renderMyFlightsJournal(flights) {
+            const container = document.getElementById('myFlightsListContainer');
+            if (!container) return;
+
+            // Отбираем только невыполненные рейсы, созданные текущим пилотом
+            const myUnfinishedFlights = flights.filter(f => f.plane_id === myPlaneId && f.status !== "завершён");
+
+            if (myUnfinishedFlights.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:var(--gray-text); padding:20px;">У вас пока нет запланированных рейсов.</div>';
+                return;
+            }
+
+            container.innerHTML = "";
+            myUnfinishedFlights.forEach(f => {
+                const row = document.createElement('div');
+                row.className = 'flight-row';
+
+                let actionButtonHtml = "";
+                // Управляем кнопками действий организатора рейса
+                if (f.status === "ожидание" || f.status === "задержанка") {
+                    actionButtonHtml = `
+                        <button class="btn-gd" style="background:#16a34a; font-size:12px; padding:6px 12px;" onclick="startActiveFlight('${f.id}')"><i class="fas fa-play"></i> Начать рейс</button>
+                        <button class="btn-gd" style="background:#d97706; font-size:12px; padding:6px 12px; margin-left:5px;" onclick="delayFlightScheduleTime('${f.id}')"><i class="fas fa-clock"></i> Задержать</button>
+                    `;
+                } else if (f.status === "активен") {
+                    actionButtonHtml = `
+                        <button class="btn-gd" style="background:#dc2626; font-size:12px; padding:6px 12px;" onclick="finishActiveFlight('${f.id}')"><i class="fas fa-stop"></i> Завершить рейс</button>
+                    `;
+                }
+
+                row.innerHTML = `
+                    <div class="flight-info-main">
+                        <span class="plane-tag">${f.number}</span>
+                        <div class="route-path">
+                            <span>${f.from_code}</span> <i class="fas fa-long-arrow-alt-right"></i> <span>${f.to_code}</span>
+                        </div>
+                    </div>
+                    <div class="flight-time-status">
+                        <span class="time-badge"><i class="far fa-clock"></i> ${f.time}</span>
+                        <span class="status-badge ${f.status === 'ожидание' ? 'waiting' : (f.status === 'активен' ? 'active' : 'delayed')}">${f.status}</span>
+                        <div style="margin-left:10px;">${actionButtonHtml}</div>
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        // 📋 12. ГЛОБАЛЬНОЕ ТАБЛО РЕЙСОВ ДЛЯ ВСЕХ ПОЛЬЗОВАТЕЛЕЙ
+        function renderGlobalFlightsTable(flights) {
+            const container = document.getElementById('allFlightsListContainer');
+            if (!container) return;
+
+            if (flights.length === 0) {
+                container.innerHTML = '<div style="text-align:center; color:var(--gray-text); padding:20px;">Рейсы в системе не найдены.</div>';
+                return;
+            }
+
+            // Твоё условие: сортировка строго в порядке "ожидание" -> "активен" -> "завершён"
+            const statusOrder = { "ожидание": 1, "задержанка": 2, "активен": 3, "завершён": 4 };
+            const sortedFlights = [...flights].sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+
+            container.innerHTML = "";
+            sortedFlights.forEach(f => {
+                const row = document.createElement('div');
+                row.className = 'flight-row';
+
+                // Для завершённых рейсов даём кнопку ускоренного воспроизведения Playback!
+                let playbackBtnHtml = "";
+                if (f.status === "завершён" && f.history && f.history.length > 0) {
+                    playbackBtnHtml = `<button class="btn-gd" style="background:#475569; font-size:12px; padding:6px 12px; margin-left:10px;" onclick="runFlightPlayback('${f.id}')"><i class="fas fa-history"></i> Playback</button>`;
+                }
+
+                row.innerHTML = `
+                    <div class="flight-info-main">
+                        <span class="plane-tag">${f.number}</span>
+                        <div class="route-path">
+                            <span title="${f.from_name}">${f.from_code}</span> <i class="fas fa-long-arrow-alt-right"></i> <span title="${f.to_name}">${f.to_code}</span>
+                        </div>
+                    </div>
+                    <div class="flight-time-status">
+                        <span class="time-badge"><i class="far fa-clock"></i> ${f.time}</span>
+                        <span class="status-badge ${f.status === 'ожидание' ? 'waiting' : (f.status === 'активен' ? 'active' : (f.status === 'завершён' ? 'finished' : 'delayed'))}">${f.status}</span>
+                        ${playbackBtnHtml}
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        // 🎛️ 13. УПРАВЛЕНИЕ СТАТУСАМИ: СТАРТ, ЗАДЕРЖКА, ЗАВЕРШЕНИЕ ПОЛЁТА
+        function startActiveFlight(flightId) {
+            currentActiveFlightId = flightId;
+            sendGrzhdStatusUpdate(flightId, "активен");
+
+            // 🌟 Твоё условие: геолокация смартфона тут же появляется на карте и меняется в реальном времени
+            if (navigator.geolocation) {
+                activeWatchId = navigator.geolocation.watchPosition(
+                    (position) => {
+                        if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                            grzhdWs.send(JSON.stringify({
+                                type: "update_plane_gps",
+                                flight_id: currentActiveFlightId,
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude
+                            }));
+                        }
+                    },
+                    (err) => console.error("Ошибка watchPosition трекера:", err),
+                    { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+                );
+            }
+            Swal.fire("Рейс активирован! 🛫", "Ваш смартфон начал транслировать GPS координаты на карту диспетчеров в реальном времени.", "success");
+        }
+
+        function delayFlightScheduleTime(flightId) {
+            Swal.fire({
+                title: 'Задержать рейс ⏱️',
+                input: 'time',
+                inputLabel: 'Укажите новое запланированное время вылета',
+                showCancelButton: true,
+                confirmButtonText: 'Перенести',
+                background: '#ffffff',
+                color: '#0a192f'
+            }).then((result) => {
+                if (result.isConfirmed && result.value) {
+                    if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                        grzhdWs.send(JSON.stringify({
+                            type: "change_status",
+                            flight_id: flightId,
+                            status: "задержанка",
+                            new_time: result.value
+                        }));
+                    }
+                }
+            });
+        }
+
+        function finishActiveFlight(flightId) {
+            // Твоё условие: организатор завершает рейс — геолокация и трек пропадают с карты слежки
+            if (activeWatchId !== null) {
+                navigator.geolocation.clearWatch(activeWatchId);
+                activeWatchId = null;
+            }
+            currentActiveFlightId = null;
+            sendGrzhdStatusUpdate(flightId, "завершён");
+            Swal.fire("Рейс успешно завершён! 🏁", "Самолёт совершил посадку. Запись полёта сохранена в архив Playback.", "success");
+        }
+
+        function sendGrzhdStatusUpdate(flightId, statusState) {
+            if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                grzhdWs.send(JSON.stringify({
+                    type: "change_status",
+                    flight_id: flightId,
+                    status: statusState
+                }));
+            }
+        }
+        // 📡 14. СВЕРХТОЧНАЯ ОТРИСОВКА FLIGHTRADAR КАРТЫ С КОРИДОРАМИ И ТРЕКАМИ ДВИЖЕНИЯ
+        function updateFlightRadarMapLayers(flights) {
+            // Сначала зачищаем старые маркеры и линии активных рейсов, чтобы перерисовать их на новых кадрах
+            for (let id in radarMarkers) { 
+                radarMap.removeLayer(radarMarkers[id]); 
+                delete radarMarkers[id]; 
+            }
+            for (let id in radarPolylines) {
+                radarMap.removeLayer(radarPolylines[id].corridor);
+                radarMap.removeLayer(radarPolylines[id].track);
+                delete radarPolylines[id];
+            }
+
+            // Бежим только по АКТИВНЫМ рейсам в реальном времени
+            flights.forEach(f => {
+                if (f.status !== "активен" || !f.history || f.history.length === 0) return;
+
+                const startAP = globalAirports[f.from_code];
+                const endAP = globalAirports[f.to_code];
+                const currentPos = f.history[f.history.length - 1]; // Текущее положение пилота по GPS смартфона
+
+                // 🌟 Твоё условие: Пунктиром проводится линия от точки вылета к точке прилёта (воздушный коридор трассы)
+                const corridorLine = L.polyline([[startAP.lat, startAP.lng], [endAP.lat, endAP.lng]], {
+                    color: '#0066cc', weight: 2, dashArray: '6, 8', opacity: 0.5
+                }).addTo(radarMap);
+
+                // 🌟 Твоё условие: Четкая сплошная линия проделанного маршрута от точки вылета до текущего положения на карте
+                const fullTrackPoints = [[startAP.lat, startAP.lng], ...f.history];
+                const trackLine = L.polyline(fullTrackPoints, {
+                    color: '#16a34a', weight: 3, opacity: 0.85
+                }).addTo(radarMap);
+
+                // Запоминаем слои линий, чтобы управлять ими при следующем тике сокета
+                radarPolylines[f.id] = { corridor: corridorLine, track: trackLine };
+
+                // Высчитываем угол наклона самолёта по вектору движения, чтобы он не летел боком
+                let planeAngle = 45;
+                if (f.history.length >= 2) {
+                    const p1 = f.history[f.history.length - 2];
+                    const p2 = f.history[f.history.length - 1];
+                    planeAngle = Math.atan2(p2[0] - p1[0], p2[1] - p1[1]) * (180 / Math.PI);
+                }
+
+                // Кастомная синяя иконка самолётика, развёрнутая по курсу полёта видеокартой
+                const planeIcon = L.divIcon({
+                    html: `<div style="transform: rotate(${-planeAngle + 90}deg); font-size:24px; text-shadow:0 2px 5px rgba(0,0,0,0.3); color:#0066cc;">✈️</div>`,
+                    className: 'radar-plane-div',
+                    iconSize: [24, 24]
+                });
+
+                const marker = L.marker([currentPos[0], currentPos[1]], { icon: planeIcon }).addTo(radarMap);
+                
+                // 🌟 Твоё условие: Нажатие на любой летящий самолёт открывает нижнюю панель FlightRadar24
+                marker.on('click', function(e) {
+                    L.DomEvent.stopPropagation(e);
+                    openRadarBottomPanel(f.number, f.from_name, f.to_name);
+                });
+
+                radarMarkers[f.id] = marker;
+            });
+        }
+
+        // 📥 15. НИЖНЯЯ ПАНЕЛЬ ИНФОРМАЦИИ О САМОЛЁТЕ
+        function openRadarBottomPanel(planeNum, fromName, toName) {
+            document.getElementById('panelPlaneNumber').innerText = planeNum;
+            document.getElementById('panelFromAirport').innerText = fromName;
+            document.getElementById('panelToAirport').innerText = toName;
+            document.getElementById('radarPanel').classList.add('show');
+        }
+
+        function closeRadarBottomPanel() {
+            document.getElementById('radarPanel').classList.remove('show');
+        }
+
+        // ☢️ 16. РЕЖИМ PLAYBACK: УСКОРЕННОЕ ВОСПРОИЗВЕДЕНИЕ ИСТОРИИ ПОЛЁТА ЗАВЕРШЕННЫХ РЕЙСОВ
+        function runFlightPlayback(flightId) {
+            // Сразу переключаем диспетчера на вкладку спутниковой карты
+            switchAirlinesTab('map');
+            
+            // Находим архивный рейс из глобального массива
+            const targetFlight = grzhd_flights.find(f => f.id === flightId);
+            if (!targetFlight || !targetFlight.history || targetFlight.history.length === 0) {
+                return Swal.fire("Нет данных", "У этого рейса отсутствует история перемещений для воспроизведения.", "warning");
+            }
+
+            const startAP = globalAirports[targetFlight.from_code];
+            const endAP = globalAirports[targetFlight.to_code];
+
+            // Натягиваем пунктирный воздушный коридор трассы для режима воспроизведения
+            const playbackCorridor = L.polyline([[startAP.lat, startAP.lng], [endAP.lat, endAP.lng]], {
+                color: '#475569', weight: 2, dashArray: '4, 6', opacity: 0.4
+            }).addTo(radarMap);
+
+            // Создаем маркер самолёта-призрака для симуляции трека
+            const playbackIcon = L.divIcon({
+                html: `<div style="font-size:24px; color:#475569;">✈️</div>`, 
+                className: 'pb-icon', 
+                iconSize: [24, 24]
+            });
+            const playbackMarker = L.marker([startAP.lat, startAP.lng], { icon: playbackIcon }).addTo(radarMap);
+
+            // Сплошная линия проделанного пути, которая будет расти на экране вслед за самолётом
+            let currentPlaybackPoints = [[startAP.lat, startAP.lng]];
+            const playbackTrackLine = L.polyline(currentPlaybackPoints, { color: '#0066cc', weight: 3 }).addTo(radarMap);
+
+            // Центрируем и приближаем камеру ArcGIS на взлётно-посадочную полосу вылета
+            radarMap.setView([startAP.lat, startAP.lng], 16);
+
+            let step = 0;
+            // 🌟 Твоё условие: Playback показывает полет в ускоренном режиме (шаг каждую 150 миллисекунду из истории ОЗУ)
+            const playbackInterval = setInterval(() => {
+                if (step >= targetFlight.history.length) {
+                    clearInterval(playbackInterval);
+                    Swal.fire("Playback завершён 🏁", `Воспроизведение исторического рейса ${targetFlight.number} полностью окончено.`, "success");
+                    
+                    // Плавно стираем временные демонстрационные слои через 4 секунды
+                    setTimeout(() => {
+                        radarMap.removeLayer(playbackMarker);
+                        radarMap.removeLayer(playbackTrackLine);
+                        radarMap.removeLayer(playbackCorridor);
+                    }, 4000);
+                } else {
+                    const currentCoords = targetFlight.history[step];
+                    playbackMarker.setLatLng(currentCoords);
+                    
+                    currentPlaybackPoints.push(currentCoords);
+                    playbackTrackLine.setLatLngs(currentPlaybackPoints);
+                    
+                    // Плавно ведём камеру за самолётом по координатам тайлов
+                    radarMap.panTo(currentCoords);
+                    step++;
+                }
+            }, 150); // Скорость перемотки истории
+        }
+        // 📋 17. ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ОБНОВЛЕНИЯ ИНТЕРФЕЙСА ПИЛОТА
+        // Если при синхронизации сервер присылает наш старый борт, восстанавливаем меню
+        function checkActivePilotSession(planes) {
+            const myPlaneKey = `plane_${grzhdClientId}`;
+            if (planes[myPlaneKey] && !myPlaneNumber) {
+                myPlaneId = myPlaneKey;
+                myPlaneNumber = planes[myPlaneKey].number;
+                activatePilotInterface(myPlaneNumber);
+            }
+        }
+    </script>
+</body>
+</html>
+              
