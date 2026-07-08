@@ -332,9 +332,15 @@
             }
         }
 
-        // Запуск при самой первой загрузке страницы
+        // 🌟 ИСПРАВЛЕННЫЙ СТАРТОВЫЙ ЗАПУСК С ПРЕДОХРАНИТЕЛЕМ ОТ ПУСТОТЫ
         window.addEventListener('DOMContentLoaded', () => {
-            promptGeolocationImmediately(); // 🌟 Мгновенно агрессивно запрашиваем GPS у пилота
+            // 1. Первым делом принудительно забиваем в выпадающий список все 4 аэропорта,
+            // чтобы у пилота СРАЗУ был выбор, даже если GPS или сеть зависнут!
+            loadAllDefaultAirportsBackup(); 
+
+            // 2. Только после этого агрессивно спрашиваем GPS для умной фильтрации сокета
+            promptGeolocationImmediately(); 
+            
             initRadarMap();
             connectGrzhdWebSocket();
         });
@@ -342,32 +348,32 @@
         // 📍 4.А ПРИНУДИТЕЛЬНЫЙ АГРЕССИВНЫЙ ЗАПРОС ДОСТУПА К GPS ПРИ ВХОДЕ
         function promptGeolocationImmediately() {
             if (navigator.geolocation) {
-                // Принудительно вызываем окно браузера "Разрешить доступ к геопозиции"
                 navigator.geolocation.getCurrentPosition(
                     (pos) => {
-                        console.log("✅ Пилот успешно предоставил доступ к GPS геолокации!");
-                        requestUserBrowserLocation(); // Перезапускаем штатный трекер
+                        console.log("✅ Пилот предоставил доступ к GPS.");
+                        requestUserBrowserLocation(); 
                     },
                     (err) => {
-                        console.warn("🛑 Пилот отклонил запрос GPS или сайт открыт без HTTPS. Включаем резервный режим.");
-                        loadAllDefaultAirportsBackup(); // Аварийный запуск списков
+                        console.warn("🛑 GPS недоступен. Оставляем базовый список из 4-х аэропортов.");
+                        loadAllDefaultAirportsBackup(); 
                     },
-                    { enableHighAccuracy: true, timeout: 5000 }
+                    { enableHighAccuracy: true, timeout: 4000 }
                 );
             } else {
                 loadAllDefaultAirportsBackup();
             }
         }
 
-        // 📍 4.Б АВАРИЙНЫЙ СПАСАТЕЛЬНЫЙ КРУГ (ТОЧНЫЕ СЕРВЕРНЫЕ КОДЫ)
+        // 🌟 4.Б АВТОНОМНЫЙ РЕЗЕРВНЫЙ СПИСОК (ТЕПЕРЬ СТАРТУЕТ МГНОВЕННО)
         function loadAllDefaultAirportsBackup() {
-            console.log("✈️ Включаем резервный режим: выводим все 4 полосы Самарского коридора.");
             const fromSelect = document.getElementById('flightFromSelect');
             if (!fromSelect) return;
             
+            // Если список уже заполнен аэропортами, не затираем его заново
+            if (fromSelect.options.length > 2) return;
+            
             fromSelect.innerHTML = '<option value="">-- Выберите точку вылета --</option>';
             
-            // 🌟 ФИКС: Прописали точные ключи букву в букву как на бэкенде в server.py!
             const backupList = [
                 {code: "GRZHD_7A", name: "GRZHD 7А Гражданский"},
                 {code: "KRN_CORONA", name: "KRN Корона"},
