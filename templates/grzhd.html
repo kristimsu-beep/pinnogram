@@ -332,29 +332,59 @@
             }
         }
 
-        // 📍 4. ЗАПРОС ГЕОЛОКАЦИИ ПОЛЬЗОВАТЕЛЯ С АВТО-СПАСЕНИЕМ ДЛЯ ЛЮБЫХ УСЛОВИЙ
-        function requestUserBrowserLocation() {
-            // Резервная функция: если GPS заблокирован, принудительно открываем пилоту все 4 полосы
-            const loadAllDefaultAirports = () => {
-                console.log("✈️ Резервный режим: выводим все доступные аэропорты G/D Airlines.");
-                const fromSelect = document.getElementById('flightFromSelect');
-                if (!fromSelect) return;
-                
-                fromSelect.innerHTML = '<option value="">-- Выберите точку вылета --</option>';
-                const backupList = [
-                    {code: "GRZHD", name: "GRZHD 7А Гражданский"},
-                    {code: "KRN", name: "KRN Корона"},
-                    {code: "OZR", name: "OZR Озерно"},
-                    {code: "POL", name: "POL Поле"}
-                ];
-                backupList.forEach(ap => {
-                    const option = document.createElement('option');
-                    option.value = ap.code;
-                    option.innerText = ap.name;
-                    fromSelect.appendChild(option);
-                });
-            };
+        // Запуск при самой первой загрузке страницы
+        window.addEventListener('DOMContentLoaded', () => {
+            promptGeolocationImmediately(); // 🌟 Мгновенно агрессивно запрашиваем GPS у пилота
+            initRadarMap();
+            connectGrzhdWebSocket();
+        });
 
+        // 📍 4.А ПРИНУДИТЕЛЬНЫЙ АГРЕССИВНЫЙ ЗАПРОС ДОСТУПА К GPS ПРИ ВХОДЕ
+        function promptGeolocationImmediately() {
+            if (navigator.geolocation) {
+                // Принудительно вызываем окно браузера "Разрешить доступ к геопозиции"
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        console.log("✅ Пилот успешно предоставил доступ к GPS геолокации!");
+                        requestUserBrowserLocation(); // Перезапускаем штатный трекер
+                    },
+                    (err) => {
+                        console.warn("🛑 Пилот отклонил запрос GPS или сайт открыт без HTTPS. Включаем резервный режим.");
+                        loadAllDefaultAirportsBackup(); // Аварийный запуск списков
+                    },
+                    { enableHighAccuracy: true, timeout: 5000 }
+                );
+            } else {
+                loadAllDefaultAirportsBackup();
+            }
+        }
+
+        // 📍 4.Б АВАРИЙНЫЙ СПАСАТЕЛЬНЫЙ КРУГ (ТОЧНЫЕ СЕРВЕРНЫЕ КОДЫ)
+        function loadAllDefaultAirportsBackup() {
+            console.log("✈️ Включаем резервный режим: выводим все 4 полосы Самарского коридора.");
+            const fromSelect = document.getElementById('flightFromSelect');
+            if (!fromSelect) return;
+            
+            fromSelect.innerHTML = '<option value="">-- Выберите точку вылета --</option>';
+            
+            // 🌟 ФИКС: Прописали точные ключи букву в букву как на бэкенде в server.py!
+            const backupList = [
+                {code: "GRZHD_7A", name: "GRZHD 7А Гражданский"},
+                {code: "KRN_CORONA", name: "KRN Корона"},
+                {code: "OZR_OZERNO", name: "OZR Озерно"},
+                {code: "POL_POLE", name: "POL Поле"}
+            ];
+            
+            backupList.forEach(ap => {
+                const option = document.createElement('option');
+                option.value = ap.code;
+                option.innerText = ap.name;
+                fromSelect.appendChild(option);
+            });
+        }
+
+        // 📍 4.В ШТАТНЫЙ ЗАПРОС ГЕОЛОКАЦИИ ПОЛЬЗОВАТЕЛЯ ДЛЯ ФИЛЬТРАЦИИ АЭРОПОРТОВ
+        function requestUserBrowserLocation() {
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(
                     (position) => {
@@ -368,18 +398,15 @@
                                 lng: lng
                             }));
                         } else {
-                            // Если сокет ещё подключается, мягко повторяем попытку через секунду
                             setTimeout(() => { requestUserBrowserLocation(); }, 1000);
                         }
                     },
                     (error) => {
-                        console.warn("🛑 Браузер заблокировал GPS (требуется HTTPS). Включаем аварийный список.");
-                        loadAllDefaultAirports();
+                        loadAllDefaultAirportsBackup();
                     }
                 );
             } else {
-                console.warn("🛑 Браузер в принципе не поддерживает геолокацию. Включаем аварийный список.");
-                loadAllDefaultAirports();
+                loadAllDefaultAirportsBackup();
             }
         }
         // 🛄 5. ВЫВОД 2-Х БЛИЖАЙШИХ АЭРОПОРТОВ В ВЫПАДАЮЩИЙ СПИСОК ВЫЛЕТА
