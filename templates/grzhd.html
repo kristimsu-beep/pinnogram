@@ -558,16 +558,19 @@
         }
         // 📡 14. СВЕРХТОЧНАЯ ОТРИСОВКА FLIGHTRADAR КАРТЫ С КОРИДОРАМИ И ТРЕКАМИ ДВИЖЕНИЯ
         function updateFlightRadarMapLayers(flights) {
-            // Сначала зачищаем старые маркеры и линии активных рейсов, чтобы перерисовать их на новых кадрах
+            // Сначала зачищаем старые маркеры и линии активных рейсов
             for (let id in radarMarkers) { 
-                radarMap.removeLayer(radarMarkers[id]); 
-                delete radarMarkers[id]; 
+                if (radarMarkers[id]) radarMap.removeLayer(radarMarkers[id]); 
             }
+            radarMarkers = {};
+
             for (let id in radarPolylines) {
-                radarMap.removeLayer(radarPolylines[id].corridor);
-                radarMap.removeLayer(radarPolylines[id].track);
-                delete radarPolylines[id];
+                if (radarPolylines[id].corridor) radarMap.removeLayer(radarPolylines[id].corridor);
+                if (radarPolylines[id].track) radarMap.removeLayer(radarPolylines[id].track);
             }
+            radarPolylines = {};
+
+            if (!flights || !Array.isArray(flights)) return;
 
             // Бежим только по АКТИВНЫМ рейсам в реальном времени
             flights.forEach(f => {
@@ -575,40 +578,43 @@
 
                 const startAP = globalAirports[f.from_code];
                 const endAP = globalAirports[f.to_code];
-                const currentPos = f.history[f.history.length - 1]; // Текущее положение пилота по GPS смартфона
+                if (!startAP || !endAP) return;
 
-                // 🌟 Твоё условие: Пунктиром проводится линия от точки вылета к точке прилёта (воздушный коридор трассы)
+                const currentPos = f.history[f.history.length - 1]; // Текущее положение пилота по GPS
+
+                // 🌟 Пунктирный воздушный коридор трассы
                 const corridorLine = L.polyline([[startAP.lat, startAP.lng], [endAP.lat, endAP.lng]], {
                     color: '#0066cc', weight: 2, dashArray: '6, 8', opacity: 0.5
                 }).addTo(radarMap);
 
-                // 🌟 Твоё условие: Четкая сплошная линия проделанного маршрута от точки вылета до текущего положения на карте
+                // 🌟 Сплошная линия проделанного маршрута от точки вылета
                 const fullTrackPoints = [[startAP.lat, startAP.lng], ...f.history];
                 const trackLine = L.polyline(fullTrackPoints, {
                     color: '#16a34a', weight: 3, opacity: 0.85
                 }).addTo(radarMap);
 
-                // Запоминаем слои линий, чтобы управлять ими при следующем тике сокета
                 radarPolylines[f.id] = { corridor: corridorLine, track: trackLine };
 
-                // Высчитываем угол наклона самолёта по вектору движения, чтобы он не летел боком
+                // Высчитываем точный угол наклона самолёта по вектору движения
                 let planeAngle = 45;
                 if (f.history.length >= 2) {
-                    const p1 = f.history[f.history.length - 2];
-                    const p2 = f.history[f.history.length - 1];
+                    const p1 = f.history[f.history.length - 2]; // Предыдущий массив [lat, lng]
+                    const p2 = f.history[f.history.length - 1]; // Текущий массив [lat, lng]
+                    // Математически вычитаем широты (p2[0]-p1[0]) и долготы (p2[1]-p1[1])
                     planeAngle = Math.atan2(p2[0] - p1[0], p2[1] - p1[1]) * (180 / Math.PI);
                 }
 
                 // Кастомная синяя иконка самолётика, развёрнутая по курсу полёта видеокартой
                 const planeIcon = L.divIcon({
-                    html: `<div style="transform: rotate(${-planeAngle + 90}deg); font-size:24px; text-shadow:0 2px 5px rgba(0,0,0,0.3); color:#0066cc;">✈️</div>`,
+                    html: `<div style="transform: rotate(${-planeAngle + 90}deg); font-size:24px; text-shadow:0 2px 5px rgba(0,0,0,0.3); color:#0066cc; width:24px; height:24px; text-align:center;">✈️</div>`,
                     className: 'radar-plane-div',
                     iconSize: [24, 24]
                 });
 
-                const marker = L.marker([currentPos[0], currentPos[1]], { icon: planeIcon }).addTo(radarMap);
+                // Создаем маркер напрямую на массиве координат currentPos
+                const marker = L.marker(currentPos, { icon: planeIcon }).addTo(radarMap);
                 
-                // 🌟 Твоё условие: Нажатие на любой летящий самолёт открывает нижнюю панель FlightRadar24
+                // Нажатие на любой летящий самолёт открывает нижнюю панель FlightRadar24
                 marker.on('click', function(e) {
                     L.DomEvent.stopPropagation(e);
                     openRadarBottomPanel(f.number, f.from_name, f.to_name);
