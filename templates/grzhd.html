@@ -411,12 +411,14 @@
             }
         }
 
-        // 🌟 4.Б АВТОНОМНЫЙ РЕЗЕРВНЫЙ СПИСОК (ТЕПЕРЬ СТАРТУЕТ МГНОВЕННО)
+        // 🌟 4.Б АВТОНОМНЫЙ РЕЗЕРВНЫЙ СПИСОК (СТРОГО ОДИН В КОДЕ С ПРЕДОХРАНИТЕЛЕМ!)
         function loadAllDefaultAirportsBackup() {
+            console.log("✈️ Запуск автономной отрисовки аэропортов Самарского коридора.");
             const fromSelect = document.getElementById('flightFromSelect');
             if (!fromSelect) return;
             
-            // Если список уже заполнен аэропортами, не затираем его заново
+            // ПРЕДОХРАНИТЕЛЬ: Если сокет уже успел записать 2 ближайших аэропорта, 
+            // этот код прерывается и не даёт стереть правильные GPS данные!
             if (fromSelect.options.length > 2) return;
             
             fromSelect.innerHTML = '<option value="">-- Выберите точку вылета --</option>';
@@ -435,30 +437,38 @@
                 fromSelect.appendChild(option);
             });
         }
-
-        // 🌟 1. АВТОНОМНЫЙ РЕЗЕРВНЫЙ СПИСОК (ВЫЗЫВАЕТСЯ ПРИ СБОЕ ИЛИ ПРИ СТАРТЕ)
-        function loadAllDefaultAirportsBackup() {
-            console.log("✈️ Запуск автономной отрисовки аэропортов Самарского коридора.");
-            const fromSelect = document.getElementById('flightFromSelect');
-            if (!fromSelect) return;
-            
-            fromSelect.innerHTML = '<option value="">-- Выберите точку вылета --</option>';
-            
-            // Жестко фиксируем эталонные коды, совпадающие с бэкендом server.py
-            const backupList = [
-                {code: "GRZHD_7A", name: "GRZHD 7А Гражданский"},
-                {code: "KRN_CORONA", name: "KRN Корона"},
-                {code: "OZR_OZERNO", name: "OZR Озерно"},
-                {code: "POL_POLE", name: "POL Поле"}
-            ];
-            
-            backupList.forEach(ap => {
-                const option = document.createElement('option');
-                option.value = ap.code;
-                option.innerText = ap.name;
-                fromSelect.appendChild(option);
-            });
+        // 📍 4.В ШТАТНЫЙ ЗАПРОС ГЕОЛОКАЦИИ ПОЛЬЗОВАТЕЛЯ ДЛЯ ФИЛЬТРАЦИИ АЭРОПОРТОВ
+        function requestUserBrowserLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        
+                        console.log(`[GPS] Отправляем координаты на сервер: ${lat}, ${lng}`);
+                        
+                        // Шлём координаты на бэкенд для расчёта 2 ближайших по Гаверсинусу
+                        if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                            grzhdWs.send(JSON.stringify({
+                                type: "request_nearest_airports",
+                                lat: lat,
+                                lng: lng
+                            }));
+                        } else {
+                            // Если сокет ещё открывается, мягко повторяем через секунду
+                            setTimeout(() => { requestUserBrowserLocation(); }, 1000);
+                        }
+                    },
+                    (error) => {
+                        console.warn("Ошибка штатного получения GPS. Оставляем резервный список.");
+                        loadAllDefaultAirportsBackup();
+                    }
+                );
+            } else {
+                loadAllDefaultAirportsBackup();
+            }
         }
+        
         // 🛄 5. ВЫВОД СТРОГО 2-Х БЛИЖАЙШИХ АЭРОПОРТОВ ОТ СЕРВЕРА
         function renderNearestDepartureAirports(nearestAirports) {
             const fromSelect = document.getElementById('flightFromSelect');
