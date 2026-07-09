@@ -548,7 +548,7 @@
             });
         }
 
-        // 📅 9. СОХРАНЕНИЕ И ПУБЛИКАЦИЯ РЕЙСА В РАСПИСАНИЕ
+        // 📅 9. СОХРАНЕНИЕ И ПУБЛИКАЦИЯ РЕЙСА В РАСПИСАНИЕ (ЭТАЛОН)
         function publishNewFlightSchedule() {
             const fromCode = document.getElementById('flightFromSelect').value;
             const toCode = document.getElementById('flightToSelect').value;
@@ -569,19 +569,26 @@
                     time: timeVal
                 }));
 
-                Swal.fire("Рейс опубликован! 📅", `Рейс ${myPlaneNumber} из "${globalAirports[fromCode].name}" в "${globalAirports[toCode].name}" успешно внесён в глобальное табло.`, "success");
+                // Безопасное получение имён для всплывающего окна, если сокет в задержке
+                const fromName = globalAirports[fromCode] ? globalAirports[fromCode].name : fromCode;
+                const toName = globalAirports[toCode] ? globalAirports[toCode].name : toCode;
+
+                Swal.fire("Рейс опубликован! 📅", `Рейс ${myPlaneNumber} из "${fromName}" в "${toName}" успешно внесён в глобальное табло.`, "success");
                 
                 // Очищаем форму создания
                 document.getElementById('flightFromSelect').value = "";
                 document.getElementById('flightToSelect').innerHTML = '<option value="">Сначала выберите точку вылета</option>';
                 document.getElementById('flightToSelect').disabled = true;
                 document.getElementById('flightTimeInput').value = "";
-                document.getElementById('confirmFlightBtn').disabled = true;
+                
+                const confirmBtn = document.getElementById('confirmFlightBtn');
+                if (confirmBtn) confirmBtn.disabled = true;
                 
                 // Переключаем пилота в его бортовой журнал
                 switchAirlinesTab('my');
             }
-                }
+        } // 🌟 ИСПРАВЛЕНО: Убрана лишняя скобка, функция закрыта идеально ровно!
+
         // 📋 10. ЕДИНАЯ СИНХРОНИЗАЦИЯ ВСЕХ ТАБЛИЦ И ОТРИСОВКА КАРТЫ FLIGHTRADAR24
         function syncAirlinesData(flights, planes) {
             // Намертво привязываем прилетевшие данные к глобальной памяти фронтенда
