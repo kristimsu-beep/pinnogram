@@ -253,18 +253,28 @@
         let activeWatchId = null; // Ссылка на непрерывный GPS-трекер телефона
         let currentActiveFlightId = null; // ID выполняемого в данный момент рейса
 
-        // Глобальные массивы и словари для отрисовки карты слежки
+        // Глобальные хранилища данных рейсов и самолётов для FlightRadar24 и Playback
         let grzhd_flights = [];
         let grzhd_planes = {};
         let radarMarkers = {};  // { flight_id: L.marker }
         let radarPolylines = {}; // { flight_id: { corridor: L.polyline, track: L.polyline } }
 
-        // Запуск при загрузке страницы
+        // 🌟 ИСПРАВЛЕНО: ОСТАЛСЯ ТОЛЬКО ОДИН, ЖЕЛЕЗОБЕТОННЫЙ СТАРТОВЫЙ КОНТЕНТ-ЛОАДЕР!
         window.addEventListener('DOMContentLoaded', () => {
+            // Сразу на нулевой миллисекунде забиваем все 4 полосы в селектор
+            if (typeof loadAllDefaultAirportsBackup === "function") {
+                loadAllDefaultAirportsBackup(); 
+            }
+
+            // Агрессивно требуем у браузера доступ к GPS координатам
+            if (typeof promptGeolocationImmediately === "function") {
+                promptGeolocationImmediately(); 
+            }
+            
             initRadarMap();
             connectGrzhdWebSocket();
-            requestUserBrowserLocation(); // Сразу запрашиваем GPS для фильтрации точек вылета
         });
+
         // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ
         function connectGrzhdWebSocket() {
             const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
@@ -279,16 +289,19 @@
                 
                 if (msg.type === "init_airports") {
                     globalAirports = msg.airports;
-                    // Синхронизируем карту и списки расписания
                     syncAirlinesData(msg.flights, msg.planes);
                 } else if (msg.type === "sync_flights") {
                     syncAirlinesData(msg.flights, msg.planes);
                 } else if (msg.type === "plane_registered") {
                     myPlaneId = msg.plane_id;
                     myPlaneNumber = msg.number;
-                    activatePilotInterface(msg.number);
+                    if (typeof activatePilotInterface === "function") {
+                        activatePilotInterface(msg.number);
+                    }
                 } else if (msg.type === "nearest_airports_response") {
-                    renderNearestDepartureAirports(msg.airports);
+                    if (typeof renderNearestDepartureAirports === "function") {
+                        renderNearestDepartureAirports(msg.airports);
+                    }
                 }
             };
 
@@ -298,38 +311,70 @@
             };
         }
 
-        // 🗺️ 2. ЗАПУСК ВЫСОКОТОЧНОЙ СПУТНИКОВОЙ КАРТЫ С ЗУМОМ 19
+        // 🗺️ 2. ЗАПУСК ВЫСОКОТОЧНОЙ СПУТНИКОВОЙ КАРТЫ С МЕТКАМИ АЭРОПОРТОВ
         function initRadarMap() {
-            // Центрируем камеру по умолчанию на Самарской области (Красноармейский район)
             radarMap = L.map('flightRadarMap', {
                 center: [52.777, 49.690],
                 zoom: 14,
                 minZoom: 2,
-                maxZoom: 19 // Твоё условие: спутник с зумом 19!
+                maxZoom: 19 // Спутник Esri с глубоким зумом 19
             });
 
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Tiles &copy; Esri &mdash; Гражданская Авиация G/D'
             }).addTo(radarMap);
+
+            // Наносим статические маркеры всех 4 взлетно-посадочных полос
+            const airportsOnMap = {
+                "GRZHD_7A": {"name": "7А Гражданский", "lat": 52.778718, "lng": 49.698091},
+                "KRN_CORONA": {"name": "Корона", "lat": 52.777094, "lng": 49.683814},
+                "OZR_OZERNO": {"name": "Озерно", "lat": 52.772260, "lng": 49.689991},
+                "POL_POLE": {"name": "Поле", "lat": 52.780357, "lng": 49.701070}
+            };
+
+            for (let code in airportsOnMap) {
+                const ap = airportsOnMap[code];
+                const airportIcon = L.divIcon({
+                    html: `<div style="font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); color: #ffffff; background: #0066cc; width: 30px; height: 30px; border-radius: 50%; display: flex; justify-content: center; align-items: center; border: 2px solid #fff;">✈️</div>`,
+                    className: 'map-airport-icon',
+                    iconSize:,
+                    iconAnchor: [15, 15]
+                });
+
+                const apMarker = L.marker([ap.lat, ap.lng], { icon: airportIcon }).addTo(radarMap);
+                apMarker.bindTooltip(`🛫 Аэропорт: ${ap.name}`, {
+                    permanent: true, direction: 'top', className: 'city-label capital-label', offset: [0, -15]
+                }).openTooltip();
+            }
         }
 
         // ⚙️ 3. ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК В СТИЛЕ ROBLOX
         function switchAirlinesTab(tabName) {
-            // Гасим все страницы
             document.querySelectorAll('.app-tab-page').forEach(page => page.classList.remove('active'));
             document.querySelectorAll('.nav-tab-btn').forEach(btn => btn.classList.remove('active'));
             
-            // Включаем нужную страницу
             const targetPage = document.getElementById('tab_' + tabName);
             if (targetPage) targetPage.classList.add('active');
             
-            // Подсвечиваем кнопку навигации
-            event.currentTarget.classList.add('active');
+            if (event && event.currentTarget) {
+                event.currentTarget.classList.add('active');
+            }
 
-            // Если переключились на карту — принудительно заставляем Leaflet перерисовать пиксели тайлов
             if (tabName === 'map') {
                 setTimeout(() => { radarMap.invalidateSize(); }, 200);
             }
+        }
+
+        // 📋 10. ЕДИНАЯ СИНХРОНИЗАЦИЯ ВСЕХ ТАБЛИЦ И ОТРИСОВКА КАРТЫ FLIGHTRADAR24
+        function syncAirlinesData(flights, planes) {
+            // Намертво привязываем прилетевшие данные к глобальной памяти фронтенда
+            if (flights) grzhd_flights = flights;
+            if (planes) grzhd_planes = planes;
+
+            // Вызываем реактивный пересчет таблиц и маркеров
+            if (typeof renderMyFlightsJournal === "function") renderMyFlightsJournal(flights);
+            if (typeof renderGlobalFlightsTable === "function") renderGlobalFlightsTable(flights);
+            if (typeof updateFlightRadarMapLayers === "function") updateFlightRadarMapLayers(flights);
         }
 
         // 🌟 ИСПРАВЛЕННЫЙ СТАРТОВЫЙ ЗАПУСК С ПРЕДОХРАНИТЕЛЕМ ОТ ПУСТОТЫ
@@ -536,11 +581,16 @@
                 switchAirlinesTab('my');
             }
                 }
-        // 📋 10. СИНХРОНИЗАЦИЯ ВСЕХ ТАБЛИЦ И ОТРИСОВКА КАРТЫ FLIGHTRADAR24
+        // 📋 10. ЕДИНАЯ СИНХРОНИЗАЦИЯ ВСЕХ ТАБЛИЦ И ОТРИСОВКА КАРТЫ FLIGHTRADAR24
         function syncAirlinesData(flights, planes) {
-            renderMyFlightsJournal(flights);
-            renderGlobalFlightsTable(flights);
-            updateFlightRadarMapLayers(flights);
+            // Намертво привязываем прилетевшие данные к глобальной памяти фронтенда
+            if (flights) grzhd_flights = flights;
+            if (planes) grzhd_planes = planes;
+
+            // Вызываем реактивный пересчет таблиц и маркеров
+            if (typeof renderMyFlightsJournal === "function") renderMyFlightsJournal(flights);
+            if (typeof renderGlobalFlightsTable === "function") renderGlobalFlightsTable(flights);
+            if (typeof updateFlightRadarMapLayers === "function") updateFlightRadarMapLayers(flights);
         }
         // 📋 11. ИСПРАВЛЕННАЯ ОТРИСОВКА БОРТОВОГО ЖУРНАЛА ПИЛОТА ("МОИ РЕЙСЫ")
         function renderMyFlightsJournal(flights) {
