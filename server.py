@@ -3005,88 +3005,9 @@ async def broadcast_grzhd_state():
             del grzhd_connections[cid]
 
 
-# 📡 Главный WebSocket роут слежки и навигации С РАСШИРЕННЫМ ЛОГИРОВАНИЕМ ДЛЯ RENDER
-@app.websocket("/grzhd/ws/{client_id}")
-async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
-    await websocket.accept()
-    grzhd_connections[client_id] = websocket
-    print(f"\n[✈️ АВИА-СОКЕТ] ПОДКЛЮЧЕНИЕ: Игрок {client_id} успешно подключился к вышке!")
-    
-    # Сразу отправляем новичку список аэропортов и текущих рейсов
-    try:
-        await websocket.send_text(json.dumps({
-            "type": "init_airports",
-            "airports": GRZHD_AIRPORTS,
-            "flights": grzhd_flights,
-            "planes": grzhd_planes
-        }, ensure_ascii=False))
-        print(f"[✈️ АВИА-СОКЕТ] Успешно отправили пакет 'init_airports' для {client_id}")
-    except Exception as e:
-        print(f"[❌ АВИА-ОШИБКА] Не удалось отправить стартовые аэропорты: {str(e)}")
-    
-    try:
-        while True:
-            raw_data = await websocket.receive_text()
-            msg = json.loads(raw_data)
-            
-            # --- 🛫 РЕГИСТРАЦИЯ САМОЛЁТА ---
-            if msg["type"] == "register_plane":
-                count = len(grzhd_planes) + 1
-                plane_num = f"GD0{count}" if count < 10 else f"GD{count}"
-                plane_id = f"plane_{client_id}"
-                
-                grzhd_planes[plane_id] = {
-                    "owner_id": client_id,
-                    "number": plane_num
-                }
-                print(f"[✈️ АВИА-БИЗНЕС] ЗАРЕГИСТРИРОВАН БОРТ: {plane_num} для пилота {client_id}")
-                await websocket.send_text(json.dumps({"type": "plane_registered", "plane_id": plane_id, "number": plane_num}, ensure_ascii=False))
-                await broadcast_grzhd_state()
 
-            # --- 📍 ПОИСК БЛИЖАЙШИХ АЭРОПОРТОВ ПО GPS ---
-            elif msg["type"] == "request_nearest_airports":
-                lat, lng = msg["lat"], msg["lng"]
-                print(f"[📍 АВИА-НАВИГАЦИЯ] ПРИЛЕТЕЛ ЗАПРОС GPS от {client_id}: Широта={lat}, Долгота={lng}")
-                
-                try:
-                    # Считаем расстояния до всех 4 точек из словаря GRZHD_AIRPORTS
-                    sorted_ap = sorted(
-                        GRZHD_AIRPORTS.items(),
-                        key=lambda item: get_distance_km(lat, lng, item[1]["lat"], item[1]["lng"])
-                    )
-                    
-                    # Формируем структуру ответа: берем 2 самые близкие точки вылета
-                    nearest_data = []
-                    for code, info in sorted_ap[:2]:
-                        nearest_data.append({"code": code, "name": info["name"]})
-                    
-                    print(f"[📍 АВИА-НАВИГАЦИЯ] Расчёт Гаверсинуса окончен. Топ-2 ближайших для {client_id}: {nearest_data}")
-                    
-                    await websocket.send_text(json.dumps({
-                        "type": "nearest_airports_response", 
-                        "airports": nearest_data
-                    }, ensure_ascii=False))
-                    print(f"[📍 АВИА-НАВИГАЦИЯ] Успешно отправили 'nearest_airports_response' в сокет пилоту {client_id}")
-                except Exception as ex:
-                    print(f"[❌ АВИА-ОШИБКА] КРАШ тригонометрии Гаверсинуса: {str(ex)}")
 
-            # --- 📅 ПУБЛИКАЦИЯ РЕЙСА ---
-            elif msg["type"] == "create_flight":
-                flight_id = f"flight_{int(asyncio.get_event_loop().time())}"
-                grzhd_flights.append({
-                    "id": flight_id,
-                    "plane_id": msg["plane_id"],
-                    "number": msg["number"],
-                    "from_code": msg["from"],
-                    "to_code": msg["to"],
-                    "time": msg["time"],
-                    "status": "ожидание",
-                    "history": [] 
-                })
-                print(f"[📅 АВИА-РАСПИСАНИЕ] ДОБАВЛЕН РЕЙС: {msg['number']} ({msg['from']} -> {msg['to']})")
-                await broadcast_grzhd_state()
-
-            # --- ⏱️ УПРАВЛЕНИЕ СТАТУСАМИ (СТАРТ, ЗАДЕРЖКА, ФИНИШ) ---
+# --- ⏱️ УПРАВЛЕНИЕ СТАТУСАМИ (СТАРТ, ЗАДЕРЖКА, ФИНИШ) ---
 # 📡 Главный WebSocket роут слежки и навигации С ПОЛНОЙ СИНХРОНИЗАЦИЕЙ КЛЮЧЕЙ ОЗУ
 @app.websocket("/grzhd/ws/{client_id}")
 async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
