@@ -246,7 +246,7 @@
         let grzhdWs;
         let radarMap;
         
-        let globalAirports = {}; // База всех 4-х аэропортов с сервера
+        let globalAirports = {}; // Base всех 4-х аэропортов с сервера
         let myPlaneId = null;     // ID нашего самолёта (если создан)
         let myPlaneNumber = null; // Номер GD0X
         
@@ -259,20 +259,22 @@
         let radarMarkers = {};  // { flight_id: L.marker }
         let radarPolylines = {}; // { flight_id: { corridor: L.polyline, track: L.polyline } }
 
-        // 🌟 ИСПРАВЛЕНО: ОСТАЛСЯ ТОЛЬКО ОДИН, ЖЕЛЕЗОБЕТОННЫЙ СТАРТОВЫЙ КОНТЕНТ-ЛОАДЕР!
+        // 🌟 ИСПРАВЛЕНО: Безопасный вызов через setTimeout, дающий браузеру дочитать весь файл до конца!
         window.addEventListener('DOMContentLoaded', () => {
-            // Сразу на нулевой миллисекунде забиваем все 4 полосы в селектор
-            if (typeof loadAllDefaultAirportsBackup === "function") {
-                loadAllDefaultAirportsBackup(); 
-            }
+            setTimeout(() => {
+                // Сразу на нулевой миллисекунде забиваем все 4 полосы в селектор
+                if (typeof loadAllDefaultAirportsBackup === "function") {
+                    loadAllDefaultAirportsBackup(); 
+                }
 
-            // Агрессивно требуем у браузера доступ к GPS координатам
-            if (typeof promptGeolocationImmediately === "function") {
-                promptGeolocationImmediately(); 
-            }
-            
-            initRadarMap();
-            connectGrzhdWebSocket();
+                // Агрессивно требуем у браузера доступ к GPS координатам
+                if (typeof promptGeolocationImmediately === "function") {
+                    promptGeolocationImmediately(); 
+                }
+                
+                if (typeof initRadarMap === "function") initRadarMap();
+                if (typeof connectGrzhdWebSocket === "function") connectGrzhdWebSocket();
+            }, 0);
         });
 
         // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ (СИНХРОНИЗИРОВАННЫЙ С СЕРВЕРОМ)
@@ -290,9 +292,9 @@
                 // 🌟 Синхронизируем чтение точных ключей, прилетающих из server.py
                 if (msg.type === "init_airports") {
                     globalAirports = msg.airports;
-                    syncAirlinesData(msg.flights, msg.planes);
+                    if (typeof syncAirlinesData === "function") syncAirlinesData(msg.flights, msg.planes);
                 } else if (msg.type === "sync_flights") {
-                    syncAirlinesData(msg.flights, msg.planes);
+                    if (typeof syncAirlinesData === "function") syncAirlinesData(msg.flights, msg.planes);
                 } else if (msg.type === "plane_registered") {
                     myPlaneId = msg.plane_id;
                     myPlaneNumber = msg.number;
@@ -378,19 +380,6 @@
             if (typeof renderGlobalFlightsTable === "function") renderGlobalFlightsTable(flights);
             if (typeof updateFlightRadarMapLayers === "function") updateFlightRadarMapLayers(flights);
         }
-
-        // 🌟 ИСПРАВЛЕННЫЙ СТАРТОВЫЙ ЗАПУСК С ПРЕДОХРАНИТЕЛЕМ ОТ ПУСТОТЫ
-        window.addEventListener('DOMContentLoaded', () => {
-            // 1. Первым делом принудительно забиваем в выпадающий список все 4 аэропорта,
-            // чтобы у пилота СРАЗУ был выбор, даже если GPS или сеть зависнут!
-            loadAllDefaultAirportsBackup(); 
-
-            // 2. Только после этого агрессивно спрашиваем GPS для умной фильтрации сокета
-            promptGeolocationImmediately(); 
-            
-            initRadarMap();
-            connectGrzhdWebSocket();
-        });
 
         // 📍 4.А ПРИНУДИТЕЛЬНЫЙ АГРЕССИВНЫЙ ЗАПРОС ДОСТУПА К GPS ПРИ ВХОДЕ
         function promptGeolocationImmediately() {
