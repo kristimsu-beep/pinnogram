@@ -275,7 +275,7 @@
             connectGrzhdWebSocket();
         });
 
-        // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ
+        // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ (СИНХРОНИЗИРОВАННЫЙ С СЕРВЕРОМ)
         function connectGrzhdWebSocket() {
             const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
             const wsUrl = protocol + window.location.host + "/grzhd/ws/" + grzhdClientId;
@@ -287,6 +287,7 @@
             grzhdWs.onmessage = (event) => {
                 const msg = JSON.parse(event.data);
                 
+                // 🌟 Синхронизируем чтение точных ключей, прилетающих из server.py
                 if (msg.type === "init_airports") {
                     globalAirports = msg.airports;
                     syncAirlinesData(msg.flights, msg.planes);
@@ -299,6 +300,7 @@
                         activatePilotInterface(msg.number);
                     }
                 } else if (msg.type === "nearest_airports_response") {
+                    // 🌟 ПРИНУДИТЕЛЬНО ПЕРЕПИСЫВАЕМ СЕЛЕКТОР НА 2 БЛИЖАЙШИХ ОТ СЕРВЕРА
                     if (typeof renderNearestDepartureAirports === "function") {
                         renderNearestDepartureAirports(msg.airports);
                     }
@@ -756,7 +758,7 @@
         }
         // 📡 14. СВЕРХТОЧНАЯ ОТРИСОВКА FLIGHTRADAR КАРТЫ С АВТО-СТАРТОМ НА ВПП
         function updateFlightRadarMapLayers(flights) {
-            // Очищаем старые слои перед обновлением кадра
+            // Очищаем старые маркеры перед обновлением кадра
             for (let id in radarMarkers) { 
                 if (radarMarkers[id]) radarMap.removeLayer(radarMarkers[id]); 
             }
@@ -778,19 +780,19 @@
                 const endAP = globalAirports[f.to_code];
                 if (!startAP || !endAP) return;
 
-                // 🌟 ЗАЩИТА ОТ ПУСТОГО ТРЕКА: Если пилот только нажал "Старт" и история пуста,
-                // ставим самолётик строго на координаты взлётной полосы аэропорта вылета!
+                // 🌟 ЗАЩИТА: Если пилот только нажал "Старт" и история пуста,
+                // принудительно ставим самолётик на координаты взлётной полосы аэропорта вылета!
                 let currentPos = [startAP.lat, startAP.lng];
                 if (f.history && f.history.length > 0) {
                     currentPos = f.history[f.history.length - 1];
                 }
 
-                // 🌟 Пунктирный воздушный коридор полёта вдаль
+                // Пунктирный воздушный коридор полёта вдаль
                 const corridorLine = L.polyline([[startAP.lat, startAP.lng], [endAP.lat, endAP.lng]], {
                     color: '#0066cc', weight: 2, dashArray: '6, 8', opacity: 0.4
                 }).addTo(radarMap);
 
-                // 🌟 Сплошная линия проделанного пилотом маршрута
+                // Сплошная линия проделанного пилотом маршрута
                 const fullTrackPoints = [[startAP.lat, startAP.lng]];
                 if (f.history && f.history.length > 0) {
                     f.history.forEach(pt => fullTrackPoints.push(pt));
@@ -809,24 +811,28 @@
                     planeAngle = Math.atan2(p2[0] - p1[0], p2[1] - p1[1]) * (180 / Math.PI);
                 }
 
+                // 🌟 ИСПРАВЛЕНО: Жёсткие размеры и точка привязки центра без пустых запятых!
                 const planeIcon = L.divIcon({
                     html: `<div style="transform: rotate(${-planeAngle + 90}deg); font-size:26px; text-shadow:0 2px 6px rgba(0,0,0,0.4); color:#0066cc; width:26px; height:26px; text-align:center; cursor:pointer;">✈️</div>`,
                     className: 'radar-plane-div',
-                    iconSize: [26, 26],
+                    iconSize:[26, 26],
                     iconAnchor: [13, 13]
                 });
 
-                // Ставим маркер на Leaflet-карту
+                // Ставим маркер самолёта на карту
                 const marker = L.marker(currentPos, { icon: planeIcon }).addTo(radarMap);
                 
                 marker.on('click', function(e) {
                     L.DomEvent.stopPropagation(e);
-                    openRadarBottomPanel(f.number, f.from_name, f.to_name);
+                    if (typeof openRadarBottomPanel === "function") {
+                        openRadarBottomPanel(f.number, f.from_name, f.to_name);
+                    }
                 });
 
                 radarMarkers[f.id] = marker;
             });
         }
+
 
 
         // 📥 15. НИЖНЯЯ ПАНЕЛЬ ИНФОРМАЦИИ О САМОЛЁТЕ
