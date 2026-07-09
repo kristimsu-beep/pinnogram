@@ -763,9 +763,9 @@
             }
         }
     
-        // 📡 14. СВЕРХТОЧНАЯ ОТРИСОВКА FLIGHTRADAR КАРТЫ С ЖЕСТКИМ ЧИСЛОВЫМ ФОРМАТИРОВАНИЕМ
+        // 📡 14. УЛЬТИМАТИВНАЯ КАРТА С ПРЕДОХРАНИТЕЛЕМ ОТ NaN И АВТО-КОНВЕРТАЦИЕЙ ТИПОВ
         function updateFlightRadarMapLayers(flights) {
-            // Зачищаем старые слои кадра
+            // Мгновенная зачистка старых слоёв кадра
             for (let id in radarMarkers) { 
                 if (radarMarkers[id]) radarMap.removeLayer(radarMarkers[id]); 
             }
@@ -786,26 +786,54 @@
                 const endAP = globalAirports[f.to_code];
                 if (!startAP || !endAP) return;
 
-                // 🌟 Базовая стартовая точка (числа Float)
+                // По умолчанию сажаем борт на взлётно-посадочную полосу вылета
                 let currentPos = [parseFloat(startAP.lat), parseFloat(startAP.lng)];
                 
-                // Если история на сервере уже копится (как на твоём скриншоте!) — парсим её в честные числа
+                // 🌟 БРОНЕБОЙНЫЙ РАЗБОР КООРДИНАТ: Проверяем все возможные форматы прилёта из Python ОЗУ
                 if (f.history && f.history.length > 0) {
                     const lastPt = f.history[f.history.length - 1];
-                    currentPos = [parseFloat(lastPt[0]), parseFloat(lastPt[1])];
+                    if (lastPt) {
+                        let l_lat = undefined;
+                        let l_lng = undefined;
+
+                        // Если пришёл классический массив [lat, lng]
+                        if (Array.isArray(lastPt) && lastPt.length >= 2) {
+                            l_lat = parseFloat(lastPt[0]);
+                            l_lng = parseFloat(lastPt[1]);
+                        } 
+                        // Если пришёл объект вида {lat: ..., lng: ...}
+                        else if (lastPt.lat !== undefined && lastPt.lng !== undefined) {
+                            l_lat = parseFloat(lastPt.lat);
+                            l_lng = parseFloat(lastPt.lng);
+                        }
+
+                        // Проверяем, что получились валидные числа, а не NaN
+                        if (!isNaN(l_lat) && !isNaN(l_lng) && l_lat !== 0 && l_lng !== 0) {
+                            currentPos = [l_lat, l_lng];
+                        }
+                    }
                 }
 
-                // 🌟 Пунктирный воздушный коридор полёта
+                // Отрисовка пунктирного воздушного коридора трассы
                 const corridorLine = L.polyline([[parseFloat(startAP.lat), parseFloat(startAP.lng)], [parseFloat(endAP.lat), parseFloat(endAP.lng)]], {
                     color: '#0066cc', weight: 2, dashArray: '6, 8', opacity: 0.4
                 }).addTo(radarMap);
 
-                // 🌟 Сплошная линия проделанного маршрута с валидацией Float
+                // Отрисовка сплошного зелёного следа проделанного пути
                 const fullTrackPoints = [[parseFloat(startAP.lat), parseFloat(startAP.lng)]];
                 if (f.history && f.history.length > 0) {
                     f.history.forEach(pt => {
-                        if (pt && pt.length >= 2) {
-                            fullTrackPoints.push([parseFloat(pt[0]), parseFloat(pt[1])]);
+                        let t_lat = undefined;
+                        let t_lng = undefined;
+                        if (Array.isArray(pt) && pt.length >= 2) {
+                            t_lat = parseFloat(pt[0]);
+                            t_lng = parseFloat(pt[1]);
+                        } else if (pt && pt.lat !== undefined && pt.lng !== undefined) {
+                            t_lat = parseFloat(pt.lat);
+                            t_lng = parseFloat(pt.lng);
+                        }
+                        if (!isNaN(t_lat) && !isNaN(t_lng)) {
+                            fullTrackPoints.push([t_lat, t_lng]);
                         }
                     });
                 }
@@ -815,23 +843,25 @@
 
                 radarPolylines[f.id] = { corridor: corridorLine, track: trackLine };
 
-                // 🌟 РАСЧЁТ УГЛА С ЗАЩИТОЙ ОТ NaN ОШИБОК
+                // Высчитываем безопасный угол наклона самолёта по вектору движения
                 let planeAngle = 45;
                 if (f.history && f.history.length >= 2) {
                     const p1 = f.history[f.history.length - 2];
                     const p2 = f.history[f.history.length - 1];
                     
-                    const latDiff = parseFloat(p2[0]) - parseFloat(p1[0]);
-                    const lngDiff = parseFloat(p2[1]) - parseFloat(p1[1]);
-                    
-                    // Проверка: если diff равен нулю, не ломаем математику
+                    let lat1 = Array.isArray(p1) ? p1[0] : (p1 ? p1.lat : 0);
+                    let lng1 = Array.isArray(p1) ? p1[1] : (p1 ? p1.lng : 0);
+                    let lat2 = Array.isArray(p2) ? p2[0] : (p2 ? p2.lat : 0);
+                    let lng2 = Array.isArray(p2) ? p2[1] : (p2 ? p2.lng : 0);
+
+                    const latDiff = parseFloat(lat2) - parseFloat(lat1);
+                    const lngDiff = parseFloat(lng2) - parseFloat(lng1);
                     if (!isNaN(latDiff) && !isNaN(lngDiff) && (latDiff !== 0 || lngDiff !== 0)) {
                         planeAngle = Math.atan2(latDiff, lngDiff) * (180 / Math.PI);
                     }
                 }
-                if (isNaN(planeAngle)) planeAngle = 45; // Финальный щит от NaN
+                if (isNaN(planeAngle)) planeAngle = 45;
 
-                // Отрисовка кастомной div-иконки самолёта
                 const planeIcon = L.divIcon({
                     html: `<div style="transform: rotate(${-planeAngle + 90}deg); font-size:26px; text-shadow:0 2px 6px rgba(0,0,0,0.4); color:#0066cc; width:26px; height:26px; text-align:center; cursor:pointer;">✈️</div>`,
                     className: 'radar-plane-div',
@@ -839,17 +869,18 @@
                     iconAnchor: [13, 13]
                 });
 
-                // Ставим маркер на Leaflet карту по валидированным координатам
+                // Ставим маркер на карту Leaflet по отвалидированным координатам без шанса на NaN-краш!
                 const marker = L.marker(currentPos, { icon: planeIcon }).addTo(radarMap);
                 
                 marker.on('click', function(e) {
                     L.DomEvent.stopPropagation(e);
-                    openRadarBottomPanel(f.number, f.from_name, f.to_name);
+                    openRadarBottomPanel(f.number, f.from_code, f.to_code);
                 });
 
                 radarMarkers[f.id] = marker;
             });
         }
+
 
 
 
