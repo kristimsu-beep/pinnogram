@@ -291,10 +291,10 @@
         let radarMarkers = {};  // { flight_id: L.marker }
         let radarPolylines = {}; // { flight_id: { corridor: L.polyline, track: L.polyline } }
 
-        // 🌟 УЛЬТИМАТИВНЫЙ ФИКС ЛОАДЕРА: Изолированный безопасный запуск сокета и карт без гонки таймингов!
+        // 🌟 ИСПРАВЛЕНО: Чистый запуск. Полностью вырезали карту из старта, чтобы она НЕ ломалась в скрытом HTML!
         window.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => {
-                // 1. Автономный запуск резервных списков
+                // 1. Автономный запуск резервных списков полос
                 try {
                     if (typeof loadAllDefaultAirportsBackup === "function") loadAllDefaultAirportsBackup();
                 } catch(e) { console.error("Ошибка списков:", e); }
@@ -304,24 +304,17 @@
                     if (typeof promptGeolocationImmediately === "function") promptGeolocationImmediately();
                 } catch(e) { console.error("Ошибка GPS-запроса:", e); }
                 
-                // 3. 🌟 ПЕРВЫМ ДЕЛОМ ЗАПУСКАЕМ СОКЕТ: Сначала открываем трубу соединения с вышкой!
+                // 3. ЗАПУСКАЕМ СТРОГО ТОЛЬКО СОКЕТ: Открываем трубу соединения с сервером!
                 try {
                     if (typeof connectGrzhdWebSocket === "function") connectGrzhdWebSocket();
                 } catch(wsError) {
                     console.error("Критический сбой запуска сокет-соединения:", wsError);
                 }
-
-                // 4. 🌟 ВТОРЫМ ДЕЛОМ ЗАПУСКАЕМ КАРТУ: Теперь, если Leaflet дёрнет метео-датчик, 
-                // объект grzhdWs уже будет создан в памяти и код не упадёт в краш!
-                try {
-                    if (typeof initRadarMap === "function") initRadarMap();
-                } catch(mapError) {
-                    console.error("Сбой инициализации Leaflet карты:", mapError);
-                }
+                
+                // 🌟 КАРТУ ОТСЮДА ПОЛНОСТЬЮ УБРАЛИ! Она сама безопасно запустится при клике на вкладку меню.
             }, 0);
         });
-
-        
+          
         // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ (С ЛОГГЕРОМ АВАРИЙ ДЛЯ RENDER)
         function connectGrzhdWebSocket() {
             const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
@@ -481,7 +474,7 @@
             if (typeof setupMapWeatherListeners === "function") setupMapWeatherListeners();
         }
 
-        // ⚙️ 3. ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК (🌟 ИСПРАВЛЕННЫЙ ТАЙМИНГ АНИМАЦИИ КАРТЫ)
+        // ⚙️ 3. ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК (🌟 ЛАЗЕРНАЯ ИНИЦИАЛИЗАЦИЯ И РЕНДЕРИНГ КАРТЫ)
         function switchAirlinesTab(tabName) {
             document.querySelectorAll('.app-tab-page').forEach(page => page.classList.remove('active'));
             document.querySelectorAll('.nav-tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -489,31 +482,34 @@
             const targetPage = document.getElementById('tab_' + tabName);
             if (targetPage) targetPage.classList.add('active');
             
-            // Заменили устаревший event на кроссбраузерный window.event для мобилок
             if (window.event && window.event.currentTarget) {
                 window.event.currentTarget.classList.add('active');
             }
 
-            // 🌟 КРИТИЧЕСКИЙ ФИКС ДЛЯ СМАРТФОНА: Переключились на карту — мгновенно будим графику!
+            // 🌟 КРИТИЧЕСКИЙ ФИКС: Создаём карту только тогда, когда див стал ВИДИМЫМ на экране!
             if (tabName === 'map') {
                 setTimeout(() => { 
+                    // Если карта ещё ни разу не создавалась — инициализируем её прямо сейчас!
+                    if (!radarMap && typeof initRadarMap === "function") {
+                        initRadarMap();
+                    }
+                    
                     if (radarMap) {
-                        radarMap.invalidateSize(); // Выравниваем тайлы Esri
+                        radarMap.invalidateSize(); // Выравниваем тайлы спутника Esri
                         
-                        // 1. Принудительно заставляем карту НАРИСОВАТЬ самолётик прямо сейчас, не дожидаясь сокета!
+                        // Принудительно заставляем карту нарисовать самолёт из ОЗУ
                         if (typeof updateFlightRadarMapLayers === "function") {
                             updateFlightRadarMapLayers(grzhd_flights);
                         }
                         
-                        // 2. Принудительно заставляем датчик отправить запрос погоды для текущего центра!
+                        // Запрашиваем погоду для центра
                         if (typeof fetchRealLocationWeatherData === "function") {
                             fetchRealLocationWeatherData();
                         }
                     }
-                }, 250); // Даём 250мс на то, чтобы вкладка физически раскрылась на экране смартфона
+                }, 200); // 200мс форы, чтобы вкладка успела отрисоваться в браузере смартфона
             }
         }
-
 
         // 📋 10. ЕДИНАЯ СИНХРОНИЗАЦИЯ ВСЕХ ТАБЛИЦ И ОТРИСОВКА КАРТЫ FLIGHTRADAR24
         function syncAirlinesData(flights, planes) {
