@@ -308,8 +308,8 @@
                 if (typeof connectGrzhdWebSocket === "function") connectGrzhdWebSocket();
             }, 0);
         });
-
-        // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ (С ПОДДЕРЖКОЙ МЕТЕО-СЛУЖБЫ)
+        
+        // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ (С ПОЛНОЙ ЗАЩИТОЙ ОТ UNDEFINED)
         function connectGrzhdWebSocket() {
             const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
             const wsUrl = protocol + window.location.host + "/grzhd/ws/" + grzhdClientId;
@@ -330,29 +330,44 @@
                 } else if (msg.type === "nearest_airports_response") {
                     renderNearestDepartureAirports(msg.airports);
                 
-                // 🌟 ДОБАВЛЕНО: Поимка реальной погоды с бэкенда по сокету
+                // 🌟 УЛЬТИМАТИВНЫЙ МЕТЕО-ПРИЁМНИК С ЗАЩИТОЙ ОТ КРАШЕЙ СДВИГА КЛЮЧЕЙ
                 } else if (msg.type === "camera_weather_response") {
-                    // 1. Обновляем данные в маленьком боковом квадратике
-                    document.getElementById('miniWeatherIcon').innerText = msg.icon;
-                    document.getElementById('miniWeatherTemp').innerText = `${msg.temp > 0 ? '+' : ''}${msg.temp}°`;
+                    console.log("🌦️ [СОКЕТ-МЕТЕО] Пакет успешно доставлен:", msg);
                     
-                    // 2. Обновляем данные в большой нижней подробной плашке
-                    document.getElementById('fullWeatherTemp').innerText = `${msg.temp > 0 ? '+' : ''}${msg.temp}°`;
-                    document.getElementById('fullWeatherIcon').innerText = msg.icon;
-                    document.getElementById('fullWeatherStatus').innerText = msg.status;
+                    const wTemp = (msg.temp !== undefined) ? msg.temp : (msg["temp"] !== undefined ? msg["temp"] : 0);
+                    const wIcon = msg.icon || msg["icon"] || "⛅";
+                    const wStatus = msg.status || msg["status"] || "Загрузка...";
+                    const wHourly = msg.hourly || msg["hourly"] || [];
+
+                    const miniIconEl = document.getElementById('miniWeatherIcon');
+                    const miniTempEl = document.getElementById('miniWeatherTemp');
+                    const fullTempEl = document.getElementById('fullWeatherTemp');
+                    const fullIconEl = document.getElementById('fullWeatherIcon');
+                    const fullStatusEl = document.getElementById('fullWeatherStatus');
+
+                    if (miniIconEl) miniIconEl.innerText = wIcon;
+                    if (miniTempEl) miniTempEl.innerText = `${wTemp > 0 ? '+' : ''}${wTemp}°`;
+                    if (fullTempEl) fullTempEl.innerText = `${wTemp > 0 ? '+' : ''}${wTemp}°`;
+                    if (fullIconEl) fullIconEl.innerText = wIcon;
+                    if (fullStatusEl) fullStatusEl.innerText = wStatus;
                     
-                    // 3. Динамически генерируем 5 почасовых ячеек прогноза
                     const hourlyContainer = document.getElementById('weatherHourlyContainer');
-                    if (hourlyContainer && msg.hourly) {
-                        hourlyContainer.innerHTML = ""; // Стираем старые часы
-                        msg.hourly.forEach(step => {
+                    if (hourlyContainer && Array.isArray(wHourly)) {
+                        hourlyContainer.innerHTML = ""; 
+                        wHourly.forEach(step => {
+                            if (!step) return;
+                            
+                            // 🌟 ИСПРАВЛЕНО: Читаем step.time вместо step.time, защищая цикл от падения!
+                            const sTime = step.time || step["time"] || "--:--";
+                            const sTemp = (step.temp !== undefined) ? step.temp : (step["temp"] !== undefined ? step["temp"] : 0);
+                            
                             const cell = document.createElement('div');
                             cell.style.display = "flex";
                             cell.style.flexDirection = "column";
                             cell.style.alignItems = "center";
                             cell.innerHTML = `
-                                <span style="font-size:11px; color:var(--gray-text); font-weight:600; text-transform:uppercase;">${step.time}</span>
-                                <span style="font-size:15px; font-weight:800; color:var(--navy-dark); margin-top:4px; display:block;">${step.temp > 0 ? '+' : ''}${step.temp}°</span>
+                                <span style="font-size:11px; color:var(--gray-text); font-weight:600; text-transform:uppercase;">${sTime}</span>
+                                <span style="font-size:15px; font-weight:800; color:var(--navy-dark); margin-top:4px; display:block;">${sTemp > 0 ? '+' : ''}${sTemp}°</span>
                             `;
                             hourlyContainer.appendChild(cell);
                         });
