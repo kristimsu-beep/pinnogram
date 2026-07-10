@@ -3094,21 +3094,22 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                         break
                 await broadcast_grzhd_state()
 
-            # --- 🌤️ 6️⃣ МЕТЕОСТАНЦИЯ: БРОНЕБОЙНЫЙ РАЗБОР С ЗАЩИТОЙ ОТ ОШИБКИ 429 ---
+            # --- 🌤️ 6️⃣ МЕТЕОСТАНЦИЯ: БРОНЕБОЙНЫЙ РАЗБОР С ЗАЩИТОЙ ОТ КРАША KEYERROR 'LAT' ---
             elif msg["type"] == "request_camera_weather":
-                lat, lng = msg["lat"], msg["lng"]
+                # 🌟 ПРЕДОХРАНИТЕЛЬ: Проверяем, что телефон вообще прислал координаты, чтобы не ронять сервер!
+                if "lat" not in msg or "lng" not in msg or msg["lat"] is None or msg["lng"] is None:
+                    print(f"[🌤️ ЧЁРНЫЙ ЯЩИК-ЩИТ] Смартфон прислал пустой GPS (карта ещё грузится). Отдаем дефолт.")
+                    lat, lng = 53.195, 50.150 # Дефолтная Самара
+                else:
+                    lat, lng = msg["lat"], msg["lng"]
                 
                 try:
-                    # 🌟 ИСПРАВЛЕНО: Добавили параметры current=temperature_2m,weather_code строго как в твоей ссылке!
-                    weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current=temperature_2m,weather_code&hourly=temperature_2m&timezone=auto"
-                                        
+                    weather_url = fhttps://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current=temperature_2m,weather_code&hourly=temperature_2m&timezone=auto"                    
                     async with httpx.AsyncClient() as client:
                         response = await client.get(weather_url, timeout=3.0)
                     
                     if response.status_code == 200:
                         w_data = response.json()
-                        
-                        # 🌟 СИНХРОНИЗАЦИЯ С ТВОИМ JSON: Читаем ключи из объекта "current"!
                         current_block = w_data.get("current", {})
                         current_temp = round(current_block.get("temperature_2m", 25))
                         weather_code = current_block.get("weather_code", 0)
@@ -3136,7 +3137,7 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                         
                         hourly_temps = []
                         for i in range(len(hourly_times)):
-                            time_label = hourly_times[i].split("T")[1] if "T" in hourly_times[i] else f"+{i}ч"
+                            time_label = hourly_times[i].split("T") if "T" in hourly_times[i] else f"+{i}ч"
                             if i == 0: time_label = "Сейчас"
                             hourly_temps.append({"time": time_label, "temp": round(hourly_vals[i])})
                         
@@ -3145,23 +3146,16 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                             "status": status_text, "icon": icon, "hourly": hourly_temps
                         }, ensure_ascii=False))
                     else:
-                        # Если Open-Meteo выдал 429 блокировку — аварийно активируем чистую автономную метеостанцию коридора G/D!
                         raise Exception(f"Блокировка API (Код {response.status_code})")
                         
                 except Exception as weather_err:
-                    print(f"[🌤️ АВТОНОМНЫЙ РЕЖИМ] Защита от лимитов Open-Meteo. Выдаем стейт Самары: +29°C")
-                    # 🌟 ИСПРАВЛЕНО: Структура hourly теперь ИДЕАЛЬНО бьётся с логгером фронтенда, исключая спам-петлю логов!
+                    print(f"[🌤️ АВТОНОМНЫЙ РЕЖИМ] Защита сокета. Выдаем стейт Самары: +29°C")
                     await websocket.send_text(json.dumps({
                         "type": "camera_weather_response", 
-                        "temp": 29, 
-                        "status": "Преимущественно ясно", 
-                        "icon": "🌤️",
+                        "temp": 29, "status": "Преимущественно ясно", "icon": "🌤️",
                         "hourly": [
-                            {"time": "Сейчас", "temp": 29},
-                            {"time": "18:00", "temp": 28},
-                            {"time": "19:00", "temp": 26},
-                            {"time": "20:00", "temp": 24},
-                            {"time": "21:00", "temp": 22}
+                            {"time": "Сейчас", "temp": 29}, {"time": "18:00", "temp": 28},
+                            {"time": "19:00", "temp": 26}, {"time": "20:00", "temp": 24}, {"time": "21:00", "temp": 22}
                         ]
                     }, ensure_ascii=False))
 
