@@ -291,23 +291,36 @@
         let radarMarkers = {};  // { flight_id: L.marker }
         let radarPolylines = {}; // { flight_id: { corridor: L.polyline, track: L.polyline } }
 
-        // 🌟 ИСПРАВЛЕНО: Безопасный вызов через setTimeout, дающий браузеру дочитать весь файл до конца!
+        // 🌟 УЛЬТИМАТИВНЫЙ ФИКС ЛОАДЕРА: Изолированный безопасный запуск сокета и карт без гонки таймингов!
         window.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => {
-                // Сразу на нулевой миллисекунде забиваем все 4 полосы в селектор
-                if (typeof loadAllDefaultAirportsBackup === "function") {
-                    loadAllDefaultAirportsBackup(); 
+                // 1. Автономный запуск резервных списков
+                try {
+                    if (typeof loadAllDefaultAirportsBackup === "function") loadAllDefaultAirportsBackup();
+                } catch(e) { console.error("Ошибка списков:", e); }
+
+                // 2. Автономный запрос GPS доступа у пилота
+                try {
+                    if (typeof promptGeolocationImmediately === "function") promptGeolocationImmediately();
+                } catch(e) { console.error("Ошибка GPS-запроса:", e); }
+                
+                // 3. 🌟 ПЕРВЫМ ДЕЛОМ ЗАПУСКАЕМ СОКЕТ: Сначала открываем трубу соединения с вышкой!
+                try {
+                    if (typeof connectGrzhdWebSocket === "function") connectGrzhdWebSocket();
+                } catch(wsError) {
+                    console.error("Критический сбой запуска сокет-соединения:", wsError);
                 }
 
-                // Агрессивно требуем у браузера доступ к GPS координатам
-                if (typeof promptGeolocationImmediately === "function") {
-                    promptGeolocationImmediately(); 
+                // 4. 🌟 ВТОРЫМ ДЕЛОМ ЗАПУСКАЕМ КАРТУ: Теперь, если Leaflet дёрнет метео-датчик, 
+                // объект grzhdWs уже будет создан в памяти и код не упадёт в краш!
+                try {
+                    if (typeof initRadarMap === "function") initRadarMap();
+                } catch(mapError) {
+                    console.error("Сбой инициализации Leaflet карты:", mapError);
                 }
-                
-                if (typeof initRadarMap === "function") initRadarMap();
-                if (typeof connectGrzhdWebSocket === "function") connectGrzhdWebSocket();
             }, 0);
         });
+
         
         // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ (С ЛОГГЕРОМ АВАРИЙ ДЛЯ RENDER)
         function connectGrzhdWebSocket() {
