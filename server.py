@@ -3127,7 +3127,7 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                             print(f"[📡 LIVE-ТРЕКЕР] Рейс {f['number']}: Добавили GPS координату [{lat}, {lng}]. Точек в ОЗУ: {len(f['history'])}")
                         break
                 await broadcast_grzhd_state()
-            # --- 🌤️ НОВЫЙ ОБРАБОТЧИК: ЗАПРОС РЕАЛЬНОЙ ПОГОДЫ ЧЕРЕЗ OPEN-METEO API ---
+            # --- 🌤️ НОВЫЙ ОБРАБОТЧИК: ЗАПРОС РЕАЛЬНОЙ ПОГОДЫ ЧЕРЕЗ OPEN-METEO API (ЭТАЛОН) ---
             elif msg["type"] == "request_camera_weather":
                 lat, lng = msg["lat"], msg["lng"]
                 
@@ -3141,12 +3141,11 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                     if response.status_code == 200:
                         w_data = response.json()
                         
-                        # 🌟 ИСПРАВЛЕНО: Читаем точный ключ "current" и переменные с подчёркиваниями из Open-Meteo API!
                         current_block = w_data.get("current", {})
                         current_temp = round(current_block.get("temperature_2m", 0))
                         weather_code = current_block.get("weather_code", 0)
                         
-                        # 🌟 ДОБАВЛЕНО: Переводим сухие коды API в понятный текст и авиа-иконки для нижней панели
+                        # 🌟 СИНХРОНИЗАЦИЯ: Переводим сухие коды API в понятный текст и авиа-иконки для фронтенда!
                         weather_statuses = {
                             0: ("Ясно", "☀️"), 1: ("Преимущественно ясно", "🌤️"), 
                             2: ("Переменная облачность", "⛅"), 3: ("Пасмурно", "☁️"),
@@ -3157,31 +3156,31 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                         }
                         status_text, icon = weather_statuses.get(weather_code, ("Переменная облачность", "⛅"))
                         
-                        # Собираем почасовой прогноз на ближайшие часовые слоты (как на скриншоте)
+                        # Собираем почасовой прогноз на ближайшие часовые слоты
                         hourly_temps = []
                         hourly_block = w_data.get("hourly", {})
-                        hourly_times = hourly_block.get("time", [])[:5] # Нам достаточно 5 часов для плашки
+                        hourly_times = hourly_block.get("time", [])[:5] 
                         hourly_vals = hourly_block.get("temperature_2m", [])[:5]
                         
                         for i in range(len(hourly_times)):
                             # Из строки '2026-07-10T14:00' вырезаем только время '14:00'
                             time_label = hourly_times[i].split("T")[1] if "T" in hourly_times[i] else f"+{i}ч"
-                            if i == 0: time_label = "Сейчас" # Красивое форматирование первой ячейки
+                            if i == 0: time_label = "Сейчас"
                             
                             hourly_temps.append({
                                 "time": time_label,
                                 "temp": round(hourly_vals[i])
                             })
                             
-                        # Отправляем метео-сводку обратно пилоту в сокет
+                        # 🌟 ФИКС КЛЮЧЕЙ: Шлём точные ключи (status, icon), которые ждёт JavaScript!
                         await websocket.send_text(json.dumps({
                             "type": "camera_weather_response",
                             "temp": current_temp,
-                            "status": status_text,
-                            "icon": icon,
+                            "status": status_text,  # Отправляем текст "Ясно" вместо undefined
+                            "icon": icon,            # Отправляем иконку ☀️ вместо undefined
                             "hourly": hourly_temps
                         }, ensure_ascii=False))
-                        print(f"[🌤️ МЕТЕО-СЛУЖБА] Успешно отправили погоду для [{lat}, {lng}] пилоту {client_id}: {current_temp}°C, {status_text}")
+                        print(f"[🌤️ МЕТЕО-СЛУЖБА] Успешно отправили погоду для [{lat}, {lng}]: {current_temp}°C, {status_text}")
                         
                 except Exception as weather_err:
                     print(f"[❌ МЕТЕО-ОШИБКА] Не удалось запросить погоду по GPS: {str(weather_err)}")
