@@ -326,11 +326,24 @@
                 }
             };
 
+            // 🌟 ИСПРАВЛЕНО: Принудительный пинок карты и метеостанции СРАЗУ при успешном коннекте сокета!
             grzhdWs.onopen = () => {
                 console.log("Диспетчерская вышка подключена. ID сессии:", grzhdClientId);
+                
                 // Сигнализируем серверу, что сокет успешно поднялся на фронте
                 grzhdWs.send(JSON.stringify({ type: "frontend_log", info: "Сокет успешно перешёл в состояние OPEN на телефоне." }));
+                
+                // 1. Принудительно просим бэкенд отдать погоду для текущего центра карты сразу при старте!
+                if (typeof fetchRealLocationWeatherData === "function") {
+                    setTimeout(fetchRealLocationWeatherData, 500); // Даем 500мс форы для стабилизации соединения
+                }
+
+                // 2. Намертво заставляем карту проверить активные рейсы и нарисовать самолётик, если он уже запущен!
+                if (typeof updateFlightRadarMapLayers === "function") {
+                    setTimeout(() => { updateFlightRadarMapLayers(grzhd_flights); }, 600);
+                }
             };
+
 
             grzhdWs.onmessage = (event) => {
                 try {
@@ -455,7 +468,7 @@
             if (typeof setupMapWeatherListeners === "function") setupMapWeatherListeners();
         }
 
-        // ⚙️ 3. ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК В СТИЛЕ ROBLOX
+        // ⚙️ 3. ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК (🌟 ИСПРАВЛЕННЫЙ ТАЙМИНГ АНИМАЦИИ КАРТЫ)
         function switchAirlinesTab(tabName) {
             document.querySelectorAll('.app-tab-page').forEach(page => page.classList.remove('active'));
             document.querySelectorAll('.nav-tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -463,14 +476,31 @@
             const targetPage = document.getElementById('tab_' + tabName);
             if (targetPage) targetPage.classList.add('active');
             
-            if (event && event.currentTarget) {
-                event.currentTarget.classList.add('active');
+            // Заменили устаревший event на кроссбраузерный window.event для мобилок
+            if (window.event && window.event.currentTarget) {
+                window.event.currentTarget.classList.add('active');
             }
 
+            // 🌟 КРИТИЧЕСКИЙ ФИКС ДЛЯ СМАРТФОНА: Переключились на карту — мгновенно будим графику!
             if (tabName === 'map') {
-                setTimeout(() => { radarMap.invalidateSize(); }, 200);
+                setTimeout(() => { 
+                    if (radarMap) {
+                        radarMap.invalidateSize(); // Выравниваем тайлы Esri
+                        
+                        // 1. Принудительно заставляем карту НАРИСОВАТЬ самолётик прямо сейчас, не дожидаясь сокета!
+                        if (typeof updateFlightRadarMapLayers === "function") {
+                            updateFlightRadarMapLayers(grzhd_flights);
+                        }
+                        
+                        // 2. Принудительно заставляем датчик отправить запрос погоды для текущего центра!
+                        if (typeof fetchRealLocationWeatherData === "function") {
+                            fetchRealLocationWeatherData();
+                        }
+                    }
+                }, 250); // Даём 250мс на то, чтобы вкладка физически раскрылась на экране смартфона
             }
         }
+
 
         // 📋 10. ЕДИНАЯ СИНХРОНИЗАЦИЯ ВСЕХ ТАБЛИЦ И ОТРИСОВКА КАРТЫ FLIGHTRADAR24
         function syncAirlinesData(flights, planes) {
