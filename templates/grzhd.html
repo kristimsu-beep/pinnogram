@@ -1149,27 +1149,26 @@
             }
         }
 
-        // 🌟 УЛЬТИМАТИВНЫЙ ФИКС: Функция с авто-ожиданием сокета и защитой от потери кадров карты!
+        // 🌤️ 18. МЕТЕО-СЛУЖБА: УСТОЙЧИВАЯ ОТПРАВКА С ТОТАЛЬНЫМ КЛИЕНТСКИМ ЛОГИРОВАНИЕМ
         function fetchRealLocationWeatherData() {
             if (!radarMap) return;
             const center = radarMap.getCenter();
             
+            // Отправляем принудительный лог-рапорт прямо в консоль Render
+            sendFrontendLog(`[КЛИЕНТ-МЕТЕО] Функция fetch проснулась! Центр экрана: Широта=${center.lat}, Долгота=${center.lng}. Статус сокета readyState=${grzhdWs ? grzhdWs.readyState : 'null'}`);
+            
             if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
-                // Если сокет готов — мгновенно шлём пакет на бэкенд
                 grzhdWs.send(JSON.stringify({
                     type: "request_camera_weather",
                     lat: center.lat,
                     lng: center.lng
                 }));
-                console.log(`[🌤️ МЕТЕО-ОТПРАВКА] Запросили сокет-погоду для центра карты: [${center.lat}, ${center.lng}]`);
+                sendFrontendLog(`[КЛИЕНТ-МЕТЕО] Пакет request_camera_weather УСПЕШНО отправлен в сокет-трубу!`);
             } else {
-                // 🌟 ЕСЛИ СОКЕТ ЕЩЁ НЕ ОТКРЫЛСЯ: Мягко ждём 1 секунду и повторяем запрос погоды автоматически!
-                console.log("[🌤️ МЕТЕО-ОЖИДАНИЕ] Сокет ещё не готов. Повторим попытку метео-запроса через 1000мс...");
-                setTimeout(fetchRealLocationWeatherData, 1000);
+                sendFrontendLog(`[КЛИЕНТ-МЕТЕО-ОТКАЗ] Пакет не отправлен, сокет ещё не в статусе OPEN. Повторим авто-запрос через 1500мс...`);
+                setTimeout(fetchRealLocationWeatherData, 1500);
             }
         }
-
-
 
         // Переключатель анимации открытия/закрытия подробной нижней панели
         function toggleWeatherBottomPanel(show) {
