@@ -3031,9 +3031,18 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
         while True:
             raw_data = await websocket.receive_text()
             msg = json.loads(raw_data)
-            
+            # --- 🛑 ПРИЕМ ОТЧЕТОВ ОБ ОШИБКАХ С ТЕЛЕФОНА ПИЛОТА ---
+            if msg.get("type") == "frontend_log":
+                print(f"[📱 СМАРТФОН-ЛОГ] От {client_id}: {msg.get('info')}")
+                continue
+                
+            elif msg.get("type") == "frontend_crash_report":
+                print(f"\n🚨🚨🚨 [КРИТИЧЕСКИЙ КРАШ НА ТЕЛЕФОНЕ] Пилот {client_id} вылетел по ошибке:")
+                print(f"👉 {msg.get('error')}\n")
+                continue
+                
             # --- 1️⃣ 🛫 РЕГИСТРАЦИЯ САМОЛЁТА ---
-            if msg["type"] == "register_plane":
+            elif msg["type"] == "register_plane":
                 count = len(grzhd_planes) + 1
                 plane_num = f"GD0{count}" if count < 10 else f"GD{count}"
                 plane_id = f"plane_{client_id}"
