@@ -309,73 +309,109 @@
             }, 0);
         });
         
-        // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ (ИТОГОВЫЙ ГЕРМЕТИЧНЫЙ МОНОЛИТ)
+        // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ (С ЛОГГЕРОМ АВАРИЙ ДЛЯ RENDER)
         function connectGrzhdWebSocket() {
             const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
             const wsUrl = protocol + window.location.host + "/grzhd/ws/" + grzhdClientId;
             
             grzhdWs = new WebSocket(wsUrl);
 
-            grzhdWs.onopen = () => console.log("Диспетчерская вышка подключена. ID сессии:", grzhdClientId);
+            // Автономный отправщик отчётов об ошибках фронтенда на сервер Render
+            window.onerror = function(message, source, lineno, colno, error) {
+                if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                    grzhdWs.send(JSON.stringify({
+                        type: "frontend_crash_report",
+                        error: `[КРАШ JS] ${message} на строке ${lineno}:${colno} в файле ${source}`
+                    }));
+                }
+            };
+
+            grzhdWs.onopen = () => {
+                console.log("Диспетчерская вышка подключена. ID сессии:", grzhdClientId);
+                // Сигнализируем серверу, что сокет успешно поднялся на фронте
+                grzhdWs.send(JSON.stringify({ type: "frontend_log", info: "Сокет успешно перешёл в состояние OPEN на телефоне." }));
+            };
 
             grzhdWs.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-                
-                if (msg.type === "init_airports" || msg.type === "sync_flights") {
-                    syncAirlinesData(msg.flights, msg.planes);
-                } else if (msg.type === "plane_registered") {
-                    myPlaneId = msg.plane_id;
-                    myPlaneNumber = msg.number;
-                    activatePilotInterface(msg.number);
-                } else if (msg.type === "nearest_airports_response") {
-                    renderNearestDepartureAirports(msg.airports);
-                
-                // 🌤️ ПОИМКА РЕАЛЬНОЙ ПОГОДЫ С БЭКЕНДА ПО СОКЕТУ (С БРОНЕБОЙНОЙ ЗАЩИТОЙ КАРТЫ)
-                } else if (msg.type === "camera_weather_response") {
-                    console.log("🌦️ [СОКЕТ-МЕТЕО] Пакет успешно доставлен:", msg);
+                try {
+                    const msg = JSON.parse(event.data);
                     
-                    const wTemp = (msg.temp !== undefined) ? msg.temp : (msg["temp"] !== undefined ? msg["temp"] : 0);
-                    const wIcon = msg.icon || msg["icon"] || "⛅";
-                    const wStatus = msg.status || msg["status"] || "Загрузка...";
-                    const wHourly = msg.hourly || msg["hourly"] || [];
-
-                    const miniIconEl = document.getElementById('miniWeatherIcon');
-                    const miniTempEl = document.getElementById('miniWeatherTemp');
-                    const fullTempEl = document.getElementById('fullWeatherTemp');
-                    const fullIconEl = document.getElementById('fullWeatherIcon');
-                    const fullStatusEl = document.getElementById('fullWeatherStatus');
-
-                    if (miniIconEl) miniIconEl.innerText = wIcon;
-                    if (miniTempEl) miniTempEl.innerText = `${wTemp > 0 ? '+' : ''}${wTemp}°`;
-                    if (fullTempEl) fullTempEl.innerText = `${wTemp > 0 ? '+' : ''}${wTemp}°`;
-                    if (fullIconEl) fullIconEl.innerText = wIcon;
-                    if (fullStatusEl) fullStatusEl.innerText = wStatus;
+                    if (msg.type === "init_airports" || msg.type === "sync_flights") {
+                        // Логируем проверку перед запуском карты
+                        if (!radarMap) {
+                            sendFrontendLog(`[🗺️ КАРТА-ОШИБКА] Попытка обновить рейсы, но объект radarMap равен null!`);
+                        }
+                        syncAirlinesData(msg.flights, msg.planes);
+                        
+                    } else if (msg.type === "plane_registered") {
+                        myPlaneId = msg.plane_id;
+                        myPlaneNumber = msg.number;
+                        activatePilotInterface(msg.number);
+                        
+                    } else if (msg.type === "nearest_airports_response") {
+                        renderNearestDepartureAirports(msg.airports);
                     
-                    // Проверяем hourlyContainer на существование перед очисткой innerHTML.
-                    const hourlyContainer = document.getElementById('weatherHourlyContainer');
-                    if (hourlyContainer && msg.hourly) {
-                        hourlyContainer.innerHTML = ""; 
-                        msg.hourly.forEach(step => {
-                            if (!step) return;
-                            const cell = document.createElement('div');
-                            cell.style.display = "flex";
-                            cell.style.flexDirection = "column";
-                            cell.style.alignItems = "center";
-                            cell.innerHTML = `
-                                <span style="font-size:11px; color:var(--gray-text); font-weight:600; text-transform:uppercase;">${step.time || step["time"] || "--:--"}</span>
-                                <span style="font-size:15px; font-weight:800; color:var(--navy-dark); margin-top:4px; display:block;">${step.temp !== undefined ? step.temp : step["temp"]}°</span>
-                            `;
-                            hourlyContainer.appendChild(cell);
-                        });
+                    } else if (msg.type === "camera_weather_response") {
+                        sendFrontendLog(`[🌤️ МЕТЕО-ДАННЫЕ] Пакет погоды прилетел в JS: temp=${msg.temp}, status=${msg.status}`);
+                        
+                        const miniIconEl = document.getElementById('miniWeatherIcon');
+                        const miniTempEl = document.getElementById('miniWeatherTemp');
+                        const fullTempEl = document.getElementById('fullWeatherTemp');
+                        const fullIconEl = document.getElementById('fullWeatherIcon');
+                        const fullStatusEl = document.getElementById('fullWeatherStatus');
+                        const hourlyContainer = document.getElementById('weatherHourlyContainer');
+
+                        // 🔍 ПРОВЕРКА ВЁРСТКИ: Если элементы не найдены, шлём рапорт на Render вместо падения скрипта!
+                        if (!miniIconEl || !miniTempEl || !fullTempEl || !hourlyContainer) {
+                            sendFrontendLog(`[❌ ВЁРСТКА-КРАШ] Элементы погоды не найдены в DOM! miniWidget=${!!miniIconEl}, hourlyContainer=${!!hourlyContainer}`);
+                        }
+
+                        if (miniIconEl) miniIconEl.innerText = msg.icon || "⛅";
+                        if (miniTempEl) miniTempEl.innerText = `${msg.temp > 0 ? '+' : ''}${msg.temp}°`;
+                        if (fullTempEl) fullTempEl.innerText = `${msg.temp > 0 ? '+' : ''}${msg.temp}°`;
+                        if (fullIconEl) fullIconEl.innerText = msg.icon || "⛅";
+                        if (fullStatusEl) fullStatusEl.innerText = msg.status || "Загрузка...";
+                        
+                        if (hourlyContainer && msg.hourly) {
+                            hourlyContainer.innerHTML = ""; 
+                            msg.hourly.forEach((step, idx) => {
+                                if (!step) return;
+                                const sTime = step.time || step["time"];
+                                const sTemp = step.temp !== undefined ? step.temp : step["temp"];
+                                
+                                if (sTime === undefined || sTemp === undefined) {
+                                    sendFrontendLog(`[❌ ПОГОДА-КЛЮЧИ] В hourly[${idx}] отсутствуют ключи! step=${JSON.stringify(step)}`);
+                                }
+
+                                const cell = document.createElement('div');
+                                cell.style.display = "flex";
+                                cell.style.flexDirection = "column";
+                                cell.style.alignItems = "center";
+                                cell.innerHTML = `
+                                    <span style="font-size:11px; color:var(--gray-text); font-weight:600; text-transform:uppercase;">${sTime || "--:--"}</span>
+                                    <span style="font-size:15px; font-weight:800; color:var(--navy-dark); margin-top:4px; display:block;">${sTemp > 0 ? '+' : ''}${sTemp}°</span>
+                                `;
+                                hourlyContainer.appendChild(cell);
+                            });
+                        }
                     }
-                } // 🌟 ИСПРАВЛЕНО: Закрыли блок camera_weather_response!
-            }; // 🌟 ИСПРАВЛЕНО: Закрыли функцию onmessage!
+                } catch (err) {
+                    sendFrontendLog(`[❌ ФАТАЛЬНЫЙ КРАШ ONMESSAGE] Ошибка внутри обработчика сокета: ${err.message}`);
+                }
+            };
 
             grzhdWs.onclose = () => {
-                console.log("Потеря связи с авиасервером. Реконнект через 3 секунды...");
                 setTimeout(connectGrzhdWebSocket, 3000);
             };
-        } // 🌟 ИСПРАВЛЕНО: Закрыли саму функцию connectGrzhdWebSocket!
+        }
+
+        // Вспомогательная функция отправки логов
+        function sendFrontendLog(text) {
+            console.warn(text);
+            if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                grzhdWs.send(JSON.stringify({ type: "frontend_log", info: text }));
+            }
+        }
 
 
 
