@@ -121,7 +121,12 @@
             0% { opacity: 0.7; box-shadow: 0 0 0 0 rgba(22,163,74,0.4); }
             70% { opacity: 1; box-shadow: 0 0 0 8px rgba(22,163,74,0); }
             100% { opacity: 0.7; box-shadow: 0 0 0 0 rgba(22,163,74,0); }
+        /* 🌟 АНИМАЦИЯ САМОЛЁТА В РЕЖИМЕ PLAYBACK */
+        .pb-icon {
+            transition: all 0.15s linear; /* Плавный шаг самолётика каждые 150 миллисекунд */
+            filter: drop-shadow(0px 2px 5px rgba(0,0,0,0.3));
         }
+        
     </style>
 </head>
 <body>
@@ -204,11 +209,38 @@
             </div>
         </div>
 
-        <!-- Вкладка 5: Полноэкранный FlightRadar на Спутнике Esri -->
+        <!-- Вкладка 5: Полноэкранный FlightRadar с Метеостанцией -->
         <div id="tab_map" class="app-tab-page" style="padding:0;">
             <div id="flightRadarMap"></div>
-        </div>
 
+            <!-- Компактный боковой квадратик погоды (справа по центру) -->
+            <div id="weatherMiniWidget" style="position: fixed; right: -80px; top: 50%; transform: translateY(-50%); background: var(--primary-white); border: 2px solid var(--blue-accent); border-radius: 12px 0 0 12px; width: 65px; height: 75px; box-shadow: -4px 4px 15px rgba(0,0,0,0.1); z-index: 1100; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: right 0.4s cubic-bezier(0.1, 0.9, 0.2, 1);" onclick="toggleWeatherBottomPanel(true)">
+                <span id="miniWeatherIcon" style="font-size: 24px;">☀️</span>
+                <span id="miniWeatherTemp" style="font-weight: 800; font-size: 16px; color: var(--navy-dark); margin-top: 2px;">+--°</span>
+            </div>
+
+            <!-- Большая нижняя подробная метео-плашка (в стиле твоего скриншота) -->
+            <div id="weatherBottomPanel" style="position: fixed; bottom: -250px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 450px; background: rgba(255,255,255,0.96); border: 1px solid var(--border-color); box-shadow: 0 -10px 30px rgba(0,0,0,0.12); border-radius: 20px 20px 12px 20px; padding: 22px; z-index: 1250; display: flex; flex-direction: column; gap: 12px; backdrop-filter: blur(10px); transition: bottom 0.4s cubic-bezier(0.1, 0.9, 0.2, 1);">
+                <span style="position: absolute; top: 12px; right: 15px; cursor: pointer; color: var(--gray-text); font-weight: bold;" onclick="toggleWeatherBottomPanel(false)">✕</span>
+                
+                <!-- Главный блок температуры -->
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <span id="fullWeatherTemp" style="font-size: 54px; font-weight: 900; color: var(--navy-dark); line-height: 1;">+--°</span>
+                    <span id="fullWeatherIcon" style="font-size: 48px;">☀️</span>
+                    <div style="text-align: left;">
+                        <div id="fullWeatherStatus" style="font-size: 16px; font-weight: 700; color: var(--navy-light);">Загрузка...</div>
+                        <div style="font-size: 12px; color: var(--gray-text);">Реальные данные метеостанции коридора G/D</div>
+                    </div>
+                </div>
+                
+                <hr style="border: none; border-top: 1px solid var(--border-color); margin: 5px 0;">
+                
+                <!-- Горизонтальная лента почасового прогноза (как на скриншоте!) -->
+                <div id="weatherHourlyContainer" style="display: flex; justify-content: space-between; align-items: center; background: var(--secondary-bg); padding: 12px; border-radius: 10px; text-align: center;">
+                    <!-- Сюда JavaScript вставит шаги времени -->
+                </div>
+            </div>
+        </div>
         <!-- Вкладка 6: Глобальное табло всех рейсов -->
         <div id="tab_all" class="app-tab-page">
             <h2 class="form-title" style="max-width:800px; margin:0 auto 20px auto;">Глобальное табло рейсов G/D Airlines</h2>
@@ -277,7 +309,7 @@
             }, 0);
         });
 
-        // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ (СИНХРОНИЗИРОВАННЫЙ С СЕРВЕРОМ)
+        // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ (С ПОДДЕРЖКОЙ МЕТЕО-СЛУЖБЫ)
         function connectGrzhdWebSocket() {
             const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
             const wsUrl = protocol + window.location.host + "/grzhd/ws/" + grzhdClientId;
@@ -289,22 +321,41 @@
             grzhdWs.onmessage = (event) => {
                 const msg = JSON.parse(event.data);
                 
-                // 🌟 Синхронизируем чтение точных ключей, прилетающих из server.py
-                if (msg.type === "init_airports") {
-                    globalAirports = msg.airports;
-                    if (typeof syncAirlinesData === "function") syncAirlinesData(msg.flights, msg.planes);
-                } else if (msg.type === "sync_flights") {
-                    if (typeof syncAirlinesData === "function") syncAirlinesData(msg.flights, msg.planes);
+                if (msg.type === "init_airports" || msg.type === "sync_flights") {
+                    syncAirlinesData(msg.flights, msg.planes);
                 } else if (msg.type === "plane_registered") {
                     myPlaneId = msg.plane_id;
                     myPlaneNumber = msg.number;
-                    if (typeof activatePilotInterface === "function") {
-                        activatePilotInterface(msg.number);
-                    }
+                    activatePilotInterface(msg.number);
                 } else if (msg.type === "nearest_airports_response") {
-                    // 🌟 ПРИНУДИТЕЛЬНО ПЕРЕПИСЫВАЕМ СЕЛЕКТОР НА 2 БЛИЖАЙШИХ ОТ СЕРВЕРА
-                    if (typeof renderNearestDepartureAirports === "function") {
-                        renderNearestDepartureAirports(msg.airports);
+                    renderNearestDepartureAirports(msg.airports);
+                
+                // 🌟 ДОБАВЛЕНО: Поимка реальной погоды с бэкенда по сокету
+                } else if (msg.type === "camera_weather_response") {
+                    // 1. Обновляем данные в маленьком боковом квадратике
+                    document.getElementById('miniWeatherIcon').innerText = msg.icon;
+                    document.getElementById('miniWeatherTemp').innerText = `${msg.temp > 0 ? '+' : ''}${msg.temp}°`;
+                    
+                    // 2. Обновляем данные в большой нижней подробной плашке
+                    document.getElementById('fullWeatherTemp').innerText = `${msg.temp > 0 ? '+' : ''}${msg.temp}°`;
+                    document.getElementById('fullWeatherIcon').innerText = msg.icon;
+                    document.getElementById('fullWeatherStatus').innerText = msg.status;
+                    
+                    // 3. Динамически генерируем 5 почасовых ячеек прогноза
+                    const hourlyContainer = document.getElementById('weatherHourlyContainer');
+                    if (hourlyContainer && msg.hourly) {
+                        hourlyContainer.innerHTML = ""; // Стираем старые часы
+                        msg.hourly.forEach(step => {
+                            const cell = document.createElement('div');
+                            cell.style.display = "flex";
+                            cell.style.flexDirection = "column";
+                            cell.style.alignItems = "center";
+                            cell.innerHTML = `
+                                <span style="font-size:11px; color:var(--gray-text); font-weight:600; text-transform:uppercase;">${step.time}</span>
+                                <span style="font-size:15px; font-weight:800; color:var(--navy-dark); margin-top:4px; display:block;">${step.temp > 0 ? '+' : ''}${step.temp}°</span>
+                            `;
+                            hourlyContainer.appendChild(cell);
+                        });
                     }
                 }
             };
@@ -314,6 +365,7 @@
                 setTimeout(connectGrzhdWebSocket, 3000);
             };
         }
+
 
         // 🗺️ 2. ЗАПУСК ВЫСОКОТОЧНОЙ СПУТНИКОВОЙ КАРТЫ С МЕТКАМИ АЭРОПОРТОВ
         function initRadarMap() {
@@ -350,6 +402,9 @@
                     permanent: true, direction: 'top', className: 'city-label capital-label', offset: [0, -15]
                 }).openTooltip();
             }
+
+            // 🌟 ДОБАВЛЕНО: Запускаем метеослужбу слежения за экраном!
+            if (typeof setupMapWeatherListeners === "function") setupMapWeatherListeners();
         }
 
         // ⚙️ 3. ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК В СТИЛЕ ROBLOX
@@ -965,6 +1020,91 @@
                 myPlaneId = myPlaneKey;
                 myPlaneNumber = planes[myPlaneKey].number;
                 activatePilotInterface(myPlaneNumber);
+            }
+        }
+        // 🌦️ МЕТЕО-СЛУЖБА: ТРЕКИНГ ПОГОДЫ ПО КООРДИНАТАМ КАМЕРЫ LEAFLET
+        let weatherThrottleTimeout = null;
+
+        // Регистрируем триггеры Leaflet карт (вызывается из функции initRadarMap после её создания)
+        function setupMapWeatherListeners() {
+            if (!radarMap) return;
+
+            // Вешаем события на движение камеры и изменение масштаба зума
+            radarMap.on('moveend', checkMapCameraWeatherState);
+            radarMap.on('zoomend', checkMapCameraWeatherState);
+            
+            // Запускаем первичную проверку при старте
+            checkMapCameraWeatherState();
+        }
+
+        // Каждую секунду проверяем уровень зума диспетчера
+        function checkMapCameraWeatherState() {
+            if (!radarMap) return;
+            
+            const currentZoom = radarMap.getZoom();
+            const miniWidget = document.getElementById('weatherMiniWidget');
+            if (!miniWidget) return;
+
+            // Твоё условие: Виджет выплывает только если зум позволяет детально рассмотреть местность
+            if (currentZoom >= 11) {
+                miniWidget.style.right = "0px"; // Плавно выдвигаем квадратик справа
+                
+                // Добавляем троттлинг (задержку), чтобы не спамить запросами к API при каждом микродвижении
+                clearTimeout(weatherThrottleTimeout);
+                weatherThrottleTimeout = setTimeout(fetchRealLocationWeatherData, 800);
+            } else {
+                miniWidget.style.right = "-80px"; // Прячем квадратик обратно вбок
+                toggleWeatherBottomPanel(false); // Принудительно закрываем нижнюю плашку
+            }
+        }
+
+        // Асинхронный запрос живых метеоданных с бэкенда по координатам центра карты
+        async function fetchRealLocationWeatherData() {
+            if (!radarMap) return;
+            const center = radarMap.getCenter();
+            
+            try {
+                const response = await fetch(`/grzhd/get_weather?lat=${center.lat}&lng=${center.lng}`);
+                const data = await response.json();
+                
+                // Обновляем данные в мини-квадратике
+                document.getElementById('miniWeatherIcon').innerText = data.icon;
+                document.getElementById('miniWeatherTemp').innerText = `${data.temp > 0 ? '+' : ''}${data.temp}°`;
+                
+                // Обновляем данные в развёрнутой нижней панели
+                document.getElementById('fullWeatherTemp').innerText = `${data.temp > 0 ? '+' : ''}${data.temp}°`;
+                document.getElementById('fullWeatherIcon').innerText = data.icon;
+                document.getElementById('fullWeatherStatus').innerText = data.status;
+                
+                // Генерируем почасовую ленту прогноза
+                const hourlyContainer = document.getElementById('weatherHourlyContainer');
+                if (hourlyContainer && data.hourly) {
+                    hourlyContainer.innerHTML = "";
+                    data.hourly.forEach(step => {
+                        const cell = document.createElement('div');
+                        cell.style.display = "flex";
+                        cell.style.direction = "column";
+                        cell.style.flexDirection = "column";
+                        cell.innerHTML = `
+                            <span style="font-size:11px; color:var(--gray-text); font-weight:600; text-transform:uppercase;">${step.hour}</span>
+                            <span style="font-size:15px; font-weight:800; color:var(--navy-dark); margin-top:4px;">${step.temp > 0 ? '+' : ''}${step.temp}°</span>
+                        `;
+                        hourlyContainer.appendChild(cell);
+                    });
+                }
+            } catch (err) {
+                console.error("Ошибка обновления метеостанции:", err);
+            }
+        }
+
+        // Переключатель анимации открытия/закрытия подробной нижней панели
+        function toggleWeatherBottomPanel(show) {
+            const panel = document.getElementById('weatherBottomPanel');
+            if (!panel) return;
+            if (show) {
+                panel.style.bottom = "20px"; // Поднимаем снизу экрана
+            } else {
+                panel.style.bottom = "-250px"; // Прячем вниз
             }
         }
     </script>
