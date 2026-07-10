@@ -1109,22 +1109,30 @@
                 activatePilotInterface(myPlaneNumber);
             }
         }
-        // 🌦️ МЕТЕО-СЛУЖБА: ТРЕКИНГ ПОГОДЫ ПО КООРДИНАТАМ КАМЕРЫ LEAFLET
-        let weatherThrottleTimeout = null;
+        // 🌤️ 18. УМНАЯ МЕТЕОСТАНЦИЯ КАМЕРЫ С АВТО-ДИСТАНЦИЕЙ (БЕЗ СПАМА И БЕЗ 429 ОШИБОК)
+        let lastWeatherLat = null; // Широта последнего метео-запроса
+        let lastWeatherLng = null; // Долгота последнего метео-запроса
 
-        // Регистрируем триггеры Leaflet карт (вызывается из функции initRadarMap после её создания)
-        function setupMapWeatherListeners() {
-            if (!radarMap) return;
-
-            // Вешаем события на движение камеры и изменение масштаба зума
-            radarMap.on('moveend', checkMapCameraWeatherState);
-            radarMap.on('zoomend', checkMapCameraWeatherState);
-            
-            // Запускаем первичную проверку при старте
-            checkMapCameraWeatherState();
+        // Функция вычисления точного расстояния между двумя координатами в метрах
+        function getDistanceInMetres(lat1, lon1, lat2, lng2) {
+            const R = 6371000; // Радиус Земли в метрах
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLng = (lng2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c; // Возвращает точную дистанцию в метрах
         }
 
-        // Каждую секунду проверяем уровень зума диспетчера
+        // Слушатель Leaflet: срабатывает строго когда пилот ПОЛНОСТЬЮ закончил двигать карту
+        function setupMapWeatherListeners() {
+            if (!radarMap) return;
+            radarMap.on('moveend', checkMapCameraWeatherState);
+            checkMapCameraWeatherState(); // Стартовый пинок при загрузке
+        }
+
+        // Проверка: нужно ли запрашивать погоду для новой точки?
         function checkMapCameraWeatherState() {
             if (!radarMap) return;
             
@@ -1132,50 +1140,59 @@
             const miniWidget = document.getElementById('weatherMiniWidget');
             if (!miniWidget) return;
 
-            // Твоё условие: Виджет выплывает только если зум позволяет детально рассмотреть местность
+            // Погода работает только на детальном зуме, позволяющем рассмотреть местность
             if (currentZoom >= 11) {
-                miniWidget.style.right = "0px"; // Плавно выдвигаем квадратик справа
+                miniWidget.style.right = "0px"; // Выдвигаем виджет справа
                 
-                // Добавляем троттлинг (задержку), чтобы не спамить запросами к API при каждом микродвижении
-                clearTimeout(weatherThrottleTimeout);
-                weatherThrottleTimeout = setTimeout(fetchRealLocationWeatherData, 800);
+                const center = radarMap.getCenter();
+
+                // Если это самый первый запуск — железно шлём запрос
+                if (lastWeatherLat === null || lastWeatherLng === null) {
+                    fetchRealLocationWeatherData(center.lat, center.lng);
+                    return;
+                }
+
+                // Высчитываем, на сколько метров диспетчер сместил камеру от прошлой точки запроса
+                const distanceMoved = getDistanceInMetres(lastWeatherLat, lastWeatherLng, center.lat, center.lng);
+                console.log(`[🌤️ МЕТЕО-РАДИУС] Камера сместилась на ${Math.round(distanceMoved)} метров.`);
+
+                // 🌟 ТВОЕ УСЛОВИЕ: Если камеру сместили больше чем на 300 метров — обновляем погоду для новой точки!
+                if (distanceMoved >= 300) {
+                    fetchRealLocationWeatherData(center.lat, center.lng);
+                }
+                // Если смещение меньше 300 метров — код молчит, не спамит сокет и экономит лимиты API!
             } else {
-                miniWidget.style.right = "-80px"; // Прячем квадратик обратно вбок
-                toggleWeatherBottomPanel(false); // Принудительно закрываем нижнюю плашку
+                miniWidget.style.right = "-80px"; // Прячем виджет, если улетели в космос
+                toggleWeatherBottomPanel(false);
             }
         }
 
-        // 🌤️ 18. МЕТЕО-СЛУЖБА: УСТОЙЧИВАЯ ОТПРАВКА С ТОТАЛЬНЫМ КЛИЕНТСКИМ ЛОГИРОВАНИЕМ
-        function fetchRealLocationWeatherData() {
-            if (!radarMap) return;
-            const center = radarMap.getCenter();
-            
-            // Отправляем принудительный лог-рапорт прямо в консоль Render
-            sendFrontendLog(`[КЛИЕНТ-МЕТЕО] Функция fetch проснулась! Центр экрана: Широта=${center.lat}, Долгота=${center.lng}. Статус сокета readyState=${grzhdWs ? grzhdWs.readyState : 'null'}`);
-            
+        // Прямая отправка пакета в сокет-трубу без таймеров и лагов
+        function fetchRealLocationWeatherData(lat, lng) {
             if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                // Запоминаем эту точку как последнюю успешную
+                lastWeatherLat = lat;
+                lastWeatherLng = lng;
+
                 grzhdWs.send(JSON.stringify({
                     type: "request_camera_weather",
-                    lat: center.lat,
-                    lng: center.lng
+                    lat: lat,
+                    lng: lng
                 }));
-                sendFrontendLog(`[КЛИЕНТ-МЕТЕО] Пакет request_camera_weather УСПЕШНО отправлен в сокет-трубу!`);
+                console.log(`[🌤️ МЕТЕО-СОКЕТ] Отправили ОДИН точечный запрос погоды для камеры: [${lat}, ${lng}]`);
             } else {
-                sendFrontendLog(`[КЛИЕНТ-МЕТЕО-ОТКАЗ] Пакет не отправлен, сокет ещё не в статусе OPEN. Повторим авто-запрос через 1500мс...`);
-                setTimeout(fetchRealLocationWeatherData, 1500);
+                // Если сокет ещё открывается — мягко пробуем повторить через секунду
+                setTimeout(() => { fetchRealLocationWeatherData(lat, lng); }, 1000);
             }
         }
 
-        // Переключатель анимации открытия/закрытия подробной нижней панели
+        // Анимация раскрытия нижней плашки
         function toggleWeatherBottomPanel(show) {
             const panel = document.getElementById('weatherBottomPanel');
             if (!panel) return;
-            if (show) {
-                panel.style.bottom = "20px"; // Поднимаем снизу экрана
-            } else {
-                panel.style.bottom = "-250px"; // Прячем вниз
-            }
+            panel.style.bottom = show ? "20px" : "-280px";
         }
+
     </script>
 </body>
 </html>
