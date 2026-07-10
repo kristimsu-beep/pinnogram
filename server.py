@@ -3104,7 +3104,7 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                     lat, lng = msg["lat"], msg["lng"]
                 
                 try:
-                    weather_url = fhttps://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current=temperature_2m,weather_code&hourly=temperature_2m&timezone=auto"                    
+                    weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current=temperature_2m,weather_code&hourly=temperature_2m&timezone=auto"                    
                     async with httpx.AsyncClient() as client:
                         response = await client.get(weather_url, timeout=3.0)
                     
