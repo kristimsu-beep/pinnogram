@@ -291,29 +291,21 @@
         let radarMarkers = {};  // { flight_id: L.marker }
         let radarPolylines = {}; // { flight_id: { corridor: L.polyline, track: L.polyline } }
 
-        // 🌟 ИСПРАВЛЕНО: Чистый запуск. Полностью вырезали карту из старта, чтобы она НЕ ломалась в скрытом HTML!
+        // 🌟 ИСПРАВЛЕНО: Чистый старт! Убрали карту отсюда, чтобы она НЕ ломалась в скрытом HTML!
         window.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => {
-                // 1. Автономный запуск резервных списков полос
-                try {
-                    if (typeof loadAllDefaultAirportsBackup === "function") loadAllDefaultAirportsBackup();
-                } catch(e) { console.error("Ошибка списков:", e); }
-
-                // 2. Автономный запрос GPS доступа у пилота
-                try {
-                    if (typeof promptGeolocationImmediately === "function") promptGeolocationImmediately();
-                } catch(e) { console.error("Ошибка GPS-запроса:", e); }
+                try { if (typeof loadAllDefaultAirportsBackup === "function") loadAllDefaultAirportsBackup(); } catch(e) {}
+                try { if (typeof promptGeolocationImmediately === "function") promptGeolocationImmediately(); } catch(e) {}
                 
-                // 3. ЗАПУСКАЕМ СТРОГО ТОЛЬКО СОКЕТ: Открываем трубу соединения с сервером!
+                // Запускаем ТОЛЬКО сокет!
                 try {
                     if (typeof connectGrzhdWebSocket === "function") connectGrzhdWebSocket();
                 } catch(wsError) {
                     console.error("Критический сбой запуска сокет-соединения:", wsError);
                 }
-                
-                // 🌟 КАРТУ ОТСЮДА ПОЛНОСТЬЮ УБРАЛИ! Она сама безопасно запустится при клике на вкладку меню.
             }, 0);
         });
+
           
         // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ (С ЛОГГЕРОМ АВАРИЙ ДЛЯ RENDER)
         function connectGrzhdWebSocket() {
@@ -474,7 +466,7 @@
             if (typeof setupMapWeatherListeners === "function") setupMapWeatherListeners();
         }
 
-        // ⚙️ 3. ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК (🌟 ЛАЗЕРНАЯ ИНИЦИАЛИЗАЦИЯ И РЕНДЕРИНГ КАРТЫ)
+        // ⚙️ 3. ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК (🌟 ДИНАМИЧЕСКИЙ ЗАПУСК КАРТЫ ПРИ КЛИКЕ)
         function switchAirlinesTab(tabName) {
             document.querySelectorAll('.app-tab-page').forEach(page => page.classList.remove('active'));
             document.querySelectorAll('.nav-tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -486,42 +478,52 @@
                 window.event.currentTarget.classList.add('active');
             }
 
-            // 🌟 КРИТИЧЕСКИЙ ФИКС: Создаём карту только тогда, когда див стал ВИДИМЫМ на экране!
+            // 🌟 КРИТИЧЕСКИЙ ФИКС: Создаём и будим карту только тогда, когда она 100% ВИДИМА на экране телефона!
             if (tabName === 'map') {
                 setTimeout(() => { 
-                    // Если карта ещё ни разу не создавалась — инициализируем её прямо сейчас!
+                    // Если карта ещё ни разу не создавалась в памяти — инициализируем её прямо на видимом экране!
                     if (!radarMap && typeof initRadarMap === "function") {
+                        console.log("[ LETAET_v2 ] Вкладка открыта, безопасно создаем Leaflet в видимом DOM!");
                         initRadarMap();
                     }
                     
                     if (radarMap) {
-                        radarMap.invalidateSize(); // Выравниваем тайлы спутника Esri
+                        radarMap.invalidateSize(); // Принудительно выравниваем тайлы спутника Esri под размер экрана
                         
-                        // Принудительно заставляем карту нарисовать самолёт из ОЗУ
+                        // Мгновенно рендерим синий самолётик, который уже накопил 22 точки в ОЗУ сервера!
                         if (typeof updateFlightRadarMapLayers === "function") {
                             updateFlightRadarMapLayers(grzhd_flights);
                         }
                         
-                        // Запрашиваем погоду для центра
+                        // Запрашиваем живую погоду для центра видимого экрана
                         if (typeof fetchRealLocationWeatherData === "function") {
                             fetchRealLocationWeatherData();
                         }
                     }
-                }, 200); // 200мс форы, чтобы вкладка успела отрисоваться в браузере смартфона
+                }, 250); // 250мс форы, чтобы мобильный процессор успел раскрыть страницу вкладки
             }
         }
 
-        // 📋 10. ЕДИНАЯ СИНХРОНИЗАЦИЯ ВСЕХ ТАБЛИЦ И ОТРИСОВКА КАРТЫ FLIGHTRADAR24
+
+        // 📋 10. ЕДИНАЯ СИНХРОНИЗАЦИЯ ВСЕХ ТАБЛИЦ И ОТРИСОВКА КАРТЫ FLIGHTRADAR24 (УМНЫЙ МОНИТОР)
         function syncAirlinesData(flights, planes) {
             // Намертво привязываем прилетевшие данные к глобальной памяти фронтенда
             if (flights) grzhd_flights = flights;
             if (planes) grzhd_planes = planes;
 
-            // Вызываем реактивный пересчет таблиц и маркеров
+            // Вызываем реактивный пересчет текстовых таблиц расписания
             if (typeof renderMyFlightsJournal === "function") renderMyFlightsJournal(flights);
             if (typeof renderGlobalFlightsTable === "function") renderGlobalFlightsTable(flights);
-            if (typeof updateFlightRadarMapLayers === "function") updateFlightRadarMapLayers(flights);
+            
+            // 🌟 ИСПРАВЛЕНО: Рисуем самолётик на карте ТОЛЬКО если объект radarMap уже создан и видим!
+            // Если он null (ты на другой вкладке) — мы не спамим 14-ю функцию впустую, исключая лаги ОЗУ!
+            if (radarMap && typeof updateFlightRadarMapLayers === "function") {
+                updateFlightRadarMapLayers(flights);
+            } else {
+                console.log("[📡 ОЗУ-СИНХРОН] Данные рейсов сохранены в память, ожидают открытия вкладки карты.");
+            }
         }
+
 
         // 📍 4.А ПРИНУДИТЕЛЬНЫЙ АГРЕССИВНЫЙ ЗАПРОС ДОСТУПА К GPS ПРИ ВХОДЕ
         function promptGeolocationImmediately() {
