@@ -1058,44 +1058,22 @@
             }
         }
 
-        // Асинхронный запрос живых метеоданных с бэкенда по координатам центра карты
-        async function fetchRealLocationWeatherData() {
+        // 🌟 ИСПРАВЛЕНО: Новая функция шлёт запрос погоды напрямую в сокет без лагов и лишних HTTP-fetch!
+        function fetchRealLocationWeatherData() {
             if (!radarMap) return;
             const center = radarMap.getCenter();
             
-            try {
-                const response = await fetch(`/grzhd/get_weather?lat=${center.lat}&lng=${center.lng}`);
-                const data = await response.json();
-                
-                // Обновляем данные в мини-квадратике
-                document.getElementById('miniWeatherIcon').innerText = data.icon;
-                document.getElementById('miniWeatherTemp').innerText = `${data.temp > 0 ? '+' : ''}${data.temp}°`;
-                
-                // Обновляем данные в развёрнутой нижней панели
-                document.getElementById('fullWeatherTemp').innerText = `${data.temp > 0 ? '+' : ''}${data.temp}°`;
-                document.getElementById('fullWeatherIcon').innerText = data.icon;
-                document.getElementById('fullWeatherStatus').innerText = data.status;
-                
-                // Генерируем почасовую ленту прогноза
-                const hourlyContainer = document.getElementById('weatherHourlyContainer');
-                if (hourlyContainer && data.hourly) {
-                    hourlyContainer.innerHTML = "";
-                    data.hourly.forEach(step => {
-                        const cell = document.createElement('div');
-                        cell.style.display = "flex";
-                        cell.style.direction = "column";
-                        cell.style.flexDirection = "column";
-                        cell.innerHTML = `
-                            <span style="font-size:11px; color:var(--gray-text); font-weight:600; text-transform:uppercase;">${step.hour}</span>
-                            <span style="font-size:15px; font-weight:800; color:var(--navy-dark); margin-top:4px;">${step.temp > 0 ? '+' : ''}${step.temp}°</span>
-                        `;
-                        hourlyContainer.appendChild(cell);
-                    });
-                }
-            } catch (err) {
-                console.error("Ошибка обновления метеостанции:", err);
+            // Отправляем пакет на бэкенд по нашему правильному глобальному сокету grzhdWs
+            if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                grzhdWs.send(JSON.stringify({
+                    type: "request_camera_weather",
+                    lat: center.lat,
+                    lng: center.lng
+                }));
+                console.log(`[🌤️ МЕТЕО-ОТПРАВКА] Запросили сокет-погоду для центра карты: [${center.lat}, ${center.lng}]`);
             }
         }
+
 
         // Переключатель анимации открытия/закрытия подробной нижней панели
         function toggleWeatherBottomPanel(show) {
