@@ -3151,7 +3151,10 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                         raise Exception(f"Блокировка API (Код {response.status_code})")
                         
                 except Exception as weather_err:
-                    print(f"[🌤️ АВТОНОМНЫЙ РЕЖИМ] Лимиты API. Выдаем резервный стейт: +25°C")
+                    # 🌟 ИСПРАВЛЕНО: Выводим ТОЧНЫЙ КРАШ в логи Render, чтобы раз и навсегда увидеть причину!
+                    print(f"\n🚨 [МЕТЕО-ФАТАЛ] Не удалось связаться с Open-Meteo API! Ошибка: {str(weather_err)}")
+                    print(f"[🌤️ АВТОНОМНЫЙ РЕЖИМ] Лимиты API. Выдаем резервный стейт: +25°C\n")
+                    
                     await websocket.send_text(json.dumps({
                         "type": "camera_weather_response", 
                         "temp": 25, "status": "Переменная облачность", "icon": "⛅",
@@ -3160,6 +3163,7 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                             {"time": "19:00", "temp": 23}, {"time": "20:00", "temp": 22}, {"time": "21:00", "temp": 20}
                         ]
                     }, ensure_ascii=False))
+
 
     except WebSocketDisconnect:
         print(f"[🛑 ВЫШКА-СТОП] Дисконнект сессии: Игрок {client_id} закрыл вкладку.")
