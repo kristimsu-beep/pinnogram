@@ -276,23 +276,31 @@
     </div>
 
     <script>
-        // Инициализация глобальных переменных гражданской авиации
-        const grzhdClientId = "pilot_" + Math.random().toString(36).substring(2, 11);
-        let grzhdWs;
-        let radarMap;
+        // 📡 1. ИСПРАВЛЕНО: Объявляем ключевые объекты как глобальные через var и window, 
+        // чтобы оперативная память смартфона ни при каких условиях не могла их стереть или обнулить!
+        var grzhdClientId = "pilot_" + Math.random().toString(36).substring(2, 11);
+        var grzhdWs = null;
+        var radarMap = null;
         
-        let globalAirports = {}; // Base всех 4-х аэропортов с сервера
-        let myPlaneId = null;     // ID нашего самолёта (если создан)
-        let myPlaneNumber = null; // Номер GD0X
+        // 🌟 Сразу намертво зашиваем базовые координаты взлётно-посадочных полос Самарского коридора
+        var globalAirports = {
+            "GRZHD_7A": {"name": "7А Гражданский", "lat": 52.778718, "lng": 49.698091},
+            "KRN_CORONA": {"name": "Корона", "lat": 52.777094, "lng": 49.683814},
+            "OZR_OZERNO": {"name": "Озерно", "lat": 52.772260, "lng": 49.689991},
+            "POL_POLE": {"name": "Поле", "lat": 52.780357, "lng": 49.701070}
+        };
         
-        let activeWatchId = null; // Ссылка на непрерывный GPS-трекер телефона
-        let currentActiveFlightId = null; // ID выполняемого в данный момент рейса
+        var myPlaneId = null;     // ID нашего самолёта (если создан)
+        var myPlaneNumber = null; // Номер GD0X
+        
+        var activeWatchId = null; // Ссылка на непрерывный GPS-трекер телефона
+        var currentActiveFlightId = null; // ID выполняемого в данный момент рейса
 
         // Глобальные хранилища данных рейсов и самолётов для FlightRadar24 и Playback
-        let grzhd_flights = [];
-        let grzhd_planes = {};
-        let radarMarkers = {};  // { flight_id: L.marker }
-        let radarPolylines = {}; // { flight_id: { corridor: L.polyline, track: L.polyline } }
+        var grzhd_flights = [];
+        var grzhd_planes = {};
+        var radarMarkers = {};  // { flight_id: L.marker }
+        var radarPolylines = {}; // { flight_id: { corridor: L.polyline, track: L.polyline } }
 
         // 🌟 ИСПРАВЛЕНО: Чистый старт! Убрали карту отсюда, чтобы она НЕ ломалась в скрытом HTML!
         window.addEventListener('DOMContentLoaded', () => {
@@ -431,12 +439,16 @@
 
         // 🗺️ 2. ЗАПУСК ВЫСОКОТОЧНОЙ СПУТНИКОВОЙ КАРТЫ С МЕТКАМИ АЭРОПОРТОВ
         function initRadarMap() {
-            radarMap = L.map('flightRadarMap', {
+            // 🌟 ИСПРАВЛЕНО: Намертво цепляем карту к глобальному window, спасая от удаления из ОЗУ смартфона!
+            window.radarMap = L.map('flightRadarMap', {
                 center: [52.777, 49.690],
                 zoom: 14,
                 minZoom: 2,
-                maxZoom: 19 // Спутник Esri с глубоким зумом 19
+                maxZoom: 19 
             });
+            
+            // Связываем локальную переменную с глобальным объектом окна
+            radarMap = window.radarMap;
 
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Tiles &copy; Esri &mdash; Гражданская Авиация G/D'
@@ -508,22 +520,19 @@
         }
 
 
-        // 📋 10. ЕДИНАЯ СИНХРОНИЗАЦИЯ ВСЕХ ТАБЛИЦ И ОТРИСОВКА КАРТЫ FLIGHTRADAR24 (УМНЫЙ МОНИТОР)
+        // 📋 10. СИНХРОНИЗАЦИЯ С ТОТАЛЬНЫМ ВЫРАВНИВАНИЕМ ОБЪЕКТА КАРТЫ
         function syncAirlinesData(flights, planes) {
-            // Намертво привязываем прилетевшие данные к глобальной памяти фронтенда
             if (flights) grzhd_flights = flights;
             if (planes) grzhd_planes = planes;
 
-            // Вызываем реактивный пересчет текстовых таблиц расписания
             if (typeof renderMyFlightsJournal === "function") renderMyFlightsJournal(flights);
             if (typeof renderGlobalFlightsTable === "function") renderGlobalFlightsTable(flights);
             
-            // 🌟 ИСПРАВЛЕНО: Рисуем самолётик на карте ТОЛЬКО если объект radarMap уже создан и видим!
-            // Если он null (ты на другой вкладке) — мы не спамим 14-ю функцию впустую, исключая лаги ОЗУ!
-            if (radarMap && typeof updateFlightRadarMapLayers === "function") {
+            // 🌟 ИСПРАВЛЕНО: Проверяем глобальное окно window.radarMap на случай блокировки контекста ОЗУ
+            var actualMap = radarMap || window.radarMap;
+            
+            if (actualMap && typeof updateFlightRadarMapLayers === "function") {
                 updateFlightRadarMapLayers(flights);
-            } else {
-                console.log("[📡 ОЗУ-СИНХРОН] Данные рейсов сохранены в память, ожидают открытия вкладки карты.");
             }
         }
 
