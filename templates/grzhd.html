@@ -318,7 +318,7 @@
         });
 
           
-        // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ (С ЛОГГЕРОМ АВАРИЙ ДЛЯ RENDER)
+        // 📡 1. ОТКРЫТИЕ ВЕБ-СОКЕТ КАНАЛА АВИАЛИНИЙ (ИТОГОВЫЙ ГЕРМЕТИЧНЫЙ СТАРТ)
         function connectGrzhdWebSocket() {
             const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
             const wsUrl = protocol + window.location.host + "/grzhd/ws/" + grzhdClientId;
@@ -335,33 +335,37 @@
                 }
             };
 
-            // 🌟 ИСПРАВЛЕНО: Принудительный пинок карты и метеостанции СРАЗУ при успешном коннекте сокета!
+            // 🌟 ИСПРАВЛЕНО: Агрессивный безопасный старт без гонки таймингов!
             grzhdWs.onopen = () => {
                 console.log("Диспетчерская вышка подключена. ID сессии:", grzhdClientId);
                 
                 // Сигнализируем серверу, что сокет успешно поднялся на фронте
                 grzhdWs.send(JSON.stringify({ type: "frontend_log", info: "Сокет успешно перешёл в состояние OPEN на телефоне." }));
                 
-                // 1. Принудительно просим бэкенд отдать погоду для текущего центра карты сразу при старте!
-                if (typeof fetchRealLocationWeatherData === "function") {
-                    setTimeout(fetchRealLocationWeatherData, 500); // Даем 500мс форы для стабилизации соединения
+                // 1. Просим бэкенд немедленно выдать погоду, если карта уже успела прогрузиться в памяти window
+                var actualMap = radarMap || window.radarMap;
+                if (actualMap && typeof fetchRealLocationWeatherData === "function") {
+                    fetchRealLocationWeatherData();
                 }
 
-                // 2. Намертво заставляем карту проверить активные рейсы и нарисовать самолётик, если он уже запущен!
-                if (typeof updateFlightRadarMapLayers === "function") {
-                    setTimeout(() => { updateFlightRadarMapLayers(grzhd_flights); }, 600);
+                // 2. ЖЕСТКИЙ СИНХРОНИЗАТОР: Просим сервер принудительно выплюнуть текущий стейт активных рейсов,
+                // чтобы массивы grzhd_flights на фронтенде мгновенно заполнились без задержек сети!
+                if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                    grzhdWs.send(JSON.stringify({ type: "request_sync" }));
                 }
             };
 
 
+            // 📡 ИСПРАВЛЕННЫЙ ПРИЕМНИК СОКЕТА (БЛОК 1)
             grzhdWs.onmessage = (event) => {
                 try {
                     const msg = JSON.parse(event.data);
                     
                     if (msg.type === "init_airports" || msg.type === "sync_flights") {
-                        // Логируем проверку перед запуском карты
-                        if (!radarMap) {
-                            sendFrontendLog(`[🗺️ КАРТА-ОШИБКА] Попытка обновить рейсы, но объект radarMap равен null!`);
+                        // Защита: извлекаем карту из глобального окна window, если контекст let уснул
+                        var actualMap = radarMap || window.radarMap;
+                        if (!actualMap) {
+                            console.warn("[🗺️ КАРТА] Данные рейсов получены, но radarMap еще не создан в DOM.");
                         }
                         syncAirlinesData(msg.flights, msg.planes);
                         
@@ -374,7 +378,7 @@
                         renderNearestDepartureAirports(msg.airports);
                     
                     } else if (msg.type === "camera_weather_response") {
-                        sendFrontendLog(`[🌤️ МЕТЕО-ДАННЫЕ] Пакет погоды прилетел в JS: temp=${msg.temp}, status=${msg.status}`);
+                        console.log("🌦️ [МЕТЕО-ОТЛАДКА] Пакет погоды прилетел с сервера:", msg);
                         
                         const miniIconEl = document.getElementById('miniWeatherIcon');
                         const miniTempEl = document.getElementById('miniWeatherTemp');
@@ -383,26 +387,27 @@
                         const fullStatusEl = document.getElementById('fullWeatherStatus');
                         const hourlyContainer = document.getElementById('weatherHourlyContainer');
 
-                        // 🔍 ПРОВЕРКА ВЁРСТКИ: Если элементы не найдены, шлём рапорт на Render вместо падения скрипта!
-                        if (!miniIconEl || !miniTempEl || !fullTempEl || !hourlyContainer) {
-                            sendFrontendLog(`[❌ ВЁРСТКА-КРАШ] Элементы погоды не найдены в DOM! miniWidget=${!!miniIconEl}, hourlyContainer=${!!hourlyContainer}`);
-                        }
-
-                        if (miniIconEl) miniIconEl.innerText = msg.icon || "⛅";
+                        // Обновляем виджеты, только если они физически существуют на экране
+                        if (miniIconEl) miniIconEl.innerText = msg.icon || msg["icon"] || "⛅";
                         if (miniTempEl) miniTempEl.innerText = `${msg.temp > 0 ? '+' : ''}${msg.temp}°`;
                         if (fullTempEl) fullTempEl.innerText = `${msg.temp > 0 ? '+' : ''}${msg.temp}°`;
-                        if (fullIconEl) fullIconEl.innerText = msg.icon || "⛅";
-                        if (fullStatusEl) fullStatusEl.innerText = msg.status || "Загрузка...";
+                        if (fullIconEl) fullIconEl.innerText = msg.icon || msg["icon"] || "⛅";
+                        if (fullStatusEl) fullStatusEl.innerText = msg.status || msg["status"] || "Загрузка...";
                         
                         if (hourlyContainer && msg.hourly) {
-                            hourlyContainer.innerHTML = ""; 
-                            msg.hourly.forEach((step, idx) => {
+                            hourlyContainer.innerHTML = ""; // Стираем старую заглушку загрузки
+                            msg.hourly.forEach((step) => {
                                 if (!step) return;
-                                const sTime = step.time || step["time"];
-                                const sTemp = step.temp !== undefined ? step.temp : step["temp"];
                                 
-                                if (sTime === undefined || sTemp === undefined) {
-                                    sendFrontendLog(`[❌ ПОГОДА-КЛЮЧИ] В hourly[${idx}] отсутствуют ключи! step=${JSON.stringify(step)}`);
+                                // Безопасное чтение ключей в любом формате (объект или ассоциативный массив)
+                                let sTime = step.time || step["time"] || "--:--";
+                                let sTemp = step.temp !== undefined ? step.temp : step["temp"];
+                                
+                                // Если время прилетело как массив после сплита, вытаскиваем строку
+                                if (Array.isArray(sTime) && sTime.length > 1) {
+                                    sTime = sTime[1];
+                                } else if (Array.isArray(sTime) && sTime.length === 1) {
+                                    sTime = sTime[0];
                                 }
 
                                 const cell = document.createElement('div');
@@ -410,22 +415,24 @@
                                 cell.style.flexDirection = "column";
                                 cell.style.alignItems = "center";
                                 cell.innerHTML = `
-                                    <span style="font-size:11px; color:var(--gray-text); font-weight:600; text-transform:uppercase;">${sTime || "--:--"}</span>
-                                    <span style="font-size:15px; font-weight:800; color:var(--navy-dark); margin-top:4px; display:block;">${sTemp > 0 ? '+' : ''}${sTemp}°</span>
+                                    <span style="font-size:11px; color:var(--gray-text); font-weight:600; text-transform:uppercase;">${sTime}</span>
+                                    <span style="font-size:15px; font-weight:800; color:var(--navy-dark); margin-top:4px; display:block;">${sTemp !== undefined ? (sTemp > 0 ? '+' : '') + sTemp + '°' : '--°'}</span>
                                 `;
                                 hourlyContainer.appendChild(cell);
                             });
                         }
                     }
                 } catch (err) {
-                    sendFrontendLog(`[❌ ФАТАЛЬНЫЙ КРАШ ONMESSAGE] Ошибка внутри обработчика сокета: ${err.message}`);
+                    console.error("Критический сбой внутри onmessage:", err);
                 }
             };
 
             grzhdWs.onclose = () => {
+                console.log("Потеря связи с авиасервером. Реконнект через 3 секунды...");
                 setTimeout(connectGrzhdWebSocket, 3000);
             };
         }
+
 
         // Вспомогательная функция отправки логов
         function sendFrontendLog(text) {
@@ -520,7 +527,7 @@
         }
 
 
-        // 📋 10. СИНХРОНИЗАЦИЯ С ТОТАЛЬНЫМ ВЫРАВНИВАНИЕМ ОБЪЕКТА КАРТЫ
+        // 📋 10. СИНХРОНИЗАЦИЯ С ИЗОЛЯЦИЕЙ ГРАФИЧЕСКИХ КРАШЕЙ LEAFLET
         function syncAirlinesData(flights, planes) {
             if (flights) grzhd_flights = flights;
             if (planes) grzhd_planes = planes;
@@ -528,13 +535,18 @@
             if (typeof renderMyFlightsJournal === "function") renderMyFlightsJournal(flights);
             if (typeof renderGlobalFlightsTable === "function") renderGlobalFlightsTable(flights);
             
-            // 🌟 ИСПРАВЛЕНО: Проверяем глобальное окно window.radarMap на случай блокировки контекста ОЗУ
-            var actualMap = radarMap || window.radarMap;
-            
-            if (actualMap && typeof updateFlightRadarMapLayers === "function") {
-                updateFlightRadarMapLayers(flights);
+            // 🌟 ИСПРАВЛЕНО: Завернули вызов карты в try/catch! Если Leaflet выдаст 'addLayer' null,
+            // поток JavaScript не упадёт, сокет продолжит жить, а погода покажет живые градусы!
+            try {
+                var actualMap = radarMap || window.radarMap;
+                if (actualMap && typeof updateFlightRadarMapLayers === "function") {
+                    updateFlightRadarMapLayers(flights);
+                }
+            } catch (mapErr) {
+                console.error("Фоновое ожидание инициализации слоев карты:", mapErr.message);
             }
         }
+
 
 
         // 📍 4.А ПРИНУДИТЕЛЬНЫЙ АГРЕССИВНЫЙ ЗАПРОС ДОСТУПА К GPS ПРИ ВХОДЕ
