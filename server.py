@@ -3111,7 +3111,7 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
 
                 # Если координаты не пришли или сбросились в ноль — включаем Самару
                 if lat is None or lng is None or lat == 0:
-                    lat, lng = 52.777, 49.690  # Дефолт Самары
+                    lat, lng = 19.756, 52.565  # Дефолт Самары
                 
                 print(f"[🌐 WTTR-ИНТЕРНЕТ] Стучимся на wttr.in за реальной погодой для: [{lat}, {lng}]")
                 try:
