@@ -563,30 +563,42 @@
         }
 
 
-        // 🌤️ МЕТЕОСЛУЖБА СЛЕЖЕНИЯ: Слушаем камеру и запрашиваем погоду в реальном времени
+        // 🌤️ МЕТЕОСЛУЖБА СЛЕЖЕНИЯ: С бронебойной защитой от заклинивания слушателя
         function setupMapWeatherListeners() {
             if (!radarMap) return;
 
             radarMap.on('moveend', function() {
-                // Берем центр экрана, куда пилот сдвинул карту (хоть в Антарктиду)
-                const center = radarMap.getCenter();
-                
-                // Формируем JSON-пакет для нашего FastAPI бэкенда server.py
-                const weatherRequest = {
-                    "type": "request_camera_weather",
-                    "lat": center.lat,
-                    "lng": center.lng
-                };
-                
-                // Отправляем пакет через наш глобальный сокет grzhdWs
-                if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
-                    grzhdWs.send(JSON.stringify(weatherRequest));
-                    console.log(`[🌤️ МЕТЕОФРОНТ] Камера замерла на координатах: ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}. Запросили живую погоду!`);
-                } else {
-                    console.warn("[🌤️ МЕТЕОФРОНТ] Не удалось отправить погоду: сокет grzhdWs закрыт или ещё не подключен.");
+                try {
+                    const center = radarMap.getCenter();
+                    
+                    // Если Leaflet выдал пустоту — просто тихо выходим, не ломая скрипт
+                    if (!center || center.lat === null || center.lat === undefined) {
+                        console.log("[🌤️ МЕТЕОФРОНТ] Поймали пустой сдвиг карты. Пропускаем.");
+                        return;
+                    }
+                    
+                    const currentLat = parseFloat(center.lat);
+                    const currentLng = parseFloat(center.lng);
+                    
+                    if (isNaN(currentLat) || isNaN(currentLng)) return;
+
+                    const weatherRequest = {
+                        "type": "request_camera_weather",
+                        "lat": currentLat,
+                        "lng": currentLng
+                    };
+                    
+                    if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                        grzhdWs.send(JSON.stringify(weatherRequest));
+                        console.log(`[🌤️ МЕТЕОФРОНТ] Пакет улетел! Камера: ${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}`);
+                    }
+                } catch (err) {
+                    // Если произошла ошибка — ловим её здесь, спасая слушатель от краша!
+                    console.error("[💥 МЕТЕОФРОНТ КРАШ СЛУШАТЕЛЯ]:", err);
                 }
             });
         }
+
         
         
 
