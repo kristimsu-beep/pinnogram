@@ -2968,6 +2968,8 @@ GRZHD_AIRPORTS = {
 grzhd_connections = {} # { client_id: WebSocket }
 grzhd_planes = {}      # { plane_id: { "owner_id": cid, "number": "GD01" } }
 grzhd_flights = []     # [ { "id": "f1", "plane_id": "...", "number": "GD01", "from_code": "KRN_CORONA", "to_code": "POL_POLE", "from_name": "Корона", "to_name": "Поле", "time": "...", "status": "ожидание"|"активен"|"завершён", "history": [[lat, lng]...] } ]
+# 🗺️ ГЕОГРАФИЧЕСКАЯ СЕТКА КОРРИДОРА G/D (Хранение реальной погоды по квадратам ~100 метров)
+WEATHER_GEO_GRID = {} # Структура: { "lat_lng_rounded": payload }
 
 # Формула Гаверсинуса для поиска двух ближайших аэропортов к пилоту
 def get_distance_km(lat1, lon1, lat2, lon2):
@@ -3094,18 +3096,40 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                         break
                 await broadcast_grzhd_state()
 
-            # --- 🌤️ 6️⃣ МЕТЕОСТАНЦИЯ: БРОНЕБОЙНЫЙ РАЗБОР С ЖИВЫМ ПОДМЕНОЙ СТАРТОВЫХ КООРДИНАТ ---
+            # --- 🌤️ 6️⃣ МЕТЕОСТАНЦИЯ: РЕАКТИВНАЯ ГЕО-СЕТКА С ШАГОМ 100 МЕТРОВ (БЕЗ ЛИМИТОВ API) ---
             elif msg["type"] == "request_camera_weather":
-                # 🌟 ИСПРАВЛЕНО: Если карта ещё грузится и прислала пустые координаты, подставляем живой центр коридора Самары!
-                # Теперь код не падает в except и всегда делает честный запрос к Open-Meteo API!
-                if "lat" not in msg or "lng" not in msg or msg["lat"] is None or msg["lng"] is None or msg["lat"] == 0:
-                    print(f"[🌤️ ЧЁРНЫЙ ЯЩИК-ЩИТ] Смартфон прислал пустой GPS. Подставляем живые координаты центра Самары [52.777, 49.690]")
-                    lat, lng = 52.777, 49.690 # Точный центр твоих 4-х аэродромов
-                else:
-                    lat, lng = msg["lat"], msg["lng"]
+                # Извлекаем координаты из пакета смартфона
+                lat_raw = msg.get("lat")
+                lng_raw = msg.get("lng")
                 
+                # Защита от пустых GPS при старте и инициализации карты
+                if lat_raw is None or lng_raw is None or lat_raw == 0:
+                    print(f"[🌤️ ГЕО-ЩИТ] Смартфон прислал пустой GPS. Подставляем центр Самарского коридора.")
+                    lat, lng = 52.777, 49.690  # Живой центр твоих 4-х аэродромов
+                else:
+                    lat, lng = lat_raw, lng_raw
+                
+                # 🌟 КЛЮЧЕВАЯ ИННОВАЦИЯ: Округляем до 3 знаков после запятой.
+                # Это разбивает всю планету на фиксированные метео-ячейки размером ~100 метров!
+                grid_key = f"{round(lat, 3)}_\_{round(lng, 3)}"
+                
+                # Проверяем, объявлена ли переменная сетки в глобальной памяти server.py
+                if 'WEATHER_GEO_GRID' not in globals():
+                    global WEATHER_GEO_GRID
+                    WEATHER_GEO_GRID = {}
+
+                # 🌟 ПРОВЕРКА ГЕО-СЕТКИ: Если в этом стометровом квадрате уже запрашивали погоду —
+                # мгновенно выдаем её из памяти ОЗУ сервера. Запрос в интернет не идёт, лимиты тарифа не тратятся!
+                if grid_key in WEATHER_GEO_GRID:
+                    print(f"[🗺️ ГЕО-СЕТКА] Камера внутри известной зоны {grid_key}. Выдаем реальную погоду из ОЗУ.")
+                    await websocket.send_text(json.dumps(WEATHER_GEO_GRID[grid_key], ensure_ascii=False))
+                    continue
+
+                # Если пилот увёл камеру дальше 100 метров — это новый квадрат. Делаем аккуратный запрос в интернет
+                print(f"[🌐 ГЕО-ИНТЕРНЕТ] Камера зашла в НОВЫЙ квадрат {grid_key} (>100м). Стучимся к Open-Meteo...")
                 try:
                     weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current=temperature_2m,weather_code&hourly=temperature_2m&timezone=auto"
+                    
                     async with httpx.AsyncClient() as client:
                         response = await client.get(weather_url, timeout=3.0)
                     
@@ -3138,31 +3162,39 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                         
                         hourly_temps = []
                         for i in range(len(hourly_times)):
-                            time_label = hourly_times[i].split("T") if "T" in hourly_times[i] else f"+{i}ч"
+                            time_label = hourly_times[i].split("T")[1] if "T" in hourly_times[i] else f"+{i}ч"
                             if i == 0: time_label = "Сейчас"
                             hourly_temps.append({"time": time_label, "temp": round(hourly_vals[i])})
                         
-                        print(f"[🌤️ ЧЁРНЫЙ ЯЩИК-УСПЕХ] API ответил HTTP 200! Отправляем живую погоду: {current_temp}°C, {status_text}")
-                        await websocket.send_text(json.dumps({
-                            "type": "camera_weather_response", "temp": current_temp,
-                            "status": status_text, "icon": icon, "hourly": hourly_temps
-                        }, ensure_ascii=False))
+                        payload = {
+                            "type": "camera_weather_response",
+                            "temp": current_temp,
+                            "status": status_text,
+                            "icon": icon,
+                            "hourly": hourly_temps
+                        }
+                        
+                        # 🌟 ЗАНОСИМ В РЕГИСТР СЕТКИ: Замораживаем погоду для этого квадрата.
+                        # Теперь при повторном посещении этой зоны запроса к API не будет!
+                        WEATHER_GEO_GRID[grid_key] = payload
+                        
+                        print(f"[🌤️ РЕАКТИВ-ОТВЕТ] Живая погода для квадрата {grid_key} отправлена: {current_temp}°C")
+                        await websocket.send_text(json.dumps(payload, ensure_ascii=False))
                     else:
-                        raise Exception(f"Блокировка API (Код {response.status_code})")
+                        raise Exception(f"API вернул код блокировки {response.status_code}")
                         
                 except Exception as weather_err:
-                    # 🌟 ИСПРАВЛЕНО: Выводим ТОЧНЫЙ КРАШ в логи Render, чтобы раз и навсегда увидеть причину!
-                    print(f"\n🚨 [МЕТЕО-ФАТАЛ] Не удалось связаться с Open-Meteo API! Ошибка: {str(weather_err)}")
-                    print(f"[🌤️ АВТОНОМНЫЙ РЕЖИМ] Лимиты API. Выдаем резервный стейт: +25°C\n")
-                    
+                    print(f"[❌ МЕТЕО-ОБРЫВ] Сбой сети или временный бан Open-Meteo: {str(weather_err)}. Страхуем Самарой.")
+                    # Безопасный резервный пакет, чтобы не ломать фронтенд при жестких сбоях
                     await websocket.send_text(json.dumps({
                         "type": "camera_weather_response", 
-                        "temp": 25, "status": "Переменная облачность", "icon": "⛅",
+                        "temp": 67, "status": "Преимущественно ясно", "icon": "🌤️",
                         "hourly": [
-                            {"time": "Сейчас", "temp": 25}, {"time": "18:00", "temp": 24},
-                            {"time": "19:00", "temp": 23}, {"time": "20:00", "temp": 22}, {"time": "21:00", "temp": 20}
+                            {"time": "Сейчас", "temp": 67}, {"time": "+1ч", "temp": 25},
+                            {"time": "+2ч", "temp": 26}, {"time": "+3ч", "temp": 25}, {"time": "+4ч", "temp": 23}
                         ]
                     }, ensure_ascii=False))
+
 
 
     except WebSocketDisconnect:
