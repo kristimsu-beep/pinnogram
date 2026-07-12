@@ -527,6 +527,33 @@
         }
 
 
+        // 🌤️ МЕТЕОСЛУЖБА СЛЕЖЕНИЯ: Слушаем камеру и запрашиваем погоду в реальном времени
+        function setupMapWeatherListeners() {
+            if (!radarMap) return;
+
+            radarMap.on('moveend', function() {
+                // Берем центр экрана, куда пилот сдвинул карту (хоть в Антарктиду)
+                const center = radarMap.getCenter();
+                
+                // Формируем JSON-пакет для нашего FastAPI бэкенда server.py
+                const weatherRequest = {
+                    "type": "request_camera_weather",
+                    "lat": center.lat,
+                    "lng": center.lng
+                };
+                
+                // Отправляем пакет через наш глобальный сокет grzhdWs
+                if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                    grzhdWs.send(JSON.stringify(weatherRequest));
+                    console.log(`[🌤️ МЕТЕОФРОНТ] Камера замерла на координатах: ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}. Запросили живую погоду!`);
+                } else {
+                    console.warn("[🌤️ МЕТЕОФРОНТ] Не удалось отправить погоду: сокет grzhdWs закрыт или ещё не подключен.");
+                }
+            });
+        }
+        
+        
+
         // 📋 10. СИНХРОНИЗАЦИЯ С ИЗОЛЯЦИЕЙ ГРАФИЧЕСКИХ КРАШЕЙ LEAFLET
         function syncAirlinesData(flights, planes) {
             if (flights) grzhd_flights = flights;
