@@ -3126,7 +3126,7 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
 
                 # Страховка на случай нулевых координат
                 if lat == 0:
-                    lat, lng = 52.777, 49.690  # Возвращаем Самару
+                    lat, lng = 19.756, 52.565  # Возвращаем Самару
                 
                 print(f"[🌐 WTTR-ИНТЕРНЕТ] Стучимся на wttr.in за реальной погодой для: [{lat}, {lng}]")
 
