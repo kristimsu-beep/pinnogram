@@ -3096,9 +3096,20 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                         break
                 await broadcast_grzhd_state()
 
-            # --- 🌤️ 6️⃣ МЕТЕОСТАНЦИЯ: РЕАКТИВНЫЙ ЖИВОЙ ИНТЕРНЕТ-ПАКЕТ ЧЕРЕЗ WTTR.IN (ОБХОД БАНОВ 429) ---
+            # --- 🌤️ 6️⃣ МЕТЕОСТАНЦИЯ: РЕАКТИВНЫЙ ЖИВОЙ ИНТЕРНЕТ-ПАКЕТ ЧЕРЕЗ WTTR.IN ---
             elif msg["type"] == "request_camera_weather":
-                lat, lng = msg.get("lat"), msg.get("lng")
+                # Защита от разных названий ключей долготы/широты с фронтенда
+                lat = msg.get("lat") or msg.get("latitude")
+                lng = msg.get("lng") or msg.get("lon") or msg.get("longitude")
+                
+                # Приводим к float, чтобы корректно проверить на 0 и пустые строки
+                try:
+                    if lat is not None: lat = float(lat)
+                    if lng is not None: lng = float(lng)
+                except (ValueError, TypeError):
+                    lat, lng = None, None
+
+                # Если координаты не пришли или сбросились в ноль — включаем Самару
                 if lat is None or lng is None or lat == 0:
                     lat, lng = 52.777, 49.690  # Дефолт Самары
                 
@@ -3178,20 +3189,8 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                         print(f"[🌤️ WTTR-УСПЕХ] Реальная интернет-погода ЖЕЛЕЗНО улетела на телефон: {current_temp}°C, {status_text}")
                     else:
                         raise Exception(f"wttr вернул код {response.status_code}")
-                        
-                except Exception as wttr_err:
-                    print(f"[❌ WTTR-ОШИБКА КРАШ] Сбой: {str(wttr_err)}. Включаем автономную Самару.")
-                    await websocket.send_text(json.dumps({
-                        "type": "camera_weather_response", 
-                        "temp": 26, "status": "Преимущественно ясно", "icon": "🌤️",
-                        "hourly": [
-                            {"time": "Сейчас", "temp": 26}, {"time": "+1ч", "temp": 27},
-                            {"time": "+2ч", "temp": 28}, {"time": "+3ч", "temp": 27}, {"time": "+4ч", "temp": 25}
-                        ]
-                    }, ensure_ascii=False))
-
-
-
+                except Exception as e:
+                    print(f"[💥 МЕТЕО-ОШИБКА] Не удалось получить погоду: {e}")
 
     except WebSocketDisconnect:
         print(f"[🛑 ВЫШКА-СТОП] Дисконнект сессии: Игрок {client_id} закрыл вкладку.")
