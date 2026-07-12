@@ -3111,8 +3111,9 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                 
                 # 🌟 КЛЮЧЕВАЯ ИННОВАЦИЯ: Округляем до 3 знаков после запятой.
                 # Это разбивает всю планету на фиксированные метео-ячейки размером ~100 метров!
-                grid_key = f"{round(lat, 3)}_\_{round(lng, 3)}"
-                
+                # 🌟 ИСПРАВЛЕНО: Сделали чистый, монолитный ключ без обратных слэшей!
+                grid_key = f"{round(lat, 3)}_{round(lng, 3)}"
+
                 # Проверяем, объявлена ли переменная сетки в глобальной памяти server.py
                 if 'WEATHER_GEO_GRID' not in globals():
                     global WEATHER_GEO_GRID
