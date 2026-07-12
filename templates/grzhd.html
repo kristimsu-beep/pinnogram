@@ -488,6 +488,37 @@
             if (typeof setupMapWeatherListeners === "function") setupMapWeatherListeners();
         }
 
+        // 🌤️ МЕТЕОСЛУЖБА СЛЕЖЕНИЯ: Слушаем камеру и запрашиваем погоду в реальном времени
+        function setupMapWeatherListeners() {
+            if (!radarMap) return;
+
+            radarMap.on('moveend', function() {
+                const center = radarMap.getCenter();
+                
+                // Извлекаем чистые числа широты и долготы
+                const currentLat = parseFloat(center.lat);
+                const currentLng = parseFloat(center.lng);
+                
+                // Дублируем ключи долготы (lng, lon, longitude), чтобы бэкенд гарантированно считал данные
+                const weatherRequest = {
+                    "type": "request_camera_weather",
+                    "lat": currentLat,
+                    "latitude": currentLat,
+                    "lng": currentLng,
+                    "lon": currentLng,
+                    "longitude": currentLng
+                };
+                
+                // Отправляем пакет через наш глобальный сокет grzhdWs
+                if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                    grzhdWs.send(JSON.stringify(weatherRequest));
+                    console.log(`[🌤️ МЕТЕОФРОНТ] Камера замерла на координатах: ${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}. Запросили живую погоду!`);
+                } else {
+                    console.warn("[🌤️ МЕТЕОФРОНТ] Не удалось отправить погоду: сокет grzhdWs закрыт или ещё не подключен.");
+                }
+            });
+                    }
+        
         // ⚙️ 3. ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК (🌟 ДИНАМИЧЕСКИЙ ЗАПУСК КАРТЫ ПРИ КЛИКЕ)
         function switchAirlinesTab(tabName) {
             document.querySelectorAll('.app-tab-page').forEach(page => page.classList.remove('active'));
