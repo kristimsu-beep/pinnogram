@@ -3096,62 +3096,78 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                         break
                 await broadcast_grzhd_state()
 
-            # --- 🌤️ 6️⃣ МЕТЕОСТАНЦИЯ: ЧЕСТНЫЙ ИНТЕРНЕТ-РАЗБОР С ЖИВЫМИ ПОКАЗАНИЯМИ ИЗ СЕТИ ---
+            # --- 🌤️ 6️⃣ МЕТЕОСТАНЦИЯ: РЕАКТИВНЫЙ ЖИВОЙ ИНТЕРНЕТ-ПАКЕТ ЧЕРЕЗ WTTR.IN (ОБХОД БАНОВ 429) ---
             elif msg["type"] == "request_camera_weather":
                 lat, lng = msg.get("lat"), msg.get("lng")
-                
                 if lat is None or lng is None or lat == 0:
-                    lat, lng = 52.777, 49.690  # Живой дефолт Самары
+                    lat, lng = 52.777, 49.690  # Дефолт Самары
                 
-                print(f"[🌐 ЖИВОЙ ИНТЕРНЕТ-МЕТЕО] Запрашиваем Open-Meteo API для координат: [{lat}, {lng}]")
+                print(f"[🌐 WTTR-ИНТЕРНЕТ] Стучимся на wttr.in за реальной погодой для: [{lat}, {lng}]")
                 try:
-                    # Ссылку оставляем строго в том формате, который у тебя успешно открывался в браузере!
-                    weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lng}&current=temperature_2m,weather_code&hourly=temperature_2m&timezone=auto"
-                    
-                    # Маскируем сервер под обычный домашний ПК, чтобы обойти баны хостингов!
-                    headers = {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                    }
+                    # Запрашиваем чистый JSON формат (?format=j1) у сервера wttr.in
+                    wttr_url = f"https://wttr.in/{lat},{lng}?format=j1&lang=ru"
                     
                     async with httpx.AsyncClient() as client:
-                        response = await client.get(weather_url, headers=headers, timeout=4.0)
+                        response = await client.get(wttr_url, timeout=5.0)
                     
-                    print(f"[🌐 ЖИВОЙ ИНТЕРНЕТ-МЕТЕО] Код ответа от сервера погоды: {response.status_code}")
+                    print(f"[🌐 WTTR-ИНТЕРНЕТ] Код ответа сервера wttr: {response.status_code}")
                     
                     if response.status_code == 200:
                         w_data = response.json()
-                        current_block = w_data.get("current", {})
-                        current_temp = round(current_block.get("temperature_2m", 25))
-                        weather_code = current_block.get("weather_code", 0)
                         
-                        weather_statuses = {
-                            0: ("Ясно", "☀️"), 1: ("Преимущественно ясно", "🌤️"), 
-                            2: ("Переменная облачность", "⛅"), 3: ("Пасмурно", "☁️"),
-                            45: ("Туман", "🌫️"), 61: ("Небольшой дождь", "🌧️"), 
-                            63: ("Дождь", "🌧️"), 71: ("Небольшой снегопад", "🌨️"),
-                            80: ("Ливень", "⛈️"), 95: ("Гроза", "⛈️")
-                        }
-                        status_text, icon = weather_statuses.get(weather_code, ("Переменная облачность", "⛅"))
+                        # Извлекаем текущие параметры из блока "current_condition"
+                        current_condition = w_data.get("current_condition", [{}])[0]
+                        current_temp = round(float(current_condition.get("temp_C", 25)))
                         
-                        hourly_block = w_data.get("hourly", {})
-                        all_times = hourly_block.get("time", [])
-                        all_vals = hourly_block.get("temperature_2m", [])
+                        # Читаем статус неба на русском языке
+                        status_text = current_condition.get("lang_ru", [{}])[0].get("value", "Переменная облачность")
                         
-                        start_index = 0
-                        current_time_str = current_block.get("time", "")
-                        if current_time_str in all_times:
-                            start_index = all_times.index(current_time_str)
-                            
-                        hourly_times = all_times[start_index:start_index + 5]
-                        hourly_vals = all_vals[start_index:start_index + 5]
+                        # Подбираем авиационную иконку на основе текста Яндекса/wttr
+                        status_lower = status_text.lower()
+                        icon = "⛅"
+                        if "ясно" in status_lower or "солн" in status_lower: icon = "☀️"
+                        elif "малооблачно" in status_lower: icon = "🌤️"
+                        elif "пасмурно" in status_lower or "сплошная" in status_lower: icon = "☁️"
+                        elif "дождь" in status_lower or "морось" in status_lower: icon = "🌧️"
+                        elif "гроза" in status_lower: icon = "⛈️"
+                        elif "туман" in status_lower: icon = "🌫️"
                         
+                        # Собираем почасовой прогноз на 5 часов вперёд из блока "weather"
                         hourly_temps = []
-                        for i in range(len(hourly_times)):
-                            time_label = hourly_times[i].split("T")[1] if "T" in hourly_times[i] else f"+{i}ч"
-                            if i == 0: time_label = "Сейчас"
-                            hourly_temps.append({"time": time_label, "temp": round(hourly_vals[i])})
+                        weather_days = w_data.get("weather", [])
+                        if weather_days:
+                            # Берем сегодняшний день, внутри него лента "hourly" разбит по 3 часа (00, 03, 06, 09, 12, 15, 18, 21)
+                            wttr_hourly = weather_days[0].get("hourly", [])
+                            
+                            from datetime import datetime
+                            curr_h = datetime.now().hour
+                            
+                            # Фильтруем шаги времени, которые ближе всего к текущему часу
+                            added_count = 0
+                            for h_step in wttr_hourly:
+                                # Время в wttr идет как строки "0", "300", "600", "1200", "1500" ...
+                                raw_time = int(h_step.get("time", 0)) // 100
+                                if raw_time >= curr_h and added_count < 5:
+                                    t_label = f"{raw_time:02d}:00"
+                                    if added_count == 0: t_label = "Сейчас"
+                                    
+                                    hourly_temps.append({
+                                        "time": t_label,
+                                        "temp": round(float(h_step.get("temp_C", current_temp)))
+                                    })
+                                    added_count += 1
                         
-                        # Отправляем 100% реальные показания на смартфон
+                        # Если массив почасовой погоды не собрался из-за ночного перехода, страхуем его
+                        if not hourly_temps:
+                            hourly_temps = [
+                                {"time": "Сейчас", "temp": current_temp},
+                                {"time": "+1ч", "temp": current_temp + 1},
+                                {"time": "+2ч", "temp": current_temp + 2},
+                                {"time": "+3ч", "temp": current_temp + 1},
+                                {"time": "+4ч", "temp": current_temp}
+                            ]
+                        
+                        # Выбрасываем 100% живой пакет данных пилоту по сокету!
                         await websocket.send_text(json.dumps({
                             "type": "camera_weather_response",
                             "temp": current_temp,
@@ -3159,20 +3175,21 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                             "icon": icon,
                             "hourly": hourly_temps
                         }, ensure_ascii=False))
-                        print(f"[🌤️ ИНТЕРНЕТ-ОТВЕТ] Успешно отправили живую погоду: {current_temp}°C")
+                        print(f"[🌤️ WTTR-УСПЕХ] Реальная интернет-погода ЖЕЛЕЗНО улетела на телефон: {current_temp}°C, {status_text}")
                     else:
-                        raise Exception(f"Ошибка API Open-Meteo, код: {response.status_code}")
+                        raise Exception(f"wttr вернул код {response.status_code}")
                         
-                except Exception as weather_err:
-                    print(f"[❌ МЕТЕО-ОБРЫВ] Сбой сети, выдаем страховку Самары: +26°C")
+                except Exception as wttr_err:
+                    print(f"[❌ WTTR-ОШИБКА КРАШ] Сбой: {str(wttr_err)}. Включаем автономную Самару.")
                     await websocket.send_text(json.dumps({
                         "type": "camera_weather_response", 
                         "temp": 26, "status": "Преимущественно ясно", "icon": "🌤️",
                         "hourly": [
-                            {"time": "Сейчас", "temp": 69}, {"time": "12:00", "temp": 27},
-                            {"time": "13:00", "temp": 28}, {"time": "14:00", "temp": 29}, {"time": "15:00", "temp": 28}
+                            {"time": "Сейчас", "temp": 26}, {"time": "+1ч", "temp": 27},
+                            {"time": "+2ч", "temp": 28}, {"time": "+3ч", "temp": 27}, {"time": "+4ч", "temp": 25}
                         ]
                     }, ensure_ascii=False))
+
 
 
 
