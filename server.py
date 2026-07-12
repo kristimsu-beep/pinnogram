@@ -3098,20 +3098,33 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
 
             # --- 🌤️ 6️⃣ МЕТЕОСТАНЦИЯ: РЕАКТИВНЫЙ ЖИВОЙ ИНТЕРНЕТ-ПАКЕТ ЧЕРЕЗ WTTR.IN ---
             elif msg["type"] == "request_camera_weather":
-                # Защита от разных названий ключей долготы/широты с фронтенда
-                lat = msg.get("lat") or msg.get("latitude")
-                lng = msg.get("lng") or msg.get("lon") or msg.get("longitude")
+                # ВЫВОДИМ В КОНСОЛЬ СЫРОЙ ПАКЕТ ДЛЯ ПРОВЕРКИ КЛЮЧЕЙ
+                print(f"[🔍 ПОГОДНЫЙ ОТЛАДЧИК] Сырой JSON от фронтенда: {msg}")
                 
-                # Приводим к float, чтобы корректно проверить на 0 и пустые строки
+                # Если msg пришел как строка, принудительно парсим его в словарь
+                if isinstance(msg, str):
+                    try:
+                        import json
+                        msg = json.loads(msg)
+                    except Exception:
+                        pass
+
+                # Достаем значения, пробуя абсолютно все варианты регистров и названий
+                lat = msg.get("lat") or msg.get("latitude") or msg.get("LAT")
+                lng = msg.get("lng") or msg.get("lon") or msg.get("longitude") or msg.get("LNG") or msg.get("LON")
+                
+                # Безопасное приведение к float
                 try:
                     if lat is not None: lat = float(lat)
                     if lng is not None: lng = float(lng)
                 except (ValueError, TypeError):
                     lat, lng = None, None
 
-                # Если координаты не пришли или сбросились в ноль — включаем Самару
+                # Если координаты пустые, кривые или сбросились в ноль
                 if lat is None or lng is None or lat == 0:
-                    lat, lng = 19.756, 52.565  # Дефолт Самары
+                    print("[⚠️ МЕТЕО-ПРЕДУПРЕЖДЕНИЕ] Координаты камеры не распознаны! Включаем дефолт.")
+                    lat, lng = 19.756, 52.565  # Твой новый тестовый дефолт
+
                 
                 print(f"[🌐 WTTR-ИНТЕРНЕТ] Стучимся на wttr.in за реальной погодой для: [{lat}, {lng}]")
                 try:
