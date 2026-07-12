@@ -495,11 +495,18 @@
             radarMap.on('moveend', function() {
                 const center = radarMap.getCenter();
                 
-                // Извлекаем чистые числа широты и долготы
+                // КРИТИЧЕСКАЯ ПРОВЕРКА: Если Leaflet не отдал координаты, тупо выходим и не спамим сервер!
+                if (!center || center.lat === undefined || center.lng === undefined) {
+                    console.log("[🌤️ МЕТЕОФРОНТ] Камера двинулась программно или пустая. Игнорируем.");
+                    return;
+                }
+                
                 const currentLat = parseFloat(center.lat);
                 const currentLng = parseFloat(center.lng);
                 
-                // Дублируем ключи долготы (lng, lon, longitude), чтобы бэкенд гарантированно считал данные
+                // Проверяем на NaN (на случай кривого парсинга)
+                if (isNaN(currentLat) || isNaN(currentLng)) return;
+
                 const weatherRequest = {
                     "type": "request_camera_weather",
                     "lat": currentLat,
@@ -509,15 +516,13 @@
                     "longitude": currentLng
                 };
                 
-                // Отправляем пакет через наш глобальный сокет grzhdWs
                 if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
                     grzhdWs.send(JSON.stringify(weatherRequest));
-                    console.log(`[🌤️ МЕТЕОФРОНТ] Камера замерла на координатах: ${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}. Запросили живую погоду!`);
-                } else {
-                    console.warn("[🌤️ МЕТЕОФРОНТ] Не удалось отправить погоду: сокет grzhdWs закрыт или ещё не подключен.");
+                    console.log(`[🌤️ МЕТЕОФРОНТ] Камера замерла на координатах: ${currentLat}, ${currentLng}`);
                 }
             });
-                    }
+        }
+
         
         // ⚙️ 3. ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК (🌟 ДИНАМИЧЕСКИЙ ЗАПУСК КАРТЫ ПРИ КЛИКЕ)
         function switchAirlinesTab(tabName) {
