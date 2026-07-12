@@ -301,6 +301,8 @@
         var grzhd_planes = {};
         var radarMarkers = {};  // { flight_id: L.marker }
         var radarPolylines = {}; // { flight_id: { corridor: L.polyline, track: L.polyline } }
+        var isAutocentering = true; // Флаг: удерживать ли камеру над самолётом
+        
 
         // 🌟 ИСПРАВЛЕНО: Чистый старт! Убрали карту отсюда, чтобы она НЕ ломалась в скрытом HTML!
         window.addEventListener('DOMContentLoaded', () => {
@@ -484,7 +486,41 @@
                 }).openTooltip();
             }
 
-            // 🌟 ДОБАВЛЕНО: Запускаем метеослужбу слежения за экраном!
+            // 🎛️ ДОБАВЛЕНО: Кнопка-переключатель режимов камеры (Борт / Свободная)
+            const CustomCamControl = L.Control.extend({
+                options: { position: 'topright' }, // Кнопка сядет в правый верхний угол
+                onAdd: function () {
+                    const btn = L.DomUtil.create('button', 'leaflet-bar custom-cam-btn');
+                    btn.style.background = '#28a745'; // По умолчанию зелёная
+                    btn.style.color = '#ffffff';
+                    btn.style.border = '2px solid #fff';
+                    btn.style.padding = '8px 12px';
+                    btn.style.fontSize = '12px';
+                    btn.style.fontWeight = 'bold';
+                    btn.style.cursor = 'pointer';
+                    btn.style.borderRadius = '4px';
+                    btn.style.boxShadow = '0 2px 5px rgba(0,0,0,0.3)';
+                    btn.innerText = '🔒 Камера: Борт';
+
+                    L.DomEvent.on(btn, 'click', function (e) {
+                        L.DomEvent.stopPropagation(e);
+                        // Переключаем наш глобальный флаг
+                        window.isAutocentering = !window.isAutocentering;
+                        
+                        if (window.isAutocentering) {
+                            btn.style.background = '#28a745';
+                            btn.innerText = '🔒 Камера: Борт';
+                        } else {
+                            btn.style.background = '#dc3545'; // Становится красной при свободной камере
+                            btn.innerText = '🔓 Камера: Свободна';
+                        }
+                    });
+                    return btn;
+                }
+            });
+            radarMap.addControl(new CustomCamControl());
+
+            // 🌟 Запускаем метеослужбу слежения за экраном!
             if (typeof setupMapWeatherListeners === "function") setupMapWeatherListeners();
         }
 
@@ -493,9 +529,13 @@
             if (!radarMap) return;
 
             radarMap.on('moveend', function() {
+                // ПРЕДОХРАНИТЕЛЬ: Если включено автоцентрирование за самолётом — 
+                // ручные запросы полностью блокируем, чтобы не спамить бэкенд и wttr.in!
+                if (window.isAutocentering !== false) return;
+
                 const center = radarMap.getCenter();
                 
-                // КРИТИЧЕСКАЯ ПРОВЕРКА: Если Leaflet не отдал координаты, тупо выходим и не спамим сервер!
+                // КРИТИЧЕСКАЯ ПРОВЕРКА: Если Leaflet не отдал координаты, тупо выходим
                 if (!center || center.lat === undefined || center.lng === undefined) {
                     console.log("[🌤️ МЕТЕОФРОНТ] Камера двинулась программно или пустая. Игнорируем.");
                     return;
@@ -522,6 +562,7 @@
                 }
             });
         }
+
 
         
         // ⚙️ 3. ПЕРЕКЛЮЧАТЕЛЬ ВКЛАДОК (🌟 ДИНАМИЧЕСКИЙ ЗАПУСК КАРТЫ ПРИ КЛИКЕ)
@@ -562,46 +603,6 @@
             }
         }
 
-
-        // 🌤️ МЕТЕОСЛУЖБА СЛЕЖЕНИЯ: С бронебойной защитой от заклинивания слушателя
-        function setupMapWeatherListeners() {
-            if (!radarMap) return;
-
-            radarMap.on('moveend', function() {
-                try {
-                    const center = radarMap.getCenter();
-                    
-                    // Если Leaflet выдал пустоту — просто тихо выходим, не ломая скрипт
-                    if (!center || center.lat === null || center.lat === undefined) {
-                        console.log("[🌤️ МЕТЕОФРОНТ] Поймали пустой сдвиг карты. Пропускаем.");
-                        return;
-                    }
-                    
-                    const currentLat = parseFloat(center.lat);
-                    const currentLng = parseFloat(center.lng);
-                    
-                    if (isNaN(currentLat) || isNaN(currentLng)) return;
-
-                    const weatherRequest = {
-                        "type": "request_camera_weather",
-                        "lat": currentLat,
-                        "lng": currentLng
-                    };
-                    
-                    if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
-                        grzhdWs.send(JSON.stringify(weatherRequest));
-                        console.log(`[🌤️ МЕТЕОФРОНТ] Пакет улетел! Камера: ${currentLat.toFixed(4)}, ${currentLng.toFixed(4)}`);
-                    }
-                } catch (err) {
-                    // Если произошла ошибка — ловим её здесь, спасая слушатель от краша!
-                    console.error("[💥 МЕТЕОФРОНТ КРАШ СЛУШАТЕЛЯ]:", err);
-                }
-            });
-        }
-
-        
-        
-
         // 📋 10. СИНХРОНИЗАЦИЯ С ИЗОЛЯЦИЕЙ ГРАФИЧЕСКИХ КРАШЕЙ LEAFLET
         function syncAirlinesData(flights, planes) {
             if (flights) grzhd_flights = flights;
@@ -610,8 +611,13 @@
             if (typeof renderMyFlightsJournal === "function") renderMyFlightsJournal(flights);
             if (typeof renderGlobalFlightsTable === "function") renderGlobalFlightsTable(flights);
             
-            // 🌟 ИСПРАВЛЕНО: Завернули вызов карты в try/catch! Если Leaflet выдаст 'addLayer' null,
-            // поток JavaScript не упадёт, сокет продолжит жить, а погода покажет живые градусы!
+            // 🌟 ИСПРАВЛЕНО: Если пилот освободил камеру для поиска погоды в Антарктиде — 
+            // временно замораживаем автообновление карты, чтобы Leaflet не сбрасывал палец пилота!
+            if (typeof isAutocentering !== "undefined" && !isAutocentering) {
+                console.log("[🗺️ МЕТЕО-ЗАЩИТА] Камера свободна, блокируем авто-сдвиг Leaflet.");
+                return; // Просто выходим, не давая карте центрироваться за самолётом!
+            }
+
             try {
                 var actualMap = radarMap || window.radarMap;
                 if (actualMap && typeof updateFlightRadarMapLayers === "function") {
@@ -621,6 +627,7 @@
                 console.error("Фоновое ожидание инициализации слоев карты:", mapErr.message);
             }
         }
+
 
 
 
