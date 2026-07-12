@@ -3104,7 +3104,6 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                 # Если msg пришел как строка, принудительно парсим его в словарь
                 if isinstance(msg, str):
                     try:
-                        import json
                         msg = json.loads(msg)
                     except Exception:
                         pass
