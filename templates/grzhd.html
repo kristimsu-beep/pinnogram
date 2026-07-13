@@ -529,34 +529,38 @@
         function setupMapWeatherListeners() {
             if (!radarMap) return;
 
-            console.log("🌤️ Метеослужбы кликов по экрану успешно перехвачена!");
+            console.log("🌤️ Метеослужба перехвачена: Ловим двойной тап по экрану!");
 
-            // 🎯 Ловим ТАП / КЛИК пальцем по любой точке карты!
-            radarMap.on('click', function(e) {
-                // e.latlng — это точные географические координаты места, куда ткнул пользователь
+            // 🛑 ОТКЛЮЧАЕМ СТАНДАРТНЫЙ ЗУМ КАРТЫ ПО ДВОЙНОМУ КЛИКУ
+            // Чтобы при двойном тапе карта не прыгала вперед, а просто считывала погоду
+            radarMap.doubleClickZoom.disable();
+
+            // 🎯 Ловим ДВОЙНОЙ ТАП / ДВОЙНОЙ КЛИК пальцем по любой точке карты!
+            radarMap.on('dblclick', function(e) {
                 if (!e || !e.latlng) return;
 
                 const clickedLat = parseFloat(e.latlng.lat).toFixed(4);
                 const clickedLng = parseFloat(e.latlng.lng).toFixed(4);
 
-                console.log(`🎯 [МЕТЕО-ТАП] Пользователь ткнул на координаты: Lat ${clickedLat}, Lng ${clickedLng}`);
+                console.log(`🎯 [МЕТЕО-ДАБЛТАП] Двойной клик по координатам: Lat ${clickedLat}, Lng ${clickedLng}`);
 
-                // Временно создаем красивый синий метео-кружок в месте клика, который сам исчезнет через 2 секунды
+                // Создаем красивый пульсирующий метео-кружок изумрудного цвета в месте двойного клика
                 const clickPulse = L.circleMarker([e.latlng.lat, e.latlng.lng], {
-                    radius: 12,
-                    color: '#007bff',
-                    fillColor: '#007bff',
-                    fillOpacity: 0.5,
+                    radius: 15,
+                    color: '#28a745', // Сделаем зеленым для контраста со спутником
+                    fillColor: '#28a745',
+                    fillOpacity: 0.6,
                     weight: 3
                 }).addTo(radarMap);
                 
+                // Удаляем кружок через 1.5 секунды
                 setTimeout(() => {
                     if (radarMap.hasLayer(clickPulse)) {
                         radarMap.removeLayer(clickPulse);
                     }
-                }, 2000);
+                }, 1500);
 
-                // Пакуем честный JSON-пакет БЕЗ каких-либо проверок флагов камеры
+                // Формируем JSON-пакет с точными координатами двойного тапа
                 const weatherRequest = {
                     "type": "request_camera_weather",
                     "lat": parseFloat(clickedLat),
@@ -566,12 +570,13 @@
                 // Проверяем сокет grzhdWs и пуляем запрос погоды
                 if (typeof grzhdWs !== 'undefined' && grzhdWs.readyState === WebSocket.OPEN) {
                     grzhdWs.send(JSON.stringify(weatherRequest));
-                    console.log(`🚀 [МЕТЕО-ТАП] Запрос новой погоды улетел на бэкенд!`);
+                    console.log(`🚀 [МЕТЕО-ДАБЛТАП] Запрос новой погоды улетел на бэкенд!`);
                 } else {
-                    console.log("❌ [МЕТЕО-ТАП] Ошибка: Сокет grzhdWs не готов или закрыт.");
+                    console.log("❌ [МЕТЕО-ДАБЛТАП] Ошибка: Сокет grzhdWs не готов или закрыт.");
                 }
             });
         }
+
 
 
 
