@@ -3111,102 +3111,108 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
                 lat = msg.get("lat") or msg.get("latitude") or msg.get("LAT")
                 lng = msg.get("lng") or msg.get("lon") or msg.get("longitude") or msg.get("LNG") or msg.get("LON")
                 
-                # ЖЕСТКИЙ ФИЛЬТР ПУСТОТЫ: Если фронтенд прислал пустой пакет при старте рейса — ТУПО ИГНОРИРУЕМ!
+                # 🔥 ИСПРАВЛЕНО: Если прилетела пустышка, мы НЕ делаем continue, чтобы не ломать цикл сокета.
+                # Мы просто пишем лог и мирно выходим из этой ветки elif (pass), ожидая нормальный пакет.
                 if lat is None or lng is None:
-                    print("[⚠️ МЕТЕО-ФИЛЬТР] Поймали пустой пакет-пустышку от фронтенда! Сбрасываем запрос, чтобы не портить погоду.")
-                    continue  # или return, смотря какой цикл внутри сокета. Если это цикл `async for message in websocket`, то пишем `continue`
+                    print("[⚠️ МЕТЕО-ФИЛЬТР] Поймали пустой пакет-пустышку от фронтенда! Пропускаем этот дубль.")
+                    pass
                 
-                # Безопасное приведение к float
-                try:
-                    lat = float(lat)
-                    lng = float(lng)
-                except (ValueError, TypeError):
-                    print("[⚠️ МЕТЕО-ФИЛЬТР] Кривые координаты. Игнорируем.")
-                    continue
+                else:
+                    # Безопасное приведение к float
+                    try:
+                        lat = float(lat)
+                        lng = float(lng)
+                    except (ValueError, TypeError):
+                        print("[⚠️ МЕТЕО-ФИЛЬТР] Кривые координаты. Игнорируем.")
+                        lat, lng = None, None
 
-                # Страховка на случай нулевых координат
-                if lat == 0:
-                    lat, lng = 19.756, 52.565  # Возвращаем Самару
-                
-                print(f"[🌐 WTTR-ИНТЕРНЕТ] Стучимся на wttr.in за реальной погодой для: [{lat}, {lng}]")
+                    if lat is not None and lng is not None:
+                        # Твой маркер-страховка Саудовской Аравии (оставляем нетронутым)
+                        if lat == 0:
+                            lat, lng = 19.756, 52.565  
+                        
+                        print(f"[🌐 WTTR-ИНТЕРНЕТ] Стучимся на wttr.in за реальной погодой для: [{lat}, {lng}]")
 
-                try:
-                    # Запрашиваем чистый JSON формат (?format=j1) у сервера wttr.in
-                    wttr_url = f"https://wttr.in/{lat},{lng}?format=j1&lang=ru"
-                    
-                    async with httpx.AsyncClient() as client:
-                        response = await client.get(wttr_url, timeout=5.0)
-                    
-                    print(f"[🌐 WTTR-ИНТЕРНЕТ] Код ответа сервера wttr: {response.status_code}")
-                    
-                    if response.status_code == 200:
-                        w_data = response.json()
-                        
-                        # Извлекаем текущие параметры из блока "current_condition"
-                        current_condition = w_data.get("current_condition", [{}])[0]
-                        current_temp = round(float(current_condition.get("temp_C", 25)))
-                        
-                        # Читаем статус неба на русском языке
-                        status_text = current_condition.get("lang_ru", [{}])[0].get("value", "Переменная облачность")
-                        
-                        # Подбираем авиационную иконку на основе текста Яндекса/wttr
-                        status_lower = status_text.lower()
-                        icon = "⛅"
-                        if "ясно" in status_lower or "солн" in status_lower: icon = "☀️"
-                        elif "малооблачно" in status_lower: icon = "🌤️"
-                        elif "пасмурно" in status_lower or "сплошная" in status_lower: icon = "☁️"
-                        elif "дождь" in status_lower or "морось" in status_lower: icon = "🌧️"
-                        elif "гроза" in status_lower: icon = "⛈️"
-                        elif "туман" in status_lower: icon = "🌫️"
-                        
-                        # Собираем почасовой прогноз на 5 часов вперёд из блока "weather"
-                        hourly_temps = []
-                        weather_days = w_data.get("weather", [])
-                        if weather_days:
-                            # Берем сегодняшний день, внутри него лента "hourly" разбит по 3 часа (00, 03, 06, 09, 12, 15, 18, 21)
-                            wttr_hourly = weather_days[0].get("hourly", [])
+                        try:
+                            # Запрашиваем чистый JSON формат (?format=j1) у сервера wttr.in
+                            wttr_url = f"https://wttr.in/{lat},{lng}?format=j1&lang=ru"
                             
-                            from datetime import datetime
-                            curr_h = datetime.now().hour
+                            async with httpx.AsyncClient() as client:
+                                response = await client.get(wttr_url, timeout=5.0)
                             
-                            # Фильтруем шаги времени, которые ближе всего к текущему часу
-                            added_count = 0
-                            for h_step in wttr_hourly:
-                                # Время в wttr идет как строки "0", "300", "600", "1200", "1500" ...
-                                raw_time = int(h_step.get("time", 0)) // 100
-                                if raw_time >= curr_h and added_count < 5:
-                                    t_label = f"{raw_time:02d}:00"
-                                    if added_count == 0: t_label = "Сейчас"
+                            print(f"[🌐 WTTR-ИНТЕРНЕТ] Код ответа сервера wttr: {response.status_code}")
+                            
+                            if response.status_code == 200:
+                                w_data = response.json()
+                                
+                                # Извлекаем параметры из блока "current_condition"
+                                current_conditions_list = w_data.get("current_condition", [{}])
+                                current_condition = current_conditions_list[0] if current_conditions_list else {}
+                                
+                                current_temp = round(float(current_condition.get("temp_C", 25)))
+                                
+                                # Читаем статус неба на русском языке
+                                lang_ru_list = current_condition.get("lang_ru", [{}])
+                                status_text = lang_ru_list[0].get("value", "Переменная облачность") if lang_ru_list else "Переменная облачность"
+                                
+                                # Подбираем авиационную иконку на основе текста
+                                status_lower = status_text.lower()
+                                icon = "⛅"
+                                if "ясно" in status_lower or "солн" in status_lower: icon = "☀️"
+                                elif "малооблачно" in status_lower: icon = "🌤️"
+                                elif "пасмурно" in status_lower or "сплошная" in status_lower: icon = "☁️"
+                                elif "дождь" in status_lower or "морось" in status_lower: icon = "🌧️"
+                                elif "гроза" in status_lower: icon = "⛈️"
+                                elif "туман" in status_lower: icon = "🌫️"
+                                
+                                # Собираем почасовой прогноз на 5 часов вперёд
+                                hourly_temps = []
+                                weather_days = w_data.get("weather", [])
+                                if weather_days:
+                                    wttr_hourly = weather_days[0].get("hourly", [])
                                     
-                                    hourly_temps.append({
-                                        "time": t_label,
-                                        "temp": round(float(h_step.get("temp_C", current_temp)))
-                                    })
-                                    added_count += 1
-                        
-                        # Если массив почасовой погоды не собрался из-за ночного перехода, страхуем его
-                        if not hourly_temps:
-                            hourly_temps = [
-                                {"time": "Сейчас", "temp": current_temp},
-                                {"time": "+1ч", "temp": current_temp + 1},
-                                {"time": "+2ч", "temp": current_temp + 2},
-                                {"time": "+3ч", "temp": current_temp + 1},
-                                {"time": "+4ч", "temp": current_temp}
-                            ]
-                        
-                        # Выбрасываем 100% живой пакет данных пилоту по сокету!
-                        await websocket.send_text(json.dumps({
-                            "type": "camera_weather_response",
-                            "temp": current_temp,
-                            "status": status_text,
-                            "icon": icon,
-                            "hourly": hourly_temps
-                        }, ensure_ascii=False))
-                        print(f"[🌤️ WTTR-УСПЕХ] Реальная интернет-погода ЖЕЛЕЗНО улетела на телефон: {current_temp}°C, {status_text}")
-                    else:
-                        raise Exception(f"wttr вернул код {response.status_code}")
-                except Exception as e:
-                    print(f"[💥 МЕТЕО-ОШИБКА] Не удалось получить погоду: {e}")
+                                    from datetime import datetime
+                                    curr_h = datetime.now().hour
+                                    
+                                    added_count = 0
+                                    for h_step in wttr_hourly:
+                                        raw_time = int(h_step.get("time", 0)) // 100
+                                        if raw_time >= curr_h and added_count < 5:
+                                            t_label = f"{raw_time:02d}:00"
+                                            if added_count == 0: t_label = "Сейчас"
+                                            
+                                            hourly_temps.append({
+                                                "time": t_label,
+                                                "temp": round(float(h_step.get("temp_C", current_temp)))
+                                            })
+                                            added_count += 1
+                                
+                                if not hourly_temps:
+                                    hourly_temps = [
+                                        {"time": "Сейчас", "temp": current_temp},
+                                        {"time": "+1ч", "temp": current_temp + 1},
+                                        {"time": "+2ч", "temp": current_temp + 2},
+                                        {"time": "+3ч", "temp": current_temp + 1},
+                                        {"time": "+4ч", "temp": current_temp}
+                                    ]
+                                
+                                # 🔥 ИСПРАВЛЕНО: Добавляем lat и lng в возвращаемый JSON.
+                                # Теперь фронтенд на 100% поймет, для какой точки пришла эта погода!
+                                await websocket.send_text(json.dumps({
+                                    "type": "camera_weather_response",
+                                    "lat": lat,
+                                    "lng": lng,
+                                    "temp": current_temp,
+                                    "status": status_text,
+                                    "icon": icon,
+                                    "hourly": hourly_temps
+                                }, ensure_ascii=False))
+                                print(f"[🌤️ WTTR-УСПЕХ] Реальная интернет-погода ЖЕЛЕЗНО улетела на телефон: {current_temp}°C, {status_text} для [{lat}, {lng}]")
+                            else:
+                                raise Exception(f"wttr вернул код {response.status_code}")
+                        except Exception as e:
+                            print(f"[💥 МЕТЕО-ОШИБКА] Не удалось получить погоду: {e}")
+
 
     except WebSocketDisconnect:
         print(f"[🛑 ВЫШКА-СТОП] Дисконнект сессии: Игрок {client_id} закрыл вкладку.")
