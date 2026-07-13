@@ -485,7 +485,9 @@
                     permanent: true, direction: 'top', className: 'city-label capital-label', offset: [0, -15]
                 }).openTooltip();
             }
-
+            
+            window.isAutocentering = true;
+            
             // 🎛️ ДОБАВЛЕНО: Кнопка-переключатель режимов камеры (Борт / Свободная)
             const CustomCamControl = L.Control.extend({
                 options: { position: 'topright' }, // Кнопка сядет в правый верхний угол
@@ -524,44 +526,45 @@
             if (typeof setupMapWeatherListeners === "function") setupMapWeatherListeners();
         }
 
-        // 🌤️ МЕТЕОСЛУЖБА СЛЕЖЕНИЯ: Слушаем камеру и запрашиваем погоду в реальном времени
         function setupMapWeatherListeners() {
             if (!radarMap) return;
 
             radarMap.on('moveend', function() {
-                // ПРЕДОХРАНИТЕЛЬ: Если включено автоцентрирование за самолётом — 
-                // ручные запросы полностью блокируем, чтобы не спамить бэкенд и wttr.in!
-                if (window.isAutocentering !== false) return;
+                // 🔥 УПРОЩАЕМ ПРЕДОХРАНИТЕЛЬ: чётко проверяем глобальный флаг. 
+                // Запрос улетит ТОЛЬКО если камера переключена в режим "Свободна" (false)
+                if (window.isAutocentering === true) {
+                    console.log("[🌤️ МЕТЕОФРОНТ] Автоцентрирование включено. Блокируем запрос погоды.");
+                    return;
+                }
 
                 const center = radarMap.getCenter();
                 
-                // КРИТИЧЕСКАЯ ПРОВЕРКА: Если Leaflet не отдал координаты, тупо выходим
                 if (!center || center.lat === undefined || center.lng === undefined) {
                     console.log("[🌤️ МЕТЕОФРОНТ] Камера двинулась программно или пустая. Игнорируем.");
                     return;
                 }
                 
-                const currentLat = parseFloat(center.lat);
-                const currentLng = parseFloat(center.lng);
+                const currentLat = parseFloat(center.lat).toFixed(4); // Округлим до 4 знаков для красоты
+                const currentLng = parseFloat(center.lng).toFixed(4);
                 
-                // Проверяем на NaN (на случай кривого парсинга)
                 if (isNaN(currentLat) || isNaN(currentLng)) return;
 
                 const weatherRequest = {
                     "type": "request_camera_weather",
-                    "lat": currentLat,
-                    "latitude": currentLat,
-                    "lng": currentLng,
-                    "lon": currentLng,
-                    "longitude": currentLng
+                    "lat": parseFloat(currentLat),
+                    "lng": parseFloat(currentLng)
                 };
                 
-                if (grzhdWs && grzhdWs.readyState === WebSocket.OPEN) {
+                // Проверяем именно твой сокет grzhdWs
+                if (typeof grzhdWs !== 'undefined' && grzhdWs.readyState === WebSocket.OPEN) {
                     grzhdWs.send(JSON.stringify(weatherRequest));
-                    console.log(`[🌤️ МЕТЕОФРОНТ] Камера замерла на координатах: ${currentLat}, ${currentLng}`);
+                    console.log(`[🌤️ МЕТЕОФРОНТ] РЕАЛЬНЫЙ ЗАПРОС УЛЕТЕЛ! Координаты центра: ${currentLat}, ${currentLng}`);
+                } else {
+                    console.log("❌ [🌤️ МЕТЕОФРОНТ] Ошибка: Сокет grzhdWs не готов или не найден.");
                 }
             });
         }
+
 
 
         
