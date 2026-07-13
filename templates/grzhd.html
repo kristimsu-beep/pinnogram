@@ -529,41 +529,50 @@
         function setupMapWeatherListeners() {
             if (!radarMap) return;
 
-            radarMap.on('moveend', function() {
-                // 🔥 УПРОЩАЕМ ПРЕДОХРАНИТЕЛЬ: чётко проверяем глобальный флаг. 
-                // Запрос улетит ТОЛЬКО если камера переключена в режим "Свободна" (false)
-                if (window.isAutocentering === true) {
-                    console.log("[🌤️ МЕТЕОФРОНТ] Автоцентрирование включено. Блокируем запрос погоды.");
-                    return;
-                }
+            console.log("🌤️ Метеослужбы кликов по экрану успешно перехвачена!");
 
-                const center = radarMap.getCenter();
-                
-                if (!center || center.lat === undefined || center.lng === undefined) {
-                    console.log("[🌤️ МЕТЕОФРОНТ] Камера двинулась программно или пустая. Игнорируем.");
-                    return;
-                }
-                
-                const currentLat = parseFloat(center.lat).toFixed(4); // Округлим до 4 знаков для красоты
-                const currentLng = parseFloat(center.lng).toFixed(4);
-                
-                if (isNaN(currentLat) || isNaN(currentLng)) return;
+            // 🎯 Ловим ТАП / КЛИК пальцем по любой точке карты!
+            radarMap.on('click', function(e) {
+                // e.latlng — это точные географические координаты места, куда ткнул пользователь
+                if (!e || !e.latlng) return;
 
+                const clickedLat = parseFloat(e.latlng.lat).toFixed(4);
+                const clickedLng = parseFloat(e.latlng.lng).toFixed(4);
+
+                console.log(`🎯 [МЕТЕО-ТАП] Пользователь ткнул на координаты: Lat ${clickedLat}, Lng ${clickedLng}`);
+
+                // Временно создаем красивый синий метео-кружок в месте клика, который сам исчезнет через 2 секунды
+                const clickPulse = L.circleMarker([e.latlng.lat, e.latlng.lng], {
+                    radius: 12,
+                    color: '#007bff',
+                    fillColor: '#007bff',
+                    fillOpacity: 0.5,
+                    weight: 3
+                }).addTo(radarMap);
+                
+                setTimeout(() => {
+                    if (radarMap.hasLayer(clickPulse)) {
+                        radarMap.removeLayer(clickPulse);
+                    }
+                }, 2000);
+
+                // Пакуем честный JSON-пакет БЕЗ каких-либо проверок флагов камеры
                 const weatherRequest = {
                     "type": "request_camera_weather",
-                    "lat": parseFloat(currentLat),
-                    "lng": parseFloat(currentLng)
+                    "lat": parseFloat(clickedLat),
+                    "lng": parseFloat(clickedLng)
                 };
                 
-                // Проверяем именно твой сокет grzhdWs
+                // Проверяем сокет grzhdWs и пуляем запрос погоды
                 if (typeof grzhdWs !== 'undefined' && grzhdWs.readyState === WebSocket.OPEN) {
                     grzhdWs.send(JSON.stringify(weatherRequest));
-                    console.log(`[🌤️ МЕТЕОФРОНТ] РЕАЛЬНЫЙ ЗАПРОС УЛЕТЕЛ! Координаты центра: ${currentLat}, ${currentLng}`);
+                    console.log(`🚀 [МЕТЕО-ТАП] Запрос новой погоды улетел на бэкенд!`);
                 } else {
-                    console.log("❌ [🌤️ МЕТЕОФРОНТ] Ошибка: Сокет grzhdWs не готов или не найден.");
+                    console.log("❌ [МЕТЕО-ТАП] Ошибка: Сокет grzhdWs не готов или закрыт.");
                 }
             });
         }
+
 
 
 
