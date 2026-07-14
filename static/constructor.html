@@ -56,25 +56,6 @@
         </div>
     </div>
     
-
-    <script>
-        const segments = window.location.pathname.split('/').filter(Boolean);
-        const projName = segments[1];
-        const pageName = segments[2];
-
-        document.getElementById('page-title').innerText = `📰 Страница: ${pageName}`;
-        document.getElementById('back-btn').onclick = () => window.location.href = `/news/${projName}`;
-
-        let blockList = [];
-        let isOwner = false;
-
-        async function loadPageData() {
-            let res = await fetch(`/api/news/page-info/${projName}/${pageName}`);
-            if (!res.ok) { alert("Ошибка загрузки страницы!"); return; }
-            let data = await res.json();
-            isOwner = data.is_owner;
-            blockList = data.blocks;
-
     <script>
         const segments = window.location.pathname.split('/').filter(Boolean);
         // Защита: если роут кривой, берем последние элементы
@@ -234,4 +215,3 @@
     </script>
 </body>
 </html>
-
