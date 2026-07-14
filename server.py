@@ -3374,7 +3374,7 @@ async def get_roblox_skin(username: str):
                 
                 # Шаг 2: Запрашиваем рендер В ПОЛНЫЙ РОСТ
                 img_res = await client.get(
-                    f"https://thumbnails.roblox.com/v1/users/avatar?userIds={u_id}&size=350x350&format=Png"
+                    f"https://thumbnails.roblox.com/v1/users/avatar?userIds={u_id}&size=420x420&format=Png"
                 )
                 
                 img_list = img_res.json().get("data", [])
