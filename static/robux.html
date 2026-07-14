@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premium Robux Hub</title>
+    <style>
+        :root {
+            --bg-main: #0d0e12;
+            --bg-panel: #14161d;
+            --bg-accent: #ff5722;
+            --bg-accent-hover: #e04e1d;
+            --text-muted: #7a8293;
+            --border-color: #222530;
+            --glow-color: rgba(255, 87, 34, 0.2);
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: #ffffff;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        /* КРАСИВЫЙ ИНДУСТРИАЛЬНЫЙ HEADER */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 40px;
+            height: 80px;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border-color);
+            position: relative;
+            z-index: 100;
+        }
+
+        .logo-area {
+            font-size: 20px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            background: linear-gradient(45deg, #fff, var(--text-muted));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* ПРОФИЛЬ И КОНТЕКСТНОЕ МЕНЮ */
+        .user-nav-block {
+            position: relative;
+        }
+
+        .profile-trigger {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #1b1e26;
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .profile-trigger:hover {
+            border-color: var(--bg-accent);
+            box-shadow: 0 0 15px var(--glow-color);
+        }
+
+        .avatar-img {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #000;
+            border: 2px solid var(--border-color);
+        }
+
+        .user-names {
+            display: flex;
+            flex-direction: column;
+            text-align: left;
+        }
+
+        .display-name {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .username-sub {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* ВЫПАДАЮЩЕЕ МЕНЮ МУЛЬТИАККАУНТИНГА */
+        .context-dropdown {
+            position: absolute;
+            top: 60px;
+            right: 0;
+            width: 300px;
+            background: #14161d;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+            padding: 16px;
+            display: none;
+            flex-direction: column;
+            gap: 14px;
+            z-index: 200;
+        }
+
+        .context-dropdown.active {
+            display: flex;
+            animation: fadeInDropdown 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes fadeInDropdown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .balance-indicator {
+            background: #1b1e26;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px dashed var(--border-color);
+        }
+
+        .balance-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .balance-value {
+            font-size: 24px;
+            font-weight: 800;
+            color: #ffb300;
+            margin-top: 4px;
+        }
+
+        .accounts-list-title {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .linked-accounts-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .account-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px;
+            background: #1b1e26;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: 0.2s;
+        }
+
+        .account-row:hover {
+            border-color: var(--border-color);
+            background: #20242e;
+        }
+
+        .account-row.active-row {
+            border-color: var(--bg-accent);
+            background: rgba(255, 87, 34, 0.05);
+        }
+
+        .acc-info-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .mini-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+        }
+
+        .dropdown-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 5px;
+        }
+
+        .btn-secondary {
+            background: #1b1e26;
+            color: #fff;
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn-secondary:hover {
+            background: #232732;
+            border-color: var(--text-muted);
+        }
+
+        .btn-logout {
+            background: rgba(220, 53, 69, 0.1);
+            color: #dc3545;
+            border: 1px solid rgba(220, 53, 69, 0.2);
+        }
+
+        .btn-logout:hover {
+            background: #dc3545;
+            color: #fff;
+            border-color: #dc3545;
+        }
+
+        /* ЦЕНТРАЛЬНЫЙ МОДУЛЬ РУЛЕТКИ */
+        main {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+            text-align: center;
+        }
+
+        .roulette-viewport-panel {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 40px;
+            margin-top: 20px;
+            position: relative;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+
+        /* ОКНО АВТОРbranchИЗАЦИИ (БЛОКИРОВЩИК ЭКРАНА) */
+        .auth-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(9, 10, 13, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .auth-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            padding: 40px;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 420px;
+            text-align: center;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+        }
+
+        .input-cyber {
+            width: 100%;
+            background: #1b1e26;
+            border: 1px solid var(--border-color);
+            padding: 14px;
+            color: #fff;
+            font-size: 16px;
+            border-radius: 8px;
+            box-sizing: border-box;
+            margin-bottom: 20px;
+            outline: none;
+            transition: 0.3s;
+        }
+
+        .input-cyber:focus {
+            border-color: var(--bg-accent);
+            box-shadow: 0 0 10px var(--glow-color);
+        }
+
+        .btn-accent {
+            width: 100%;
+            background: var(--bg-accent);
+            color: #fff;
+            font-weight: 700;
+            font-size: 16px;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn-accent:hover {
+            background: var(--bg-accent-hover);
+            box-shadow: 0 0 20px rgba(255, 87, 34, 0.4);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 🌌 ЧАСТЬ 1. КИБЕРПАНК-БЛОКИРОВЩИК: ОКНО АВТОРbranchИЗАЦИИ -->
+    <!-- Показывается поверх всего экрана, если сессия пользователя не инициализирована -->
+    <div id="auth-gate" class="auth-overlay">
+        <div class="auth-card">
+            <h2 style="margin-top:0; font-size:24px; letter-spacing:1px; font-weight:800; text-transform:uppercase; color:#ff5722;">Инициализация профиля</h2>
+            <p style="color: var(--text-muted); font-size:14px; margin-bottom:25px; line-height:1.5;">Синхронизируйте вашу игровую сессию. Укажите точный Roblox никнейм для подключения к серверам базы данных.</p>
+            <input type="text" id="roblox-username-field" class="input-cyber" placeholder="Введите ваш никнейм...">
+            <button onclick="executeAuth()" class="btn-accent">Синхронизировать сессию</button>
+        </div>
+    </div>
+
+    <!-- 🌌 ЧАСТЬ 2. ПРЕМИАЛЬНАЯ НАВИГАЦИОННАЯ ПАНЕЛЬ (HEADER) -->
+    <header>
+        <!-- Индустриальный текстовый логотип платформы -->
+        <div class="logo-area">Hub System</div>
+        
+        <!-- Блок профиля игрока (изначально скрыт, активируется при наличии куки-сессии) -->
+        <div class="user-nav-block" id="user-navbar-area" style="display:none;">
+            
+            <!-- Интерактивный триггер выпадающего меню -->
+            <div class="profile-trigger" onclick="toggleDropdown()">
+                <img id="current-avatar" src="" class="avatar-img">
+                <div class="user-names">
+                    <span id="current-display-name" class="display-name">Загрузка профиля</span>
+                    <span id="current-username" class="username-sub">@loading</span>
+                </div>
+            </div>
+
+            <!-- ВЫПАДАЮЩАЯ СЛУЖЕБНАЯ КАРТОЧКА МУЛЬТИАККАУНТИНГА -->
+            <div id="account-dropdown" class="context-dropdown">
+                
+                <!-- Живой цифровой счетчик баланса робуксов -->
+                <div class="balance-indicator">
+                    <div class="balance-label">Доступный баланс</div>
+                    <div class="balance-value"><span id="active-balance-display">0</span> R$</div>
+                </div>
+
+                <!-- Блок истории транзакций (заглушка под реальныеRoblox-транзакции) -->
+                <div style="background: #1b1e26; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; font-size: 11px;">
+                    <span style="color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Последняя транзакция</span>
+                    <div style="display: flex; justify-content: space-between; margin-top: 5px; color: #7a8293;">
+                        <span>Синхронизация шлюза</span>
+                        <span style="color: #4caf50;">Успешно</span>
+                    </div>
+                </div>
+
+                <div class="accounts-list-title">Привязанные учетные записи</div>
+                
+                <!-- Сюда JavaScript будет динамически рендерить строки твоих твинков и основы -->
+                <div class="linked-accounts-container" id="linked-accounts-box"></div>
+                
+                <!-- Кнопки управления аккаунтами сессии -->
+                <div class="dropdown-actions">
+                    <button class="btn-secondary" onclick="triggerAddAccountMode()">Привязать учетную запись</button>
+                    <button class="btn-secondary btn-logout" onclick="executeLogout()">Выйти из сессии</button>
+                </div>
+            </div>
+        </div>
+    </header>
+        <!-- 🌌 ЧАСТЬ 3. ЦЕНТРАЛЬНЫЙ МОДУЛЬ КОНВЕЙЕРА (MAIN РУЛЕТКА) -->
+    <main>
+        <div class="roulette-viewport-panel">
+            <h2 style="margin-top:0; font-weight:800; text-transform:uppercase; letter-spacing:1px; color: #ff5722;">Испытание Фортуны</h2>
+            <p style="color: var(--text-muted); margin-bottom:30px; font-size:14px;">Запуск конвейера доступен раз в 12 часов</p>
+            
+            <!-- КОНТЕЙНЕР БАРАБАНА С ВЕРТИКАЛЬНЫМ МАРКЕРОМ ЦЕНТРА -->
+            <div style="position: relative; max-width: 800px; margin: 0 auto; background: #14161d; border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);">
+                
+                <!-- Лазерный неоновый указатель центра (Визир) -->
+                <div style="position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 4px; height: 100%; background: linear-gradient(to bottom, #ff5722, #e04e1d); z-index: 10; box-shadow: 0 0 10px #ff5722;"></div>
+                
+                <!-- Собственно холст для отрисовки призов -->
+                <canvas id="roulette-canvas" width="800" height="140" style="display: block; width: 100%; height: 100%;"></canvas>
+            </div>
+
+            <!-- БЛОК УПРАВЛЕНИЯ БАРАБАНОМ -->
+            <div style="margin-top: 25px;">
+                <!-- Кнопка запуска рулетки -->
+                <button id="spin-trigger-btn" onclick="startRouletteSpin()" class="btn-accent" style="max-width: 280px; margin: 0 auto; display: block;">Активировать барабан</button>
+                
+                <!-- Высокотехнологичный таймер обратного отсчета (по умолчанию скрыт, покажем через JS) -->
+                <div id="spin-timer-cooldown" style="display: none; font-size: 14px; font-weight: 700; color: var(--text-muted); background: #1b1e26; padding: 14px 28px; border-radius: 8px; border: 1px solid var(--border-color); max-width: 240px; margin: 0 auto; text-transform: uppercase; letter-spacing: 1px;">
+                    Блокировка: <span id="timer-countdown-val" style="color: #fff; font-variant-numeric: tabular-nums;">12:00:00</span>
+                </div>
+            </div>
+        </div>
+    </main>
+    <!-- 🌌 ЧАСТЬ 4. ЯДРО УПРАВЛЕНИЯ, МУЛЬТИАККАУНТИНГ И ФИЗИЧЕСКИЙ ДВИЖК CANVAS -->
+    <script>
+        // Инициализация Canvas и контекста отрисовки
+        const canvas = document.getElementById('roulette-canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Конфигурация размеров элементов на ленте рулетки
+        const itemWidth = 130;   // Ширина одной карточки приза в пикселях
+        const itemPadding = 8;   // Зазор между карточками призов
+        const totalItemSpace = itemWidth + itemPadding;
+
+        // Премиальная таблица призов без смайликов и дешёвых градиентов
+        const PRIZES = [
+            { value: 0,   label: "0 ROBUX",   color: "#1c1e24", textColor: "#4c5264", chance: 0.70 },
+            { value: 10,  label: "10 ROBUX",  color: "#112e1f", textColor: "#2eb872", chance: 0.20 },
+            { value: 25,  label: "25 ROBUX",  color: "#0f2547", textColor: "#3b82f6", chance: 0.05 },
+            { value: 50,  label: "50 ROBUX",  color: "#381339", textColor: "#d946ef", chance: 0.02 },
+            { value: 100, label: "100 ROBUX", color: "#422a1d", textColor: "#f59e0b", chance: 0.01 }
+        ];
+
+        let rouletteItems = [];     // Массив для хранения сгенерированной ленты
+        let currentX = 0;           // Текущее физическое смещение ленты по оси X
+        let isSpinning = false;     // Флаг блокировки повторного запуска во время кручения
+        let currentSessionData = null; // Глобальный объект сессии активных аккаунтов
+
+        // 🎰 1. ГЕНЕРАТОР БЕСКОНЕЧНОЙ ЛЕНТЫ ПРИЗОВ С УЧЕТОМ ВЕСА ШАНСОВ
+        function generateRouletteTape() {
+            rouletteItems = [];
+            // Генерируем 150 элементов, чтобы ленты хватило на долгое кинематографичное кручение
+            for (let i = 0; i < 150; i++) {
+                let rand = Math.random();
+                let cumulative = 0;
+                let chosenPrize = PRIZES[0];
+
+                for (let prize of PRIZES) {
+                    cumulative += prize.chance;
+                    if (rand <= cumulative) {
+                        chosenPrize = prize;
+                        break;
+                    }
+                }
+                rouletteItems.push({ ...chosenPrize });
+            }
+        }
+
+        // 🎰 2. РЕАКТИВНЫЙ ОТРИСОВЩИК КАДРОВ НА CANVAS (60 FPS)
+        function drawRoulette() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Глубокий матовый фон подложки барабана
+            ctx.fillStyle = "#0d0e12";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const centerOffset = canvas.width / 2;
+
+            rouletteItems.forEach((item, index) => {
+                // Математический расчет координаты X для каждой карточки относительно центра визира
+                let itemX = centerOffset + (index * totalItemSpace) - currentX;
+
+                // Оптимизация производительности: рендерим только карточки, находящиеся в поле видимости
+                if (itemX + itemWidth > 0 && itemX < canvas.width) {
+                    
+                    // Отрисовка тела карточки приза со скруглением 6px
+                    ctx.fillStyle = item.color;
+                    ctx.beginPath();
+                    ctx.roundRect(itemX, 15, itemWidth, 110, 6);
+                    ctx.fill();
+
+                    // Строгая технологичная окантовка карточки
+                    ctx.strokeStyle = "#1b1e26";
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+
+                    // Текст номинала выигранных робуксов
+                    ctx.fillStyle = item.textColor;
+                    ctx.font = "bold 15px 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(item.label, itemX + (itemWidth / 2), 70);
+                    
+                    // Внутренний декоративный элемент карточки для веса дизайна
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.02)";
+                    ctx.fillRect(itemX + 8, 98, itemWidth - 16, 16);
+                }
+            });
+        }
+
+        // 🎰 3. ФИЗИЧЕСКИЙ ДВИЖОК ПЛАВНОГО ЗАМЕДЛЕНИЯ КРУЧЕНИЯ (КРИВАЯ БЕЗЬЕ)
+        function animateSpin(targetX, duration) {
+            const startTime = performance.now();
+
+            function updateFrame(now) {
+                const elapsed = now - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+
+                // Математическая функция плавного торможения Ease-Out Cubic
+                const easeOutCubic = 1 - Math.pow(1 - progress, 3);
+                currentX = easeOutCubic * targetX;
+
+                drawRoulette();
+
+                if (progress < 1) {
+                    requestAnimationFrame(updateFrame);
+                } else {
+                    // Анимация полностью завершена
+                    isSpinning = false;
+                    
+                    // Точный расчет индекса выигранной карточки, которая замерла под визиром
+                    const winningIndex = Math.floor(currentX / totalItemSpace);
+                    const wonPrize = rouletteItems[winningIndex];
+                    
+                    document.getElementById('spin-trigger-btn').disabled = false;
+                    
+                    // Выводим премиальное системное уведомление о фиксации приза
+                    alert(`[SYSTEM] Конвейер остановлен. На баланс зачислено: ${wonPrize.label}`);
+                    
+                    // На следующем шаге мы привяжем сюда защищенный POST запрос на бэкенд
+                }
+            }
+            requestAnimationFrame(updateFrame);
+        }
+
+        // Запуск триггера кручения рулетки
+        function startRouletteSpin() {
+            if (isSpinning) return;
+            
+            isSpinning = true;
+            document.getElementById('spin-trigger-btn').disabled = true;
+
+            generateRouletteTape();
+
+            // Выбираем случайный индекс карточки в глубине ленты (между 45 и 65 для долгого кручения)
+            const targetIndex = Math.floor(Math.random() * 20) + 45; 
+            
+            // Расчет конечной координаты X. 
+            // Добавляем микро-рандом (Math.random() * (itemWidth - 40)), чтобы стрелка останавливалась реалистично в разных частях карточки
+            const targetX = (targetIndex * totalItemSpace) + (Math.random() * (itemWidth - 40) + 20);
+
+            // Запуск физического скольжения длительностью ровно 6000 миллисекунд (6 секунд)
+            animateSpin(targetX, 6000);
+        }
+
+        // 🔐 4. МОДУЛЬ УПРАВЛЕНИЯ СЕССИЯМИ И МУЛЬТИАККАУНТАМИ
+        async function checkSession() {
+            let res = await fetch('/api/robux/session');
+            let data = await res.json();
+            
+            if (data.authenticated) {
+                currentSessionData = data;
+                document.getElementById('auth-gate').style.display = 'none';
+                document.getElementById('user-navbar-area').style.display = 'flex';
+                updateNavbarUI();
+            } else {
+                document.getElementById('auth-gate').style.display = 'flex';
+                document.getElementById('user-navbar-area').style.display = 'none';
+            }
+        }
+
+        function updateNavbarUI() {
+            if (!currentSessionData) return;
+            
+            const activeUser = currentSessionData.active_username;
+            const activeAccInfo = currentSessionData.accounts[activeUser];
+            
+            document.getElementById('current-avatar').src = activeAccInfo.avatar_url;
+            document.getElementById('current-display-name').innerText = activeAccInfo.display_name;
+            document.getElementById('current-username').innerText = '@' + activeUser;
+            document.getElementById('active-balance-display').innerText = activeAccInfo.balance;
+
+            const box = document.getElementById('linked-accounts-box');
+            box.innerHTML = '';
+            
+            for (let uName in currentSessionData.accounts) {
+                let acc = currentSessionData.accounts[uName];
+                let isCurrent = (uName === activeUser);
+                
+                let row = document.createElement('div');
+                row.className = `account-row ${isCurrent ? 'active-row' : ''}`;
+                row.onclick = () => { if (!isCurrent) switchAccount(uName); };
+                
+                row.innerHTML = `
+                    <div class="acc-info-left">
+                        <img src="${acc.avatar_url}" class="mini-avatar">
+                        <div style="display:flex; flex-direction:column;">
+                            <span style="font-size:13px; font-weight:600;">${acc.display_name}</span>
+                            <span style="font-size:10px; color:var(--text-muted);">@${uName}</span>
+                        </div>
+                    </div>
+                    <span style="font-size:12px; font-weight:700; color:#ffb300;">${acc.balance} R$</span>
+                `;
+                box.appendChild(row);
+            }
+        }
+
+        async function executeAuth() {
+            const name = document.getElementById('roblox-username-field').value.trim();
+            if (!name) return;
+            
+            let res = await fetch('/api/robux/auth', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: name})
+            });
+            
+            if (res.ok) {
+                document.getElementById('roblox-username-field').value = '';
+                checkSession();
+            } else {
+                alert("[SYSTEM ERROR] Сбой синхронизации со шлюзом. Проверьте валидность никнейма.");
+            }
+        }
+        // 🔐 5. ПЕРЕКЛЮЧЕНИЕ УЧЕТНЫХ ЗАПИСЕЙ И СБРОС СЕССИИ (МУЛЬТИАККАУНТИНГ)
+        async function switchAccount(username) {
+            let res = await fetch('/api/robux/switch', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: username})
+            });
+            if (res.ok) {
+                checkSession();
+                document.getElementById('account-dropdown').classList.remove('active');
+            }
+        }
+
+        // Перевод интерфейса в режим привязки дополнительного твинка
+        function triggerAddAccountMode() {
+            document.getElementById('account-dropdown').classList.remove('active');
+            document.getElementById('auth-gate').style.display = 'flex';
+        }
+
+        // Полное уничтожение сессионных кук на сервере
+        async function executeLogout() {
+            let res = await fetch('/api/robux/logout', {method: 'POST'});
+            if (res.ok) window.location.reload();
+        }
+
+        // Переключатель видимости контекстного меню
+        function toggleDropdown() {
+            document.getElementById('account-dropdown').classList.toggle('active');
+        }
+
+        // Умный предохранитель: закрывает меню, если пользователь кликнул мимо него
+        window.addEventListener('click', function(e) {
+            const navBlock = document.getElementById('user-navbar-area');
+            if (navBlock && !navBlock.contains(e.target)) {
+                document.getElementById('account-dropdown').classList.remove('active');
+            }
+        });
+
+        // Сдвигаем стартовую позицию ленты чуть вперед для красивого дефолтного вида при загрузке
+        generateRouletteTape();
+        currentX = totalItemSpace * 2; 
+        setTimeout(drawRoulette, 100);
+
+        // 🔥 КРИТИЧЕСКИЙ СТАРТ: Запускаем проверку авторизации при первом открытии страницы
+        checkSession();
+    </script>
+</body>
+</html>
