@@ -3403,6 +3403,135 @@ async def route_project_view(project_name: str):
 async def route_page_view(project_name: str, page_name: str):
     return FileResponse("static/constructor.html")
 
+from fastapi import FastAPI, Request, HTTPException, Response
+from fastapi.responses import JSONResponse, FileResponse
+from pydantic import BaseModel
+from datetime import datetime, timedelta
+import httpx
+import json
+
+# Расширяем нашу глобальную базу данных в ОЗУ для модуля Ронеты/Рулетки
+# Структура: 
+# db_robux = {
+#    "session_token_или_ip": {
+#         "active_username": "tutireg0",
+#         "accounts": {
+#              "tutireg0": {"display_name": "Tuti", "avatar_url": "...", "balance": 0, "last_spin": "ISO_DATE"},
+#              "alt_acc": {"display_name": "Alt", "avatar_url": "...", "balance": 100, "last_spin": None}
+#         }
+#    }
+# }
+db_robux = {}
+
+class AuthRobloxModel(BaseModel):
+    username: str
+
+# Функция получения полной карточки игрока из API Roblox
+async def fetch_roblox_profile(username: str):
+    async with httpx.AsyncClient() as client:
+        try:
+            # 1. Поиск ID и DisplayName
+            id_res = await client.post(
+                "https://users.roblox.com/v1/usernames/users", 
+                json={"usernames": [username], "excludeBannedUsers": False}
+            )
+            u_list = id_res.json().get("data", [])
+            if not u_list or len(u_list) == 0:
+                return None
+                
+            user_info = u_list[0]
+            u_id = user_info["id"]
+            display_name = user_info.get("displayName", username)
+            
+            # 2. Получение круглой аватарки высокой четкости (размер 150x150)
+            img_res = await client.get(
+                f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={u_id}&size=150x150&format=Png&isCircular=true"
+            )
+            img_list = img_res.json().get("data", [])
+            avatar_url = img_list[0]["imageUrl"] if img_list and len(img_list) > 0 else "https://rbxcdn.com"
+            
+            return {
+                "username": username,
+                "display_name": display_name,
+                "avatar_url": avatar_url
+            }
+        except Exception as e:
+            print(f"Error fetching Roblox profile: {e}")
+            return None
+
+# 1. API: Авторизация / Добавление аккаунта в мультисессию
+@app.post("/api/robux/auth")
+async def robux_auth(data: AuthRobloxModel, request: Request, response: Response):
+    username = data.username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Username required")
+        
+    # Имитируем уникальный токен сессии пользователя (в реале можно куку-сессию, пока берем IP или куку)
+    session_id = request.cookies.get("robux_session")
+    if not session_id:
+        session_id = f"sess_{int(datetime.now().timestamp())}"
+        response.set_cookie(key="robux_session", value=session_id, max_age=31536000, path="/")
+        
+    profile = await fetch_roblox_profile(username)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Roblox user not found")
+        
+    if session_id not in db_robux:
+        db_robux[session_id] = {"active_username": username, "accounts": {}}
+        
+    # Если аккаунт добавляется впервые — инициализируем баланс и таймер
+    if username not in db_robux[session_id]["accounts"]:
+        db_robux[session_id]["accounts"][username] = {
+            "display_name": profile["display_name"],
+            "avatar_url": profile["avatar_url"],
+            "balance": 0,
+            "last_spin": None
+        }
+        
+    # Делаем этот аккаунт активным в текущей сессии
+    db_robux[session_id]["active_username"] = username
+    return {"status": "success", "active_user": username, "session": db_robux[session_id]}
+
+# 2. API: Получить состояние текущей сессии (активный аккаунт, балансы, список всех привязанных)
+@app.get("/api/robux/session")
+async def get_robux_session(request: Request):
+    session_id = request.cookies.get("robux_session")
+    if not session_id or session_id not in db_robux:
+        return {"authenticated": False}
+        
+    return {
+        "authenticated": True,
+        "active_username": db_robux[session_id]["active_username"],
+        "accounts": db_robux[session_id]["accounts"]
+    }
+
+# 3. API: Переключение активного аккаунта внутри мультисессии
+@app.post("/api/robux/switch")
+async def switch_robux_account(data: AuthRobloxModel, request: Request):
+    session_id = request.cookies.get("robux_session")
+    if not session_id or session_id not in db_robux:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    target_user = data.username.strip()
+    if target_user in db_robux[session_id]["accounts"]:
+        db_robux[session_id]["active_username"] = target_user
+        return {"status": "success", "active_user": target_user}
+    raise HTTPException(status_code=400, detail="Account not linked")
+
+# 4. API: Выход из конкретного аккаунта или полной сессии
+@app.post("/api/robux/logout")
+async def robux_logout(request: Request, response: Response):
+    session_id = request.cookies.get("robux_session")
+    if session_id in db_robux:
+        del db_robux[session_id]
+    response.delete_cookie(key="robux_session", path="/")
+    return {"status": "success"}
+
+# 🌐 Роут страницы
+@app.get("/robux")
+async def route_robux_page():
+    return FileResponse("static/robux.html")
+    
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
