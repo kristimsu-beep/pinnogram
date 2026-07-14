@@ -16,5 +16,6 @@ disnake==2.7.0
 Pillow==10.2.0
 requests
 chess==1.10.0
-motor==3.3.1
-dnspython==2.4.2
+pymongo==4.6.3
+motor==3.3.2
+dnspython==2.6.1
