@@ -3465,6 +3465,7 @@ import motor.motor_asyncio
 import random
 from datetime import datetime, timedelta
 from uuid import uuid4
+from pydantic import BaseModel
 
 # ⚠️ Вставь сюда скопированную ссылку с экрана MongoDB и замени <db_password> на свой пароль!
 MONGO_URI = "mongodb+srv://admin:7u!Rk!CrQRV%5Eh@robux.wb9rz4o.mongodb.net/?appName=Robux"
@@ -3477,9 +3478,16 @@ try:
     print("[🎉 MONGO-УСПЕХ] Облачный шлюз MongoDB успешно запущен!")
 except Exception as e:
     print(f"[💥 MONGO-КРАШ] Не удалось подключиться к MongoDB Atlas: {e}")
-
+    
+class RegisterModel(BaseModel):
+    username: str
+    
 # Модель для кручения рулетки
 class SpinRequest(BaseModel):
+    username: str
+    
+# 🔥 ДОБАВЛЕНО: Модель для валидации никнейма при авторизации робуксов
+class AuthRobloxModel(BaseModel):
     username: str
 
 # Математическая функция генерации серверного приза (70%, 20%, 5%, 2%, 1%)
