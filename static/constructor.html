@@ -75,8 +75,31 @@
             isOwner = data.is_owner;
             blockList = data.blocks;
 
-            if (isOwner) document.getElementById('editor-tools').classList.remove('hidden');
-            renderCanvas();
+    <script>
+        const segments = window.location.pathname.split('/').filter(Boolean);
+        // Защита: если роут кривой, берем последние элементы
+        const projName = segments[segments.length - 2] || segments[1];
+        const pageName = segments[segments.length - 1] || segments[2];
+
+        document.getElementById('page-title').innerText = `📰 Страница: ${pageName}`;
+        document.getElementById('back-btn').onclick = () => window.location.href = `/news/${projName}`;
+
+        let blockList = [];
+        let isOwner = false;
+
+        async function loadPageData() {
+            try {
+                let res = await fetch(`/api/news/page-info/${projName}/${pageName}`);
+                if (!res.ok) { alert("Ошибка загрузки страницы!"); return; }
+                let data = await res.json();
+                isOwner = data.is_owner;
+                blockList = data.blocks;
+
+                if (isOwner) document.getElementById('editor-tools').classList.remove('hidden');
+                renderCanvas();
+            } catch (e) {
+                alert("Ошибка связи с сервером при загрузке: " + e.message);
+            }
         }
 
         function renderCanvas() {
@@ -126,19 +149,17 @@
                             </div>
                         ` : '<p style="color:#888;">Аватар не задан</p>';
                     }
-                } // <--- 🔥 ВОТ ЭТУ КОПЫТНУЮ СКОБКУ МЫ СЮДА ВЕРНУЛИ! Теперь цепочка не рвется!
-                
-                // --- 🔥 ТЕПЕРЬ ОН СТОИТ НА СВОЕМ МЕСТЕ ЧИСТО И ПРАВИЛЬНО ---
+                }
                 else if (block.type === 'roblox_skin') {
                     if (isOwner) {
                         bDiv.innerHTML += `
                             <input type="text" placeholder="Введите ник игрока для загрузки 3D-скина..." value="${block.content || ''}" onchange="updateBlockSkin(${index}, this.value)">
-                            ${block.skin_url ? `<img src="${block.skin_url}" class="roblox-skin-full">` : ''}
+                            ${block.skin_url ? `<img src="${block.skin_url}" class="roblox-skin-full" style="max-height:400px; display:block; margin:15px auto;">` : ''}
                         `;
                     } else {
                         bDiv.innerHTML += block.skin_url ? `
                             <div style="text-align:center;">
-                                <img src="${block.skin_url}" class="roblox-skin-full">
+                                <img src="${block.skin_url}" class="roblox-skin-full" style="max-height:400px; display:block; margin:15px auto;">
                                 <p style="margin-top:8px; font-weight:bold; font-size:18px; color:#ff5722;">${block.content}</p>
                             </div>
                         ` : '<p style="color:#888;">Персонаж не задан</p>';
@@ -148,33 +169,56 @@
                 canvas.appendChild(bDiv);
             });
             
-            // 🔥 Не забудь включить показ кнопки "Очистить" в самом конце рендеринга для владельца!
             const clearBtn = document.getElementById('clear-canvas-btn');
             if (clearBtn) {
                 clearBtn.style.display = isOwner ? 'block' : 'none';
             }
         }
 
+        // 🔥 ИСПРАВЛЕНО: Теперь при создании нового блока в массив ЖЕСТКО зашивается пустое поле skin_url!
+        function addBlock(type) { 
+            blockList.push({ type: type, content: '', avatar_url: '', skin_url: '' }); 
+            renderCanvas(); 
+        }
 
-        function addBlock(type) { blockList.push({ type: type, content: '', avatar_url: '' }); renderCanvas(); }
         function deleteBlock(index) { blockList.splice(index, 1); renderCanvas(); }
         function updateBlockContent(index, val) { blockList[index].content = val; }
         function updateBlockImage(index, val) { blockList[index].content = val; renderCanvas(); }
         
         async function updateBlockRoblox(index, username) {
+            if(!username) return;
             blockList[index].content = username;
             let res = await fetch('/api/news/roblox-avatar/' + username);
             let data = await res.json();
             blockList[index].avatar_url = data.avatar_url;
             renderCanvas();
         }
+
+        // 🔥 УЛЬТРА-ДЕБАГ ФУНКЦИЯ: Защищает от пустых ответов Рендера на мобилке
         async function updateBlockSkin(index, username) {
+            if(!username) return;
             blockList[index].content = username;
-            // Стучимся на наш новый эндпоинт бэкенда
-            let res = await fetch('/api/news/roblox-skin/' + username);
-            let data = await res.json();
-            blockList[index].skin_url = data.skin_url;
-            renderCanvas(); // Перерисовываем экран, чтобы скин отобразился
+            
+            try {
+                let res = await fetch('/api/news/roblox-skin/' + username);
+                if (!res.ok) {
+                    alert("⚠️ Бэкенд ответил ошибкой: " + res.status);
+                    return;
+                }
+                let data = await res.json();
+                
+                // Проверяем все возможные ключи, которые мог вернуть Python
+                let finalUrl = data.skin_url || data.avatar_url || null;
+                
+                if (finalUrl) {
+                    blockList[index].skin_url = finalUrl;
+                } else {
+                    alert("⚠️ Сервер вернул пустой ключ картинки!");
+                }
+                renderCanvas();
+            } catch (err) {
+                alert("❌ Ошибка отправки запроса: " + err.message);
+            }
         }
         
         async function saveAndPublish() {
