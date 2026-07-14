@@ -3355,7 +3355,35 @@ async def get_roblox_avatar(username: str):
             
     # Если игрок не найден или упала сеть — отдаем нашу вылизанную заглушку без .png
     return {"avatar_url": "https://tr.rbxcdn.com/30day-avatar-headshot/150/150/AvatarHeadshot/Png/unknown"}
-
+    
+# 9. API: Загрузка ПОЛНОРАЗМЕРНОГО скина игрока Roblox (Во весь рост)
+@app.get("/api/news/roblox-skin/{username}")
+async def get_roblox_skin(username: str):
+    async with httpx.AsyncClient() as client:
+        try:
+            # Шаг 1: Ищем ID игрока по никнейму
+            id_res = await client.post(
+                "https://users.roblox.com/v1/usernames/users", 
+                json={"usernames": [username], "excludeBannedUsers": False}
+            )
+            u_list = id_res.json().get("data", [])
+            if u_list:
+                u_id = u_list[0]["id"]
+                
+                # Шаг 2: Запрашиваем рендер ВДЛЬ РОСТ (Размер 350x350 для идеального баланса на странице)
+                img_res = await client.get(
+                    f"https://thumbnails.roblox.com/v1/users/avatar?userIds={u_id}&size=350x350&format=Png"
+                )
+                img_list = img_res.json().get("data", [])
+                if img_list: 
+                    return {"skin_url": img_list[0]["imageUrl"]}
+                    
+        except Exception as e: 
+            print(f"❌ Ошибка API Roblox Skin: {e}")
+            
+    # Заглушка, если никнейм не найден — отдаем силуэт базового нубика Roblox во весь рост
+    return {"skin_url": "https://tr.rbxcdn.com/30day-avatar/350/350/Avatar/Png/unknown"}
+    
 
 # 🌐 КРАСИВЫЕ НАВИГАЦИОННЫЕ РОУТЫ (Просто отдают файлы из папки static)
 @app.get("/news")
