@@ -3421,152 +3421,178 @@ import json
 #         }
 #    }
 # }
-db_robux = {}
-
-class AuthRobloxModel(BaseModel):
-    username: str
-
-# Функция получения полной карточки игрока из API Roblox
+# 🔍 ФУНКЦИЯ-ШЛЮЗ: Подтягивает аватарку, displayName и ID прямо с серверов Roblox
 async def fetch_roblox_profile(username: str):
     async with httpx.AsyncClient() as client:
         try:
-            # 1. Поиск ID и DisplayName
+            # Шаг 1: Поиск ID и DisplayName по никнейму
             id_res = await client.post(
                 "https://users.roblox.com/v1/usernames/users", 
                 json={"usernames": [username], "excludeBannedUsers": False}
             )
-            u_list = id_res.json().get("data", [])
+            u_data = id_res.json()
+            u_list = u_data.get("data", [])
+            
             if not u_list or len(u_list) == 0:
+                print(f"[⚠️ ПРОФИЛЬ-API] Игрок {username} не найден в системе Roblox.")
                 return None
                 
             user_info = u_list[0]
             u_id = user_info["id"]
             display_name = user_info.get("displayName", username)
             
-            # 2. Получение круглой аватарки высокой четкости (размер 150x150)
+            # Шаг 2: Получение круглой аватарки высокой четкости (150x150) по ID
             img_res = await client.get(
                 f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={u_id}&size=150x150&format=Png&isCircular=true"
             )
-            img_list = img_res.json().get("data", [])
-            avatar_url = img_list[0]["imageUrl"] if img_list and len(img_list) > 0 else "https://rbxcdn.com"
+            img_data = img_res.json()
+            img_list = img_data.get("data", [])
             
+            # Извлекаем ссылку на картинку. Если сбой — ставим системный аватар Roblox
+            avatar_url = img_list[0]["imageUrl"] if img_list and len(img_list) > 0 else "https://tr.rbxcdn.com/30day-avatar/350/350/Avatar/Png/unknown.png"
+            
+            print(f"[🎉 ПРОФИЛЬ-API] Успешно синхронизирован: {display_name} (@{username})")
             return {
                 "username": username,
                 "display_name": display_name,
                 "avatar_url": avatar_url
             }
         except Exception as e:
-            print(f"Error fetching Roblox profile: {e}")
+            print(f"❌ Критическая ошибка в fetch_roblox_profile: {e}")
             return None
+# --- 🚀 КИБЕРПАНК МОДУЛЬ: ИНТЕГРАЦИЯ MONGODB ATLAS ДЛЯ ШЛЮЗА РОБУКСОВ ---
+import motor.motor_asyncio
+import random
+from datetime import datetime, timedelta
+from uuid import uuid4
 
-# 1. API: Авторизация / Добавление аккаунта в мультисессию
+# ⚠️ Вставь сюда скопированную ссылку с экрана MongoDB и замени <db_password> на свой пароль!
+MONGO_URI = "mongodb+srv://admin:7u!Rk!CrQRV%5Eh@robux.wb9rz4o.mongodb.net/?appName=Robux"
+
+try:
+    print("[🗄️ MONGO-БАЗА] Инициализация подключения к облачному кластеру...")
+    mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
+    db = mongo_client["robux_hub_db"]
+    sessions_collection = db["user_sessions"]
+    print("[🎉 MONGO-УСПЕХ] Облачный шлюз MongoDB успешно запущен!")
+except Exception as e:
+    print(f"[💥 MONGO-КРАШ] Не удалось подключиться к MongoDB Atlas: {e}")
+
+# Модель для кручения рулетки
+class SpinRequest(BaseModel):
+    username: str
+
+# Математическая функция генерации серверного приза (70%, 20%, 5%, 2%, 1%)
+def calculate_server_prize():
+    rand = random.random()
+    if rand <= 0.70: return {"value": 0, "label": "0 ROBUX", "index": 0}
+    elif rand <= 0.90: return {"value": 10, "label": "10 ROBUX", "index": 1}
+    elif rand <= 0.95: return {"value": 25, "label": "25 ROBUX", "index": 2}
+    elif rand <= 0.97: return {"value": 50, "label": "50 ROBUX", "index": 3}
+    else: return {"value": 100, "label": "100 ROBUX", "index": 4}
+
+# 1. API: Авторизация / Добавление аккаунта в облачную мультисессию
 @app.post("/api/robux/auth")
 async def robux_auth(data: AuthRobloxModel, request: Request, response: Response):
     username = data.username.strip()
-    if not username:
-        raise HTTPException(status_code=400, detail="Username required")
+    if not username: raise HTTPException(status_code=400, detail="Username required")
         
-    # Имитируем уникальный токен сессии пользователя (в реале можно куку-сессию, пока берем IP или куку)
     session_id = request.cookies.get("robux_session")
     if not session_id:
         session_id = f"sess_{int(datetime.now().timestamp())}"
         response.set_cookie(key="robux_session", value=session_id, max_age=31536000, path="/")
         
     profile = await fetch_roblox_profile(username)
-    if not profile:
-        raise HTTPException(status_code=404, detail="Roblox user not found")
+    if not profile: raise HTTPException(status_code=404, detail="Roblox user not found")
         
-    if session_id not in db_robux:
-        db_robux[session_id] = {"active_username": username, "accounts": {}}
+    session = await sessions_collection.find_one({"session_id": session_id})
+    if not session:
+        session = {
+            "session_id": session_id,
+            "active_username": username,
+            "accounts": {}
+        }
         
-    # Если аккаунт добавляется впервые — инициализируем баланс и таймер
-    if username not in db_robux[session_id]["accounts"]:
-        db_robux[session_id]["accounts"][username] = {
+    if username not in session["accounts"]:
+        session["accounts"][username] = {
             "display_name": profile["display_name"],
             "avatar_url": profile["avatar_url"],
             "balance": 0,
-            "last_spin": None
+            "last_spin": None,
+            "transactions": [
+                {
+                    "id": "TX-INIT",
+                    "type": "Синхронизация шлюза",
+                    "amount": "0 R$",
+                    "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
+                    "status": "Успешно"
+                }
+            ]
         }
         
-    # Делаем этот аккаунт активным в текущей сессии
-    db_robux[session_id]["active_username"] = username
-    return {"status": "success", "active_user": username, "session": db_robux[session_id]}
+    session["active_username"] = username
+    await sessions_collection.update_one({"session_id": session_id}, {"$set": session}, upsert=True)
+    return {"status": "success", "active_user": username}
 
-# 2. API: Получить состояние текущей сессии (активный аккаунт, балансы, список всех привязанных)
+# 2️⃣ API: Получить состояние сессии из MongoDB
 @app.get("/api/robux/session")
 async def get_robux_session(request: Request):
     session_id = request.cookies.get("robux_session")
-    if not session_id or session_id not in db_robux:
-        return {"authenticated": False}
+    if not session_id: return {"authenticated": False}
+        
+    session = await sessions_collection.find_one({"session_id": session_id})
+    if not session: return {"authenticated": False}
+    
+    # 🔥 ИСПРАВЛЕНО ДЛЯ БЕЗОПАСНОСТИ: Проверяем и инициализируем транзакции для каждого твинка в сессии
+    for uName, acc in session.get("accounts", {}).items():
+        if "transactions" not in acc or not acc["transactions"]:
+            acc["transactions"] = [
+                {
+                    "id": "TX-INIT",
+                    "type": "Синхронизация шлюза",
+                    "amount": "0 R$",
+                    "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
+                    "status": "Успешно"
+                }
+            ]
         
     return {
         "authenticated": True,
-        "active_username": db_robux[session_id]["active_username"],
-        "accounts": db_robux[session_id]["accounts"]
+        "active_username": session["active_username"],
+        "accounts": session["accounts"]
     }
 
-# 3. API: Переключение активного аккаунта внутри мультисессии
+# 3️⃣ API: Переключение активного аккаунта внутри облачной сессии
 @app.post("/api/robux/switch")
 async def switch_robux_account(data: AuthRobloxModel, request: Request):
     session_id = request.cookies.get("robux_session")
-    if not session_id or session_id not in db_robux:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not session_id: raise HTTPException(status_code=401)
+        
+    session = await sessions_collection.find_one({"session_id": session_id})
+    if not session: raise HTTPException(status_code=404)
         
     target_user = data.username.strip()
-    if target_user in db_robux[session_id]["accounts"]:
-        db_robux[session_id]["active_username"] = target_user
+    if target_user in session["accounts"]:
+        await sessions_collection.update_one({"session_id": session_id}, {"$set": {"active_username": target_user}})
         return {"status": "success", "active_user": target_user}
     raise HTTPException(status_code=400, detail="Account not linked")
 
-# 4. API: Выход из конкретного аккаунта или полной сессии
-@app.post("/api/robux/logout")
-async def robux_logout(request: Request, response: Response):
-    session_id = request.cookies.get("robux_session")
-    if session_id in db_robux:
-        del db_robux[session_id]
-    response.delete_cookie(key="robux_session", path="/")
-    return {"status": "success"}
-
-# 🌐 Роут страницы
-@app.get("/robux")
-async def route_robux_page():
-    return FileResponse("static/robux.html")
-
-import random
-from uuid import uuid4
-
-# Модель для кручения рулетки
-class SpinRequest(BaseModel):
-    username: str
-
-# Функция для генерации случайного выигрыша по жестким весам (70%, 20%, 5%, 2%, 1%)
-def calculate_server_prize():
-    rand = random.random()
-    if rand <= 0.70:
-        return {"value": 0, "label": "0 ROBUX", "index": 0}
-    elif rand <= 0.90:
-        return {"value": 10, "label": "10 ROBUX", "index": 1}
-    elif rand <= 0.95:
-        return {"value": 25, "label": "25 ROBUX", "index": 2}
-    elif rand <= 0.97:
-        return {"value": 50, "label": "50 ROBUX", "index": 3}
-    else:
-        return {"value": 100, "label": "100 ROBUX", "index": 4}
-
-# 1. API: Запуск кручения и фиксация выигрыша на сервере
+# 4️⃣ API: Запуск кручения рулетки (Облачный расчет и защита)
 @app.post("/api/robux/spin")
 async def robux_spin(data: SpinRequest, request: Request):
     session_id = request.cookies.get("robux_session")
-    if not session_id or session_id not in db_robux:
-        raise HTTPException(status_code=401, detail="Сессия не найдена")
+    if not session_id: raise HTTPException(status_code=401)
+        
+    session = await sessions_collection.find_one({"session_id": session_id})
+    if not session or not session.get("accounts"): raise HTTPException(status_code=404)
         
     username = data.username.strip()
-    if username != db_robux[session_id]["active_username"] or username not in db_robux[session_id]["accounts"]:
-        raise HTTPException(status_code=400, detail="Аккаунт не активен")
+    if username != session["active_username"] or username not in session["accounts"]:
+        raise HTTPException(status_code=400, detail="Account not active")
         
-    account = db_robux[session_id]["accounts"][username]
+    account = session["accounts"][username]
     
-    # ⏱️ ПРОВЕРКА ТАЙМЕРА (12 часов = 43200 секунд)
+    # ⏱️ ПРОВЕРКА ТАЙМЕРА ИЗ ОБЛАКА (12 часов)
     now = datetime.now()
     if account["last_spin"]:
         last_spin_time = datetime.fromisoformat(account["last_spin"])
@@ -3579,19 +3605,15 @@ async def robux_spin(data: SpinRequest, request: Request):
                 "msg": "Конвейер заблокирован кулдауном"
             }
             
-    # Вычисляем приз на сервере (защита от взлома фронтенда)
     prize = calculate_server_prize()
-    
-    # Обновляем состояние аккаунта
     account["last_spin"] = now.isoformat()
     account["balance"] += prize["value"]
     
-    # Инициализируем историю транзакций, если её ещё нет
-    if "transactions" not in account:
+    # 🔥 ИСПРАВЛЕНО ДЛЯ БЕЗОПАСНОСТИ: Если у аккаунта нет поля транзакций, принудительно создаем его
+    if "transactions" not in account or not account["transactions"]:
         account["transactions"] = []
-        
-    # Добавляем запись в реальную историю транзакций сайта
-    tx_id = f"TX-{str(uuid4())[:8].upper()}" # Уникальный хэш операции
+
+    tx_id = f"TX-{str(uuid4())[:8].upper()}"
     new_tx = {
         "id": tx_id,
         "type": "Испытание Фортуны",
@@ -3599,44 +3621,41 @@ async def robux_spin(data: SpinRequest, request: Request):
         "date": now.strftime("%d.%m.%Y %H:%M"),
         "status": "Успешно" if prize["value"] > 0 else "Выполнено"
     }
-    # Пушим в начало списка, чтобы новые операции были сверху
     account["transactions"].insert(0, new_tx)
+    
+    # 💾 НАМЕРТВО ФИКСИРУЕМ ВЫИГРЫШ И ОБНОВЛЕННЫЙ БАЛАНС В MONGO ATLAS
+    await sessions_collection.update_one(
+        {"session_id": session_id},
+        {"$set": {f"accounts.{username}": account}}
+    )
     
     return {
         "status": "success",
         "prize_value": prize["value"],
         "prize_label": prize["label"],
-        "prize_index": prize["index"], # Передаем индекс, чтобы Canvas остановился именно на этой карточке!
+        "prize_index": prize["index"],
         "new_balance": account["balance"],
         "next_spin_in": 43200
     }
-
-# 2. АПГРЕЙД API СЕССИИ: Теперь возвращает историю транзакций и кулдаун
-@app.get("/api/robux/session")
-async def get_robux_session(request: Request):
+# 5️⃣ API: Выход из сессии (Полное удаление сессионного документа из MongoDB)
+@app.post("/api/robux/logout")
+async def robux_logout(request: Request, response: Response):
     session_id = request.cookies.get("robux_session")
-    if not session_id or session_id not in db_robux:
-        return {"authenticated": False}
+    
+    if session_id:
+        # Уничтожаем документ сессии в облаке MongoDB Atlas
+        await sessions_collection.delete_one({"session_id": session_id})
+        print(f"[🔐 ШЛЮЗ РОБУКСОВ] Сессия {session_id} успешно ликвидирована из облака.")
         
-    # Принудительно проверяем наличие поля транзакций для всех аккаунтов сессии
-    active_user = db_robux[session_id]["active_username"]
-    for uName, acc in db_robux[session_id]["accounts"].items():
-        if "transactions" not in acc:
-            acc["transactions"] = [
-                {
-                    "id": "TX-INIT",
-                    "type": "Синхронизация шлюза",
-                    "amount": "0 R$",
-                    "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
-                    "status": "Успешно"
-                }
-            ]
-            
-    return {
-        "authenticated": True,
-        "active_username": activeUser,
-        "accounts": db_robux[session_id]["accounts"]
-    }
+    # Чистим сессионные куки на самом смартфоне клиента
+    response.delete_cookie(key="robux_session", path="/")
+    return {"status": "success"}
+    
+# 6️⃣ РОУТ ОТДАЧИ ПРЕМИАЛЬНОЙ СТРАНИЦЫ ИНТЕРФЕЙСА
+@app.get("/robux")
+async def route_robux_page():
+    return FileResponse("static/robux.html")
+    
     
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
