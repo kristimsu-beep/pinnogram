@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roblox Tilda Engine</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #1e1e24; color: #fff; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 40px auto; background: #2a2a35; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        h2, h3 { color: #ff5722; }
+        input, button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 6px; border: none; font-size: 16px; box-sizing: border-box; }
+        input { background: #3b3b4f; color: #fff; }
+        button { background: #ff5722; color: #fff; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #e04e1d; }
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; margin-top: 20px; }
+        .card { background: #3b3b4f; padding: 20px; border-radius: 8px; text-align: center; cursor: pointer; border: 2px solid transparent; transition: 0.2s; }
+        .card:hover { border-color: #ff5722; background: #44445c; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- АВТОРИЗАЦИЯ -->
+        <div id="auth-section" class="hidden">
+            <h2>🚀 Вход в Конструктор Новостей</h2>
+            <input type="text" id="roblox-nick" placeholder="Ваш Roblox никнейм...">
+            <button onclick="loginUser()">Войти</button>
+        </div>
+
+        <!-- ГЛАВНАЯ СТУДИЯ -->
+        <div id="main-dashboard" class="hidden">
+            <h2>👋 Панель управления: <span id="user-title" style="color:#fff;"></span></h2>
+            <input type="text" id="proj-name-input" placeholder="Название нового проекта...">
+            <button onclick="submitProject()">➕ Создать новый проект</button>
+            <h3>Ваши проекты:</h3>
+            <div id="user-projects-grid" class="card-grid"></div>
+        </div>
+
+        <!-- КАБИНЕТ ПРОЕКТА -->
+        <div id="project-dashboard" class="hidden">
+            <h2 id="proj-title">📁 Проект: </h2>
+            <p>Создатель: <b id="proj-owner"></b></p>
+            <div id="owner-page-controls" class="hidden">
+                <input type="text" id="page-name-input" placeholder="Название новой страницы...">
+                <button onclick="submitPage()">📄 Создать страницу и войти</button>
+            </div>
+            <h3>Страницы проекта:</h3>
+            <div id="pages-grid" class="card-grid"></div>
+            <button onclick="window.location.href='/news'" style="background:#555; margin-top:20px;">⬅️ На главную</button>
+        </div>
+    </div>
+
+    <script>
+        const segments = window.location.pathname.split('/').filter(Boolean);
+        const currentProject = segments[1] || null;
+
+        async function initPage() {
+            if (currentProject) {
+                let res = await fetch(`/api/news/project-info/${currentProject}`);
+                if (!res.ok) { window.location.href = '/news'; return; }
+                let data = await res.json();
+                document.getElementById('project-dashboard').classList.remove('hidden');
+                document.getElementById('proj-title').innerText = `📁 Проект: ${data.project_name}`;
+                document.getElementById('proj-owner').innerText = data.owner;
+
+                if (data.is_owner) document.getElementById('owner-page-controls').classList.remove('hidden');
+
+                const grid = document.getElementById('pages-grid');
+                grid.innerHTML = '';
+                data.pages.forEach(pName => {
+                    let card = document.createElement('div');
+                    card.className = 'card';
+                    card.innerText = '📄 ' + pName;
+                    card.onclick = () => window.location.href = `/news/${currentProject}/${pName}`;
+                    grid.appendChild(card);
+                });
+            } else {
+                let res = await fetch('/api/news/me');
+                let data = await res.json();
+                if (!data.authenticated) {
+                    document.getElementById('auth-section').classList.remove('hidden');
+                } else {
+                    document.getElementById('main-dashboard').classList.remove('hidden');
+                    document.getElementById('user-title').innerText = data.username;
+                    const pGrid = document.getElementById('user-projects-grid');
+                    pGrid.innerHTML = '';
+                    data.projects.forEach(pName => {
+                        let card = document.createElement('div');
+                        card.className = 'card';
+                        card.innerText = '📁 ' + pName;
+                        card.onclick = () => window.location.href = `/news/${pName}`;
+                        pGrid.appendChild(card);
+                    });
+                }
+            }
+        }
+
+        async function loginUser() {
+            const name = document.getElementById('roblox-nick').value;
+            let res = await fetch('/api/news/auth', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: name})
+            });
+            if(res.ok) window.location.reload();
+        }
+
+        async function submitProject() {
+            const name = document.getElementById('proj-name-input').value;
+            if(!name) return;
+            let res = await fetch('/api/news/projects', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: name})
+            });
+            if(res.ok) { let data = await res.json(); window.location.href = '/news/' + data.project_name; }
+        }
+
+        async function submitPage() {
+            const name = document.getElementById('page-name-input').value;
+            if(!name) return;
+            let res = await fetch(`/api/news/projects/${currentProject}/pages`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: name})
+            });
+            if(res.ok) { let data = await res.json(); window.location.href = `/news/${currentProject}/${data.page_name}`; }
+        }
+
+        initPage();
+    </script>
+</body>
+</html>
