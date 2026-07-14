@@ -19,27 +19,43 @@
         .editable-area { background: rgba(0,0,0,0.3); padding: 12px; border-radius: 4px; outline: none; border: 1px dashed #666; font-size: 18px; }
         .view-mode-text { font-size: 18px; line-height: 1.6; white-space: pre-wrap; }
         .hidden { display: none; }
+        /* Стиль для полноразмерного скина Roblox */
+        .roblox-skin-full {
+            max-height: 400px;
+            display: block;
+            margin: 15px auto;
+            filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5)); /* Красивая тень под персонажем */
+        }
+        
     </style>
 </head>
 <body>
     <div class="container">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
             <h2 id="page-title">📰 Страница: </h2>
-            <button id="back-btn" style="background: #555; width: auto;">⬅️ Назад в проект</button>
+            <div style="display:flex; gap:10px;">
+                <!-- 🔥 ДОБАВЛЕНО: Кнопка быстрой очистки для создателя -->
+                <button id="clear-canvas-btn" onclick="if(confirm('Очистить все блоки?')) { blockList = []; renderCanvas(); }" style="background: #dc3545; width: auto; margin:0; padding: 8px 12px; font-size:14px; display:none;">🗑️ Очистить</button>
+                <button id="back-btn" style="background: #555; width: auto; margin:0; padding: 8px 12px; font-size:14px;">⬅️ Назад в проект</button>
+            </div>
         </div>
 
+        <!-- Холст, куда JS будет пушить текст, картинки, головы и наши новые 3D-скины -->
         <div id="tilda-canvas"></div>
 
+        <!-- Панель инструментов конструктора -->
         <div id="editor-tools" class="hidden" style="background:#222; padding:20px; border-radius:8px; margin-top:30px; text-align:center;">
             <h3>🛠️ Панель блоков конструктора:</h3>
             <div style="display:flex; gap:10px;">
-                <button onclick="addBlock('text')" style="background:#4caf50; flex:1;">📝 Текст</button>
-                <button onclick="addBlock('image')" style="background:#2196f3; flex:1;">🖼️ Картинка</button>
-                <button onclick="addBlock('roblox')" style="background:#9c27b0; flex:1;">🤖 Roblox Аватар</button>
+                <button onclick="addBlock('text')" style="background:#4caf50; flex:1; margin:0;">📝 Текст</button>
+                <button onclick="addBlock('image')" style="background:#2196f3; flex:1; margin:0;">🖼️ Картинка</button>
+                <button onclick="addBlock('roblox')" style="background:#9c27b0; flex:1; margin:0;">🤖 Голова</button>
+                <button onclick="addBlock('roblox_skin')" style="background:#e91e63; flex:1; margin:0;">🧍 Скин в рост</button>
             </div>
-            <button onclick="saveAndPublish()" style="background:#ff5722; margin-top:20px; width: 100%; font-size: 18px;">🔥 ОПУБЛИКОВАТЬ ИЗМЕНЕНИЯ</button>
+            <button onclick="saveAndPublish()" style="background:#ff5722; margin-top:20px; width: 100%; font-size: 18px; margin-bottom:0;">🔥 ОПУБЛИКОВАТЬ ИЗМЕНЕНИЯ</button>
         </div>
     </div>
+    
 
     <script>
         const segments = window.location.pathname.split('/').filter(Boolean);
@@ -110,10 +126,35 @@
                             </div>
                         ` : '<p style="color:#888;">Аватар не задан</p>';
                     }
+                } // <--- 🔥 ВОТ ЭТУ КОПЫТНУЮ СКОБКУ МЫ СЮДА ВЕРНУЛИ! Теперь цепочка не рвется!
+                
+                // --- 🔥 ТЕПЕРЬ ОН СТОИТ НА СВОЕМ МЕСТЕ ЧИСТО И ПРАВИЛЬНО ---
+                else if (block.type === 'roblox_skin') {
+                    if (isOwner) {
+                        bDiv.innerHTML += `
+                            <input type="text" placeholder="Введите ник игрока для загрузки 3D-скина..." value="${block.content || ''}" onchange="updateBlockSkin(${index}, this.value)">
+                            ${block.skin_url ? `<img src="${block.skin_url}" class="roblox-skin-full">` : ''}
+                        `;
+                    } else {
+                        bDiv.innerHTML += block.skin_url ? `
+                            <div style="text-align:center;">
+                                <img src="${block.skin_url}" class="roblox-skin-full">
+                                <p style="margin-top:8px; font-weight:bold; font-size:18px; color:#ff5722;">${block.content}</p>
+                            </div>
+                        ` : '<p style="color:#888;">Персонаж не задан</p>';
+                    }
                 }
+                
                 canvas.appendChild(bDiv);
             });
+            
+            // 🔥 Не забудь включить показ кнопки "Очистить" в самом конце рендеринга для владельца!
+            const clearBtn = document.getElementById('clear-canvas-btn');
+            if (clearBtn) {
+                clearBtn.style.display = isOwner ? 'block' : 'none';
+            }
         }
+
 
         function addBlock(type) { blockList.push({ type: type, content: '', avatar_url: '' }); renderCanvas(); }
         function deleteBlock(index) { blockList.splice(index, 1); renderCanvas(); }
@@ -127,7 +168,15 @@
             blockList[index].avatar_url = data.avatar_url;
             renderCanvas();
         }
-
+        async function updateBlockSkin(index, username) {
+            blockList[index].content = username;
+            // Стучимся на наш новый эндпоинт бэкенда
+            let res = await fetch('/api/news/roblox-skin/' + username);
+            let data = await res.json();
+            blockList[index].skin_url = data.skin_url;
+            renderCanvas(); // Перерисовываем экран, чтобы скин отобразился
+        }
+        
         async function saveAndPublish() {
             let res = await fetch(`/api/news/${projName}/${pageName}/publish`, {
                 method: 'POST',
