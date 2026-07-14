@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Конструктор страниц</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #1e1e24; color: #fff; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: #2a2a35; padding: 30px; border-radius: 12px; }
+        h2 { color: #ff5722; margin: 0; }
+        button, input { padding: 12px; margin: 10px 0; border-radius: 6px; border: none; font-size: 16px; box-sizing: border-box; }
+        button { background: #ff5722; color: #fff; font-weight: bold; cursor: pointer; }
+        input { background: #3b3b4f; color: #fff; width: 100%; }
+        .tilda-block { background: #333344; padding: 20px; margin: 15px 0; border-radius: 8px; border-left: 5px solid #ff5722; position: relative; }
+        .block-controls { text-align: right; }
+        .btn-delete { background: #dc3545; padding: 5px 10px; font-size: 12px; width: auto; margin: 0; }
+        .roblox-avatar-circle { width: 120px; height: 120px; border-radius: 50%; border: 4px solid #ff5722; display: block; margin: 0 auto; background: #222; }
+        .block-img { max-width: 100%; max-height: 350px; border-radius: 8px; display: block; margin: 10px auto; }
+        .editable-area { background: rgba(0,0,0,0.3); padding: 12px; border-radius: 4px; outline: none; border: 1px dashed #666; font-size: 18px; }
+        .view-mode-text { font-size: 18px; line-height: 1.6; white-space: pre-wrap; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+            <h2 id="page-title">📰 Страница: </h2>
+            <button id="back-btn" style="background: #555; width: auto;">⬅️ Назад в проект</button>
+        </div>
+
+        <div id="tilda-canvas"></div>
+
+        <div id="editor-tools" class="hidden" style="background:#222; padding:20px; border-radius:8px; margin-top:30px; text-align:center;">
+            <h3>🛠️ Панель блоков конструктора:</h3>
+            <div style="display:flex; gap:10px;">
+                <button onclick="addBlock('text')" style="background:#4caf50; flex:1;">📝 Текст</button>
+                <button onclick="addBlock('image')" style="background:#2196f3; flex:1;">🖼️ Картинка</button>
+                <button onclick="addBlock('roblox')" style="background:#9c27b0; flex:1;">🤖 Roblox Аватар</button>
+            </div>
+            <button onclick="saveAndPublish()" style="background:#ff5722; margin-top:20px; width: 100%; font-size: 18px;">🔥 ОПУБЛИКОВАТЬ ИЗМЕНЕНИЯ</button>
+        </div>
+    </div>
+
+    <script>
+        const segments = window.location.pathname.split('/').filter(Boolean);
+        const projName = segments[1];
+        const pageName = segments[2];
+
+        document.getElementById('page-title').innerText = `📰 Страница: ${pageName}`;
+        document.getElementById('back-btn').onclick = () => window.location.href = `/news/${projName}`;
+
+        let blockList = [];
+        let isOwner = false;
+
+        async function loadPageData() {
+            let res = await fetch(`/api/news/page-info/${projName}/${pageName}`);
+            if (!res.ok) { alert("Ошибка загрузки страницы!"); return; }
+            let data = await res.json();
+            isOwner = data.is_owner;
+            blockList = data.blocks;
+
+            if (isOwner) document.getElementById('editor-tools').classList.remove('hidden');
+            renderCanvas();
+        }
+
+        function renderCanvas() {
+            const canvas = document.getElementById('tilda-canvas');
+            canvas.innerHTML = '';
+
+            blockList.forEach((block, index) => {
+                let bDiv = document.createElement('div');
+                bDiv.className = 'tilda-block';
+
+                if (isOwner) {
+                    bDiv.innerHTML = `
+                        <div class="block-controls">
+                            <button class="btn-delete" onclick="deleteBlock(${index})">❌ Удалить блок</button>
+                        </div>
+                    `;
+                }
+
+                if (block.type === 'text') {
+                    if (isOwner) {
+                        bDiv.innerHTML += `<div class="editable-area" contenteditable="true" oninput="updateBlockContent(${index}, this.innerText)">${block.content || 'Нажмите сюда, чтобы ввести текст...'}</div>`;
+                    } else {
+                        bDiv.innerHTML += `<div class="view-mode-text">${block.content}</div>`;
+                    }
+                } 
+                else if (block.type === 'image') {
+                    if (isOwner) {
+                        bDiv.innerHTML += `
+                            <input type="text" placeholder="Вставьте URL ссылки на изображение..." value="${block.content || ''}" onchange="updateBlockImage(${index}, this.value)">
+                            ${block.content ? `<img src="${block.content}" class="block-img">` : ''}
+                        `;
+                    } else {
+                        bDiv.innerHTML += block.content ? `<img src="${block.content}" class="block-img">` : '<p style="color:#888;">Изображение не добавлено</p>';
+                    }
+                } 
+                else if (block.type === 'roblox') {
+                    if (isOwner) {
+                        bDiv.innerHTML += `
+                            <input type="text" placeholder="Введите ник игрока в Roblox..." value="${block.content || ''}" onchange="updateBlockRoblox(${index}, this.value)">
+                            ${block.avatar_url ? `<img src="${block.avatar_url}" class="roblox-avatar-circle">` : ''}
+                        `;
+                    } else {
+                        bDiv.innerHTML += block.avatar_url ? `
+                            <div style="text-align:center;">
+                                <img src="${block.avatar_url}" class="roblox-avatar-circle">
+                                <p style="margin-top:8px; font-weight:bold; font-size:18px;">${block.content}</p>
+                            </div>
+                        ` : '<p style="color:#888;">Аватар не задан</p>';
+                    }
+                }
+                canvas.appendChild(bDiv);
+            });
+        }
+
+        function addBlock(type) { blockList.push({ type: type, content: '', avatar_url: '' }); renderCanvas(); }
+        function deleteBlock(index) { blockList.splice(index, 1); renderCanvas(); }
+        function updateBlockContent(index, val) { blockList[index].content = val; }
+        function updateBlockImage(index, val) { blockList[index].content = val; renderCanvas(); }
+        
+        async function updateBlockRoblox(index, username) {
+            blockList[index].content = username;
+            let res = await fetch('/api/news/roblox-avatar/' + username);
+            let data = await res.json();
+            blockList[index].avatar_url = data.avatar_url;
+            renderCanvas();
+        }
+
+        async function saveAndPublish() {
+            let res = await fetch(`/api/news/${projName}/${pageName}/publish`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({blocks: blockList})
+            });
+            if(res.ok) alert('🚀 Изменения успешно опубликованы для всех гостей!');
+        }
+
+        loadPageData();
+    </script>
+</body>
+</html>
+
