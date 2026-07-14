@@ -3221,6 +3221,154 @@ async def grzhd_websocket_endpoint(websocket: WebSocket, client_id: str):
         print(f"[❌ ВЫШКА-ГЛОБАЛ-КРАШ] Ошибка сокета: {str(e)}")
         if client_id in grzhd_connections: del grzhd_connections[client_id]
                 
+from fastapi import FastAPI, Request, HTTPException, Response
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+import httpx
+import os
+
+
+# 📁 ПОДКЛЮЧАЕМ ПАПКУ СО СТАТИКОЙ
+# Все файлы из папки static будут доступны в браузере автоматически
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Глобальная база данных в оперативной памяти сервера
+db_tilda = {}
+
+class RegisterModel(BaseModel):
+    username: str
+
+class ProjectModel(BaseModel):
+    name: str
+
+class PageModel(BaseModel):
+    name: str
+
+class BlocksUpdateModel(BaseModel):
+    blocks: list
+
+# 1. API: Авторизация
+@app.post("/api/news/auth")
+async def news_auth(data: RegisterModel, response: Response):
+    username = data.username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Никнейм пустой")
+    if username not in db_tilda:
+        db_tilda[username] = {"projects": {}}
+    response.set_cookie(key="roblox_user", value=username, max_age=86400, path="/")
+    return {"status": "success", "username": username}
+
+# 2. API: Получить информацию о текущем пользователе и его проектах
+@app.get("/api/news/me")
+async def get_me(request: Request):
+    user = request.cookies.get("roblox_user")
+    if not user or user not in db_tilda:
+        return {"authenticated": False, "username": "", "projects": []}
+    return {
+        "authenticated": True, 
+        "username": user, 
+        "projects": list(db_tilda[user]["projects"].keys())
+    }
+
+# 3. API: Создать проект
+@app.post("/api/news/projects")
+async def create_project(data: ProjectModel, request: Request):
+    user = request.cookies.get("roblox_user")
+    if not user or user not in db_tilda: raise HTTPException(status_code=401)
+    proj_name = data.name.strip().replace(" ", "-")
+    if proj_name in db_tilda[user]["projects"]: raise HTTPException(status_code=400, detail="Уже есть")
+    db_tilda[user]["projects"][proj_name] = {"pages": {}}
+    return {"status": "success", "project_name": proj_name}
+
+# 4. API: Получить данные проекта (список страниц и владельца)
+@app.get("/api/news/project-info/{project_name}")
+async def get_project_info(project_name: str, request: Request):
+    current_user = request.cookies.get("roblox_user")
+    owner = next((u for u, d in db_tilda.items() if project_name in d["projects"]), None)
+    if not owner: raise HTTPException(status_code=404, detail="Проект не найден")
+    
+    return {
+        "project_name": project_name,
+        "owner": owner,
+        "is_owner": (current_user == owner),
+        "pages": list(db_tilda[owner]["projects"][project_name]["pages"].keys())
+    }
+
+# 5. API: Создать страницу
+@app.post("/api/news/projects/{project_name}/pages")
+async def create_page(project_name: str, data: PageModel, request: Request):
+    user = request.cookies.get("roblox_user")
+    if not user or project_name not in db_tilda[user]["projects"]: raise HTTPException(status_code=403)
+    page_name = data.name.strip().replace(" ", "-")
+    db_tilda[user]["projects"][project_name]["pages"][page_name] = []
+    return {"status": "success", "page_name": page_name}
+
+# 6. API: Получить блоки конкретной страницы
+@app.get("/api/news/page-info/{project_name}/{page_name}")
+async def get_page_info(project_name: str, page_name: str, request: Request):
+    current_user = request.cookies.get("roblox_user")
+    owner = next((u for u, d in db_tilda.items() if project_name in d["projects"] and page_name in d["projects"][project_name]["pages"]), None)
+    if not owner: raise HTTPException(status_code=404, detail="Страница не найдена")
+    
+    return {
+        "project_name": project_name,
+        "page_name": page_name,
+        "is_owner": (current_user == owner),
+        "blocks": db_tilda[owner]["projects"][project_name]["pages"][page_name]
+    }
+
+# 7. API: Сохранить/Опубликовать блоки
+@app.post("/api/news/{project_name}/{page_name}/publish")
+async def publish_page(project_name: str, page_name: str, data: BlocksUpdateModel, request: Request):
+    user = request.cookies.get("roblox_user")
+    if not user or project_name not in db_tilda[user]["projects"]: raise HTTPException(status_code=403)
+    db_tilda[user]["projects"][project_name]["pages"][page_name] = data.blocks
+    return {"status": "success"}
+
+# 8. API: Загрузка круглого аватара Roblox
+@app.get("/api/news/roblox-avatar/{username}")
+async def get_roblox_avatar(username: str):
+    async with httpx.AsyncClient() as client:
+        try:
+            # 🔥 ИСПРАВЛЕНО: Указан точный и правильный API-эндпоинт Roblox для поиска ID
+            id_res = await client.post(
+                "https://users.roblox.com/v1/usernames/users", 
+                json={"usernames": [username], "excludeBannedUsers": False}
+            )
+            
+            u_list = id_res.json().get("data", [])
+            if u_list:
+                # Берем ID самого первого найденного игрока
+                u_id = u_list[0]["id"]
+                
+                # Запрашиваем круглую аватарку по его ID
+                img_res = await client.get(f"https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds={u_id}&size=150x150&format=Png&isCircular=true")
+                
+                img_list = img_res.json().get("data", [])
+                if img_list: 
+                    # Возвращаем прямую ссылку на готовую аватарку
+                    return {"avatar_url": img_list[0]["imageUrl"]}
+                    
+        except Exception as e: 
+            print(f"❌ Ошибка API Roblox: {e}") # Выведем ошибку в консоль бэкенда для отладки
+            
+    # Если игрок не найден или упала сеть — отдаем нашу вылизанную заглушку без .png
+    return {"avatar_url": "https://tr.rbxcdn.com/30day-avatar-headshot/150/150/AvatarHeadshot/Png/unknown"}
+
+
+# 🌐 КРАСИВЫЕ НАВИГАЦИОННЫЕ РОУТЫ (Просто отдают файлы из папки static)
+@app.get("/news")
+async def route_news_main():
+    return FileResponse("static/news.html")
+
+@app.get("/news/{project_name}")
+async def route_project_view(project_name: str):
+    return FileResponse("static/news.html")
+
+@app.get("/news/{project_name}/{page_name}")
+async def route_page_view(project_name: str, page_name: str):
+    return FileResponse("static/constructor.html")
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
