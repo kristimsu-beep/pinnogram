@@ -3531,6 +3531,112 @@ async def robux_logout(request: Request, response: Response):
 @app.get("/robux")
 async def route_robux_page():
     return FileResponse("static/robux.html")
+
+import random
+from uuid import uuid4
+
+# Модель для кручения рулетки
+class SpinRequest(BaseModel):
+    username: str
+
+# Функция для генерации случайного выигрыша по жестким весам (70%, 20%, 5%, 2%, 1%)
+def calculate_server_prize():
+    rand = random.random()
+    if rand <= 0.70:
+        return {"value": 0, "label": "0 ROBUX", "index": 0}
+    elif rand <= 0.90:
+        return {"value": 10, "label": "10 ROBUX", "index": 1}
+    elif rand <= 0.95:
+        return {"value": 25, "label": "25 ROBUX", "index": 2}
+    elif rand <= 0.97:
+        return {"value": 50, "label": "50 ROBUX", "index": 3}
+    else:
+        return {"value": 100, "label": "100 ROBUX", "index": 4}
+
+# 1. API: Запуск кручения и фиксация выигрыша на сервере
+@app.post("/api/robux/spin")
+async def robux_spin(data: SpinRequest, request: Request):
+    session_id = request.cookies.get("robux_session")
+    if not session_id or session_id not in db_robux:
+        raise HTTPException(status_code=401, detail="Сессия не найдена")
+        
+    username = data.username.strip()
+    if username != db_robux[session_id]["active_username"] or username not in db_robux[session_id]["accounts"]:
+        raise HTTPException(status_code=400, detail="Аккаунт не активен")
+        
+    account = db_robux[session_id]["accounts"][username]
+    
+    # ⏱️ ПРОВЕРКА ТАЙМЕРА (12 часов = 43200 секунд)
+    now = datetime.now()
+    if account["last_spin"]:
+        last_spin_time = datetime.fromisoformat(account["last_spin"])
+        cooldown_end = last_spin_time + timedelta(hours=12)
+        if now < cooldown_end:
+            time_left = cooldown_end - now
+            return {
+                "status": "cooldown", 
+                "seconds_left": int(time_left.total_seconds()),
+                "msg": "Конвейер заблокирован кулдауном"
+            }
+            
+    # Вычисляем приз на сервере (защита от взлома фронтенда)
+    prize = calculate_server_prize()
+    
+    # Обновляем состояние аккаунта
+    account["last_spin"] = now.isoformat()
+    account["balance"] += prize["value"]
+    
+    # Инициализируем историю транзакций, если её ещё нет
+    if "transactions" not in account:
+        account["transactions"] = []
+        
+    # Добавляем запись в реальную историю транзакций сайта
+    tx_id = f"TX-{str(uuid4())[:8].upper()}" # Уникальный хэш операции
+    new_tx = {
+        "id": tx_id,
+        "type": "Испытание Фортуны",
+        "amount": f"+{prize['value']} R$" if prize["value"] > 0 else "0 R$",
+        "date": now.strftime("%d.%m.%Y %H:%M"),
+        "status": "Успешно" if prize["value"] > 0 else "Выполнено"
+    }
+    # Пушим в начало списка, чтобы новые операции были сверху
+    account["transactions"].insert(0, new_tx)
+    
+    return {
+        "status": "success",
+        "prize_value": prize["value"],
+        "prize_label": prize["label"],
+        "prize_index": prize["index"], # Передаем индекс, чтобы Canvas остановился именно на этой карточке!
+        "new_balance": account["balance"],
+        "next_spin_in": 43200
+    }
+
+# 2. АПГРЕЙД API СЕССИИ: Теперь возвращает историю транзакций и кулдаун
+@app.get("/api/robux/session")
+async def get_robux_session(request: Request):
+    session_id = request.cookies.get("robux_session")
+    if not session_id or session_id not in db_robux:
+        return {"authenticated": False}
+        
+    # Принудительно проверяем наличие поля транзакций для всех аккаунтов сессии
+    active_user = db_robux[session_id]["active_username"]
+    for uName, acc in db_robux[session_id]["accounts"].items():
+        if "transactions" not in acc:
+            acc["transactions"] = [
+                {
+                    "id": "TX-INIT",
+                    "type": "Синхронизация шлюза",
+                    "amount": "0 R$",
+                    "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
+                    "status": "Успешно"
+                }
+            ]
+            
+    return {
+        "authenticated": True,
+        "active_username": activeUser,
+        "accounts": db_robux[session_id]["accounts"]
+    }
     
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
