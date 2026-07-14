@@ -3366,23 +3366,28 @@ async def get_roblox_skin(username: str):
                 "https://users.roblox.com/v1/usernames/users", 
                 json={"usernames": [username], "excludeBannedUsers": False}
             )
+            
             u_list = id_res.json().get("data", [])
-            if u_list:
+            # 🔥 БЕЗОПАСНОСТЬ: Проверяем, что список не пустой, чтобы u_list[0] не выдал IndexError
+            if u_list and len(u_list) > 0:
                 u_id = u_list[0]["id"]
                 
-                # Шаг 2: Запрашиваем рендер ВДЛЬ РОСТ (Размер 350x350 для идеального баланса на странице)
+                # Шаг 2: Запрашиваем рендер В ПОЛНЫЙ РОСТ
                 img_res = await client.get(
                     f"https://thumbnails.roblox.com/v1/users/avatar?userIds={u_id}&size=350x350&format=Png"
                 )
+                
                 img_list = img_res.json().get("data", [])
-                if img_list: 
+                if img_list and len(img_list) > 0: 
+                    # Возвращаем прямую ссылку на 3D-рендер персонажа
                     return {"skin_url": img_list[0]["imageUrl"]}
                     
         except Exception as e: 
             print(f"❌ Ошибка API Roblox Skin: {e}")
             
-    # Заглушка, если никнейм не найден — отдаем силуэт базового нубика Roblox во весь рост
+    # Железная заглушка без .png на конце
     return {"skin_url": "https://tr.rbxcdn.com/30day-avatar/350/350/Avatar/Png/unknown"}
+
     
 
 # 🌐 КРАСИВЫЕ НАВИГАЦИОННЫЕ РОУТЫ (Просто отдают файлы из папки static)
