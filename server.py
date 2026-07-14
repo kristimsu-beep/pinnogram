@@ -3386,7 +3386,7 @@ async def get_roblox_skin(username: str):
             print(f"❌ Ошибка API Roblox Skin: {e}")
             
     # Железная заглушка без .png на конце
-    return {"skin_url": "https://tr.rbxcdn.com/30day-avatar/350/350/Avatar/Png/unknown"}
+    return {"skin_url": "https://tr.rbxcdn.com/30day-avatar/350/350/Avatar/Png/unknown.png"}
 
     
 
