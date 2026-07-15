@@ -379,9 +379,9 @@
             <h2 style="margin-top:0; font-weight:800; text-transform:uppercase; letter-spacing:1px; color: #ff5722;">Испытание Фортуны</h2>
             <p style="color: var(--text-muted); margin-bottom:25px; font-size:14px;">Запуск конвейера доступен раз в 12 часов</p>
             
-            <div style="position: relative; max-width: 800px; margin: 0 auto; background: #14161d; border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);">
-                <!-- Лазерный неоновый указатель центра -->
-                <div style="position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 4px; height: 100%; background: linear-gradient(to bottom, #ff5722, #e04e1d); z-index: 10; box-shadow: 0 0 10px #ff5722;"></div>
+            <!-- 🔥 ОБНОВЛЕННЫЙ ВЫСОКОТЕХНОЛОГИЧНЫЙ КОРПУС БАРАБАНА (УБРАНЫ СТАРЫЕ СЛОИ) -->
+            <div style="position: relative; max-width: 800px; margin: 0 auto; background: #090a0d; border: 1px solid #1f222c; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                <!-- Сам холст для реактивной отрисовки неонового конвейера призов -->
                 <canvas id="roulette-canvas" width="800" height="140" style="display: block; width: 100%; height: 100%;"></canvas>
             </div>
 
@@ -393,14 +393,14 @@
             </div>
         </div>
 
-        <!-- 🔥 СЮДА МЫ ДОБАВИЛИ КАРТОЧКИ КАЛЬКУЛЯТОРА И ФОРМУ ВЫВОДА ДЛЯ ТЕЛЕФОНА -->
+        <!-- КАРТОЧКИ КАЛЬКУЛЯТОРА И ФОРМУ ВЫВОДА ДЛЯ ТЕЛЕФОНА -->
         <div style="max-width: 800px; margin: 40px auto 0 auto; display: flex; flex-direction: column; gap: 25px; text-align: left;">
             
             <!-- КАРТОЧКА 1: КАЛЬКУЛЯТОР КОМИССИИ -->
             <div style="background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 16px; padding: 25px; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
                 <h3 style="margin-top:0; font-size:16px; font-weight:800; text-transform:uppercase; color: #ff5722; letter-spacing:0.5px;">Калькулятор вывода средств</h3>
                 <p style="color: var(--text-muted); font-size:12px; line-height:1.5; margin-bottom:20px;">
-                    Учтите комиссию сети Roblox в размере 30%. Калькулятор автоматически вычислит нужные параметры закупки геймпасса.
+                    Учтите комиссию сети Roblox in размере 30%. Калькулятор автоматически вычислит нужные параметры закупки геймпасса.
                 </p>
                 
                 <div style="background: #1b1e26; border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
@@ -480,47 +480,85 @@
             }
         }
 
-        // 🎰 2. РЕАКТИВНЫЙ ОТРИСОВЩИК КАДРОВ НА CANVAS (60 FPS)
+        // 🎰 2. РЕАКТИВНЫЙ ОТРИСОВЩИК КАДРОВ НА CANVAS С НЕОНОВЫМ СВЕЧЕНИЕМ
         function drawRoulette() {
+            // Очищаем холст
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Глубокий матовый фон подложки барабана
-            ctx.fillStyle = "#0d0e12";
+            // Глубокий угольный фон подложки барабана
+            ctx.fillStyle = "#090a0d";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             const centerOffset = canvas.width / 2;
 
+            // СБРОС СТИЛЕЙ ТЕНИ (Важно для оптимизации, чтобы тени не размывали весь экран)
+            ctx.shadowBlur = 0;
+
             rouletteItems.forEach((item, index) => {
-                // Математический расчет координаты X для каждой карточки относительно центра визира
                 let itemX = centerOffset + (index * totalItemSpace) - currentX;
 
-                // Оптимизация производительности: рендерим только карточки, находящиеся в поле видимости
+                // Рендерим только карточки, находящиеся в поле видимости
                 if (itemX + itemWidth > 0 && itemX < canvas.width) {
                     
-                    // Отрисовка тела карточки приза со скруглением 6px
-                    ctx.fillStyle = item.color;
+                    // 1. Создаем плавный вертикальный градиент для карточки (сверху светлее, снизу темнее)
+                    let cardGrad = ctx.createLinearGradient(itemX, 15, itemX, 125);
+                    cardGrad.addColorStop(0, item.color);
+                    cardGrad.addColorStop(1, "#0d0e12"); // Уходит в глубокую матовую тень
+                    
+                    ctx.fillStyle = cardGrad;
                     ctx.beginPath();
-                    ctx.roundRect(itemX, 15, itemWidth, 110, 6);
+                    ctx.roundRect(itemX, 15, itemWidth, 110, 8); // Скругление углов 8px
                     ctx.fill();
 
-                    // Строгая технологичная окантовка карточки
-                    ctx.strokeStyle = "#1b1e26";
-                    ctx.lineWidth = 1;
+                    // 2. Строгая матовая окантовка для каждой карточки
+                    ctx.strokeStyle = "rgba(34, 37, 48, 0.6)";
+                    ctx.lineWidth = 1.5;
                     ctx.stroke();
 
-                    // Текст номинала выигранных робуксов
+                    // 3. Текст номинала робуксов с эффектом градиента
                     ctx.fillStyle = item.textColor;
-                    ctx.font = "bold 15px 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif";
+                    ctx.font = "bold 16px 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif";
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
-                    ctx.fillText(item.label, itemX + (itemWidth / 2), 70);
+                    ctx.fillText(item.label, itemX + (itemWidth / 2), 65);
                     
-                    // Внутренний декоративный элемент карточки для веса дизайна
-                    ctx.fillStyle = "rgba(255, 255, 255, 0.02)";
-                    ctx.fillRect(itemX + 8, 98, itemWidth - 16, 16);
+                    // 4. Минималистичная декоративная плашка снизу для премиального веса дизайна
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.015)";
+                    ctx.fillRect(itemX + 12, 95, itemWidth - 24, 16);
                 }
             });
+
+            // --- 🌌 ЭФФЕКТ СИНЕМАТИЧНОЙ ВИНЬЕТКИ (ЗАТЕМНЕНИЕ ПО КРАЯМ БАРАБАНА) ---
+            // Этот трюк скрывает появление карточек из ниоткуда и делает рулетку бесконечной
+            let edgeGrad = ctx.createLinearGradient(0, 0, canvas.width, 0);
+            edgeGrad.addColorStop(0, "#090a0d");        // Левый край полностью черный
+            edgeGrad.addColorStop(0.15, "transparent");  // Плавный переход в прозрачность
+            edgeGrad.addColorStop(0.85, "transparent");  // Плавный переход обратно в тень
+            edgeGrad.addColorStop(1, "#090a0d");        // Правый край полностью черный
+            
+            ctx.fillStyle = edgeGrad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // --- 🌌 НЕОНОВЫЙ КИБЕРПАНК СЛУЖЕБНЫЙ МАРКЕР (ЦЕНТРАЛЬНЫЙ ЛАЗЕР) ---
+            // Рисуем мощный лазерный визир поверх всех карточек и виньетки
+            ctx.shadowColor = "#ff5722"; // Цвет свечения лазера
+            ctx.shadowBlur = 12;         // Радиус размытия неонового свечения
+            
+            ctx.fillStyle = "linear-gradient(to bottom, #ff5722, #e04e1d)";
+            
+            // Пересоздаем градиент для самого лазерного луча
+            let laserGrad = ctx.createLinearGradient(canvas.width / 2 - 2, 0, canvas.width / 2 + 2, canvas.height);
+            laserGrad.addColorStop(0, "#ff7043");
+            laserGrad.addColorStop(0.5, "#ff5722");
+            laserGrad.addColorStop(1, "#bf360c");
+            
+            ctx.fillStyle = laserGrad;
+            ctx.fillRect(canvas.width / 2 - 2, 0, 4, canvas.height); // Отрендерили луч шириной 4px
+
+            // Сбрасываем тени, чтобы они не ломали другие элементы страницы
+            ctx.shadowBlur = 0;
         }
+
 
         // 🎰 3. ФИЗИЧЕСКИЙ ДВИЖОК ПЛАВНОГО ЗАМЕДЛЕНИЯ КРУЧЕНИЯ (КРИВАЯ БЕЗЬЕ)
         function animateSpin(targetX, duration) {
