@@ -3488,7 +3488,20 @@ class SpinRequest(BaseModel):
 # 🔥 ДОБАВЛЕНО: Модель для валидации никнейма при авторизации робуксов
 class AuthRobloxModel(BaseModel):
     username: str
+# Модель для приёма системного статуса от телефона
+class LibraryLogModel(BaseModel):
+    status: str
+    version: str
 
+# 🛑 ОТЛАДОЧНЫЙ ШЛЮЗ: Логирует статус загрузки 3D графики прямо в консоль Render
+@app.post("/api/robux/debug-log")
+async def debug_library_log(data: LibraryLogModel):
+    if data.status == "SUCCESS":
+        print(f"[🎉 ГРАФИКА-УСПЕХ] Движок Three.js успешно импортирован на клиенте! Версия: {data.version}")
+    else:
+        print(f"[💥 ГРАФИКА-КРАШ] Сбой импорта Three.js на мобильном устройстве!")
+    return {"status": "logged"}
+    
 # Математическая функция генерации серверного приза (70%, 20%, 5%, 2%, 1%)
 def calculate_server_prize():
     rand = random.random()
