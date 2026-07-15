@@ -522,25 +522,67 @@
             requestAnimationFrame(updateFrame);
         }
 
-        // Запуск триггера кручения рулетки
-        function startRouletteSpin() {
-            if (isSpinning) return;
+        // 🎰 ОБНОВЛЕННЫЙ ЗАПУСК РУЛЕТКИ ЧЕРЕЗ СЕРВЕРНОЕ API
+        async function startRouletteSpin() {
+            if (isSpinning || !currentSessionData) return;
             
-            isSpinning = true;
-            document.getElementById('spin-trigger-btn').disabled = true;
-
-            generateRouletteTape();
-
-            // Выбираем случайный индекс карточки в глубине ленты (между 45 и 65 для долгого кручения)
-            const targetIndex = Math.floor(Math.random() * 20) + 45; 
+            const activeUser = currentSessionData.active_username;
             
-            // Расчет конечной координаты X. 
-            // Добавляем микро-рандом (Math.random() * (itemWidth - 40)), чтобы стрелка останавливалась реалистично в разных частях карточки
-            const targetX = (targetIndex * totalItemSpace) + (Math.random() * (itemWidth - 40) + 20);
+            let res = await fetch('/api/robux/spin', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ username: activeUser })
+            });
+            
+            let data = await res.json();
+            
+            if (data.status === "cooldown") {
+                alert(`Конвейер заблокирован. Доступ откроется через ${Math.ceil(data.seconds_left / 60)} мин.`);
+                return;
+            }
+            
+            if (data.status === "success") {
+                isSpinning = true;
+                document.getElementById('spin-trigger-btn').disabled = true;
 
-            // Запуск физического скольжения длительностью ровно 6000 миллисекунд (6 секунд)
-            animateSpin(targetX, 6000);
+                generateRouletteTape();
+
+                // 🔥 ИСПРАВЛЕНО: Берем индекс напрямую из ответа сервера!
+                const targetPrizeIndex = data.prize_index;
+                
+                let finalItemIndex = 50;
+                for (let i = 45; i < 70; i++) {
+                    if (rouletteItems[i].value === PRIZES[targetPrizeIndex].value) {
+                        finalItemIndex = i;
+                        break;
+                    }
+                }
+
+                const targetX = (finalItemIndex * totalItemSpace) + (Math.random() * (itemWidth - 40) + 20);
+
+                const startTime = performance.now();
+                function updateFrame(now) {
+                    const elapsed = now - startTime;
+                    const progress = Math.min(elapsed / 6000, 1);
+                    const easeOutCubic = 1 - Math.pow(1 - progress, 3);
+                    
+                    currentX = easeOutCubic * targetX;
+                    drawRoulette();
+
+                    if (progress < 1) {
+                        requestAnimationFrame(updateFrame);
+                    } else {
+                        // 🔥 ИСПРАВЛЕНО: Сначала сбрасываем флаг кручения, чтобы дать дорогу таймеру!
+                        isSpinning = false;
+                        alert(`[SYSTEM] Начисление выполнено: ${data.prize_label}`);
+                        // Обновляем глобальную сессию новыми данными с сервера
+                        checkSession();
+                    }
+                }
+                requestAnimationFrame(updateFrame);
+            }
         }
+
 
         // 🔐 4. МОДУЛЬ УПРАВЛЕНИЯ СЕССИЯМИ И МУЛЬТИАККАУНТАМИ
         async function checkSession() {
@@ -672,25 +714,23 @@
 
             let timeLeft = secondsLeft;
 
-            // Чистим старый интервал, если он работал (защита от багов мультиаккаунтинга)
-            if (cooldownInterval) clearInterval(cooldownInterval);
+            // 🔥 ИСПРАВЛЕНО: Жестко привязываем интервал к глобальному окну window, чтобы избежать падения скрипта!
+            if (window.cooldownInterval) clearInterval(window.cooldownInterval);
 
-            cooldownInterval = setInterval(() => {
+            window.cooldownInterval = setInterval(() => {
                 timeLeft--;
 
                 if (timeLeft <= 0) {
-                    clearInterval(cooldownInterval);
+                    clearInterval(window.cooldownInterval);
                     btn.style.display = 'block';
                     timerPanel.style.display = 'none';
                     return;
                 }
 
-                // Математический перевод секунд в красивый формат ЧЧ:ММ:СС
                 let hours = Math.floor(timeLeft / 3600);
                 let minutes = Math.floor((timeLeft % 3600) / 60);
                 let seconds = timeLeft % 60;
 
-                // Добавляем нули перед цифрами, если они меньше 10 (например, 09 вместо 9)
                 let hStr = hours < 10 ? '0' + hours : hours;
                 let mStr = minutes < 10 ? '0' + minutes : minutes;
                 let sStr = seconds < 10 ? '0' + seconds : seconds;
@@ -698,6 +738,7 @@
                 timerVal.innerText = `${hStr}:${mStr}:${sStr}`;
             }, 1000);
         }
+
         
         async function executeAuth() {
             const name = document.getElementById('roblox-username-field').value.trim();
