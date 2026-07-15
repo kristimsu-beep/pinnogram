@@ -600,7 +600,7 @@
             requestAnimationFrame(updateFrame);
         }
 
-        // 🎰 ОБНОВЛЕННЫЙ ЗАПУСК РУЛЕТКИ ЧЕРЕЗ СЕРВЕРНОЕ API
+        // 🎰 ОБНОВЛЕННЫЙ ЗАПУСК РУЛЕТКИ ЧЕРЕЗ СЕРВЕРНОЕ API С АКТИВАЦИЕЙ 3D САЛЮТА
         async function startRouletteSpin() {
             if (isSpinning || !currentSessionData) return;
             
@@ -625,7 +625,6 @@
 
                 generateRouletteTape();
 
-                // 🔥 ИСПРАВЛЕНО: Берем индекс напрямую из ответа сервера!
                 const targetPrizeIndex = data.prize_index;
                 
                 let finalItemIndex = 50;
@@ -650,17 +649,24 @@
                     if (progress < 1) {
                         requestAnimationFrame(updateFrame);
                     } else {
-                        // 🔥 ИСПРАВЛЕНО: Сначала сбрасываем флаг кручения, чтобы дать дорогу таймеру!
                         isSpinning = false;
-                        alert(`[SYSTEM] Начисление выполнено: ${data.prize_label}`);
-                        // Обновляем глобальную сессию новыми данными с сервера
-                        checkSession();
+                        
+                        // 🔥 МОМЕНТ МАГИИ: Запускаем объемный 3D фонтан золотых робуксов!
+                        if (typeof spawn3DRobuxExplosion === "function") {
+                            spawn3DRobuxExplosion(data.prize_value);
+                        }
+                        
+                        // Небольшая задержка в 800мс, чтобы монеты успели долететь до центра экрана перед alert
+                        setTimeout(() => {
+                            alert(`[SYSTEM] Начисление выполнено: ${data.prize_label}`);
+                            // Мгновенно обновляем баланс и сессию из MongoDB Atlas прямо на экране
+                            checkSession();
+                        }, 800);
                     }
                 }
                 requestAnimationFrame(updateFrame);
             }
         }
-
 
         // 🔐 4. МОДУЛЬ УПРАВЛЕНИЯ СЕССИЯМИ И МУЛЬТИАККАУНТАМИ
         async function checkSession() {
@@ -948,19 +954,28 @@
         }
         // 🌌 3D-МОДУЛЬ: ГЕНЕРАЦИЯ, РЕНДЕРИНГ И АНИМАЦИЯ ЗОЛОТЫХ РОБУКСОВ (ФИНАЛЬНАЯ СИНХРОНИЗАЦИЯ)
         function init3DRobuxScene() {
+        // 🌌 ГЛОБАЛЬНЫЙ МАССИВ ДЛЯ ДИНАМИЧЕСКИХ ЧАСТИЦ (3D МОНЕТ)
+        window.fallingCoinsArray = [];
+        window.robux3DScene = null;
+        window.robux3DGeometry = null;
+        window.robux3DMaterial = null;
+
+        // 🌌 3D-МОДУЛЬ: ГЕНЕРАЦИЯ, РЕНДЕРИНГ И СИСТЕМА ЧАСТИЦ (ФИНАЛЬНЫЙ АПГРЕЙД)
+        function init3DRobuxScene() {
             const container3d = document.getElementById('robux-3d-scene');
             if (!container3d) return;
 
             const scene = new THREE.Scene();
+            window.robux3DScene = scene; // Сохраняем в окно для доступа из рулетки
             
             const camera = new THREE.PerspectiveCamera(45, 800 / 180, 0.1, 1000);
-            camera.position.set(0, 0, 5.5); // Придвинули камеру ещё ближе
+            camera.position.set(0, 0, 5.5);
 
             const renderer = new THREE.WebGLRenderer({ canvas: container3d, alpha: true, antialias: true });
             renderer.setSize(800, 180, false);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-            // Яркий неоновый студийный свет
+            // Студийное неоновое освещение
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
             scene.add(ambientLight);
 
@@ -980,51 +995,124 @@
             holePath.moveTo(-0.15, 0.1); holePath.lineTo(0.1, 0.15); holePath.lineTo(0.15, -0.1); holePath.lineTo(-0.1, -0.15); holePath.lineTo(-0.15, 0.1);
             shape.holes.push(holePath);
 
-            const extrudeSettings = { depth: 0.20, bevelEnabled: true, bevelSegments: 3, steps: 1, bevelSize: 0.03, bevelThickness: 0.03 };
+            const extrudeSettings = { depth: 0.18, bevelEnabled: true, bevelSegments: 3, steps: 1, bevelSize: 0.02, bevelThickness: 0.02 };
             const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
             geometry.center();
+            window.robux3DGeometry = geometry; // Линкуем для триггера выигрыша
 
             const goldMaterial = new THREE.MeshStandardMaterial({
                 color: 0xffb300,
                 metalness: 0.96,
-                roughness: 0.12 // Ещё больше глянца и зеркального отражения
+                roughness: 0.12
             });
+            window.robux3DMaterial = goldMaterial; // Линкуем для триггера выигрыша
 
-            // 🔥 ИСПРАВЛЕНО: Сдвигаем крупную крутящуюся монету ближе к центру (было -3.4, стало -1.8)
+            // Базовая декоративная левитирующая монета слева
             const spinningCoin = new THREE.Mesh(geometry, goldMaterial);
             spinningCoin.scale.set(1.9, 1.8, 1.8);
-            spinningCoin.position.set(-1.8, 0, 0); 
+            spinningCoin.position.set(-2.0, 0, 0); 
             spinningCoin.rotation.set(Math.PI / 2.3, 0, Math.PI / 6); 
             scene.add(spinningCoin);
 
-            // 🔥 ИСПРАВЛЕНО: Сдвигаем гору монет справа ближе к центру (было 3.2, стало 1.8)
+            // Статичная стопка монет справа
             const coinGroup = new THREE.Group();
-            
             const coin1 = new THREE.Mesh(geometry, goldMaterial);
-            coin1.scale.set(1.6, 1.6, 1.6);
-            coin1.position.set(1.8, -0.4, 0);
-            coin1.rotation.set(Math.PI / 2, 0, 0.4);
-            coinGroup.add(coin1);
-
+            coin1.scale.set(1.6, 1.6, 1.6); coin1.position.set(2.0, -0.4, 0); coin1.rotation.set(Math.PI / 2, 0, 0.4); coinGroup.add(coin1);
             const coin2 = new THREE.Mesh(geometry, goldMaterial);
-            coin2.scale.set(1.5, 1.5, 1.5);
-            coin2.position.set(2.1, -0.3, 0.3);
-            coin2.rotation.set(Math.PI / 2.2, 0.3, -0.2);
-            coinGroup.add(coin2);
-
+            coin2.scale.set(1.5, 1.5, 1.5); coin2.position.set(2.3, -0.3, 0.3); coin2.rotation.set(Math.PI / 2.2, 0.3, -0.2); coinGroup.add(coin2);
             scene.add(coinGroup);
 
+            // 🛠️ ЦИКЛ АНИМАЦИИ: Мгновенный расчет физики падения монет
             function animate3D() {
                 requestAnimationFrame(animate3D);
+
+                // Вращение фоновой левой монеты
                 spinningCoin.rotation.y += 0.016;
                 spinningCoin.position.y = 0 + Math.sin(performance.now() * 0.002) * 0.07;
+
+                // Перебор и обсчет физики каждой летящей монеты из массива выигрыша
+                for (let i = window.fallingCoinsArray.length - 1; i >= 0; i--) {
+                    let coinData = window.fallingCoinsArray[i];
+                    
+                    // Применяем гравитацию (увеличиваем скорость падения вниз)
+                    coinData.velocity.y -= 0.006; 
+                    
+                    // Обновляем трехмерные координаты объекта
+                    coinData.mesh.position.x += coinData.velocity.x;
+                    coinData.mesh.position.y += coinData.velocity.y;
+                    coinData.mesh.position.z += coinData.velocity.z;
+
+                    // Хаотичное трехмерное вращение в полете для реализма
+                    coinData.mesh.rotation.x += coinData.rotSpeed.x;
+                    coinData.mesh.rotation.y += coinData.rotSpeed.y;
+                    coinData.mesh.rotation.z += coinData.rotSpeed.z;
+
+                    // Если монета улетела далеко вниз за пределы корпуса рулетки — удаляем её, разгружая ОЗУ
+                    if (coinData.mesh.position.y < -3) {
+                        scene.remove(coinData.mesh);
+                        window.fallingCoinsArray.splice(i, 1);
+                    }
+                }
+
                 renderer.render(scene, camera);
             }
             animate3D();
         }
-
         setTimeout(init3DRobuxScene, 300);
-    
+
+         // 🎰 ТРИГГЕР ЗОЛОТОГО ДОЖДЯ: СПАВН ОБЪЕМНЫХ ЧАСТИЦ ПРИ ВЫИГРЫШЕ
+        function spawn3DRobuxExplosion(prizeValue) {
+            if (!window.robux3DScene || !window.robux3DGeometry || !window.robux3DMaterial) return;
+            if (prizeValue <= 0) return; // Если 0 робуксов — фонтан не запускаем
+
+            // Динамический расчет количества монет в зависимости от куша
+            let coinCount = 15; // Дефолт для 10 R$
+            if (prizeValue === 25) coinCount = 30;
+            if (prizeValue >= 50) coinCount = 60;
+
+            console.log(`[🎉 3D-ЭФФЕКТ] Активирован золотой салют! Создаем монет: ${coinCount}`);
+
+            for (let i = 0; i < coinCount; i++) {
+                // Создаем новый независимый 3D-меш робукса
+                const coinMesh = new THREE.Mesh(window.robux3DGeometry, window.robux3DMaterial);
+                
+                // Случайный размер монетки для эффекта объема (от мелких до крупных)
+                const scale = Math.random() * 0.4 + 0.5;
+                coinMesh.scale.set(scale, scale, scale);
+
+                // Точка старта: раскидываем монеты по всей верхней горизонтали корпуса рулетки
+                // Диапазон по оси X от -3.5 (слева) до +3.5 (справа)
+                const startX = (Math.random() - 0.5) * 7;
+                coinMesh.position.set(startX, 2.0, (Math.random() - 0.5) * 2);
+
+                // Задаем случайные углы наклона при рождении
+                coinMesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+
+                // ВЕКТОРЫ СКОРОСТИ: монеты вылетают с легким хаотичным разбросом вбок и вверх
+                const velocity = {
+                    x: (Math.random() - 0.5) * 0.04, // Легкий разлет влево-вправо
+                    y: Math.random() * 0.05 + 0.05,  // Подкидываем чуть вверх перед падением
+                    z: (Math.random() - 0.5) * 0.02
+                };
+
+                // Скорость индивидуального кручения по осям X, Y, Z
+                const rotSpeed = {
+                    x: (Math.random() - 0.5) * 0.05,
+                    y: (Math.random() - 0.5) * 0.08,
+                    z: (Math.random() - 0.5) * 0.05
+                };
+
+                // Добавляем меш на сцену Three.js
+                window.robux3DScene.add(coinMesh);
+
+                // Записываем монету и её физические векторы в глобальный массив для обсчета кадров
+                window.fallingCoinsArray.push({
+                    mesh: coinMesh,
+                    velocity: velocity,
+                    rotSpeed: rotSpeed
+                });
+            }
+        }
     </script>
 </body>
 </html>
