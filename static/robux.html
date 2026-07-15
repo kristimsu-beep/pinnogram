@@ -948,7 +948,7 @@
                 btn.innerText = "Запросить транзакцию автоматизации";
             }
         }
-        // 🌌 ГЛОБАЛЬНЫЙ МАССИВ ДЛЯ ДИНАМИЧЕСКИХ ЧАСТИЦ (3D МОНЕТ)
+        // 🌌 ГЛОБАЛЬНЫЙ МАССИВ И ШЛЮЗЫ ДЛЯ СИСТЕМЫ ЧАСТИЦ (3D МОНЕТ)
         window.fallingCoinsArray = [];
         window.robux3DScene = null;
         window.robux3DGeometry = null;
@@ -959,23 +959,22 @@
             const container3d = document.getElementById('robux-3d-scene');
             if (!container3d) return;
 
+            // 🔥 СИНХРОНИЗАЦИЯ: Привязываем локальную сцену к глобальному окну window
             scene3d = new THREE.Scene();
+            window.robux3DScene = scene3d; 
             
-            // Расчет камеры под полный экран смартфона (динамические размеры)
             const width = window.innerWidth;
             const height = window.innerHeight;
             camera3d = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
-            camera3d.position.set(0, 0, 7); // Отодвигаем камеру, чтобы охватить весь экран
+            camera3d.position.set(0, 0, 7); 
 
             renderer3d = new THREE.WebGLRenderer({ canvas: container3d, alpha: true, antialias: true });
             renderer3d.setSize(width, height, false);
             renderer3d.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-            // Мощный глобальный заполняющий свет для всей страницы
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
             scene3d.add(ambientLight);
 
-            // Оставляем неоновую подсветку по центру, где крутится рулетка
             const orangeLaserLight = new THREE.PointLight(0xff5722, 6, 25); 
             orangeLaserLight.position.set(0, 1, 3);
             scene3d.add(orangeLaserLight);
@@ -994,17 +993,21 @@
             const extrudeSettings = { depth: 0.20, bevelEnabled: true, bevelSegments: 3, steps: 1, bevelSize: 0.03, bevelThickness: 0.03 };
             robuxGeometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
             robuxGeometry.center();
+            // 🔥 СИНХРОНИЗАЦИЯ: Отдаем геометрию в глобальный шлюз выигрыша
+            window.robux3DGeometry = robuxGeometry; 
 
             robuxMaterial = new THREE.MeshStandardMaterial({
                 color: 0xffb300,
                 metalness: 0.95,
                 roughness: 0.12
             });
+            // 🔥 СИНХРОНИЗАЦИЯ: Отдаем материал в глобальный шлюз выигрыша
+            window.robux3DMaterial = robuxMaterial; 
 
             // Наша базовая левитирующая монета СЛЕВА от рулетки
             spinningCoin = new THREE.Mesh(robuxGeometry, robuxMaterial);
             spinningCoin.scale.set(1.5, 1.5, 1.5);
-            spinningCoin.position.set(-2.2, 1.2, 0); // Подняли чуть выше к уровню рулетки
+            spinningCoin.position.set(-2.2, 1.2, 0); 
             spinningCoin.rotation.set(Math.PI / 2.3, 0, Math.PI / 6); 
             scene3d.add(spinningCoin);
 
@@ -1016,7 +1019,6 @@
             coin2.scale.set(1.2, 1.2, 1.2); coin2.position.set(2.5, 0.9, 0.3); coin2.rotation.set(Math.PI / 2.2, 0.3, -0.2); coinGroup.add(coin2);
             scene3d.add(coinGroup);
 
-            // Поддержка адаптивности при перевороте или изменении размера экрана смартфона
             window.addEventListener('resize', () => {
                 const w = window.innerWidth;
                 const h = window.innerHeight;
@@ -1027,6 +1029,7 @@
 
             animate3D();
         }
+
 
         // 🎰 3. ПОЛНОЭКРАННЫЙ ТРИГГЕР ВЗРЫВА: СПАВН ЧАСТИЦ С САМОГО ВЕРХА ЭКРАНА
         function spawn3DRobuxExplosion(prizeValue) {
