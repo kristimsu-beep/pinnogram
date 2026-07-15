@@ -952,8 +952,6 @@
                 btn.innerText = "Запросить транзакцию автоматизации";
             }
         }
-        // 🌌 3D-МОДУЛЬ: ГЕНЕРАЦИЯ, РЕНДЕРИНГ И АНИМАЦИЯ ЗОЛОТЫХ РОБУКСОВ (ФИНАЛЬНАЯ СИНХРОНИЗАЦИЯ)
-        function init3DRobuxScene() {
         // 🌌 ГЛОБАЛЬНЫЙ МАССИВ ДЛЯ ДИНАМИЧЕСКИХ ЧАСТИЦ (3D МОНЕТ)
         window.fallingCoinsArray = [];
         window.robux3DScene = null;
@@ -1058,8 +1056,6 @@
             }
             animate3D();
         }
-        setTimeout(init3DRobuxScene, 300);
-
          // 🎰 ТРИГГЕР ЗОЛОТОГО ДОЖДЯ: СПАВН ОБЪЕМНЫХ ЧАСТИЦ ПРИ ВЫИГРЫШЕ
         function spawn3DRobuxExplosion(prizeValue) {
             if (!window.robux3DScene || !window.robux3DGeometry || !window.robux3DMaterial) return;
@@ -1113,6 +1109,7 @@
                 });
             }
         }
+        setTimeout(init3DRobuxScene, 300);           
     </script>
 </body>
 </html>
