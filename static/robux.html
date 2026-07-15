@@ -488,84 +488,81 @@
             }
         }
 
-        // 🎰 2. РЕАКТИВНЫЙ ОТРИСОВЩИК КАДРОВ НА CANVAS С НЕОНОВЫМ СВЕЧЕНИЕМ
+        // 🎰 2. РЕАКТИВНЫЙ ОТРИСОВЩИК КАДРОВ НА CANVAS С НЕОНОВЫМ СВЕЧЕНИЕМ (ПРОЗРАЧНЫЙ ДЛЯ 3D)
         function drawRoulette() {
-            // Очищаем холст
+            // Очищаем холст перед каждым кадром
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Глубокий угольный фон подложки барабана
-            ctx.fillStyle = "#090a0d";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // 🔥 ИСПРАВЛЕНО ДЛЯ 3D: Полностью убрали закрашивание фона глухим цветом (#090a0d)!
+            // Теперь холст 2D-рулетки прозрачный, и сквозь него видно вращающиеся монеты.
 
             const centerOffset = canvas.width / 2;
 
-            // СБРОС СТИЛЕЙ ТЕНИ (Важно для оптимизации, чтобы тени не размывали весь экран)
+            // СБРОС СТИЛЕЙ ТЕНИ (Важно для оптимизации, чтобы тени не лагали на смартфонах)
             ctx.shadowBlur = 0;
 
             rouletteItems.forEach((item, index) => {
                 let itemX = centerOffset + (index * totalItemSpace) - currentX;
 
-                // Рендерим только карточки, находящиеся в поле видимости
+                // Рендерим только те карточки призов, которые физически видны в окне
                 if (itemX + itemWidth > 0 && itemX < canvas.width) {
                     
-                    // 1. Создаем плавный вертикальный градиент для карточки (сверху светлее, снизу темнее)
+                    // Вертикальный градиент карточки (делаем подложку полупрозрачной для стиля)
                     let cardGrad = ctx.createLinearGradient(itemX, 15, itemX, 125);
                     cardGrad.addColorStop(0, item.color);
-                    cardGrad.addColorStop(1, "#0d0e12"); // Уходит в глубокую матовую тень
+                    cardGrad.addColorStop(1, "rgba(13, 14, 18, 0.85)"); // Полупрозрачный низ для глубины
                     
                     ctx.fillStyle = cardGrad;
                     ctx.beginPath();
-                    ctx.roundRect(itemX, 15, itemWidth, 110, 8); // Скругление углов 8px
+                    ctx.roundRect(itemX, 15, itemWidth, 110, 8);
                     ctx.fill();
 
-                    // 2. Строгая матовая окантовка для каждой карточки
-                    ctx.strokeStyle = "rgba(34, 37, 48, 0.6)";
+                    // Тонкая окантовка карточки приза
+                    ctx.strokeStyle = "rgba(34, 37, 48, 0.7)";
                     ctx.lineWidth = 1.5;
                     ctx.stroke();
 
-                    // 3. Текст номинала робуксов с эффектом градиента
+                    // Номинал робуксов
                     ctx.fillStyle = item.textColor;
                     ctx.font = "bold 16px 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif";
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
                     ctx.fillText(item.label, itemX + (itemWidth / 2), 65);
                     
-                    // 4. Минималистичная декоративная плашка снизу для премиального веса дизайна
+                    // Декоративная полоска снизу карточки
                     ctx.fillStyle = "rgba(255, 255, 255, 0.015)";
                     ctx.fillRect(itemX + 12, 95, itemWidth - 24, 16);
                 }
             });
 
             // --- 🌌 ЭФФЕКТ СИНЕМАТИЧНОЙ ВИНЬЕТКИ (ЗАТЕМНЕНИЕ ПО КРАЯМ БАРАБАНА) ---
-            // Этот трюк скрывает появление карточек из ниоткуда и делает рулетку бесконечной
+            // Оставляем её, но делаем уход в прозрачность к центру, чтобы открыть вид на 3D-монеты!
             let edgeGrad = ctx.createLinearGradient(0, 0, canvas.width, 0);
-            edgeGrad.addColorStop(0, "#090a0d");        // Левый край полностью черный
-            edgeGrad.addColorStop(0.15, "transparent");  // Плавный переход в прозрачность
-            edgeGrad.addColorStop(0.85, "transparent");  // Плавный переход обратно в тень
-            edgeGrad.addColorStop(1, "#090a0d");        // Правый край полностью черный
+            edgeGrad.addColorStop(0, "#090a0d");        // Левый край полностью скрывает появление карт
+            edgeGrad.addColorStop(0.20, "transparent"); // Размытие открывает обзор на 3D сцену
+            edgeGrad.addColorStop(0.80, "transparent"); // Размытие справа
+            edgeGrad.addColorStop(1, "#090a0d");        // Правый край полностью скрывает уход карт
             
             ctx.fillStyle = edgeGrad;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // --- 🌌 НЕОНОВЫЙ КИБЕРПАНК СЛУЖЕБНЫЙ МАРКЕР (ЦЕНТРАЛЬНЫЙ ЛАЗЕР) ---
-            // Рисуем мощный лазерный визир поверх всех карточек и виньетки
-            ctx.shadowColor = "#ff5722"; // Цвет свечения лазера
-            ctx.shadowBlur = 12;         // Радиус размытия неонового свечения
+            // Луч ложится поверх виньетки и карточек, подсвечивая монеты сзади
+            ctx.shadowColor = "#ff5722";
+            ctx.shadowBlur = 12; // Неоновое свечение лазера
             
-            ctx.fillStyle = "linear-gradient(to bottom, #ff5722, #e04e1d)";
-            
-            // Пересоздаем градиент для самого лазерного луча
             let laserGrad = ctx.createLinearGradient(canvas.width / 2 - 2, 0, canvas.width / 2 + 2, canvas.height);
             laserGrad.addColorStop(0, "#ff7043");
             laserGrad.addColorStop(0.5, "#ff5722");
             laserGrad.addColorStop(1, "#bf360c");
             
             ctx.fillStyle = laserGrad;
-            ctx.fillRect(canvas.width / 2 - 2, 0, 4, canvas.height); // Отрендерили луч шириной 4px
+            ctx.fillRect(canvas.width / 2 - 2, 0, 4, canvas.height);
 
-            // Сбрасываем тени, чтобы они не ломали другие элементы страницы
+            // Сбрасываем тени, чтобы процессор телефона отдыхал
             ctx.shadowBlur = 0;
         }
+
 
 
         // 🎰 3. ФИЗИЧЕСКИЙ ДВИЖОК ПЛАВНОГО ЗАМЕДЛЕНИЯ КРУЧЕНИЯ (КРИВАЯ БЕЗЬЕ)
@@ -949,98 +946,85 @@
                 btn.innerText = "Запросить транзакцию автоматизации";
             }
         }
-        // 🌌 3D-МОДУЛЬ: ГЕНЕРАЦИЯ, РЕНДЕРИНГ И АНИМАЦИЯ ЗОЛОТЫХ РОБУКСОВ (ФИКС ДЛЯ СМАРТФОНОВ)
+        // 🌌 3D-МОДУЛЬ: ГЕНЕРАЦИЯ, РЕНДЕРИНГ И АНИМАЦИЯ ЗОЛОТЫХ РОБУКСОВ (ФИНАЛЬНАЯ СИНХРОНИЗАЦИЯ)
         function init3DRobuxScene() {
             const container3d = document.getElementById('robux-3d-scene');
             if (!container3d) return;
 
             const scene = new THREE.Scene();
             
-            // Жестко задаем пропорции 800 к 180, чтобы избежать бага нулевой высоты на мобилках
             const camera = new THREE.PerspectiveCamera(45, 800 / 180, 0.1, 1000);
-            camera.position.set(0, 0, 6); // Придвинули камеру поближе (было 8)
+            camera.position.set(0, 0, 5.5); // Придвинули камеру ещё ближе
 
             const renderer = new THREE.WebGLRenderer({ canvas: container3d, alpha: true, antialias: true });
-            renderer.setSize(800, 180, false); // false запрещает перезаписывать инлайн-стили CSS
+            renderer.setSize(800, 180, false);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-            // Яркий неоновый студийный свет, чтобы золото горело огнём
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // Увеличили общую яркость
+            // Яркий неоновый студийный свет
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
             scene.add(ambientLight);
 
-            const orangeLaserLight = new THREE.PointLight(0xff5722, 5, 20); // Сверхмощный неон
-            orangeLaserLight.position.set(0, 0, 3);
+            const orangeLaserLight = new THREE.PointLight(0xff5722, 6, 15); 
+            orangeLaserLight.position.set(0, 0, 2.5);
             scene.add(orangeLaserLight);
 
-            const goldReflectLight = new THREE.DirectionalLight(0xffd700, 2.5); // Золотые блики
-            goldReflectLight.position.set(4, 4, 2);
+            const goldReflectLight = new THREE.DirectionalLight(0xffd700, 3.0); 
+            goldReflectLight.position.set(2, 4, 1.5);
             scene.add(goldReflectLight);
 
-            // Математическая геометрия шестиугольника Roblox
+            // Геометрия шестиугольника Roblox
             const shape = new THREE.Shape();
-            shape.moveTo(-0.5, 0.3);
-            shape.lineTo(0.3, 0.5);
-            shape.lineTo(0.5, -0.3);
-            shape.lineTo(-0.3, -0.5);
-            shape.lineTo(-0.5, 0.3);
+            shape.moveTo(-0.5, 0.3); shape.lineTo(0.3, 0.5); shape.lineTo(0.5, -0.3); shape.lineTo(-0.3, -0.5); shape.lineTo(-0.5, 0.3);
 
             const holePath = new THREE.Path();
-            holePath.moveTo(-0.15, 0.1);
-            holePath.lineTo(0.1, 0.15);
-            holePath.lineTo(0.15, -0.1);
-            holePath.lineTo(-0.1, -0.15);
-            holePath.lineTo(-0.15, 0.1);
+            holePath.moveTo(-0.15, 0.1); holePath.lineTo(0.1, 0.15); holePath.lineTo(0.15, -0.1); holePath.lineTo(-0.1, -0.15); holePath.lineTo(-0.15, 0.1);
             shape.holes.push(holePath);
 
-            const extrudeSettings = { depth: 0.22, bevelEnabled: true, bevelSegments: 3, steps: 1, bevelSize: 0.03, bevelThickness: 0.03 };
+            const extrudeSettings = { depth: 0.20, bevelEnabled: true, bevelSegments: 3, steps: 1, bevelSize: 0.03, bevelThickness: 0.03 };
             const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
             geometry.center();
 
-            // Премиальный глянцевый золотой металл
             const goldMaterial = new THREE.MeshStandardMaterial({
-                color: 0xffb300, // Сделали золото сочнее
-                metalness: 0.95,
-                roughness: 0.15  // Уменьшили шероховатость для чистого зеркального блеска
+                color: 0xffb300,
+                metalness: 0.96,
+                roughness: 0.12 // Ещё больше глянца и зеркального отражения
             });
 
-            // Главная монета слева (УВЕЛИЧИЛИ МАСШТАБ В 2 РАЗА)
+            // 🔥 ИСПРАВЛЕНО: Сдвигаем крупную крутящуюся монету ближе к центру (было -3.4, стало -1.8)
             const spinningCoin = new THREE.Mesh(geometry, goldMaterial);
-            spinningCoin.scale.set(1.8, 1.8, 1.8); // Сделали её массивной и заметной
-            spinningCoin.position.set(-3.0, 0, 0); 
+            spinningCoin.scale.set(1.9, 1.8, 1.8);
+            spinningCoin.position.set(-1.8, 0, 0); 
             spinningCoin.rotation.set(Math.PI / 2.3, 0, Math.PI / 6); 
             scene.add(spinningCoin);
 
-            // Кучка монет справа (УВЕЛИЧИЛИ МАСШТАБ В 2 РАЗА)
+            // 🔥 ИСПРАВЛЕНО: Сдвигаем гору монет справа ближе к центру (было 3.2, стало 1.8)
             const coinGroup = new THREE.Group();
             
             const coin1 = new THREE.Mesh(geometry, goldMaterial);
             coin1.scale.set(1.6, 1.6, 1.6);
-            coin1.position.set(2.8, -0.4, 0);
+            coin1.position.set(1.8, -0.4, 0);
             coin1.rotation.set(Math.PI / 2, 0, 0.4);
             coinGroup.add(coin1);
 
             const coin2 = new THREE.Mesh(geometry, goldMaterial);
-            coin2.scale.set(1.6, 1.6, 1.6);
-            coin2.position.set(3.2, -0.3, 0.4);
+            coin2.scale.set(1.5, 1.5, 1.5);
+            coin2.position.set(2.1, -0.3, 0.3);
             coin2.rotation.set(Math.PI / 2.2, 0.3, -0.2);
             coinGroup.add(coin2);
 
             scene.add(coinGroup);
 
-            // Бесконечный цикл вращения
             function animate3D() {
                 requestAnimationFrame(animate3D);
-
-                spinningCoin.rotation.y += 0.018; // Чуть ускорили вращение
-                spinningCoin.position.y = 0 + Math.sin(performance.now() * 0.002) * 0.08; // Покачивание
-
+                spinningCoin.rotation.y += 0.016;
+                spinningCoin.position.y = 0 + Math.sin(performance.now() * 0.002) * 0.07;
                 renderer.render(scene, camera);
             }
             animate3D();
         }
 
-        // Запуск сцены
-        setTimeout(init3DRobuxScene, 300);       
+        setTimeout(init3DRobuxScene, 300);
+    
     </script>
 </body>
 </html>
