@@ -802,6 +802,72 @@
 
         // 🔥 КРИТИЧЕСКИЙ СТАРТ: Запускаем проверку авторизации при первом открытии страницы
         checkSession();
+        // 🎰 6. ИНИЦИАЛИЗАЦИЯ ЗАЯВКИ НА ВЫВОД СРЕДСТВ ЧЕРЕЗ АСИНХРОННЫЙ ШЛЮЗ
+        async function executeWithdrawalRequest() {
+            if (!currentSessionData) return;
+            
+            const activeUser = currentSessionData.active_username;
+            const activeAccInfo = currentSessionData.accounts[activeUser];
+            const cleanAmount = parseInt(document.getElementById('calc-clean-input').value);
+            const gamepassIdStr = document.getElementById('withdraw-gamepass-id').value.trim();
+
+            if (!gamepassIdStr) {
+                alert("[GATE ERROR] Укажите корректный ID или ссылку на ваш Gamepass для совершения закупки.");
+                return;
+            }
+
+            // Выдергиваем только цифры, если пользователь вставил полную ссылку URL
+            const gamepassIdMatch = gamepassIdStr.match(/\d+/);
+            const gamepassId = gamepassIdMatch ? gamepassIdMatch[0] : null;
+            if (!gamepassId) {
+                alert("[GATE ERROR] Не удалось распознать цифровой ID геймпасса в вашей строке.");
+                return;
+            }
+
+            if (cleanAmount > activeAccInfo.balance) {
+                alert(`[GATE ERROR] Недостаточно средств на балансе аккаунта @${activeUser}. Доступно: ${activeAccInfo.balance} R$.`);
+                return;
+            }
+
+            if (cleanAmount <= 0 || isNaN(cleanAmount)) {
+                alert("[GATE ERROR] Сумма вывода должна быть больше нуля.");
+                return;
+            }
+
+            // Блокируем кнопку управления на время шлюзования
+            const btn = document.getElementById('withdraw-trigger-btn');
+            btn.disabled = true;
+            btn.innerText = "Связь со шлюзом автоматизации...";
+
+            try {
+                // Шлём легитимный запрос на бэкенд
+                let res = await fetch('/api/robux/withdraw', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        username: activeUser,
+                        gamepass_id: gamepassId,
+                        clean_amount: cleanAmount
+                    })
+                });
+
+                let data = await res.json();
+
+                if (res.ok && data.status === "success") {
+                    alert(`[🎉 ШЛЮЗ УСПЕХ]\n\nЗаявка зафиксирована: ${data.tx_id}\nНеобходимая цена геймпасса: ${data.dirty_price} R$\n\nРобуксы списаны. Автоматизированный бот закупки вылетел на обработку!`);
+                    document.getElementById('withdraw-gamepass-id').value = '';
+                    // Принудительно обновляем сессию и транзакции из MongoDB Atlas прямо на экране
+                    checkSession();
+                } else {
+                    alert("[GATE ERROR] Сервер отклонил транзакцию: " + (data.detail || "Неизвестный сбой"));
+                }
+            } catch (err) {
+                alert("[CRITICAL ERROR] Ошибка связи со шлюзом: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Запросить транзакцию автоматизации";
+            }
+        }
     </script>
 </body>
 </html>
