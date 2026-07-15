@@ -558,42 +558,147 @@
             }
         }
 
+        // ⚙️ ОБНОВЛЕННАЯ СЛУЖБА UI: ТРАНЗАКЦИИ, МУЛЬТИАККАУНТИНГ И КУЛДАУН ИЗ MONGODB
         function updateNavbarUI() {
             if (!currentSessionData) return;
             
             const activeUser = currentSessionData.active_username;
             const activeAccInfo = currentSessionData.accounts[activeUser];
             
+            // 1. Привязка основных данных в шапку
             document.getElementById('current-avatar').src = activeAccInfo.avatar_url;
             document.getElementById('current-display-name').innerText = activeAccInfo.display_name;
             document.getElementById('current-username').innerText = '@' + activeUser;
             document.getElementById('active-balance-display').innerText = activeAccInfo.balance;
 
-            const box = document.getElementById('linked-accounts-box');
-            box.innerHTML = '';
-            
-            for (let uName in currentSessionData.accounts) {
-                let acc = currentSessionData.accounts[uName];
-                let isCurrent = (uName === activeUser);
-                
-                let row = document.createElement('div');
-                row.className = `account-row ${isCurrent ? 'active-row' : ''}`;
-                row.onclick = () => { if (!isCurrent) switchAccount(uName); };
-                
-                row.innerHTML = `
-                    <div class="acc-info-left">
-                        <img src="${acc.avatar_url}" class="mini-avatar">
-                        <div style="display:flex; flex-direction:column;">
-                            <span style="font-size:13px; font-weight:600;">${acc.display_name}</span>
-                            <span style="font-size:10px; color:var(--text-muted);">@${uName}</span>
+            // 2. Вывод самой последней живой транзакции в контекстное меню профиля
+            const dropdownNode = document.getElementById('account-dropdown');
+            if (dropdownNode && dropdownNode.children.length > 1) {
+                // Ищем второй дочерний элемент (наш блок транзакций)
+                const txBox = dropdownNode.children[1];
+                if (activeAccInfo.transactions && activeAccInfo.transactions.length > 0) {
+                    const latestTx = activeAccInfo.transactions[0]; // Берем самую свежую операцию
+                    
+                    // Подсвечиваем сумму зеленым, если это плюс, или серым, если ноль
+                    const isPlus = latestTx.amount.includes('+');
+                    const colorStyle = isPlus ? '#2eb872' : '#7a8293';
+                    
+                    txBox.innerHTML = `
+                        <span style="color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; font-size:10px; display:block; margin-bottom:5px;">Последняя операция аккаунта</span>
+                        <div style="display: flex; justify-content: space-between; align-items:center; color: #fff; font-size:12px;">
+                            <span style="font-weight:600; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${latestTx.type}</span>
+                            <span style="color: ${colorStyle}; font-weight:700;">${latestTx.amount}</span>
                         </div>
-                    </div>
-                    <span style="font-size:12px; font-weight:700; color:#ffb300;">${acc.balance} R$</span>
-                `;
-                box.appendChild(row);
+                        <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size:10px; color: var(--text-muted);">
+                            <span>${latestTx.date}</span>
+                            <span style="color:#ff5722; font-weight:600;">[${latestTx.status}]</span>
+                        </div>
+                    `;
+                }
+            }
+
+            // 3. Рендеринг списка подключенных учетных записей (твинков и основы)
+            const box = document.getElementById('linked-accounts-box');
+            if (box) {
+                box.innerHTML = '';
+                for (let uName in currentSessionData.accounts) {
+                    let acc = currentSessionData.accounts[uName];
+                    let isCurrent = (uName === activeUser);
+                    
+                    let row = document.createElement('div');
+                    row.className = `account-row ${isCurrent ? 'active-row' : ''}`;
+                    row.onclick = () => { if (!isCurrent) switchAccount(uName); };
+                    
+                    row.innerHTML = `
+                        <div class="acc-info-left">
+                            <img src="${acc.avatar_url}" class="mini-avatar">
+                            <div style="display:flex; flex-direction:column;">
+                                <span style="font-size:13px; font-weight:600;">${acc.display_name}</span>
+                                <span style="font-size:10px; color:var(--text-muted);">@${uName}</span>
+                            </div>
+                        </div>
+                        <span style="font-size:12px; font-weight:700; color:#ffb300;">${acc.balance} R$</span>
+                    `;
+                    box.appendChild(row);
+                }
+            }
+
+            // 4. 🔥 ПРОВЕРКА КУЛДАУНА ИЗ ОБЛАКА MONGODB ATLAS
+            if (activeAccInfo.last_spin) {
+                const now = new Date();
+                // Парсим ISO-дату последнего спина, которую сохранил Python-сервер
+                const lastSpinTime = new Date(activeAccInfo.last_spin);
+                
+                // Рассчитываем точную временную отметку окончания блокировки (+12 часов)
+                const cooldownEnd = new Date(lastSpinTime.getTime() + (12 * 60 * 60 * 1000));
+                
+                if (now < cooldownEnd) {
+                    // Вычисляем, сколько секунд блокировки осталось спать барабану
+                    const secondsLeft = Math.floor((cooldownEnd - now) / 1000);
+                    // Передаем управление тикающему таймеру на экране
+                    startVisualCooldownTimer(secondsLeft);
+                } else {
+                    // Время вышло — возвращаем кнопку активации конвейера
+                    document.getElementById('spin-trigger-btn').style.display = 'block';
+                    document.getElementById('spin-timer-cooldown').style.display = 'none';
+                    if (window.cooldownInterval) clearInterval(window.cooldownInterval);
+                }
+            } else {
+                // Если аккаунт новый и ни разу не испытывал фортуну
+                document.getElementById('spin-trigger-btn').style.display = 'block';
+                document.getElementById('spin-timer-cooldown').style.display = 'none';
+                if (window.cooldownInterval) clearInterval(window.cooldownInterval);
             }
         }
 
+        
+        let cooldownInterval = null;
+
+        // ⏱️ ЖИВОЙ СЧЕТЧИК КУЛДАУНА ДЛЯ ЭКРАНА СМАРТФОНА
+        function startVisualCooldownTimer(secondsLeft) {
+            const btn = document.getElementById('spin-trigger-btn');
+            const timerPanel = document.getElementById('spin-timer-cooldown');
+            const timerVal = document.getElementById('timer-countdown-val');
+
+            if (secondsLeft <= 0) {
+                btn.style.display = 'block';
+                timerPanel.style.display = 'none';
+                return;
+            }
+
+            // Блокируем кнопку запуска конвейера и выводим панель таймера
+            btn.style.display = 'none';
+            timerPanel.style.display = 'block';
+
+            let timeLeft = secondsLeft;
+
+            // Чистим старый интервал, если он работал (защита от багов мультиаккаунтинга)
+            if (cooldownInterval) clearInterval(cooldownInterval);
+
+            cooldownInterval = setInterval(() => {
+                timeLeft--;
+
+                if (timeLeft <= 0) {
+                    clearInterval(cooldownInterval);
+                    btn.style.display = 'block';
+                    timerPanel.style.display = 'none';
+                    return;
+                }
+
+                // Математический перевод секунд в красивый формат ЧЧ:ММ:СС
+                let hours = Math.floor(timeLeft / 3600);
+                let minutes = Math.floor((timeLeft % 3600) / 60);
+                let seconds = timeLeft % 60;
+
+                // Добавляем нули перед цифрами, если они меньше 10 (например, 09 вместо 9)
+                let hStr = hours < 10 ? '0' + hours : hours;
+                let mStr = minutes < 10 ? '0' + minutes : minutes;
+                let sStr = seconds < 10 ? '0' + seconds : seconds;
+
+                timerVal.innerText = `${hStr}:${mStr}:${sStr}`;
+            }, 1000);
+        }
+        
         async function executeAuth() {
             const name = document.getElementById('roblox-username-field').value.trim();
             if (!name) return;
