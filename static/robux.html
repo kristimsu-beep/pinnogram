@@ -1004,19 +1004,28 @@
             // 🔥 СИНХРОНИЗАЦИЯ: Отдаем материал в глобальный шлюз выигрыша
             window.robux3DMaterial = robuxMaterial; 
 
-            // Наша базовая левитирующая монета СЛЕВА от рулетки
+            // 🔥 ИСПРАВЛЕНО: Увеличиваем размер и сдвигаем базовую левитирующую монету ближе к центру (было -2.2, стало -1.1)
             spinningCoin = new THREE.Mesh(robuxGeometry, robuxMaterial);
-            spinningCoin.scale.set(1.5, 1.5, 1.5);
-            spinningCoin.position.set(-2.2, 1.2, 0); 
+            spinningCoin.scale.set(2.2, 2.2, 2.2); // Сделали крупнее для сочности
+            spinningCoin.position.set(-1.1, 1.6, -1); // Подняли на уровень рулетки и сместили к центру
             spinningCoin.rotation.set(Math.PI / 2.3, 0, Math.PI / 6); 
             scene3d.add(spinningCoin);
 
-            // Базовая стопка монет СПРАВА от рулетки
+            // 🔥 ИСПРАВЛЕНО: Сдвигаем гору монет справа ближе к центру (было 2.2, стало 1.2)
             const coinGroup = new THREE.Group();
+            
             const coin1 = new THREE.Mesh(robuxGeometry, robuxMaterial);
-            coin1.scale.set(1.3, 1.3, 1.3); coin1.position.set(2.2, 0.8, 0); coin1.rotation.set(Math.PI / 2, 0, 0.4); coinGroup.add(coin1);
+            coin1.scale.set(1.8, 1.6, 1.6); 
+            coin1.position.set(1.2, 1.0, -1); // Придвинули ближе к центру под Хедер
+            coin1.rotation.set(Math.PI / 2, 0, 0.4); 
+            coinGroup.add(coin1);
+
             const coin2 = new THREE.Mesh(robuxGeometry, robuxMaterial);
-            coin2.scale.set(1.2, 1.2, 1.2); coin2.position.set(2.5, 0.9, 0.3); coin2.rotation.set(Math.PI / 2.2, 0.3, -0.2); coinGroup.add(coin2);
+            coin2.scale.set(1.6, 1.5, 1.5); 
+            coin2.position.set(1.5, 1.1, -0.6); 
+            coin2.rotation.set(Math.PI / 2.2, 0.3, -0.2); 
+            coinGroup.add(coin2);
+
             scene3d.add(coinGroup);
 
             window.addEventListener('resize', () => {
