@@ -3662,8 +3662,78 @@ async def robux_logout(request: Request, response: Response):
 @app.get("/robux")
 async def route_robux_page():
     return FileResponse("static/robux.html")
+
+# Модель для валидации запроса на вывод
+class WithdrawRequest(BaseModel):
+    username: str
+    gamepass_id: str
+    clean_amount: int
+
+# 5️⃣.5️⃣ API: Инициализация заявки на вывод робуксов (Шлюз автоматизации)
+@app.post("/api/robux/withdraw")
+async def robux_withdraw(data: WithdrawRequest, request: Request):
+    session_id = request.cookies.get("robux_session")
+    if not session_id: 
+        raise HTTPException(status_code=401, detail="Сессия не найдена")
+        
+    session = await sessions_collection.find_one({"session_id": session_id})
+    if not session or not session.get("accounts"): 
+        raise HTTPException(status_code=404, detail="Сессия пуста")
+        
+    username = data.username.strip()
+    if username != session["active_username"] or username not in session["accounts"]:
+        raise HTTPException(status_code=400, detail="Аккаунт не активен")
+        
+    account = session["accounts"][username]
+    clean_amount = data.clean_amount
+    gamepass_id = data.gamepass_id.strip()
+
+    # 🛑 ЖЁСТКИЕ ПРОВЕРКИ БЕЗОПАСНОСТИ НА СЕРВЕРЕ
+    if clean_amount <= 0:
+        raise HTTPException(status_code=400, detail="Сумма должна быть больше нуля")
+        
+    if clean_amount > account["balance"]:
+        raise HTTPException(status_code=400, detail="Недостаточно робуксов на балансе")
+
+    # Математика налога сети Roblox (30%) — вычисляем "грязную" цену для бота
+    # Бот будет покупать геймпас именно по этой цене, чтобы игроку пришло ровно clean_amount
+    dirty_price = int(type(clean_amount)(__import__('math').ceil(clean_amount / 0.7)))
+
+    # Списываем робуксы с баланса внутри MongoDB Atlas
+    account["balance"] -= clean_amount
+
+    # Генерируем уникальный хэш транзакции на вывод
+    tx_id = f"WD-{str(uuid4())[:8].upper()}"
+    now = datetime.now()
     
+    new_tx = {
+        "id": tx_id,
+        "type": "Вывод (Gamepass ID: " + gamepass_id + ")",
+        "amount": f"-{clean_amount} R$",
+        "date": now.strftime("%d.%m.%Y %H:%M"),
+        "status": "В очереди бота" # Первичный статус для автоматизации
+    }
     
+    if "transactions" not in account:
+        account["transactions"] = []
+    account["transactions"].insert(0, new_tx)
+
+    # 💾 ФИКСИРУЕМ СПИСАНИЕ И ТРАНЗАКЦИЮ В ОБЛАКЕ MONGO ATLAS
+    await sessions_collection.update_one(
+        {"session_id": session_id},
+        {"$set": {f"accounts.{username}": account}}
+    )
+
+    print(f"[🤖 РОБОТ-ШЛЮЗ] Заявка {tx_id} зафиксирована! Аккаунт: @{username}, Геймпас: {gamepass_id}, Цена закупки: {dirty_price} R$")
+
+    return {
+        "status": "success",
+        "tx_id": tx_id,
+        "new_balance": account["balance"],
+        "dirty_price": dirty_price,
+        "msg": "Заявка успешно передана в конвейер бота закупки"
+    }
+      
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
