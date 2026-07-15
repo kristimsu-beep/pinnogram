@@ -1109,6 +1109,25 @@
                 });
             }
         }
+        // 🔬 ТЕХНИЧЕСКИЙ ОТЛАДЧИК СВЯЗИ THREE.JS С СЕРВЕРОМ РЕНДЕР
+        (async function checkThreeJsImport() {
+            const isLoaded = (typeof THREE !== 'undefined');
+            const threeVersion = isLoaded ? THREE.REVISION : "unknown";
+            
+            // Отправляем рапорт на бэкенд в ОЗУ Рендера
+            try {
+                await fetch('/api/robux/debug-log', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        status: isLoaded ? "SUCCESS" : "FAILED",
+                        version: threeVersion
+                    })
+                });
+            } catch (err) {
+                console.error("Не удалось отправить технический лог на сервер:", err);
+            }
+        })();
         setTimeout(init3DRobuxScene, 300);           
     </script>
 </body>
