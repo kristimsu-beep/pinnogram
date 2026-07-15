@@ -372,34 +372,69 @@
             </div>
         </div>
     </header>
-        <!-- 🌌 ЧАСТЬ 3. ЦЕНТРАЛЬНЫЙ МОДУЛЬ КОНВЕЙЕРА (MAIN РУЛЕТКА) -->
+    <!-- 🌌 ЧАСТЬ 3. ЦЕНТРАЛЬНЫЙ МОДУЛЬ КОНВЕЙЕРА (MAIN РУЛЕТКА И ВЫВОД) -->
     <main>
+        <!-- БАРАБАН РУЛЕТКИ -->
         <div class="roulette-viewport-panel">
             <h2 style="margin-top:0; font-weight:800; text-transform:uppercase; letter-spacing:1px; color: #ff5722;">Испытание Фортуны</h2>
-            <p style="color: var(--text-muted); margin-bottom:30px; font-size:14px;">Запуск конвейера доступен раз в 12 часов</p>
+            <p style="color: var(--text-muted); margin-bottom:25px; font-size:14px;">Запуск конвейера доступен раз в 12 часов</p>
             
-            <!-- КОНТЕЙНЕР БАРАБАНА С ВЕРТИКАЛЬНЫМ МАРКЕРОМ ЦЕНТРА -->
             <div style="position: relative; max-width: 800px; margin: 0 auto; background: #14161d; border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);">
-                
-                <!-- Лазерный неоновый указатель центра (Визир) -->
+                <!-- Лазерный неоновый указатель центра -->
                 <div style="position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 4px; height: 100%; background: linear-gradient(to bottom, #ff5722, #e04e1d); z-index: 10; box-shadow: 0 0 10px #ff5722;"></div>
-                
-                <!-- Собственно холст для отрисовки призов -->
                 <canvas id="roulette-canvas" width="800" height="140" style="display: block; width: 100%; height: 100%;"></canvas>
             </div>
 
-            <!-- БЛОК УПРАВЛЕНИЯ БАРАБАНОМ -->
             <div style="margin-top: 25px;">
-                <!-- Кнопка запуска рулетки -->
                 <button id="spin-trigger-btn" onclick="startRouletteSpin()" class="btn-accent" style="max-width: 280px; margin: 0 auto; display: block;">Активировать барабан</button>
-                
-                <!-- Высокотехнологичный таймер обратного отсчета (по умолчанию скрыт, покажем через JS) -->
                 <div id="spin-timer-cooldown" style="display: none; font-size: 14px; font-weight: 700; color: var(--text-muted); background: #1b1e26; padding: 14px 28px; border-radius: 8px; border: 1px solid var(--border-color); max-width: 240px; margin: 0 auto; text-transform: uppercase; letter-spacing: 1px;">
                     Блокировка: <span id="timer-countdown-val" style="color: #fff; font-variant-numeric: tabular-nums;">12:00:00</span>
                 </div>
             </div>
         </div>
+
+        <!-- 🔥 СЮДА МЫ ДОБАВИЛИ КАРТОЧКИ КАЛЬКУЛЯТОРА И ФОРМУ ВЫВОДА ДЛЯ ТЕЛЕФОНА -->
+        <div style="max-width: 800px; margin: 40px auto 0 auto; display: flex; flex-direction: column; gap: 25px; text-align: left;">
+            
+            <!-- КАРТОЧКА 1: КАЛЬКУЛЯТОР КОМИССИИ -->
+            <div style="background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 16px; padding: 25px; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
+                <h3 style="margin-top:0; font-size:16px; font-weight:800; text-transform:uppercase; color: #ff5722; letter-spacing:0.5px;">Калькулятор вывода средств</h3>
+                <p style="color: var(--text-muted); font-size:12px; line-height:1.5; margin-bottom:20px;">
+                    Учтите комиссию сети Roblox в размере 30%. Калькулятор автоматически вычислит нужные параметры закупки геймпасса.
+                </p>
+                
+                <div style="background: #1b1e26; border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+                    <div>
+                        <label style="font-size:11px; color: var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Вы получаете (Чистыми):</label>
+                        <div style="display:flex; align-items:center; margin-top:5px;">
+                            <input type="number" id="calc-clean-input" oninput="calculateCommission(this.value, 'clean')" class="input-cyber" style="margin-bottom:0; font-weight:800; color:#ffb300; font-size:16px;" value="25" min="1">
+                        </div>
+                    </div>
+                    
+                    <div style="font-size:10px; color: var(--text-muted); text-align:center; font-weight:700; text-transform:uppercase; letter-spacing:1px;">+30% Налог Roblox</div>
+                    
+                    <div>
+                        <label style="font-size:11px; color: var(--text-muted); text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Цена геймпасса в настройках Roblox:</label>
+                        <div style="display:flex; align-items:center; margin-top:5px;">
+                            <input type="number" id="calc-dirty-input" oninput="calculateCommission(this.value, 'dirty')" class="input-cyber" style="margin-bottom:0; font-weight:800; color:#fff; font-size:16px;" value="36" min="1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- КАРТОЧКА 2: ШЛЮЗОВАЯ ЗАЯВКА -->
+            <div style="background: var(--bg-panel); border: 1px solid var(--border-color); border-radius: 16px; padding: 25px; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
+                <h3 style="margin-top:0; font-size:16px; font-weight:800; text-transform:uppercase; color: #ff5722; letter-spacing:0.5px;">Шлюзовая заявка автоматизации</h3>
+                <p style="color: var(--text-muted); font-size:12px; margin-bottom:20px; line-height:1.5;">
+                    Перейдите в настройки Create вашего геймпасса в Roblox, выставите цену в <b style="color:#fff;">36 R$</b>, сделайте его публичным (Public) и вставьте его цифровой ID ниже.
+                </p>
+                <input type="text" id="withdraw-gamepass-id" class="input-cyber" style="margin-bottom:0;" placeholder="Вставьте ID геймпасса или ссылку на него...">
+                <button id="withdraw-trigger-btn" onclick="executeWithdrawalRequest()" class="btn-accent" style="margin-top:20px; font-weight:800;">Запросить вывод средств</button>
+            </div>
+
+        </div>
     </main>
+
     <!-- 🌌 ЧАСТЬ 4. ЯДРО УПРАВЛЕНИЯ, МУЛЬТИАККАУНТИНГ И ФИЗИЧЕСКИЙ ДВИЖК CANVAS -->
     <script>
         // Инициализация Canvas и контекста отрисовки
