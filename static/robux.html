@@ -954,33 +954,34 @@
         window.robux3DGeometry = null;
         window.robux3DMaterial = null;
         
-        // 🌌 3D-МОДУЛЬ: ПОЛНОЭКРАННАЯ СИСТЕМА ЧАСТИЦ (ЛИВЕНЬ РОБУКСОВ НА ВЕСЬ ЭКРАН)
+        // 🌌 3D-МОДУЛЬ: ПОЛНОЭКРАННАЯ СИСТЕМА С ТЕСТОВЫМ СПАВНОМ ПРИ СТАРТЕ
         function init3DRobuxScene() {
             const container3d = document.getElementById('robux-3d-scene');
             if (!container3d) return;
 
-            // 🔥 СИНХРОНИЗАЦИЯ: Привязываем локальную сцену к глобальному окну window
             scene3d = new THREE.Scene();
-            window.robux3DScene = scene3d; 
             
-            const width = window.innerWidth;
-            const height = window.innerHeight;
+            // 🔥 ИСПРАВЛЕНО: Жёстко вычисляем размеры экрана с подстраховкой через screen.width
+            const width = window.innerWidth || document.documentElement.clientWidth || screen.width;
+            const height = window.innerHeight || document.documentElement.clientHeight || screen.height;
+            
             camera3d = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
-            camera3d.position.set(0, 0, 7); 
+            camera3d.position.set(0, 0, 6.5); // Немного приблизили камеру для сочности
 
             renderer3d = new THREE.WebGLRenderer({ canvas: container3d, alpha: true, antialias: true });
             renderer3d.setSize(width, height, false);
             renderer3d.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
+            // Мощный заполняющий свет (подкрутили яркость на максимум)
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); 
             scene3d.add(ambientLight);
 
-            const orangeLaserLight = new THREE.PointLight(0xff5722, 6, 25); 
-            orangeLaserLight.position.set(0, 1, 3);
+            const orangeLaserLight = new THREE.PointLight(0xff5722, 8, 30); 
+            orangeLaserLight.position.set(0, 0, 3);
             scene3d.add(orangeLaserLight);
 
-            const goldReflectLight = new THREE.DirectionalLight(0xffd700, 3.0); 
-            goldReflectLight.position.set(3, 8, 2);
+            const goldReflectLight = new THREE.DirectionalLight(0xffd700, 3.5); 
+            goldReflectLight.position.set(2, 6, 2);
             scene3d.add(goldReflectLight);
 
             // Геометрия шестиугольника Roblox
@@ -993,50 +994,45 @@
             const extrudeSettings = { depth: 0.20, bevelEnabled: true, bevelSegments: 3, steps: 1, bevelSize: 0.03, bevelThickness: 0.03 };
             robuxGeometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
             robuxGeometry.center();
-            // 🔥 СИНХРОНИЗАЦИЯ: Отдаем геометрию в глобальный шлюз выигрыша
-            window.robux3DGeometry = robuxGeometry; 
 
             robuxMaterial = new THREE.MeshStandardMaterial({
                 color: 0xffb300,
                 metalness: 0.95,
                 roughness: 0.12
             });
-            // 🔥 СИНХРОНИЗАЦИЯ: Отдаем материал в глобальный шлюз выигрыша
-            window.robux3DMaterial = robuxMaterial; 
 
-            // 🔥 ИСПРАВЛЕНО: Увеличиваем размер и сдвигаем базовую левитирующую монету ближе к центру (было -2.2, стало -1.1)
+            window.robux3DGeometry = robuxGeometry;
+            window.robux3DMaterial = robuxMaterial;
+
+            // 🔥 ДЕКОРАЦИЯ: Ставим монеты СТРОГО по центру экрана (0,0), чтобы они 100% попали в объектив камеры!
             spinningCoin = new THREE.Mesh(robuxGeometry, robuxMaterial);
-            spinningCoin.scale.set(2.2, 2.2, 2.2); // Сделали крупнее для сочности
-            spinningCoin.position.set(-1.1, 1.6, -1); // Подняли на уровень рулетки и сместили к центру
+            spinningCoin.scale.set(2.0, 2.0, 2.0);
+            spinningCoin.position.set(-1.0, 0, -1); // Чуть левее центра
             spinningCoin.rotation.set(Math.PI / 2.3, 0, Math.PI / 6); 
             scene3d.add(spinningCoin);
 
-            // 🔥 ИСПРАВЛЕНО: Сдвигаем гору монет справа ближе к центру (было 2.2, стало 1.2)
             const coinGroup = new THREE.Group();
-            
             const coin1 = new THREE.Mesh(robuxGeometry, robuxMaterial);
-            coin1.scale.set(1.8, 1.6, 1.6); 
-            coin1.position.set(1.2, 1.0, -1); // Придвинули ближе к центру под Хедер
-            coin1.rotation.set(Math.PI / 2, 0, 0.4); 
-            coinGroup.add(coin1);
-
-            const coin2 = new THREE.Mesh(robuxGeometry, robuxMaterial);
-            coin2.scale.set(1.6, 1.5, 1.5); 
-            coin2.position.set(1.5, 1.1, -0.6); 
-            coin2.rotation.set(Math.PI / 2.2, 0.3, -0.2); 
-            coinGroup.add(coin2);
-
+            coin1.scale.set(1.6, 1.6, 1.6); coin1.position.set(1.0, -0.4, -1); coin1.rotation.set(Math.PI / 2, 0, 0.4); coinGroup.add(coin1);
             scene3d.add(coinGroup);
 
             window.addEventListener('resize', () => {
-                const w = window.innerWidth;
-                const h = window.innerHeight;
+                const w = window.innerWidth || document.documentElement.clientWidth;
+                const h = window.innerHeight || document.documentElement.clientHeight;
                 camera3d.aspect = w / h;
                 camera3d.updateProjectionMatrix();
                 renderer3d.setSize(w, h, false);
             });
 
             animate3D();
+
+            // 🔥 ШЛЮЗ ТЕСТИРОВАНИЯ: Принудительно спавним 5 крутящихся монет через 1 секунду после старта сайта
+            setTimeout(() => {
+                console.log("[🔬 ТЕСТ-СПАВН] Запуск тестовой проверки падения монет...");
+                if (typeof spawn3DRobuxExplosion === "function") {
+                    spawn3DRobuxExplosion(25); // Симулируем выигрыш 25 Robux для спавна монет
+                }
+            }, 1000);
         }
 
 
