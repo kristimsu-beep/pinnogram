@@ -315,8 +315,8 @@
 </head>
 <body>
     <!-- 🔥 ДОБАВЛЕНО: Полноэкранный 3D холст на самом заднем плане сайта -->
-    <canvas id="robux-3d-scene" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; pointer-events: none;"></canvas>
-    
+    <canvas id="robux-3d-scene" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 99999; pointer-events: none;"></canvas>
+
     <!-- 🌌 ЧАСТЬ 1. КИБЕРПАНК-БЛОКИРОВЩИК: ОКНО АВТОРbranchИЗАЦИИ -->
     <!-- Показывается поверх всего экрана, если сессия пользователя не инициализирована -->
     <div id="auth-gate" class="auth-overlay">
