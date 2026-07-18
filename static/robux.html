@@ -314,9 +314,6 @@
     <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
 </head>
 <body>
-    <!-- 🔥 ДОБАВЛЕНО: Полноэкранный 3D холст на самом заднем плане сайта -->
-    <canvas id="robux-3d-scene" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 99999; pointer-events: none;"></canvas>
-
     <!-- 🌌 ЧАСТЬ 1. КИБЕРПАНК-БЛОКИРОВЩИК: ОКНО АВТОРbranchИЗАЦИИ -->
     <!-- Показывается поверх всего экрана, если сессия пользователя не инициализирована -->
     <div id="auth-gate" class="auth-overlay">
@@ -383,9 +380,16 @@
             <h2 style="margin-top:0; font-weight:800; text-transform:uppercase; letter-spacing:1px; color: #ff5722;">Испытание Фортуны</h2>
             <p style="color: var(--text-muted); margin-bottom:25px; font-size:14px;">Запуск конвейера доступен раз в 12 часов</p>
             
-            <!-- 🔥 ИСПРАВЛЕННЫЙ ЧИСТЫЙ КОРПУС БАРАБАНА (ПРОЗРАЧНЫЙ ДЛЯ ПОЛНОЭКРАННОГО 3D) -->
-            <div style="position: relative; max-width: 800px; margin: 0 auto; background: rgba(20, 22, 29, 0.4); border: 1px solid #1f222c; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); height: 140px;">
-                <canvas id="roulette-canvas" width="800" height="140" style="display: block; width: 100%; height: 100%;"></canvas>
+            <!-- 🔥 ФИНАЛЬНЫЙ КОРПУС: ЖЕСТКАЯ СВЯЗКА 2D КОНВЕЙЕРА И 3D ПРОСТРАНСТВА МОНЕТ -->
+            <div style="position: relative; max-width: 800px; margin: 0 auto; background: #090a0d; border: 1px solid #1f222c; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); height: 180px;">
+                
+                <!-- Подложка: Холст для рендеринга 3D-робуксов (Задний план) с жесткими размерами -->
+                <canvas id="robux-3d-scene" width="800" height="180" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none;"></canvas>
+                
+                <!-- Слой выше: Наш неоновый 2D барабан призов (висит по центру) -->
+                <div style="position: absolute; top: 20px; left: 0; width: 100%; height: 140px; z-index: 2; background: rgba(9,10,13,0.05); backdrop-filter: blur(0.5px);">
+                    <canvas id="roulette-canvas" width="800" height="140" style="display: block; width: 100%; height: 100%;"></canvas>
+                </div>
             </div>
 
             <div style="margin-top: 25px;">
@@ -395,6 +399,7 @@
                 </div>
             </div>
         </div>
+
 
         <!-- КАРТОЧКИ КАЛЬКУЛЯТОРА И ФОРМУ ВЫВОДА ДЛЯ ТЕЛЕФОНА -->
         <div style="max-width: 800px; margin: 40px auto 0 auto; display: flex; flex-direction: column; gap: 25px; text-align: left;">
@@ -954,34 +959,31 @@
         window.robux3DGeometry = null;
         window.robux3DMaterial = null;
         
-        // 🌌 3D-МОДУЛЬ: ПОЛНОЭКРАННАЯ СИСТЕМА С ТЕСТОВЫМ СПАВНОМ ПРИ СТАРТЕ
+        // 🌌 3D-МОДУЛЬ: ГЕНЕРАЦИЯ И СИСТЕМА ЧАСТИЦ (СТАБИЛЬНЫЙ ВАРИАНТ ВНУТРИ КОРПУСА)
         function init3DRobuxScene() {
             const container3d = document.getElementById('robux-3d-scene');
             if (!container3d) return;
 
             scene3d = new THREE.Scene();
             
-            // 🔥 ИСПРАВЛЕНО: Жёстко вычисляем размеры экрана с подстраховкой через screen.width
-            const width = window.innerWidth || document.documentElement.clientWidth || screen.width;
-            const height = window.innerHeight || document.documentElement.clientHeight || screen.height;
-            
-            camera3d = new THREE.PerspectiveCamera(60, width / height, 0.1, 1000);
-            camera3d.position.set(0, 0, 6.5); // Немного приблизили камеру для сочности
+            // Фиксированная камера под рамки 800x180
+            camera3d = new THREE.PerspectiveCamera(45, 800 / 180, 0.1, 1000);
+            camera3d.position.set(0, 0, 5.5); 
 
             renderer3d = new THREE.WebGLRenderer({ canvas: container3d, alpha: true, antialias: true });
-            renderer3d.setSize(width, height, false);
+            renderer3d.setSize(800, 180, false);
             renderer3d.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-            // Мощный заполняющий свет (подкрутили яркость на максимум)
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); 
+            // Сочный свет
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
             scene3d.add(ambientLight);
 
-            const orangeLaserLight = new THREE.PointLight(0xff5722, 8, 30); 
-            orangeLaserLight.position.set(0, 0, 3);
+            const orangeLaserLight = new THREE.PointLight(0xff5722, 6, 15); 
+            orangeLaserLight.position.set(0, 0, 2.5);
             scene3d.add(orangeLaserLight);
 
-            const goldReflectLight = new THREE.DirectionalLight(0xffd700, 3.5); 
-            goldReflectLight.position.set(2, 6, 2);
+            const goldReflectLight = new THREE.DirectionalLight(0xffd700, 3.0); 
+            goldReflectLight.position.set(2, 4, 1.5);
             scene3d.add(goldReflectLight);
 
             // Геометрия шестиугольника Roblox
@@ -997,87 +999,65 @@
 
             robuxMaterial = new THREE.MeshStandardMaterial({
                 color: 0xffb300,
-                metalness: 0.95,
+                metalness: 0.96,
                 roughness: 0.12
             });
 
+            window.robux3DScene = scene3d;
             window.robux3DGeometry = robuxGeometry;
             window.robux3DMaterial = robuxMaterial;
 
-            // 🔥 ДЕКОРАЦИЯ: Ставим монеты СТРОГО по центру экрана (0,0), чтобы они 100% попали в объектив камеры!
+            // Базовая левитирующая монета СЛЕВА (Сдвинули ближе, чтобы 100% попала в фокус)
             spinningCoin = new THREE.Mesh(robuxGeometry, robuxMaterial);
-            spinningCoin.scale.set(2.0, 2.0, 2.0);
-            spinningCoin.position.set(-1.0, 0, -1); // Чуть левее центра
+            spinningCoin.scale.set(1.9, 1.8, 1.8);
+            spinningCoin.position.set(-1.8, 0, 0); 
             spinningCoin.rotation.set(Math.PI / 2.3, 0, Math.PI / 6); 
             scene3d.add(spinningCoin);
 
+            // Стопка монет СПРАВА (Сдвинули ближе к центру)
             const coinGroup = new THREE.Group();
             const coin1 = new THREE.Mesh(robuxGeometry, robuxMaterial);
-            coin1.scale.set(1.6, 1.6, 1.6); coin1.position.set(1.0, -0.4, -1); coin1.rotation.set(Math.PI / 2, 0, 0.4); coinGroup.add(coin1);
+            coin1.scale.set(1.6, 1.6, 1.6); coin1.position.set(1.8, -0.4, 0); coin1.rotation.set(Math.PI / 2, 0, 0.4); coinGroup.add(coin1);
+            const coin2 = new THREE.Mesh(robuxGeometry, robuxMaterial);
+            coin2.scale.set(1.5, 1.5, 1.5); coin2.position.set(2.1, -0.3, 0.3); coin2.rotation.set(Math.PI / 2.2, 0.3, -0.2); coinGroup.add(coin2);
             scene3d.add(coinGroup);
 
-            window.addEventListener('resize', () => {
-                const w = window.innerWidth || document.documentElement.clientWidth;
-                const h = window.innerHeight || document.documentElement.clientHeight;
-                camera3d.aspect = w / h;
-                camera3d.updateProjectionMatrix();
-                renderer3d.setSize(w, h, false);
-            });
-
             animate3D();
-
-            // 🔥 ШЛЮЗ ТЕСТИРОВАНИЯ: Принудительно спавним 5 крутящихся монет через 1 секунду после старта сайта
-            setTimeout(() => {
-                console.log("[🔬 ТЕСТ-СПАВН] Запуск тестовой проверки падения монет...");
-                if (typeof spawn3DRobuxExplosion === "function") {
-                    spawn3DRobuxExplosion(25); // Симулируем выигрыш 25 Robux для спавна монет
-                }
-            }, 1000);
         }
 
-
-        // 🎰 3. ПОЛНОЭКРАННЫЙ ТРИГГЕР ВЗРЫВА: СПАВН ЧАСТИЦ С САМОГО ВЕРХА ЭКРАНА
+        // 🎰 3. ТРИГГЕР ВЗРЫВА: СПАВН ЧАСТИЦ СТРОГО ВНУТРИ БАРАБАНА РУЛЕТКИ
         function spawn3DRobuxExplosion(prizeValue) {
-            if (!scene3d || !robuxGeometry || !robuxMaterial || !camera3d) return;
-            if (prizeValue <= 0) return;
+            if (!window.robux3DScene || !window.robux3DGeometry || !window.robux3DMaterial) return;
 
-            // Увеличиваем количество монет, так как теперь им лететь через весь экран!
-            let coinCount = 30; // Дефолт для 10 R$
-            if (prizeValue === 25) coinCount = 60;
-            if (prizeValue >= 50) coinCount = 120; // Тотальный золотой ливень!
-
-            // Вычисляем верхнюю видимую границу экрана в 3D координатах
-            const vFOV = camera3d.fov * Math.PI / 180;
-            const topY = Math.tan(vFOV / 2) * camera3d.position.z + 1.0; // Точка старта за пределами верхней рамки
-            const aspect = window.innerWidth / window.innerHeight;
-            const widthX = topY * aspect * 2; // Ширина зоны спавна
+            let coinCount = 20; // Оптимальная плотность для внутренней коробки
+            if (prizeValue === 25) coinCount = 35;
+            if (prizeValue >= 50) coinCount = 55;
 
             for (let i = 0; i < coinCount; i++) {
-                const coinMesh = new THREE.Mesh(robuxGeometry, robuxMaterial);
+                const coinMesh = new THREE.Mesh(window.robux3DGeometry, window.robux3DMaterial);
                 
                 const scale = Math.random() * 0.3 + 0.4;
                 coinMesh.scale.set(scale, scale, scale);
 
-                // Спавним монеты по всей ширине экрана на самом верху
-                const startX = (Math.random() - 0.5) * widthX;
-                // Добавляем случайную задержку по высоте (Math.random() * 4), чтобы монеты падали волнами, а не одной кучей
-                coinMesh.position.set(startX, topY + Math.random() * 4, (Math.random() - 0.5) * 2);
+                // Спавним монеты по всей ширине барабана (от -3.0 до +3.0) на верхней границе (Y = 2.0)
+                const startX = (Math.random() - 0.5) * 6;
+                coinMesh.position.set(startX, 2.0, (Math.random() - 0.5) * 1.5);
                 coinMesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
 
-                // Физика падения: монеты летят строго вниз с легким разбросом в стороны
+                // Направление полета: монеты вылетают с легким хаотичным разбросом вбок и падают вниз
                 const velocity = {
-                    x: (Math.random() - 0.5) * 0.03,
-                    y: -(Math.random() * 0.04 + 0.03), // Скорость падения строго вниз (минус!)
-                    z: (Math.random() - 0.5) * 0.01
+                    x: (Math.random() - 0.5) * 0.04,
+                    y: -(Math.random() * 0.03 + 0.03), // Скорость падения вниз
+                    z: (Math.random() - 0.5) * 0.02
                 };
 
                 const rotSpeed = {
-                    x: (Math.random() - 0.5) * 0.07,
-                    y: (Math.random() - 0.5) * 0.10,
-                    z: (Math.random() - 0.5) * 0.07
+                    x: (Math.random() - 0.5) * 0.05,
+                    y: (Math.random() - 0.5) * 0.08,
+                    z: (Math.random() - 0.5) * 0.05
                 };
 
-                scene3d.add(coinMesh);
+                window.robux3DScene.add(coinMesh);
 
                 window.fallingCoinsArray.push({
                     mesh: coinMesh,
@@ -1086,7 +1066,50 @@
                 });
             }
         }
+        // 🎰 2. ЕДИНЫЙ ЦИКЛ ОБСЧЕТА ФИЗИКИ, КРУЧЕНИЯ И ГРАВИТАЦИИ (60 FPS)
+        function animate3D() {
+            // Предохранитель: если сцена Three.js не успела создаться, глушим шаг, дабы не крашить JS
+            if (!scene3d || !renderer3d || !camera3d) return;
+            
+            // Заставляем браузер телефона непрерывно перерисовывать 3D-сцену на каждом кадре
+            requestAnimationFrame(animate3D);
 
+            // Мягкое вращение и покачивание левой базовой монеты на ребре
+            if (spinningCoin) {
+                spinningCoin.rotation.y += 0.016; // Скорость кручения
+                spinningCoin.position.y = 0 + Math.sin(performance.now() * 0.002) * 0.07; // Левитация
+            }
+
+            // РЕАКТИВНЫЙ ФИЗИЧЕСКИЙ ДВИЖОК ПАДЕНИЯ МОНЕТ САЛЮТА
+            for (let i = window.fallingCoinsArray.length - 1; i >= 0; i--) {
+                let coinData = window.fallingCoinsArray[i];
+                
+                // Применяем силу тяжести к монете (увеличиваем скорость её падения строго вниз)
+                coinData.velocity.y -= 0.005; 
+                
+                // Сдвигаем трехмерные координаты меша в пространстве на величину импульса скорости
+                coinData.mesh.position.x += coinData.velocity.x;
+                coinData.mesh.position.y += coinData.velocity.y;
+                coinData.mesh.position.z += coinData.velocity.z;
+
+                // Хаотично вращаем монету по трем осям в полете, создавая реалистичные блики золота
+                coinData.mesh.rotation.x += coinData.rotSpeed.x;
+                coinData.mesh.rotation.y += coinData.rotSpeed.y;
+                coinData.mesh.rotation.z += coinData.rotSpeed.z;
+
+                // УМНЫЙ КЛИНИНГ ОЗУ СМАРТФОНА:
+                // Если монета пролетела весь корпус рулетки и улетела ниже дна (Y < -2.2) — 
+                // полностью удаляем её из мира Three.js и вырезаем из массива, разгружая видеочип телефона!
+                if (coinData.mesh.position.y < -2.2) {
+                    scene3d.remove(coinData.mesh);
+                    window.fallingCoinsArray.splice(i, 1);
+                }
+            }
+
+            // Командуем рендеру вывести обновленный кадр на экран телефона
+            renderer3d.render(scene3d, camera3d);
+        }
+        
         // 🔬 ТЕХНИЧЕСКИЙ ОТЛАДЧИК СВЯЗИ THREE.JS С СЕРВЕРОМ РЕНДЕР
         (async function checkThreeJsImport() {
             const isLoaded = (typeof THREE !== 'undefined');
