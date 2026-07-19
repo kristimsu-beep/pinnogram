@@ -169,12 +169,11 @@
             overflow: hidden !important;
         }
 
-        /* --- 🔍 ЛЕВАЯ ПАНЕЛЬ: СПИСОК ЧАТОВ И ПОИСК --- */
         .sidebar {
             background: var(--tg-sidebar);
             border-right: 1px solid var(--tg-border);
             display: flex;
-            flex-direction: column;
+            flex-direction: column; /* Элементы встают вертикально друг за другом */
             height: 100%;
             z-index: 10;
         }
@@ -223,10 +222,11 @@
         }
         .search-user-item:hover { background: var(--tg-active); }
 
-        /* Карточки чатов в списке */
+        /* 🔥 КРИТИЧЕСКИЙ ФИКС: Ограничиваем список чатов, чтобы он не выталкивал кнопку настроек! */
         .chats-list {
-            flex: 1;
-            overflow-y: auto;
+            flex: 1 !important; /* Забирает только свободное место */
+            overflow-y: auto !important; /* Если контактов много, внутри включится скролл, а кнопка останется на месте */
+            min-height: 0;
         }
         .chat-item {
             display: flex;
