@@ -3775,7 +3775,7 @@ DEFAULT_AVATAR_GRADIENTS = [
     "linear-gradient(135deg, #00c6ff, #0072ff)", # Синий
     "linear-gradient(135deg, #f12711, #f5af19)", # Огненный
     "linear-gradient(135deg, #11998e, #38ef7d)", # Изумрудный
-    "linear-gradient(135deg, #8e2de2, #4a00e0)"  // Фиолетовый
+    "linear-gradient(135deg, #8e2de2, #4a00e0)"  # Фиолетовый
 ]
 
 # 1️⃣ API: Регистрация нового киберпанк-аккаунта в Geragram
