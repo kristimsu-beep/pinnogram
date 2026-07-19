@@ -568,6 +568,45 @@
         }
         .wallpaper-thumb:hover { transform: scale(1.04); }
         .wallpaper-thumb.active { border-color: var(--tg-button); }
+        /* 🚨 КРИТИЧЕСКИЙ ФИКС: Запрещаем боковой шторке профиля вылезать за границы экрана, когда чат не выбран */
+        .main-layout {
+            overflow: hidden !important;
+        }
+
+        /* 📱 АДАПТИВНАЯ МОБИЛЬНАЯ ВЁРСТКА (ДЛЯ ТЕЛЕФОНОВ) */
+        @media (max-width: 768px) {
+            .main-layout {
+                grid-template-columns: 1fr; /* На смартфонах колонка становится одна */
+            }
+            .sidebar {
+                display: flex;
+                width: 100%;
+            }
+            .chat-window {
+                display: none; /* Изначально окно чата скрыто, виден только список контактов */
+                width: 100%;
+            }
+            
+            /* Когда чат открыт — переключаем экраны с помощью класса на body */
+            .chat-open .sidebar {
+                display: none !important;
+            }
+            .chat-open .chat-window {
+                display: flex !important;
+            }
+            
+            /* Шторка профиля на весь экран телефона */
+            .user-profile-drawer {
+                width: 100% !important;
+                right: -100% !important;
+            }
+            .user-profile-drawer.open {
+                right: 0 !important;
+            }
+        }
+        .mobile-back-btn {
+            display: block !important;
+        }    
     </style>
 </head>
 <body>
@@ -639,6 +678,11 @@
 
                 <!-- Шапка текущего чата -->
                 <div class="chat-header">
+                    <!-- 📱 Мобильная кнопка Назад (Появится только на смартфонах) -->
+                    <button class="footer-action-btn mobile-back-btn" onclick="backToSidebar()" style="display: none; margin-right: 12px; color: var(--tg-text); background: none; border: none; cursor: pointer;">
+                        <i class="fa-solid fa-arrow-left"></i>
+                    </button>
+                    
                     <div class="chat-header-user" onclick="openUserProfileDrawer()">
                         <div class="avatar-circle" id="currentChatAvatar">G</div>
                         <div class="chat-header-info">
@@ -650,6 +694,7 @@
                         <button onclick="openUserProfileDrawer()"><i class="fa-solid fa-circle-info"></i></button>
                     </div>
                 </div>
+
 
                 <!-- Игровое облако сообщений с обоями и узорами -->
                 <div class="chat-body-wrapper" id="chatBodyScroll">
@@ -1128,6 +1173,9 @@
         async function selectChat(username) {
             activeChatUser = username;
             
+            // 📱 АДАПТИВНОСТЬ: Добавляем класс на body, чтобы на смартфонах скрылся список и открылся чат
+            document.body.classList.add('chat-open');
+            
             // Скрываем начальный экран-заглушку
             document.getElementById('noChatSelected').style.display = 'none';
             
@@ -1141,7 +1189,19 @@
             // Включаем автообновление переписки каждые 2 секунды
             chatInterval = setInterval(loadChatHistory, 2000);
         }
-
+        // Функция возврата к списку контактов для мобильных устройств
+        function backToSidebar() {
+            activeChatUser = null;
+            if (chatInterval) clearInterval(chatInterval);
+            
+            // Убираем мобильный класс чата — возвращается сайдбар контактов
+            document.body.classList.remove('chat-open');
+            document.getElementById('noChatSelected').style.display = 'flex';
+            
+            // На всякий случай закрываем шторку профиля, если она была открыта
+            closeUserProfileDrawer();
+        }
+        
         // Синхронизация данных профиля и прав приватности (Муты / Блокировки)
         async function syncUserProfileAndPrivacy() {
             if (!activeChatUser) return;
@@ -1283,14 +1343,15 @@
             }
         }
 
-        // Отправка обычного текстового сообщения
+        // 🔥 ИСПРАВЛЕННЫЙ ДВИЖОК ОТПРАВКИ ТЕКСТОВЫХ СООБЩЕНИЙ
         async function sendMessage() {
             const input = document.getElementById('messageInputField');
             const text = input.value.trim();
             if (!text || !activeChatUser) return;
             
             try {
-                const res = await fetch('/api/getagram/messages/send', { // Примечание: на бэкенде роут geragram, поправим опечатку во фронте
+                // ИСПРАВЛЕНО: Теперь роут /api/geragram/... совпадает с СУБД бэкендом
+                const res = await fetch('/api/geragram/messages/send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1300,7 +1361,7 @@
                     })
                 });
                 
-                // Если бэкенд вернул 403 (блокировка), выкидываем ошибку
+                // Если бэкенд вернул 403 (блокировка)
                 if (res.status === 403) {
                     alert('Невозможно отправить сообщение: вы заблокированы или заблокировали пользователя.');
                     return;
@@ -1308,10 +1369,10 @@
                 
                 if (res.ok) {
                     input.value = '';
-                    loadChatHistory();
+                    loadChatHistory(); // Мгновенно обновляем переписку локально
                 }
             } catch (err) {
-                alert('Ошибка отправки.');
+                alert('Ошибка отправки сообщения в облако Geragram.');
             }
         }
         // --- 🎙️ ДВИЖОК ЗАПИСИ ГОЛОСОВЫХ СООБЩЕНИЙ ---
