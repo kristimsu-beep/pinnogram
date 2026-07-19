@@ -52,7 +52,7 @@
             z-index: 100;
         }
 
-        /* 3D Roblox Логотип с G и S */
+        /* 3D Roblox Логотип с G и S по центру */
         .roblox-logo-3d {
             width: 100px;
             height: 100px;
@@ -162,6 +162,7 @@
             height: 100%;
             width: 100%;
             position: relative;
+            overflow: hidden !important; /* Намертво прячет шторку профиля до вызова */
         }
 
         /* ЛЕВАЯ ПАНЕЛЬ: СПИСОК ЧАТОВ И КОНТАКТОВ */
@@ -205,6 +206,7 @@
             max-height: 200px;
             overflow-y: auto;
             display: none;
+            z-index: 15;
         }
         .search-user-item {
             display: flex;
@@ -230,22 +232,6 @@
         .chat-item:hover, .chat-item.active {
             background: var(--tg-active);
         }
-        
-        .avatar-circle {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            color: white;
-            font-size: 18px;
-            position: relative;
-            background-size: cover;
-            background-position: center;
-            flex-shrink: 0;
-        }
         .chat-info {
             margin-left: 12px;
             flex: 1;
@@ -258,8 +244,7 @@
         }
         .chat-name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .chat-last-msg { font-size: 13px; color: var(--tg-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-        /* ПРАВАЯ ПАНЕЛЬ: ОКНО ЧАТА */
+        /* --- ПРАВАЯ ПАНЕЛЬ: ОКНО ЧАТА И СТРОКА ВВОДА --- */
         .chat-window {
             display: flex;
             flex-direction: column;
@@ -282,7 +267,6 @@
         }
         .chat-header-info { margin-left: 12px; }
         .chat-header-status { font-size: 13px; color: var(--tg-text-muted); }
-        
         .chat-header-actions button {
             background: none; border: none; color: var(--tg-text-muted); font-size: 18px; cursor: pointer; margin-left: 15px;
         }
@@ -295,6 +279,7 @@
             overflow-y: auto;
             padding: 20px;
         }
+        /* Векторный паттерн-узор поверх любого градиента */
         .chat-body-pattern {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -322,14 +307,7 @@
         }
         .msg-inbound { background: #182533; align-self: flex-start; border-bottom-left-radius: 4px; }
         .msg-outbound { background: #2b5278; align-self: flex-end; border-bottom-right-radius: 4px; }
-        
-        .msg-time {
-            font-size: 11px;
-            color: rgba(255,255,255,0.5);
-            text-align: right;
-            margin-top: 4px;
-            display: block;
-        }
+        .msg-time { font-size: 11px; color: rgba(255,255,255,0.5); text-align: right; margin-top: 4px; display: block; }
 
         /* --- 🎙️ СТИЛИ ДЛЯ ГОЛОСОВЫХ СООБЩЕНИЙ --- */
         .voice-msg-player {
@@ -341,41 +319,15 @@
         }
         .voice-play-btn {
             background: var(--tg-button);
-            border: none;
-            width: 34px;
-            height: 34px;
-            border-radius: 50%;
-            color: white;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background 0.2s;
+            border: none; width: 34px; height: 34px; border-radius: 50%; color: white; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; transition: background 0.2s;
         }
-        .voice-play-btn:hover {
-            background: var(--tg-button-hover);
-        }
-        .voice-wave-visual {
-            flex: 1;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            gap: 3px;
-        }
-        /* Имитация дорожки звука в стиле Telegram */
-        .voice-wave-bar {
-            flex: 1;
-            height: 60%;
-            background: rgba(255,255,255,0.3);
-            border-radius: 2px;
-        }
-        .voice-duration {
-            font-size: 12px;
-            color: var(--tg-text-muted);
-            margin-left: 5px;
-        }
+        .voice-play-btn:hover { background: var(--tg-button-hover); }
+        .voice-wave-visual { flex: 1; height: 20px; display: flex; align-items: center; gap: 3px; }
+        .voice-wave-bar { flex: 1; height: 60%; background: rgba(255,255,255,0.3); border-radius: 2px; }
+        .voice-duration { font-size: 12px; color: var(--tg-text-muted); margin-left: 5px; }
 
-        /* --- ПОЛЕ ВВОДА СООБЩЕНИЙ (ФУТЕР) --- */
+        /* ПОЛЕ ВВОДА СООБЩЕНИЙ (ФУТЕР) */
         .chat-footer {
             background: var(--tg-sidebar);
             padding: 12px 20px;
@@ -383,6 +335,7 @@
             align-items: center;
             gap: 12px;
             border-top: 1px solid var(--tg-border);
+            z-index: 5;
         }
         .chat-input-field {
             flex: 1;
@@ -393,18 +346,9 @@
             color: white;
             outline: none;
             font-size: 15px;
-            transition: border-color 0.2s;
-        }
-        .chat-input-field:focus {
-            border-color: var(--tg-active);
         }
         .footer-action-btn {
-            background: none;
-            border: none;
-            color: var(--tg-text-muted);
-            font-size: 20px;
-            cursor: pointer;
-            transition: color 0.2s, transform 0.1s;
+            background: none; border: none; color: var(--tg-text-muted); font-size: 20px; cursor: pointer; transition: color 0.2s, transform 0.1s;
         }
         .footer-action-btn:hover { color: white; }
         .footer-action-btn:active { transform: scale(0.95); }
@@ -421,10 +365,7 @@
         /* --- ВЫПЛЫВАЮЩИЙ БОКОВОЙ ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ --- */
         .user-profile-drawer {
             position: absolute;
-            right: -350px;
-            top: 0;
-            width: 350px;
-            height: 100%;
+            right: -350px; top: 0; width: 350px; height: 100%;
             background: var(--tg-sidebar);
             border-left: 1px solid var(--tg-border);
             z-index: 20;
@@ -435,98 +376,34 @@
         .user-profile-drawer.open { right: 0; }
         
         .drawer-header {
-            padding: 16px;
-            border-bottom: 1px solid var(--tg-border);
-            display: flex;
-            align-items: center;
-            gap: 15px;
+            padding: 16px; border-bottom: 1px solid var(--tg-border); display: flex; align-items: center; gap: 15px;
         }
         .drawer-close { background: none; border: none; color: white; font-size: 18px; cursor: pointer; }
         
-        .drawer-body-container {
-            position: relative;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
+        .drawer-body-container { position: relative; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .drawer-body { padding: 24px; overflow-y: auto; text-align: center; display: flex; flex-direction: column; align-items: center; height: 100%; transition: filter 0.3s ease; }
         
-        .drawer-body {
-            padding: 24px;
-            overflow-y: auto;
-            text-align: center;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            height: 100%;
-            transition: filter 0.3s ease;
-        }
-        
-        /* 🚨 Эффект Блокировки: Размытие профиля по твоей задумке */
-        .drawer-body.blurred-lock {
-            filter: blur(12px) grayscale(0.5);
-            pointer-events: none;
-            user-select: none;
-        }
+        /* Стили Блокировки (Замытие профиля при ЧС) */
+        .drawer-body.blurred-lock { filter: blur(12px) grayscale(0.5); pointer-events: none; user-select: none; }
         .lock-overlay {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            display: none; /* Включается через JS при блокировке */
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 25;
-            background: rgba(23,33,43,0.75);
-            padding: 20px;
-            text-align: center;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 25; background: rgba(23,33,43,0.75); padding: 20px; text-align: center;
         }
         .lock-overlay i { font-size: 56px; color: #ff3333; margin-bottom: 16px; }
         .lock-overlay p { font-size: 16px; font-weight: 600; color: #ff5959; }
 
-        .profile-drawer-avatar {
-            width: 110px;
-            height: 110px;
-            border-radius: 50%;
-            font-size: 42px;
-            margin-bottom: 16px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background-size: cover;
-            background-position: center;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-        }
+        .profile-drawer-avatar { width: 110px; height: 110px; border-radius: 50%; font-size: 42px; margin-bottom: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; background-size: cover; background-position: center; box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
         .profile-drawer-name { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
         .profile-drawer-status { font-size: 14px; color: var(--tg-text-muted); margin-bottom: 24px; }
         
-        .info-box {
-            width: 100%;
-            background: var(--tg-bg);
-            padding: 14px;
-            border-radius: 10px;
-            text-align: left;
-            margin-bottom: 12px;
-            border: 1px solid rgba(255,255,255,0.02);
-        }
+        .info-box { width: 100%; background: var(--tg-bg); padding: 14px; border-radius: 10px; text-align: left; margin-bottom: 12px; border: 1px solid rgba(255,255,255,0.02); }
         .info-box label { font-size: 12px; color: var(--tg-text-muted); display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
         .info-box p { font-size: 15px; font-weight: 500; color: var(--tg-text); }
 
         .profile-actions-list { width: 100%; margin-top: 15px; }
         .action-item-btn {
-            width: 100%;
-            padding: 12px 14px;
-            background: none;
-            border: none;
-            text-align: left;
-            color: white;
-            font-size: 15px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            border-radius: 8px;
-            transition: background 0.15s;
+            width: 100%; padding: 12px 14px; background: none; border: none; text-align: left; color: white; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 12px; border-radius: 8px; transition: background 0.15s;
         }
         .action-item-btn:hover { background: rgba(255,255,255,0.05); }
         .action-item-btn.danger { color: #ff5959; }
@@ -534,86 +411,30 @@
 
         /* --- НАСТРОЙКИ: МОДАЛКА КАСТОМИЗАЦИИ ОБОЕВ --- */
         .modal-overlay {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.65);
-            backdrop-filter: blur(4px);
-            z-index: 200;
-            display: none;
-            align-items: center;
-            justify-content: center;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); z-index: 200; display: none; align-items: center; justify-content: center;
         }
         .modal-content {
-            background: var(--tg-sidebar);
-            padding: 28px;
-            border-radius: 16px;
-            width: 90%;
-            max-width: 440px;
-            border: 1px solid var(--tg-border);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+            background: var(--tg-sidebar); padding: 28px; border-radius: 16px; width: 90%; max-width: 440px; border: 1px solid var(--tg-border); box-shadow: 0 20px 40px rgba(0,0,0,0.6);
         }
-        .wallpaper-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-            margin: 16px 0;
-        }
-        .wallpaper-thumb {
-            height: 75px;
-            border-radius: 8px;
-            cursor: pointer;
-            border: 2px solid transparent;
-            background-size: cover;
-            transition: transform 0.2s, border-color 0.2s;
-        }
+        .wallpaper-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+        .wallpaper-thumb { height: 75px; border-radius: 8px; cursor: pointer; border: 2px solid transparent; background-size: cover; transition: transform 0.2s, border-color 0.2s; }
         .wallpaper-thumb:hover { transform: scale(1.04); }
         .wallpaper-thumb.active { border-color: var(--tg-button); }
-        /* 🚨 КРИТИЧЕСКИЙ ФИКС: Задаем базовую сетку мессенджера и запираем боковую шторку */
-        .main-layout {
-            display: grid;
-            grid-template-columns: 350px 1fr; /* Левая панель 350px, правая - на весь экран */
-            width: 100%;
-            height: 100%;
-            position: relative; /* Дает точку отсчета для выплывания шторки профиля */
-            overflow: hidden !important; /* Намертво прячет профиль до клика */
-        }
 
         /* 📱 АДАПТИВНАЯ МОБИЛЬНАЯ ВЁРСТКА (ДЛЯ ТЕЛЕФОНОВ) */
         @media (max-width: 768px) {
-            .main-layout {
-                grid-template-columns: 1fr; /* На смартфонах колонка становится одна */
-            }
-            .sidebar {
-                display: flex;
-                width: 100%;
-            }
-            .chat-window {
-                display: none; /* Изначально окно чата скрыто, виден только список контактов */
-                width: 100%;
-            }
+            .main-layout { grid-template-columns: 1fr; }
+            .sidebar { display: flex; width: 100%; }
+            .chat-window { display: none; width: 100%; }
             
-            /* Когда чат открыт — переключаем экраны с помощью класса на body */
-            .chat-open .sidebar {
-                display: none !important;
-            }
-            .chat-open .chat-window {
-                display: flex !important;
-            }
+            .chat-open .sidebar { display: none !important; }
+            .chat-open .chat-window { display: flex !important; }
             
-            /* Шторка профиля на весь экран телефона */
-            .user-profile-drawer {
-                width: 100% !important;
-                right: -100% !important;
+            .user-profile-drawer { width: 100% !important; right: -100% !important; }
+            .user-profile-drawer.open { right: 0 !important; }
+            .mobile-back-btn { display: block !important; }
             }
-            .user-profile-drawer.open {
-                right: 0 !important;
-            }
-
-            /* 🔥 ИСПРАВЛЕНО: Кнопка «Назад» активируется СТРОГО внутри мобильного режима */
-            .mobile-back-btn {
-                display: block !important;
-            }    
-        }
+        
     </style>
 </head>
 <body>
