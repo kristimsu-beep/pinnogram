@@ -489,68 +489,96 @@
             }
         }
 
-        // 🎰 2. РЕАКТИВНЫЙ ОТРИСОВЩИК КАДРОВ НА CANVAS С НЕОНОВЫМ СВЕЧЕНИЕМ (ПРОЗРАЧНЫЙ ДЛЯ 3D)
+        // 🎰 2. РЕАКТИВНЫЙ ОТРИСОВЩИК КАДРОВ С ПОЛУПРОЗРАЧНЫМИ СИЛУЭТАМИ РОБУКСОВ НА КАРТОЧКАХ
         function drawRoulette() {
             // Очищаем холст перед каждым кадром
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 🔥 ИСПРАВЛЕНО ДЛЯ 3D: Полностью убрали закрашивание фона глухим цветом (#090a0d)!
-            // Теперь холст 2D-рулетки прозрачный, и сквозь него видно вращающиеся монеты.
-
             const centerOffset = canvas.width / 2;
-
-            // СБРОС СТИЛЕЙ ТЕНИ (Важно для оптимизации, чтобы тени не лагали на смартфонах)
-            ctx.shadowBlur = 0;
+            ctx.shadowBlur = 0; // Сброс теней для оптимизации мобильного процессора
 
             rouletteItems.forEach((item, index) => {
                 let itemX = centerOffset + (index * totalItemSpace) - currentX;
 
-                // Рендерим только те карточки призов, которые физически видны в окне
+                // Рендерим только те карточки призов, которые физически видны на экране смартфона
                 if (itemX + itemWidth > 0 && itemX < canvas.width) {
                     
-                    // Вертикальный градиент карточки (делаем подложку полупрозрачной для стиля)
+                    // 1. Вертикальный градиент подложки карточки приза
                     let cardGrad = ctx.createLinearGradient(itemX, 15, itemX, 125);
                     cardGrad.addColorStop(0, item.color);
-                    cardGrad.addColorStop(1, "rgba(13, 14, 18, 0.85)"); // Полупрозрачный низ для глубины
+                    cardGrad.addColorStop(1, "rgba(13, 14, 18, 0.85)"); 
                     
                     ctx.fillStyle = cardGrad;
                     ctx.beginPath();
                     ctx.roundRect(itemX, 15, itemWidth, 110, 8);
                     ctx.fill();
 
-                    // Тонкая окантовка карточки приза
+                    // --- 💎 МАТЕМАТИЧЕСКАЯ ОТРИСОВКА ПОЛУПРОЗРАЧНОГО ЗHАКА ROBUX ---
+                    // Вычисляем абсолютный геометрический центр текущей карточки приза
+                    let centerX = itemX + (itemWidth / 2);
+                    let centerY = 65; // Середина карточки по вертикали
+
+                    ctx.save(); // Сохраняем холст перед трансформацией координат
+                    ctx.translate(centerX, centerY); // Переносим нулевую точку в центр карты
+                    ctx.rotate(0.2); // Слегка поворачиваем водяной знак на 12 градусов для стиля
+
+                    // Задаем цвет силуэта: очень нежный, полупрозрачный белый
+                    ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
+                    ctx.lineWidth = 4; // Толщина линий силуэта
+
+                    // Математически чертим внешний скошенный шестиугольник Roblox на фоне цифр
+                    ctx.beginPath();
+                    ctx.moveTo(-25, 12);
+                    ctx.lineTo(12, 25);
+                    ctx.lineTo(25, -12);
+                    ctx.lineTo(-12, -25);
+                    ctx.closePath();
+                    ctx.stroke();
+
+                    // Математически чертим внутренний фирменный квадратный вырез робукса
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(-6, 4);
+                    ctx.lineTo(4, 6);
+                    ctx.lineTo(6, -4);
+                    ctx.lineTo(-4, -6);
+                    ctx.closePath();
+                    ctx.stroke();
+
+                    ctx.restore(); // Возвращаем холст в исходное состояние для отрисовки текста
+                    // ----------------=======================================---
+
+                    // 2. Тонкая неоновая окантовка карточки приза
                     ctx.strokeStyle = "rgba(34, 37, 48, 0.7)";
                     ctx.lineWidth = 1.5;
                     ctx.stroke();
 
-                    // Номинал робуксов
+                    // 3. Вывод номинала робуксов (Текст ложится ПОВЕРХ водяного знака)
                     ctx.fillStyle = item.textColor;
                     ctx.font = "bold 16px 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif";
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
-                    ctx.fillText(item.label, itemX + (itemWidth / 2), 65);
+                    ctx.fillText(item.label, centerX, centerY);
                     
-                    // Декоративная полоска снизу карточки
+                    // 4. Декоративная полоска снизу карточки
                     ctx.fillStyle = "rgba(255, 255, 255, 0.015)";
                     ctx.fillRect(itemX + 12, 95, itemWidth - 24, 16);
                 }
             });
 
             // --- 🌌 ЭФФЕКТ СИНЕМАТИЧНОЙ ВИНЬЕТКИ (ЗАТЕМНЕНИЕ ПО КРАЯМ БАРАБАНА) ---
-            // Оставляем её, но делаем уход в прозрачность к центру, чтобы открыть вид на 3D-монеты!
             let edgeGrad = ctx.createLinearGradient(0, 0, canvas.width, 0);
-            edgeGrad.addColorStop(0, "#090a0d");        // Левый край полностью скрывает появление карт
-            edgeGrad.addColorStop(0.20, "transparent"); // Размытие открывает обзор на 3D сцену
-            edgeGrad.addColorStop(0.80, "transparent"); // Размытие справа
-            edgeGrad.addColorStop(1, "#090a0d");        // Правый край полностью скрывает уход карт
+            edgeGrad.addColorStop(0, "#090a0d");        
+            edgeGrad.addColorStop(0.20, "transparent"); 
+            edgeGrad.addColorStop(0.80, "transparent"); 
+            edgeGrad.addColorStop(1, "#090a0d");        
             
             ctx.fillStyle = edgeGrad;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // --- 🌌 НЕОНОВЫЙ КИБЕРПАНК СЛУЖЕБНЫЙ МАРКЕР (ЦЕНТРАЛЬНЫЙ ЛАЗЕР) ---
-            // Луч ложится поверх виньетки и карточек, подсвечивая монеты сзади
             ctx.shadowColor = "#ff5722";
-            ctx.shadowBlur = 12; // Неоновое свечение лазера
+            ctx.shadowBlur = 12; 
             
             let laserGrad = ctx.createLinearGradient(canvas.width / 2 - 2, 0, canvas.width / 2 + 2, canvas.height);
             laserGrad.addColorStop(0, "#ff7043");
@@ -560,12 +588,9 @@
             ctx.fillStyle = laserGrad;
             ctx.fillRect(canvas.width / 2 - 2, 0, 4, canvas.height);
 
-            // Сбрасываем тени, чтобы процессор телефона отдыхал
-            ctx.shadowBlur = 0;
+            ctx.shadowBlur = 0; // Сбрасываем тени, чтобы процессор отдыхал
         }
-
-
-
+        
         // 🎰 3. ФИЗИЧЕСКИЙ ДВИЖОК ПЛАВНОГО ЗАМЕДЛЕНИЯ КРУЧЕНИЯ (КРИВАЯ БЕЗЬЕ)
         function animateSpin(targetX, duration) {
             const startTime = performance.now();
