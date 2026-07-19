@@ -603,10 +603,12 @@
             .user-profile-drawer.open {
                 right: 0 !important;
             }
+
+            /* 🔥 ИСПРАВЛЕНО: Кнопка «Назад» активируется СТРОГО внутри мобильного режима */
+            .mobile-back-btn {
+                display: block !important;
+            }    
         }
-        .mobile-back-btn {
-            display: block !important;
-        }    
     </style>
 </head>
 <body>
@@ -676,7 +678,7 @@
                     <p style="margin-top: 10px; font-size: 14px;">Выберите чат из списка или найдите пользователя сверху</p>
                 </div>
 
-                <!-- Шапка текущего чата -->
+                <!-- 🚨 КРИТИЧЕСКИЙ ФИКС: СЮДА ВОЗВРАЩАЕМ СТЁРТЫЙ ОТКРЫВАЮЩИЙ ТЕГ ДЛЯ СЕТКИ ШАПКИ ЧАТА -->
                 <div class="chat-header">
                     <!-- 📱 Мобильная кнопка Назад (Появится только на смартфонах) -->
                     <button class="footer-action-btn mobile-back-btn" onclick="backToSidebar()" style="display: none; margin-right: 12px; color: var(--tg-text); background: none; border: none; cursor: pointer;">
@@ -694,7 +696,6 @@
                         <button onclick="openUserProfileDrawer()"><i class="fa-solid fa-circle-info"></i></button>
                     </div>
                 </div>
-
 
                 <!-- Игровое облако сообщений с обоями и узорами -->
                 <div class="chat-body-wrapper" id="chatBodyScroll">
