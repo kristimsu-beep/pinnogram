@@ -32,13 +32,14 @@
         body {
             background-color: #080c10;
             color: var(--tg-text);
-            height: 100vh; /* Ограничиваем высоту по экрану */
-            width: 100vw;
+            height: 100vh !important; /* Намертво фиксируем высоту по экрану */
+            width: 100vw !important;
             display: flex;
             justify-content: center;
             align-items: center;
-            overflow: hidden;
+            overflow: hidden !important; /* Запрещаем странице скроллиться вниз */
         }
+
         /* 🔥 ВОЗВРАЩАЕМ РАЗМЕРЫ ГЛАВНОМУ КОНТЕЙНЕРУ ПРИЛОЖЕНИЯ */
         .messenger-wrapper {
             width: 100%;
@@ -1358,11 +1359,6 @@
             } catch (err) { alert('Ошибка действия.'); }
         }
 
-        // Защита от XSS-уязвимостей (экранирование спецсимволов)
-        function escapeHtml(text) {
-            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
-        }
         function openUserProfileDrawer() { 
             const drawer = document.getElementById('profileDrawer');
             if (drawer) {
@@ -1379,6 +1375,19 @@
                 drawer.classList.remove('open'); 
             }
         }
+        // Функция отслеживания нажатия клавиши Enter внутри строки ввода
+        function checkSendKey(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // Защита от XSS-уязвимостей (ИСПРАВЛЕНО: правильное экранирование кавычки)
+        function escapeHtml(text) {
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
     </script>
 </body>
 </html>
+
