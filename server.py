@@ -20,6 +20,7 @@ from fastapi.responses import RedirectResponse, FileResponse
 from fastapi import Form, File, UploadFile
 from typing import List
 from fastapi.staticfiles import StaticFiles
+from bson import ObjectId  # 🎯 ВОТ ЭТОТ ИМПОРТ ВСЁ ИСПРАВИТ!
 
 
 # Вечное облачное хранилище для видео и голосовых Pinnogram
