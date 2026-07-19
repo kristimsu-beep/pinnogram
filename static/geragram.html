@@ -29,18 +29,19 @@
             -webkit-font-smoothing: antialiased;
         }
 
-        /* 🚨 НАМЕРТВО ЗАПИРАЕМ ВЫСОТУ СТРАНИЦЫ ПО ЭКРАНУ */
+        /* 🚨 НАМЕРТВО ЗАПИРАЕМ СТРАНИЦУ ОТ СКРОЛЛА ВНИЗ */
         html, body {
             background-color: #080c10;
             color: var(--tg-text);
-            height: 100vh !important; /* Ровно 100% от высоты твоего экрана (твои 1814px) */
+            height: 100vh !important;
             width: 100vw !important;
             margin: 0 !important;
             padding: 0 !important;
             display: flex;
             justify-content: center;
             align-items: center;
-            overflow: hidden !important; /* Категорически запрещаем странице растягиваться вниз! */
+            overflow: hidden !important; /* Убирает скролл всей страницы */
+            touch-action: none; /* Запрещает свайпы страницы вниз на телефонах */
         }
 
         /* 1. Главный экран мессенджера (Жестко запираем в границы окна браузера) */
@@ -1187,8 +1188,21 @@
                         `;
                     }
                     
-                    // Парсим красивое время
-                    const msgTime = msg.timestamp ? msg.timestamp.substring(11, 16) : '--:--';
+                    // 🔥 ИСПРАВЛЕНО: Динамическая конвертация серверного времени в местное время региона пользователя
+                    let msgTime = '--:--';
+                    if (msg.timestamp) {
+                        try {
+                            // Если строка времени не оканчивается на Z, подставляем её, чтобы JS понял, что это UTC
+                            const dateStr = msg.timestamp.endsWith('Z') ? msg.timestamp : msg.timestamp + 'Z';
+                            const utcDate = new Date(dateStr);
+                            
+                            // Форматируем строго под местный регион пользователя (выведет локальные часы:минуты)
+                            msgTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        } catch(e) {
+                            // Резервный ручной парсинг на случай сбоя формата
+                            msgTime = msg.timestamp.substring(11, 16); 
+                        }
+                    }
                     
                     bubble.innerHTML = `
                         ${bodyContent}
@@ -1205,6 +1219,7 @@
                 console.error('Ошибка загрузки сообщений:', err);
             }
         }
+
 
         // 🔥 ИСПРАВЛЕННЫЙ ДВИЖОК ОТПРАВКИ ТЕКСТОВЫХ СООБЩЕНИЙ
         async function sendMessage() {
