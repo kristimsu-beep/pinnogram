@@ -9,7 +9,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
-        :root {
+        /* 🎨 СИСТЕМА ДИНАМИЧЕСКИХ ТЕМ */
+        :root, [data-theme="dark"] {
             --tg-bg: #0e1621;
             --tg-sidebar: #17212b;
             --tg-active: #2b5278;
@@ -19,6 +20,31 @@
             --tg-button: #2481cc;
             --tg-button-hover: #2996e6;
             --chat-wall: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            --menu-bg: #1c2834;
+        }
+        [data-theme="light"] {
+            --tg-bg: #ffffff;
+            --tg-sidebar: #f1f5f9;
+            --tg-active: #e2e8f0;
+            --tg-text: #0f172a;
+            --tg-text-muted: #64748b;
+            --tg-border: #cbd5e1;
+            --tg-button: #3b82f6;
+            --tg-button-hover: #2563eb;
+            --chat-wall: linear-gradient(135deg, #f3f4f6, #e5e7eb);
+            --menu-bg: #ffffff;
+        }
+        [data-theme="black"] {
+            --tg-bg: #000000;
+            --tg-sidebar: #0a000a;
+            --tg-active: #1a1a1a;
+            --tg-text: #ffffff;
+            --tg-text-muted: #a3a3a3;
+            --tg-border: #262626;
+            --tg-button: #ff3333;
+            --tg-button-hover: #cc0000;
+            --chat-wall: linear-gradient(135deg, #000000, #121212);
+            --menu-bg: #121212;
         }
 
         * {
@@ -29,7 +55,7 @@
             -webkit-font-smoothing: antialiased;
         }
 
-        /* 🚨 НАМЕРТВО ЗАПИРАЕМ СТРАНИЦУ ОТ СКРОЛЛА ВНИЗ */
+        /* 🚨 УКОМПЛЕКТОВЫВАЕМ СТРАНИЦУ, НО ВОЗВРАЩАЕМ ЗУМ И ЖЕСТЫ */
         html, body {
             background-color: #080c10;
             color: var(--tg-text);
@@ -40,9 +66,12 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            overflow: hidden !important; /* Убирает скролл всей страницы */
-            touch-action: none; /* Запрещает свайпы страницы вниз на телефонах */
+            overflow: hidden !important; /* Намертво запирает прокрутку страницы вниз */
+            
+            /* 🎯 ИСПРАВЛЕНО: Заменили none на auto, чтобы вернулся зум пальцами! */
+            touch-action: auto !important; 
         }
+
 
         /* 1. Главный экран мессенджера (Жестко запираем в границы окна браузера) */
         .messenger-wrapper {
@@ -470,7 +499,72 @@
             .user-profile-drawer { width: 100% !important; right: -100% !important; }
             .user-profile-drawer.open { right: 0 !important; }
             .mobile-back-btn { display: block !important; }
-        }        
+        }
+        /* 📱 ТЕЛЕГРАМ-СТИЛЬ: КОНТЕКСТНОЕ МЕНЮ */
+        .context-menu {
+            position: fixed;
+            background: var(--menu-bg);
+            border: 1px solid var(--tg-border);
+            border-radius: 12px;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.5);
+            padding: 6px;
+            z-index: 1000;
+            display: none;
+            min-width: 170px;
+            animation: menuFadeIn 0.15s ease;
+        }
+        @keyframes menuFadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .context-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            color: var(--tg-text);
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background 0.15s;
+        }
+        .context-menu-item:hover { background: var(--tg-active); }
+        .context-menu-item.danger { color: #ff5959; }
+        .context-menu-item.danger:hover { background: rgba(255,89,89,0.1); }
+
+        /* 📌 СТИЛИ ЗАКРЕПЛЁННОГО СООБЩЕНИЯ */
+        .pinned-message-bar {
+            background: var(--tg-sidebar);
+            border-bottom: 1px solid var(--tg-border);
+            padding: 8px 20px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 4;
+        }
+        .pinned-content { border-left: 2px solid var(--tg-button); padding-left: 10px; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* 🎙️ СТИЛИ БЛОКА ОТВЕТА (ЦИТАТЫ) НАД ИНПУТОМ */
+        .reply-preview-bar {
+            background: var(--tg-sidebar);
+            border-top: 1px solid var(--tg-border);
+            padding: 8px 20px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .reply-content { border-left: 2px solid var(--tg-button); padding-left: 10px; font-size: 13px; }
+        
+        /* Стили цитаты внутри самого пузыря сообщения */
+        .msg-reply-quote {
+            background: rgba(0,0,0,0.15);
+            border-left: 2px solid var(--tg-button);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-bottom: 6px;
+            color: var(--tg-text-muted);
+        }
     </style>
 </head>
 <body>
@@ -529,7 +623,7 @@
                 </button>
             </div>
 
-            <!-- ПРАВАЯ КОЛОНКА: ОКНО ПЕРЕПИСКИ -->
+            <!-- ПРАВАЯ КОЛОНКА: ОКНО ПЕРЕПИСКИ (ОБНОВЛЕНО: ЗАКРЕПЫ И ОТВЕТЫ) -->
             <div class="chat-window">
                 
                 <!-- Начальный экран, когда ни один чат не открыт -->
@@ -538,10 +632,9 @@
                         <span class="roblox-logo-text">GS</span>
                     </div>
                     <p style="margin-top: 10px; font-size: 14px;">Выберите чат из списка или найдите пользователя сверху</p>
-                </div> <!-- 🎯 ВОТ ЭТОТ ПРОПУЩЕННЫЙ ТЕГ ВСЁ ЛОМАЛ! Закрываем заглушку -->
+                </div>
 
-
-                <!-- 🚨 КРИТИЧЕСКИЙ ФИКС: СЮДА ВОЗВРАЩАЕМ СТЁРТЫЙ ОТКРЫВАЮЩИЙ ТЕГ ДЛЯ СЕТКИ ШАПКИ ЧАТА -->
+                <!-- Шапка текущего чата -->
                 <div class="chat-header">
                     <!-- 📱 Мобильная кнопка Назад (Появится только на смартфонах) -->
                     <button class="footer-action-btn mobile-back-btn" onclick="backToSidebar()" style="display: none; margin-right: 12px; color: var(--tg-text); background: none; border: none; cursor: pointer;">
@@ -560,6 +653,12 @@
                     </div>
                 </div>
 
+                <!-- 📌 Панель закреплённого сообщения (Врезается сразу под шапку) -->
+                <div class="pinned-message-bar" id="pinnedMessageBar">
+                    <div class="pinned-content" id="pinnedMessageText">Закреплённое сообщение</div>
+                    <button class="footer-action-btn" onclick="unpinMessageGlobal()" style="font-size:14px; background:none; border:none; color:var(--tg-text-muted); cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+
                 <!-- Игровое облако сообщений с обоями и узорами -->
                 <div class="chat-body-wrapper" id="chatBodyScroll">
                     <!-- Постоянный векторный узор Telegram поверх любого фона -->
@@ -567,6 +666,15 @@
                     <div class="messages-container" id="messagesContainer">
                         <!-- Динамические сообщения -->
                     </div>
+                </div>
+
+                <!-- 🎙️ Панель превью ответа на сообщение (Врезается прямо над футером ввода) -->
+                <div class="reply-preview-bar" id="replyPreviewBar">
+                    <div class="reply-content">
+                        <div style="color: var(--tg-button); font-weight:600; font-size:11px;" id="replyTitleText">Ответ на сообщение</div>
+                        <div id="replyPreviewText" style="color: var(--tg-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:400px; font-size:13px;">Текст...</div>
+                    </div>
+                    <button class="footer-action-btn" onclick="cancelReplyMode()" style="font-size:14px; background:none; border:none; color:var(--tg-text-muted); cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
                 </div>
 
                 <!-- Поле ввода и управления медиа -->
@@ -584,6 +692,7 @@
                     </button>
                 </div>
             </div>
+
             <!-- 👤 ВЫПЛЫВАЮЩИЙ БОКОВОЙ ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ -->
             <div class="user-profile-drawer" id="profileDrawer">
                 <div class="drawer-header">
@@ -634,7 +743,7 @@
         </div> <!-- /main-layout -->
     </div> <!-- /messenger-wrapper -->
 
-    <!-- 🎨 МОДАЛЬНОЕ ОКНО: ОБОИ И БЕЗОПАСНОСТЬ -->
+    <!-- 🎨 МОДАЛЬНОЕ ОКНО: ОБОИ И БЕЗОПАСНОСТЬ (С ВЫБОРОМ ТЕМ) -->
     <div class="modal-overlay" id="wallpaperModal">
         <div class="modal-content">
             <h3 style="margin-bottom: 12px; font-weight: 600;">Кастомизация мессенджера</h3>
@@ -665,16 +774,31 @@
                 <i class="fa-solid fa-shield-halved"></i> Настройка двухфакторной аутентификации (2FA)
             </button>
 
-            <button class="auth-btn" style="background:none; color:var(--tg-text-muted); margin-top:15px;" onclick="closeWallpaperModal()">Закрыть</button>
+            <!-- 🎯 ВОТ СЮДА ДОБАВИЛИ ВЫБОР ТЕМЫ ОФОРМЛЕНИЯ -->
+            <hr style="border: 0; border-top: 1px solid var(--tg-border); margin: 18px 0;">
+            <h4 style="margin-bottom: 12px; font-size:15px; font-weight:600;">Тема оформления</h4>
+            <div style="display: flex; gap: 8px; margin-bottom: 15px;">
+                <button class="auth-btn" style="background: #f1f5f9; color: #0f172a; font-size:12px; padding:10px 8px; font-weight:600;" onclick="changeMessengerTheme('light')">Белая</button>
+                <button class="auth-btn" style="background: #17212b; color: #fff; font-size:12px; padding:10px 8px; font-weight:600;" onclick="changeMessengerTheme('dark')">Тёмная</button>
+                <button class="auth-btn" style="background: #000000; color: #fff; font-size:12px; padding:10px 8px; font-weight:600; border: 1px solid #262626;" onclick="changeMessengerTheme('black')">Чёрная</button>
+            </div>
+
+            <button class="auth-btn" style="background:none; color:var(--tg-text-muted); margin-top:5px;" onclick="closeWallpaperModal()">Закрыть</button>
         </div>
     </div>
+
     <script>
         // --- 📱 ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И ДАННЫЕ СЕССИИ ---
         let myUsername = null;        // Никнейм текущего авторизованного юзера
         let isRegisterMode = false;   // Переключатель режима Вход / Регистрация
         let activeChatUser = null;   // С кем открыт чат в данный момент
         let chatInterval = null;      // Таймер регулярного обновления сообщений
-
+        let selectedMsgId = null;       // ID сообщения, на которое кликнули
+        let selectedMsgText = "";     // Текст выбранного сообщения
+        let selectedMsgOwner = false;  // Моё ли это сообщение
+        let replyToMsgId = null;       // ID сообщения, на которое отвечаем
+        let editMsgId = null;          // ID сообщения, которое редактируем
+        
         // Автоматический старт при полной загрузке DOM-дерева
         window.addEventListener('DOMContentLoaded', () => {
             checkActiveSession();
@@ -1221,25 +1345,44 @@
         }
 
 
-        // 🔥 ИСПРАВЛЕННЫЙ ДВИЖОК ОТПРАВКИ ТЕКСТОВЫХ СООБЩЕНИЙ
+        // 🔥 СУПЕР-ДВИЖОК ОТПРАВКИ: ТЕКСТ, РЕДАКТИРОВАНИЕ И ЦИТИРОВАНИЕ
         async function sendMessage() {
             const input = document.getElementById('messageInputField');
             const text = input.value.trim();
             if (!text || !activeChatUser) return;
             
+            // 📝 РЕЖИМ 1: Если включено РЕДАКТИРОВАНИЕ нашего сообщения
+            if (editMsgId) {
+                const bubble = document.querySelector(`[data-id="${editMsgId}"]`);
+                if (bubble && bubble.querySelector('span')) {
+                    bubble.querySelector('span').innerText = text + " (изменено)";
+                }
+                
+                // В реальном приложении здесь отправляется PUT/POST запрос на бэкенд /api/geragram/messages/edit
+                editMsgId = null; // Сбрасываем флаг правки
+                input.value = '';
+                return;
+            }
+
+            // 💬 РЕЖИМ 2 и 3: Обычная отправка или ОТВЕТ (цитирование)
             try {
-                // ИСПРАВЛЕНО: Теперь роут /api/geragram/... совпадает с СУБД бэкендом
+                const payload = {
+                    to_user: activeChatUser,
+                    content: text,
+                    msg_type: 'text'
+                };
+
+                // Если мы отвечаем на сообщение, подшиваем в контент цитату (для визуализации в чате)
+                if (replyToMsgId) {
+                    payload.content = `[В ответ на: ${selectedMsgText}]\n${text}`;
+                }
+
                 const res = await fetch('/api/geragram/messages/send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        to_user: activeChatUser,
-                        content: text,
-                        msg_type: 'text'
-                    })
+                    body: JSON.stringify(payload)
                 });
                 
-                // Если бэкенд вернул 403 (блокировка)
                 if (res.status === 403) {
                     alert('Невозможно отправить сообщение: вы заблокированы или заблокировали пользователя.');
                     return;
@@ -1247,12 +1390,14 @@
                 
                 if (res.ok) {
                     input.value = '';
-                    loadChatHistory(); // Мгновенно обновляем переписку локально
+                    if (replyToMsgId) cancelReplyMode(); // Гасим плашку ответа над инпутом после отправки
+                    loadChatHistory(); 
                 }
             } catch (err) {
                 alert('Ошибка отправки сообщения в облако Geragram.');
             }
         }
+
         // --- 🎙️ ДВИЖОК ЗАПИСИ ГОЛОСОВЫХ СООБЩЕНИЙ ---
         let mediaRecorder = null;
         let audioChunks = [];
@@ -1405,8 +1550,98 @@
             const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
             return text.replace(/[&<>"']/g, function(m) { return map[m]; });
         }
-    </script>
+        // Изменение темы оформления мессенджера
+        function changeMessengerTheme(themeName) {
+            document.documentElement.setAttribute('data-theme', themeName);
+            localStorage.setItem('geragram-theme', themeName); // Сохраняем выбор в память
+        }
+        // Восстановление темы при загрузке
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('geragram-theme') || 'dark';
+            changeMessengerTheme(savedTheme);
+        });
 
+        // Отслеживание долгого нажатия (для телефонов) и правого клика (для ПК) на пузыри сообщений
+        document.getElementById('messagesContainer').addEventListener('contextmenu', function(e) {
+            const bubble = e.target.closest('.msg-bubble');
+            if (!bubble) return;
+            e.preventDefault(); // Блокируем стандартное меню браузера
+            
+            // Запоминаем данные сообщения (в реальном приложении ID берется из data-id)
+            selectedMsgId = bubble.dataset.id || Math.random().toString(); 
+            bubble.dataset.id = selectedMsgId; // Присваиваем временный ID, если его нет
+            selectedMsgText = bubble.querySelector('span') ? bubble.querySelector('span').innerText : "Голосовое сообщение";
+            selectedMsgOwner = bubble.classList.contains('msg-outbound'); // Проверяем, наше ли
+            
+            // Управляем видимостью кнопок Редактировать/Удалить в зависимости от автора
+            document.getElementById('ctxEdit').style.display = selectedMsgOwner ? 'flex' : 'none';
+            document.getElementById('ctxDelete').style.display = selectedMsgOwner ? 'flex' : 'none';
+            
+            // Позиционируем контекстное меню на экране
+            const menu = document.getElementById('msgContextMenu');
+            menu.style.top = `${e.clientY}px`;
+            menu.style.left = `${e.clientX}px`;
+            menu.style.display = 'block';
+        });
+
+        // Скрываем меню при клике в любом другом месте экрана
+        document.addEventListener('click', function() {
+            document.getElementById('msgContextMenu').style.display = 'none';
+        });
+
+        // Функция копирования в буфер обмена
+        function triggerCopyAction() {
+            navigator.clipboard.writeText(selectedMsgText);
+            alert('Текст скопирован в буфер обмена!');
+        }
+
+        // Функция активации режима ответа (цитирования)
+        function triggerReplyAction() {
+            replyToMsgId = selectedMsgId;
+            editMsgId = null; // Сбрасываем режим редактирования, если он был
+            document.getElementById('replyPreviewText').innerText = selectedMsgText;
+            document.getElementById('replyPreviewBar').style.display = 'flex';
+            document.getElementById('messageInputField').focus();
+        }
+        function cancelReplyMode() {
+            replyToMsgId = null;
+            document.getElementById('replyPreviewBar').style.display = 'none';
+        }
+
+        // Функция активации режима редактирования сообщения
+        function triggerEditAction() {
+            editMsgId = selectedMsgId;
+            replyToMsgId = null; // Сбрасываем ответ
+            const input = document.getElementById('messageInputField');
+            input.value = selectedMsgText; // Подставляем текст в инпут для правки
+            input.focus();
+        }
+
+        // Функция закрепления сообщения в шапке чата
+        function triggerPinAction() {
+            const bar = document.getElementById('pinnedMessageBar');
+            document.getElementById('pinnedMessageText').innerText = `Закреплено: ${selectedMsgText}`;
+            bar.style.display = 'flex';
+        }
+        function unpinMessageGlobal() {
+            document.getElementById('pinnedMessageBar').style.display = 'none';
+        }
+
+        // Имитация удаления и редактирования (визуально на фронтенде для теста)
+        function triggerDeleteAction() {
+            const bubble = document.querySelector(`[data-id="${selectedMsgId}"]`);
+            if (bubble) bubble.remove();
+        }
+        
+    </script>
+    <!-- 📱 КОНТЕКСТНОЕ МЕНЮ GERAGRAM -->
+    <div class="context-menu" id="msgContextMenu">
+        <div class="context-menu-item" id="ctxReply" onclick="triggerReplyAction()"><i class="fa-solid fa-reply"></i> Ответить</div>
+        <div class="context-menu-item" id="ctxCopy" onclick="triggerCopyAction()"><i class="fa-solid fa-copy"></i> Копировать</div>
+        <div class="context-menu-item" id="ctxPin" onclick="triggerPinAction()"><i class="fa-solid fa-thumbtack"></i> Закрепить</div>
+        <div class="context-menu-item" id="ctxEdit" onclick="triggerEditAction()"><i class="fa-solid fa-pen"></i> Редактировать</div>
+        <div class="context-menu-item danger" id="ctxDelete" onclick="triggerDeleteAction()"><i class="fa-solid fa-trash"></i> Удалить</div>
+    </div>
 </body>
 </html>
 
