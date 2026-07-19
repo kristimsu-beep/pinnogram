@@ -29,15 +29,18 @@
             -webkit-font-smoothing: antialiased;
         }
 
-        body {
+        /* 🚨 НАМЕРТВО ЗАПИРАЕМ ВЫСОТУ СТРАНИЦЫ ПО ЭКРАНУ */
+        html, body {
             background-color: #080c10;
             color: var(--tg-text);
-            height: 100vh !important; /* Намертво фиксируем высоту по экрану */
+            height: 100vh !important; /* Ровно 100% от высоты твоего экрана (твои 1814px) */
             width: 100vw !important;
+            margin: 0 !important;
+            padding: 0 !important;
             display: flex;
             justify-content: center;
             align-items: center;
-            overflow: hidden !important; /* Запрещаем странице скроллиться вниз */
+            overflow: hidden !important; /* Категорически запрещаем странице растягиваться вниз! */
         }
 
         /* 1. Главный экран мессенджера (Жестко запираем в границы окна браузера) */
