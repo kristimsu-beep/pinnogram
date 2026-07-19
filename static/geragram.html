@@ -1391,75 +1391,7 @@
             return text.replace(/[&<>"']/g, function(m) { return map[m]; });
         }
     </script>
-    <!-- 🚨 АВТОМАТИЧЕСКИЙ ЛОГ-СКАНЕР GERAGRAM ДЛЯ ПОИСКА ОШИБОК -->
-    <div id="renderDebugLog" style="position: fixed; bottom: 10px; right: 10px; width: 320px; max-height: 250px; background: rgba(0,0,0,0.9); border: 2px solid #ff3333; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 11px; color: #4cd964; overflow-y: auto; z-index: 99999; box-shadow: 0 10px 30px rgba(0,0,0,0.8); line-height: 1.4;">
-        <div style="font-weight: bold; color: #ff3333; margin-bottom: 6px; border-bottom: 1px solid #ff3333; padding-bottom: 4px;">🚀 GERAGRAM RENDER LOG:</div>
-        <div id="debugLogContent">Запуск сканирования интерфейса...</div>
-    </div>
 
-    <script>
-        // Функция автоматического замера блоков в реальном времени
-        function runInterfaceScanner() {
-            const logs = [];
-            
-            // 1. Проверяем главный контейнер приложения
-            const wrapper = document.getElementById('messengerApp');
-            if (!wrapper) {
-                logs.push("<span style='color:#ff5959;'>❌ Ошибка: #messengerApp отсутствует в HTML!</span>");
-            } else {
-                const wStyles = window.getComputedStyle(wrapper);
-                logs.push(`✅ Мессенджер: ${wrapper.offsetWidth}x${wrapper.offsetHeight}px (видимость: ${wStyles.display})`);
-            }
-
-            // 2. Проверяем заглушку
-            const noChat = document.getElementById('noChatSelected');
-            if (noChat) {
-                logs.push(`⚠️ Заглушка чата: видимость = ${window.getComputedStyle(noChat).display}`);
-            }
-
-            // 3. Проверяем правую панель окна чата
-            const chatWin = document.querySelector('.chat-window');
-            if (!chatWin) {
-                logs.push("<span style='color:#ff5959;'>❌ Ошибка: Класс .chat-window не найден!</span>");
-            } else {
-                logs.push(`✅ Окно чата: ${chatWin.offsetWidth}x${chatWin.offsetHeight}px`);
-            }
-
-            // 4. Ищем строку ввода сообщений
-            const footer = document.querySelector('.chat-footer');
-            if (!footer) {
-                logs.push("<span style='color:#ff5959;'>❌ Ошибка: Поле ввода (.chat-footer) не найдено в HTML!</span>");
-            } else {
-                const rect = footer.getBoundingClientRect();
-                logs.push(`✅ Строка ввода: ${footer.offsetWidth}x${footer.offsetHeight}px`);
-                logs.push(`📍 Позиция Y на экране: ${Math.round(rect.top)}px (высота окна: ${window.innerHeight}px)`);
-                
-                // Проверяем, улетела ли кнопка за край монитора
-                if (rect.top > window.innerHeight) {
-                    logs.push("<span style='color:#ffb045;'>🚨 ВНИМАНИЕ: Строка ввода уползла вниз за границы экрана!</span>");
-                }
-            }
-
-            // 5. Ищем кнопку настроек обоев
-            const paletteBtn = document.querySelector('.sidebar .auth-btn');
-            if (!paletteBtn) {
-                logs.push("<span style='color:#ffb045;'>⚠️ Кнопка «Обои» не найдена в сайдбаре!</span>");
-            } else {
-                const pRect = paletteBtn.getBoundingClientRect();
-                logs.push(`📍 Кнопка настроек Y: ${Math.round(pRect.top)}px`);
-                if (pRect.top > window.innerHeight) {
-                    logs.push("<span style='color:#ffb045;'>🚨 ВНИМАНИЕ: Кнопка настроек уползла вниз за границы экрана!</span>");
-                }
-            }
-
-            // Выводим логи в наше черное окошко отладки
-            document.getElementById('debugLogContent').innerHTML = logs.join('<br>');
-        }
-
-        // Запускаем сканер сразу и повторяем каждые 3 секунды, чтобы ловить изменения при кликах
-        setTimeout(runInterfaceScanner, 1000);
-        setInterval(runInterfaceScanner, 3000);
-    </script>
 </body>
 </html>
 
