@@ -568,9 +568,14 @@
         }
         .wallpaper-thumb:hover { transform: scale(1.04); }
         .wallpaper-thumb.active { border-color: var(--tg-button); }
-        /* 🚨 КРИТИЧЕСКИЙ ФИКС: Запрещаем боковой шторке профиля вылезать за границы экрана, когда чат не выбран */
+        /* 🚨 КРИТИЧЕСКИЙ ФИКС: Задаем базовую сетку мессенджера и запираем боковую шторку */
         .main-layout {
-            overflow: hidden !important;
+            display: grid;
+            grid-template-columns: 350px 1fr; /* Левая панель 350px, правая - на весь экран */
+            width: 100%;
+            height: 100%;
+            position: relative; /* Дает точку отсчета для выплывания шторки профиля */
+            overflow: hidden !important; /* Намертво прячет профиль до клика */
         }
 
         /* 📱 АДАПТИВНАЯ МОБИЛЬНАЯ ВЁРСТКА (ДЛЯ ТЕЛЕФОНОВ) */
