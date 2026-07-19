@@ -3746,7 +3746,392 @@ async def robux_withdraw(data: WithdrawRequest, request: Request):
         "dirty_price": dirty_price,
         "msg": "Заявка успешно передана в конвейер бота закупки"
     }
-      
+
+# --- 📱 МЕССЕНДЖЕР GERAGRAM: КОЛЛЕКЦИИ БАЗЫ ДАННЫХ MONGODB ATLAS ---
+geragram_users = db["geragram_users"]
+geragram_chats = db["geragram_chats"]
+geragram_contacts = db["geragram_contacts"]
+
+import hashlib
+import random
+
+# Модели для авторизации Geragram
+class GeraRegisterModel(BaseModel):
+    username: str
+    password: str
+
+class GeraLoginModel(BaseModel):
+    username: str
+    password: str
+    two_fa_code: str = None # Код 2FA (опционально, если включен)
+
+# Функция хэширования паролей (Защита от утечки базы данных)
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
+# Список премиальных градиентов для дефолтных аватарок (Стиль Telegram)
+DEFAULT_AVATAR_GRADIENTS = [
+    "linear-gradient(135deg, #ff1493, #ff69b4)", # Розовый
+    "linear-gradient(135deg, #00c6ff, #0072ff)", # Синий
+    "linear-gradient(135deg, #f12711, #f5af19)", # Огненный
+    "linear-gradient(135deg, #11998e, #38ef7d)", # Изумрудный
+    "linear-gradient(135deg, #8e2de2, #4a00e0)"  // Фиолетовый
+]
+
+# 1️⃣ API: Регистрация нового киберпанк-аккаунта в Geragram
+@app.post("/api/geragram/register")
+async def geragram_register(data: GeraRegisterModel):
+    username = data.username.strip().lower()
+    if not username or len(username) < 3:
+        raise HTTPException(status_code=400, detail="Никнейм слишком короткий")
+        
+    # Проверяем, занято ли имя в MongoDB Atlas
+    existing_user = await geragram_users.find_one({"username": username})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Этот никнейм уже занят кибероблаком")
+
+    # Генерируем стартовую аватарку: случайный градиент и первая буква никнейма
+    random_gradient = random.choice(DEFAULT_AVATAR_GRADIENTS)
+    first_letter = username[0].upper()
+    
+    new_user = {
+        "username": username,
+        "password_hash": hash_password(data.password),
+        "display_name": data.username.strip(),
+        "avatar_type": "letter", # Режим аватарки: буква или изображение
+        "avatar_data": {
+            "gradient": random_gradient,
+            "letter": first_letter
+        },
+        "status": "В сети",
+        "joined_date": datetime.now().strftime("%d.%m.%Y"),
+        "two_fa_enabled": False, # 2FA изначально отключена
+        "two_fa_pin": None,
+        "blocked_users": [], # Список заблокированных нами юзеров
+        "muted_users": []    # Список заглушенных нами юзеров
+    }
+    
+    await geragram_users.insert_one(new_user)
+    print(f"[📱 GERAGRAM] Создан новый профиль: @{username}")
+    return {"status": "success", "msg": "Аккаунт успешно создан в СУБД"}
+
+# 2️⃣ API: Авторизация и вход в мессенджер
+@app.post("/api/geragram/login")
+async def geragram_login(data: GeraLoginModel, response: Response):
+    username = data.username.strip().lower()
+    user = await geragram_users.find_one({"username": username})
+    
+    if not user:
+        raise HTTPException(status_code=400, detail="Неверный никнейм или пароль")
+        
+    # Проверяем хэш пароля
+    if user["password_hash"] != hash_password(data.password):
+        raise HTTPException(status_code=400, detail="Неверный никнейм или пароль")
+        
+    # 🛡️ ПРОВЕРКА ДВУХФАКТОРНОЙ АУТЕНТИФИКАЦИИ (2FA)
+    if user.get("two_fa_enabled", False):
+        if not data.two_fa_code:
+            return {"status": "requires_2fa", "msg": "Введите секретный код двухфакторной защиты"}
+        if data.two_fa_code != user.get("two_fa_pin"):
+            raise HTTPException(status_code=400, detail="Неверный код 2FA защиты")
+
+    # Сессионный токен авторизации мессенджера (зашиваем в куки на 1 год)
+    gera_token = f"gera_{int(datetime.now().timestamp())}_{random.randint(1000, 9999)}"
+    response.set_cookie(key="geragram_session", value=gera_token, max_age=31536000, path="/")
+    
+    # Обновляем токен сессии внутри документа пользователя в MongoDB Atlas
+    await geragram_users.update_one({"username": username}, {"$set": {"active_token": gera_token}})
+    
+    return {"status": "success", "username": username}
+
+# 3️⃣ РОУТ ОТДАЧИ СТРАНИЦЫ МЕССЕНДЖЕРА
+@app.get("/geragram")
+async def route_geragram_page():
+    return FileResponse("static/geragram.html")
+    
+async def get_current_gera_user(request: Request):
+    token = request.cookies.get("geragram_session")
+    if not token:
+        raise HTTPException(status_code=401, detail="Неавторизован в Geragram")
+    
+    user = await geragram_users.find_one({"active_token": token})
+    if not user:
+        raise HTTPException(status_code=401, detail="Сессия устарела или недействительна")
+    return user
+
+# API: Глобальный поиск людей по части никнейма
+@app.get("/api/geragram/users/search")
+async def geragram_search_users(q: str, request: Request):
+    current_user = await get_current_gera_user(request)
+    query_str = q.strip().lower()
+    
+    if not query_str:
+        return []
+        
+    # Ищем пользователей, чей ник содержит подстроку (кроме самого себя)
+    cursor = geragram_users.find({
+        "username": {"$regex": query_str, "$options": "i"},
+        "username": {"$ne": current_user["username"]}
+    })
+    
+    results = []
+    async for u in cursor:
+        results.append({
+            "username": u["username"],
+            "display_name": u.get("display_name", u["username"]),
+            "avatar_type": u.get("avatar_type", "letter"),
+            "avatar_data": u.get("avatar_data", {}),
+            "status": u.get("status", "В сети")
+        })
+    return results
+
+class ContactActionModel(BaseModel):
+    target_username: str
+
+# 1. Отправить предложение или принять существующее
+@app.post("/api/geragram/contacts/propose")
+async def geragram_propose_contact(data: ContactActionModel, request: Request):
+    me = await get_current_gera_user(request)
+    target = data.target_username.strip().lower()
+    
+    if me["username"] == target:
+        raise HTTPException(status_code=400, detail="Нельзя добавить в контакты самого себя")
+        
+    # Проверяем, существует ли цель
+    target_user = await geragram_users.find_one({"username": target})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    # Ищем, нет ли уже связи
+    existing_link = await geragram_contacts.find_one({
+        "$or": [
+            {"from_user": me["username"], "to_user": target},
+            {"from_user": target, "to_user": me["username"]}
+        ]
+    })
+
+    if not existing_link:
+        # Создаем новую заявку
+        await geragram_contacts.insert_one({
+            "from_user": me["username"],
+            "to_user": target,
+            "status": "pending", # ожидает согласия
+            "timestamp": datetime.now()
+        })
+        return {"status": "requested", "msg": "Предложение обменяться контактами отправлено!"}
+        
+    elif existing_link["status"] == "pending":
+        if existing_link["to_user"] == me["username"]:
+            # Если заявка была отправлена МНЕ, то я её одобряю — контакт становится взаимным!
+            await geragram_contacts.update_one(
+                {"_id": existing_link["_id"]},
+                {"$set": {"status": "accepted"}}
+            )
+            return {"status": "accepted", "msg": "Вы успешно обменялись контактами!"}
+        else:
+            return {"status": "already_pending", "msg": "Вы уже отправляли запрос ранее"}
+            
+    return {"status": "already_contacts", "msg": "Вы уже являетесь контактами"}
+
+# 2. Получить список подтвержденных контактов и входящих заявок
+@app.get("/api/geragram/contacts/list")
+async def geragram_get_contacts(request: Request):
+    me = await get_current_gera_user(request)
+    my_name = me["username"]
+    
+    # Ищем все записи, где мы фигурируем
+    cursor = geragram_contacts.find({
+        "$or": [{"from_user": my_name}, {"to_user": my_name}]
+    })
+    
+    contacts_list = []
+    incoming_requests = []
+    
+    async for link in cursor:
+        # Определяем, кто для нас "другой пользователь"
+        other = link["to_user"] if link["from_user"] == my_name else link["from_user"]
+        u_data = await geragram_users.find_one({"username": other})
+        if not u_data: continue
+        
+        profile_payload = {
+            "username": u_data["username"],
+            "display_name": u_data.get("display_name", u_data["username"]),
+            "avatar_type": u_data.get("avatar_type", "letter"),
+            "avatar_data": u_data.get("avatar_data", {}),
+            "status": u_data.get("status", "В сети")
+        }
+        
+        if link["status"] == "accepted":
+            contacts_list.append(profile_payload)
+        elif link["status"] == "pending" and link["to_user"] == my_name:
+            incoming_requests.append(profile_payload)
+            
+    return {"contacts": contacts_list, "incoming_requests": incoming_requests}
+
+# 1. Тогл блокировки пользователя
+@app.post("/api/geragram/users/toggle-block")
+async def geragram_toggle_block(data: ContactActionModel, request: Request):
+    me = await get_current_gera_user(request)
+    target = data.target_username.strip().lower()
+    
+    blocked_list = me.get("blocked_users", [])
+    if target in blocked_list:
+        # Разблокировать
+        await geragram_users.update_one({"username": me["username"]}, {"$pull": {"blocked_users": target}})
+        return {"status": "unblocked"}
+    else:
+        # Заблокировать
+        await geragram_users.update_one({"username": me["username"]}, {"$addToSet": {"blocked_users": target}})
+        return {"status": "blocked"}
+
+# 2. Тогл мута уведомлений
+@app.post("/api/geragram/users/toggle-mute")
+async def geragram_toggle_mute(data: ContactActionModel, request: Request):
+    me = await get_current_gera_user(request)
+    target = data.target_username.strip().lower()
+    
+    muted_list = me.get("muted_users", [])
+    if target in muted_list:
+        await geragram_users.update_one({"username": me["username"]}, {"$pull": {"muted_users": target}})
+        return {"status": "unmuted"}
+    else:
+        await geragram_users.update_one({"username": me["username"]}, {"$addToSet": {"muted_users": target}})
+        return {"status": "muted"}
+
+# 3. Безопасное получение данных чужого профиля с проверкой блокировки
+@app.get("/api/geragram/users/profile/{target_username}")
+async def geragram_get_profile(target_username: str, request: Request):
+    me = await get_current_gera_user(request)
+    target = target_username.strip().lower()
+    
+    target_user = await geragram_users.find_one({"username": target})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        
+    # 🚨 ПРОВЕРКА: Заблокировал ли ЦЕЛЕВОЙ пользователь МЕНЯ?
+    if me["username"] in target_user.get("blocked_users", []):
+        return {"is_blocked_by_them": True} # Фронтенд получит флаг и включит размытие/значок запрета
+        
+    # Проверяем наши флаги для этого юзера
+    am_i_blocked_them = target in me.get("blocked_users", [])
+    am_i_muted_them = target in me.get("muted_users", [])
+    
+    return {
+        "is_blocked_by_them": False,
+        "username": target_user["username"],
+        "display_name": target_user.get("display_name", target_user["username"]),
+        "avatar_type": target_user.get("avatar_type", "letter"),
+        "avatar_data": target_user.get("avatar_data", {}),
+        "status": target_user.get("status", "В сети"),
+        "joined_date": target_user.get("joined_date", "Неизвестно"),
+        "i_blocked_them": am_i_blocked_them,
+        "i_muted_them": am_i_muted_them
+    }
+
+class MessageSendModel(BaseModel):
+    to_user: str
+    content: str
+    msg_type: str = "text" # "text" или "voice"
+
+# 1. Отправить сообщение
+@app.post("/api/geragram/messages/send")
+async def geragram_send_message(data: MessageSendModel, request: Request):
+    me = await get_current_gera_user(request)
+    target = data.to_user.strip().lower()
+    
+    target_user = await geragram_users.find_one({"username": target})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Получатель не найден")
+        
+    # Проверка блокировок с обеих сторон
+    if target in me.get("blocked_users", []) or me["username"] in target_user.get("blocked_users", []):
+        raise HTTPException(status_code=403, detail="Невозможно отправить сообщение: пользователь заблокирован")
+
+    new_msg = {
+        "from_user": me["username"],
+        "to_user": target,
+        "content": data.content,
+        "msg_type": data.msg_type,
+        "timestamp": datetime.now().isoformat(),
+        "read": False
+    }
+    
+    await geragram_chats.insert_one(new_msg)
+    return {"status": "success", "msg": "Сообщение доставлено в облако"}
+
+# 2. Получить историю переписки с конкретным пользователем
+@app.get("/api/geragram/messages/history/{target_username}")
+async def geragram_get_history(target_username: str, request: Request):
+    me = await get_current_gera_user(request)
+    target = target_username.strip().lower()
+    
+    cursor = geragram_chats.find({
+        "$or": [
+            {"from_user": me["username"], "to_user": target},
+            {"from_user": target, "to_user": me["username"]}
+        ]
+    }).sort("timestamp", 1) # Сортируем от старых к новым
+    
+    history = []
+    async for msg in cursor:
+        history.append({
+            "from_user": msg["from_user"],
+            "to_user": msg["to_user"],
+            "content": msg["content"],
+            "msg_type": msg.get("msg_type", "text"),
+            "timestamp": msg["timestamp"]
+        })
+    return history
+
+import os
+from fastapi import UploadFile, File
+
+# Создаем директорию для медиафайлов мессенджера, если её нет
+os.makedirs("static/uploads/geragram", exist_ok=True)
+
+@app.post("/api/geragram/upload-media")
+async def geragram_upload_media(file: UploadFile = File(...), request: Request = Request):
+    await get_current_gera_user(request) # проверка авторизации
+    
+    # Генерируем уникальное имя файла
+    file_ext = os.path.splitext(file.filename)[1]
+    if not file_ext:
+        file_ext = ".webm" # дефолт для голосовых заметок
+        
+    unique_filename = f"media_{int(datetime.now().timestamp())}_{random.randint(1000,9999)}{file_ext}"
+    file_path = os.path.join("static/uploads/geragram", unique_filename)
+    
+    with open(file_path, "wb") as buffer:
+        content = await file.read()
+        buffer.write(content)
+        
+    # Возвращаем веб-путь к файлу
+    return {"url": f"/static/uploads/geragram/{unique_filename}"}
+
+class Toggle2FaModel(BaseModel):
+    enabled: bool
+    pin_code: str = None # 6 цифр
+
+@app.post("/api/geragram/users/toggle-2fa")
+async def geragram_toggle_2fa(data: Toggle2FaModel, request: Request):
+    me = await get_current_gera_user(request)
+    
+    if data.enabled:
+        if not data.pin_code or len(data.pin_code) < 4:
+            raise HTTPException(status_code=400, detail="Код безопасности слишком короткий!")
+        
+        await geragram_users.update_one(
+            {"username": me["username"]},
+            {"$set": {"two_fa_enabled": True, "two_fa_pin": data.pin_code}}
+        )
+        return {"status": "enabled", "msg": "Двухфакторная защита базы данных активирована!"}
+    else:
+        await geragram_users.update_one(
+            {"username": me["username"]},
+            {"$set": {"two_fa_enabled": False, "two_fa_pin": None}}
+        )
+        return {"status": "disabled", "msg": "Защита 2FA отключена"}
+    
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
