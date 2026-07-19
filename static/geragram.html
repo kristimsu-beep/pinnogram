@@ -1263,7 +1263,8 @@
             }
         }
 
-        // Загрузка и рендеринг истории сообщений из MongoDB Atlas (С поддержкой цитат и правок)
+
+        // Загрузка и рендеринг истории сообщений из MongoDB Atlas (С поддержкой цитат, правок и мгновенного удаления)
         async function loadChatHistory() {
             if (!activeChatUser) return;
             
@@ -1274,9 +1275,17 @@
                 
                 const container = document.getElementById('messagesContainer');
                 
-                // Проверяем, изменилось ли количество сообщений
-                const currentBubblesCount = container.querySelectorAll('.msg-bubble').length;
-                if (messages.length === currentBubblesCount) return;
+                // 🔥 УМНЫЙ ТЕЛЕГРАМ-ФИЛЬТР: Сравниваем ID сообщений. Если в базе что-то удалили или изменили — перерисовываем чат мгновенно
+                const currentIds = Array.from(container.querySelectorAll('.msg-bubble')).map(b => b.dataset.id).join(',');
+                const serverIds = messages.map(msg => (typeof msg._id === 'object' && msg._id.$oid) ? msg._id.$oid : (msg._id || msg.id)).join(',');
+                
+                // Ищем флаги правок (is_edited), чтобы заметить, если сообщение изменили на сервере
+                const hasEditedChanges = messages.some((msg, idx) => {
+                    const bubble = container.querySelectorAll('.msg-bubble')[idx];
+                    return bubble && msg.is_edited && !bubble.innerHTML.includes('изменено');
+                });
+
+                if (currentIds === serverIds && !hasEditedChanges) return; // Контент не изменился, выходим
                 
                 container.innerHTML = '';
                 
@@ -1285,15 +1294,20 @@
                     const isOutbound = (msg.from_user !== activeChatUser);
                     bubble.className = `msg-bubble ${isOutbound ? 'msg-outbound' : 'msg-inbound'}`;
                     
-                    // 🎯 КРИТИЧЕСКИЙ ФИКС: Привязываем реальный ID сообщения из MongoDB Atlas к HTML-элементу!
-                    bubble.dataset.id = msg._id || msg.id; 
+                    // Бронированный сбор ID сообщения из MongoDB Atlas
+                    if (msg._id) {
+                        bubble.dataset.id = (typeof msg._id === 'object' && msg._id.$oid) ? msg._id.$oid : msg._id;
+                    } else {
+                        bubble.dataset.id = msg.id;
+                    }
                     
-                    let bodyContent = '';
+                    let quoteContent = '';
+                    let mainMediaContent = '';
                     let messageText = msg.content;
                     
-                    // 🎙️ ТЕЛЕГРАМ-ЦИТАТА: Если сообщение является ответом на другое сообщение
+                    // 🎙️ ТЕЛЕГРАМ-ЦИТАТА: Если сообщение является ответом
                     if (msg.reply_to_text) {
-                        bodyContent += `
+                        quoteContent = `
                             <div class="msg-reply-quote">
                                 <div style="font-weight:600; color:var(--tg-button); font-size:11px;">Ответ</div>
                                 <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(msg.reply_to_text)}</div>
@@ -1303,11 +1317,11 @@
                     
                     // Если тип контента - текст
                     if (msg.msg_type === 'text') {
-                        bodyContent += `<span style="white-space: pre-wrap;">${escapeHtml(messageText)}</span>`;
+                        mainMediaContent = `<span style="white-space: pre-wrap;">${escapeHtml(messageText)}</span>`;
                     } 
                     // Если тип контента - голосовое сообщение
                     else if (msg.msg_type === 'voice') {
-                        bodyContent += `
+                        mainMediaContent = `
                             <div class="voice-msg-player">
                                 <button class="voice-play-btn" onclick="playVoiceAudio('${msg.content}', this)">
                                     <i class="fa-solid fa-play"></i>
@@ -1331,11 +1345,13 @@
                         } catch(e) { msgTime = msg.timestamp.substring(11, 16); }
                     }
                     
-                    // ✏️ ТЕЛЕГРАМ-ПЛАШКА "изменено": Добавляем надпись, если у сообщения в базе стоит флаг исправления
+                    // ТЕЛЕГРАМ-ПЛАШКА "изменено"
                     const editedLabel = msg.is_edited ? '<span style="font-size:10px; opacity:0.5; margin-right:4px;">изменено</span>' : '';
                     
+                    // 🔥 ИСПРАВЛЕНО: Склеиваем цитату, основной текст сообщения и блок времени вместе!
                     bubble.innerHTML = `
-                        ${bodyContent}
+                        ${quoteContent}
+                        ${mainMediaContent}
                         <div style="text-align: right; margin-top: 4px; display: block; font-size: 11px;">
                             ${editedLabel}
                             <span class="msg-time" style="color: rgba(255,255,255,0.5);">${msgTime}</span>
@@ -1347,7 +1363,7 @@
                 const scrollWrapper = document.getElementById('chatBodyScroll');
                 scrollWrapper.scrollTop = scrollWrapper.scrollHeight;
 
-            } catch (err) { console.error(err); }
+            } catch (err) { console.error('Сбой рендеринга:', err); }
         }
 
 
