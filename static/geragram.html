@@ -273,12 +273,14 @@
         .chat-name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .chat-last-msg { font-size: 13px; color: var(--tg-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         /* --- 💬 ПРАВАЯ ПАНЕЛЬ: ОКНО ЧАТА И СТРОКА ВВОДА --- */
-        .chat-window {
+         .chat-window {
             display: flex;
             flex-direction: column;
-            height: 100%; /* Заставляем чат занимать ровно 100% высоты контейнера */
+            height: 100%; /* Заставляем окно чата занимать ровно 100% высоты мессенджера */
             position: relative;
+            overflow: hidden; /* Прячем всё, что пытается вылезти за рамки */
         }
+
         .chat-header {
             background: var(--tg-sidebar);
             padding: 12px 20px;
@@ -302,12 +304,13 @@
         .chat-header-actions button:hover { color: white; }
 
         .chat-body-wrapper {
-            flex: 1; /* Облако сообщений заберет себе всё свободное место, отжав футер вниз */
+            flex: 1; /* 🔥 КРИТИЧЕСКИЙ ФИКС: отжимает футер вниз и не даёт ему уползать */
             background: var(--chat-wall);
             position: relative;
-            overflow-y: auto;
+            overflow-y: auto; /* Включает внутреннюю прокрутку сообщений */
             padding: 20px;
         }
+
         /* Векторный паттерн-узор поверх любого градиента */
         .chat-body-pattern {
             position: absolute;
@@ -342,12 +345,13 @@
         .chat-footer {
             background: var(--tg-sidebar);
             padding: 12px 20px;
-            display: flex;
+            display: flex; /* Выстраивает иконки, инпут и самолётик в одну линию */
             align-items: center;
             gap: 12px;
             border-top: 1px solid var(--tg-border);
-            z-index: 5;
+            z-index: 5; /* Ставит футер поверх фоновых паттернов */
         }
+
         .chat-input-field {
             flex: 1;
             background: var(--tg-bg);
