@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeraGram Messenger</title>
+    <!-- Google Fonts & FontAwesome Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --tg-bg: #0e1621;
+            --tg-sidebar: #17212b;
+            --tg-active: #2b5278;
+            --tg-text: #f5f5f5;
+            --tg-text-muted: #7f91a4;
+            --tg-border: #101921;
+            --tg-button: #2481cc;
+            --tg-button-hover: #2996e6;
+            --chat-wall: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background-color: #080c10;
+            color: var(--tg-text);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* --- ЭКРАН АВТОРИЗАЦИИ / РЕГИСТРАЦИИ --- */
+        .auth-container {
+            background: var(--tg-sidebar);
+            border: 1px solid var(--tg-border);
+            border-radius: 16px;
+            padding: 40px;
+            width: 100%;
+            max-width: 420px;
+            text-align: center;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+
+        /* 3D Roblox Логотип с G и S */
+        .roblox-logo-3d {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 20px;
+            background: linear-gradient(135deg, #ff3333, #bd0000);
+            transform: rotate(-15deg);
+            border-radius: 22px;
+            position: relative;
+            box-shadow: 
+                -5px 5px 0px #660000,
+                -10px 10px 15px rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s ease;
+        }
+        .roblox-logo-3d:hover {
+            transform: rotate(-10deg) scale(1.05);
+        }
+        .roblox-logo-3d::after {
+            content: '';
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            background: var(--tg-sidebar);
+            border-radius: 6px;
+            transform: rotate(15deg);
+            box-shadow: inset 2px -2px 5px rgba(0,0,0,0.5);
+        }
+        .roblox-logo-text {
+            position: absolute;
+            font-weight: 900;
+            font-size: 26px;
+            color: #ffffff;
+            z-index: 5;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            letter-spacing: -2px;
+            transform: rotate(15deg);
+        }
+
+        .auth-container h2 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        .auth-container p {
+            color: var(--tg-text-muted);
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+        .input-group {
+            position: relative;
+            margin-bottom: 16px;
+        }
+        .input-group i {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--tg-text-muted);
+        }
+        .input-group input {
+            width: 100%;
+            padding: 14px 14px 14px 45px;
+            background: var(--tg-bg);
+            border: 1px solid var(--tg-border);
+            border-radius: 10px;
+            color: white;
+            font-size: 15px;
+            outline: none;
+            transition: border 0.2s;
+        }
+        .input-group input:focus {
+            border-color: var(--tg-button);
+        }
+        .auth-btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--tg-button);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .auth-btn:hover { background: var(--tg-button-hover); }
+        .auth-toggle {
+            margin-top: 20px;
+            font-size: 14px;
+            color: var(--tg-button);
+            cursor: pointer;
+        }
+
+        /* --- ОСНОВНОЙ ИНТЕРФЕЙС МЕССЕНДЖЕРА --- */
+        .messenger-wrapper {
+            display: none; 
+            width: 100vw;
+            height: 100vh;
+            background: var(--tg-bg);
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            height: 100%;
+            width: 100%;
+            position: relative;
+        }
+
+        /* ЛЕВАЯ ПАНЕЛЬ: СПИСОК ЧАТОВ И КОНТАКТОВ */
+        .sidebar {
+            background: var(--tg-sidebar);
+            border-right: 1px solid var(--tg-border);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            z-index: 10;
+        }
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--tg-border);
+        }
+        .search-wrapper {
+            position: relative;
+        }
+        .search-wrapper i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--tg-text-muted);
+        }
+        .search-input {
+            width: 100%;
+            padding: 10px 12px 10px 38px;
+            background: var(--tg-bg);
+            border: 1px solid var(--tg-border);
+            border-radius: 8px;
+            color: white;
+            outline: none;
+            font-size: 14px;
+        }
+        .search-results-dropdown {
+            background: var(--tg-bg);
+            border: 1px solid var(--tg-border);
+            border-radius: 8px;
+            margin-top: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+        .search-user-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid var(--tg-border);
+        }
+        .search-user-item:hover { background: var(--tg-active); }
+
+        .chats-list {
+            flex: 1;
+            overflow-y: auto;
+        }
+        .chat-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+            transition: background 0.15s;
+        }
+        .chat-item:hover, .chat-item.active {
+            background: var(--tg-active);
+        }
+        
+        .avatar-circle {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: white;
+            font-size: 18px;
+            position: relative;
+            background-size: cover;
+            background-position: center;
+            flex-shrink: 0;
+        }
+        .chat-info {
+            margin-left: 12px;
+            flex: 1;
+            min-width: 0;
+        }
+        .chat-name-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+        .chat-name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chat-last-msg { font-size: 13px; color: var(--tg-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* ПРАВАЯ ПАНЕЛЬ: ОКНО ЧАТА */
+        .chat-window {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            position: relative;
+        }
+        .chat-header {
+            background: var(--tg-sidebar);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--tg-border);
+            z-index: 5;
+        }
+        .chat-header-user {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        .chat-header-info { margin-left: 12px; }
+        .chat-header-status { font-size: 13px; color: var(--tg-text-muted); }
+        
+        .chat-header-actions button {
+            background: none; border: none; color: var(--tg-text-muted); font-size: 18px; cursor: pointer; margin-left: 15px;
+        }
+        .chat-header-actions button:hover { color: white; }
+
+        .chat-body-wrapper {
+            flex: 1;
+            background: var(--chat-wall);
+            position: relative;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        .chat-body-pattern {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            opacity: 0.06;
+            background-image: radial-gradient(circle at 50% 50%, #fff 2px, transparent 0);
+            background-size: 24px 24px;
+            pointer-events: none;
+            z-index: 1;
+        }
+        .messages-container {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .msg-bubble {
+            max-width: 60%;
+            padding: 8px 14px;
+            border-radius: 12px;
+            font-size: 15px;
+            line-height: 1.4;
+            position: relative;
+            word-wrap: break-word;
+        }
+        .msg-inbound { background: #182533; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .msg-outbound { background: #2b5278; align-self: flex-end; border-bottom-right-radius: 4px; }
+        
+        .msg-time {
+            font-size: 11px;
+            color: rgba(255,255,255,0.5);
+            text-align: right;
+            margin-top: 4px;
+            display: block;
+        }
+
+        /* --- 🎙️ СТИЛИ ДЛЯ ГОЛОСОВЫХ СООБЩЕНИЙ --- */
+        .voice-msg-player {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 4px 0;
+            min-width: 180px;
+        }
+        .voice-play-btn {
+            background: var(--tg-button);
+            border: none;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        .voice-play-btn:hover {
+            background: var(--tg-button-hover);
+        }
+        .voice-wave-visual {
+            flex: 1;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+        /* Имитация дорожки звука в стиле Telegram */
+        .voice-wave-bar {
+            flex: 1;
+            height: 60%;
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
+        }
+        .voice-duration {
+            font-size: 12px;
+            color: var(--tg-text-muted);
+            margin-left: 5px;
+        }
+
+        /* --- ПОЛЕ ВВОДА СООБЩЕНИЙ (ФУТЕР) --- */
+        .chat-footer {
+            background: var(--tg-sidebar);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-top: 1px solid var(--tg-border);
+        }
+        .chat-input-field {
+            flex: 1;
+            background: var(--tg-bg);
+            border: 1px solid var(--tg-border);
+            border-radius: 10px;
+            padding: 12px 16px;
+            color: white;
+            outline: none;
+            font-size: 15px;
+            transition: border-color 0.2s;
+        }
+        .chat-input-field:focus {
+            border-color: var(--tg-active);
+        }
+        .footer-action-btn {
+            background: none;
+            border: none;
+            color: var(--tg-text-muted);
+            font-size: 20px;
+            cursor: pointer;
+            transition: color 0.2s, transform 0.1s;
+        }
+        .footer-action-btn:hover { color: white; }
+        .footer-action-btn:active { transform: scale(0.95); }
+        .footer-action-btn.recording { color: #ff3333; animation: pulseRecord 1.5s infinite; }
+        .send-btn { color: var(--tg-button); }
+        .send-btn:hover { color: var(--tg-button-hover); }
+
+        @keyframes pulseRecord {
+            0% { opacity: 1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
+
+        /* --- ВЫПЛЫВАЮЩИЙ БОКОВОЙ ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ --- */
+        .user-profile-drawer {
+            position: absolute;
+            right: -350px;
+            top: 0;
+            width: 350px;
+            height: 100%;
+            background: var(--tg-sidebar);
+            border-left: 1px solid var(--tg-border);
+            z-index: 20;
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+        }
+        .user-profile-drawer.open { right: 0; }
+        
+        .drawer-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--tg-border);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .drawer-close { background: none; border: none; color: white; font-size: 18px; cursor: pointer; }
+        
+        .drawer-body-container {
+            position: relative;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .drawer-body {
+            padding: 24px;
+            overflow-y: auto;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100%;
+            transition: filter 0.3s ease;
+        }
+        
+        /* 🚨 Эффект Блокировки: Размытие профиля по твоей задумке */
+        .drawer-body.blurred-lock {
+            filter: blur(12px) grayscale(0.5);
+            pointer-events: none;
+            user-select: none;
+        }
+        .lock-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: none; /* Включается через JS при блокировке */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 25;
+            background: rgba(23,33,43,0.75);
+            padding: 20px;
+            text-align: center;
+        }
+        .lock-overlay i { font-size: 56px; color: #ff3333; margin-bottom: 16px; }
+        .lock-overlay p { font-size: 16px; font-weight: 600; color: #ff5959; }
+
+        .profile-drawer-avatar {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            font-size: 42px;
+            margin-bottom: 16px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-size: cover;
+            background-position: center;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+        }
+        .profile-drawer-name { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+        .profile-drawer-status { font-size: 14px; color: var(--tg-text-muted); margin-bottom: 24px; }
+        
+        .info-box {
+            width: 100%;
+            background: var(--tg-bg);
+            padding: 14px;
+            border-radius: 10px;
+            text-align: left;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255,255,255,0.02);
+        }
+        .info-box label { font-size: 12px; color: var(--tg-text-muted); display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .info-box p { font-size: 15px; font-weight: 500; color: var(--tg-text); }
+
+        .profile-actions-list { width: 100%; margin-top: 15px; }
+        .action-item-btn {
+            width: 100%;
+            padding: 12px 14px;
+            background: none;
+            border: none;
+            text-align: left;
+            color: white;
+            font-size: 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border-radius: 8px;
+            transition: background 0.15s;
+        }
+        .action-item-btn:hover { background: rgba(255,255,255,0.05); }
+        .action-item-btn.danger { color: #ff5959; }
+        .action-item-btn.danger:hover { background: rgba(255,89,89,0.1); }
+
+        /* --- НАСТРОЙКИ: МОДАЛКА КАСТОМИЗАЦИИ ОБОЕВ --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.65);
+            backdrop-filter: blur(4px);
+            z-index: 200;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background: var(--tg-sidebar);
+            padding: 28px;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 440px;
+            border: 1px solid var(--tg-border);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+        }
+        .wallpaper-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin: 16px 0;
+        }
+        .wallpaper-thumb {
+            height: 75px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            background-size: cover;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+        .wallpaper-thumb:hover { transform: scale(1.04); }
+        .wallpaper-thumb.active { border-color: var(--tg-button); }
+    </style>
+</head>
+<body>
+
+    <!-- 🛡️ БЛОК АВТОРИЗАЦИИ И РЕГИСТРАЦИИ -->
+    <div class="auth-container" id="authBox">
+        <!-- Трёхмерное Roblox лого с GS по центру -->
+        <div class="roblox-logo-3d">
+            <span class="roblox-logo-text">GS</span>
+        </div>
+        <h2 id="authTitle">Войти в GeraGram</h2>
+        <p id="authDesc">Введите логин и секретный ключ доступа</p>
+        
+        <div class="input-group">
+            <i class="fa-solid fa-user"></i>
+            <input type="text" id="authUsername" placeholder="Ваш уникальный никнейм" autocomplete="off">
+        </div>
+        <div class="input-group">
+            <i class="fa-solid fa-lock"></i>
+            <input type="password" id="authPassword" placeholder="Ваш криптопароль">
+        </div>
+        
+        <!-- Скрытое поле для 2FA кода (проявится через JS при необходимости) -->
+        <div class="input-group" id="twoFaField" style="display: none;">
+            <i class="fa-solid fa-shield-halved"></i>
+            <input type="text" id="auth2FaCode" placeholder="Код двухфакторной защиты" maxlength="6">
+        </div>
+
+        <button class="auth-btn" id="authMainBtn" onclick="handleAuth()">Продолжить</button>
+        <div class="auth-toggle" id="authToggleMode" onclick="toggleAuthMode()">Создать защищённый аккаунт</div>
+    </div>
+
+    <!-- 📱 ОСНОВНОЙ ИНТЕРФЕЙС GERAGRAM -->
+    <div class="messenger-wrapper" id="messengerApp">
+        <div class="main-layout">
+            
+            <!-- ЛЕВАЯ КОЛОНКА: СЕРВИСНАЯ ПАНЕЛЬ И КОНТАКТЫ -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <div class="search-wrapper">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <!-- Строка ввода никнейма в верхней панели -->
+                        <input type="text" class="search-input" id="globalUserSearch" placeholder="Введите никнейм для поиска..." oninput="searchUsersGlobal()">
+                    </div>
+                    <!-- Выпадающий список найденных людей -->
+                    <div class="search-results-dropdown" id="searchResults"></div>
+                </div>
+                
+                <!-- Список чатов / контактов -->
+                <div class="chats-list" id="chatsContainerList">
+                    <!-- Сюда JS будет рендерить активные диалоги -->
+                </div>
+                
+                <button class="auth-btn" style="margin: 15px; width: calc(100% - 30px); font-size: 13px; padding: 11px;" onclick="openWallpaperModal()">
+                    <i class="fa-solid fa-palette"></i> Обои и Безопасность
+                </button>
+            </div>
+
+            <!-- ПРАВАЯ КОЛОНКА: ОКНО ПЕРЕПИСКИ -->
+            <div class="chat-window">
+                
+                <!-- Начальный экран, когда ни один чат не открыт -->
+                <div id="noChatSelected" style="position:absolute; top:0; left:0; width:100%; height:100%; background: var(--tg-bg); z-index:4; display:flex; flex-direction:column; align-items:center; justify-content:center; color: var(--tg-text-muted);">
+                    <div class="roblox-logo-3d" style="opacity: 0.25; transform: rotate(0deg) scale(0.85); cursor:default;">
+                        <span class="roblox-logo-text">GS</span>
+                    </div>
+                    <p style="margin-top: 10px; font-size: 14px;">Выберите чат из списка или найдите пользователя сверху</p>
+                </div>
+
+                <!-- Шапка текущего чата -->
+                <div class="chat-header">
+                    <div class="chat-header-user" onclick="openUserProfileDrawer()">
+                        <div class="avatar-circle" id="currentChatAvatar">G</div>
+                        <div class="chat-header-info">
+                            <div class="chat-name" id="currentChatName">Пользователь</div>
+                            <div class="chat-header-status" id="currentChatStatus">загрузка...</div>
+                        </div>
+                    </div>
+                    <div class="chat-header-actions">
+                        <button onclick="openUserProfileDrawer()"><i class="fa-solid fa-circle-info"></i></button>
+                    </div>
+                </div>
+
+                <!-- Игровое облако сообщений с обоями и узорами -->
+                <div class="chat-body-wrapper" id="chatBodyScroll">
+                    <!-- Постоянный векторный узор Telegram поверх любого фона -->
+                    <div class="chat-body-pattern"></div>
+                    <div class="messages-container" id="messagesContainer">
+                        <!-- Динамические сообщения -->
+                    </div>
+                </div>
+
+                <!-- Поле ввода и управления медиа -->
+                <div class="chat-footer">
+                    <button class="footer-action-btn"><i class="fa-regular fa-face-smile"></i></button>
+                    <input type="text" class="chat-input-field" id="messageInputField" placeholder="Напишите сообщение..." onkeypress="checkSendKey(event)">
+                    
+                    <!-- Кнопка голосовых сообщений -->
+                    <button class="footer-action-btn" id="voiceRecordBtn" onclick="toggleVoiceRecording()">
+                        <i class="fa-solid fa-microphone"></i>
+                    </button>
+                    
+                    <button class="footer-action-btn send-btn" onclick="sendMessage()">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+            <!-- 👤 ВЫПЛЫВАЮЩИЙ БОКОВОЙ ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ -->
+            <div class="user-profile-drawer" id="profileDrawer">
+                <div class="drawer-header">
+                    <button class="drawer-close" onclick="closeUserProfileDrawer()"><i class="fa-solid fa-xmark"></i></button>
+                    <h3>Информация</h3>
+                </div>
+                
+                <div class="drawer-body-container">
+                    <!-- 🚨 ОВЕРЛЕЙ БЛОКИРОВКИ: Размывает всё и показывает значок запрета -->
+                    <div class="lock-overlay" id="drawerLockOverlay">
+                        <i class="fa-solid fa-ban"></i>
+                        <p>Доступ ограничен</p>
+                    </div>
+
+                    <!-- Основное тело профиля -->
+                    <div class="drawer-body" id="drawerBodyData">
+                        <div class="profile-drawer-avatar" id="drawerAvatar"></div>
+                        <div class="profile-drawer-name" id="drawerDisplayName">Никнейм</div>
+                        <div class="profile-drawer-status" id="drawerStatus">в сети</div>
+                        
+                        <div class="info-box">
+                            <label>Имя пользователя</label>
+                            <p id="drawerUsername">@username</p>
+                        </div>
+                        <div class="info-box">
+                            <label>Дата присоединения</label>
+                            <p id="drawerJoinedDate">--.--.----</p>
+                        </div>
+                        
+                        <!-- Кнопка обмена контактами -->
+                        <button class="auth-btn" id="addContactActionBtn" style="width:100%; margin-top:10px;" onclick="sendContactRequest()">
+                            <i class="fa-solid fa-user-plus"></i> Предложить контакты
+                        </button>
+
+                        <!-- Кнопки управления приватностью -->
+                        <div class="profile-actions-list">
+                            <button class="action-item-btn" id="muteToggleBtn" onclick="toggleMuteUser()">
+                                <i class="fa-solid fa-bell"></i> Уведомления: Вкл
+                            </button>
+                            <button class="action-item-btn danger" id="blockToggleBtn" onclick="toggleBlockUser()">
+                                <i class="fa-solid fa-user-slash"></i> Заблокировать
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div> <!-- /main-layout -->
+    </div> <!-- /messenger-wrapper -->
+
+    <!-- 🎨 МОДАЛЬНОЕ ОКНО: ОБОИ И БЕЗОПАСНОСТЬ -->
+    <div class="modal-overlay" id="wallpaperModal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 12px; font-weight: 600;">Кастомизация мессенджера</h3>
+            <p style="font-size: 14px; color: var(--tg-text-muted); margin-bottom: 15px;">Выберите премиальный градиент (узоры наложатся сами):</p>
+            
+            <div class="wallpaper-grid">
+                <div class="wallpaper-thumb" style="background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);" onclick="setWallpaper('linear-gradient(135deg, #0f2027, #203a43, #2c5364)')"></div>
+                <div class="wallpaper-thumb" style="background: linear-gradient(135deg, #1f4037, #99f2c8);" onclick="setWallpaper('linear-gradient(135deg, #1f4037, #99f2c8)')"></div>
+                <div class="wallpaper-thumb" style="background: linear-gradient(135deg, #aa4b6b, #6b6b83, #3b8d99);" onclick="setWallpaper('linear-gradient(135deg, #aa4b6b, #6b6b83, #3b8d99)')"></div>
+                <div class="wallpaper-thumb" style="background: linear-gradient(135deg, #11141a, #1d2330);" onclick="setWallpaper('linear-gradient(135deg, #11141a, #1d2330)')"></div>
+                <div class="wallpaper-thumb" style="background: linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045);" onclick="setWallpaper('linear-gradient(135deg, #833ab4, #fd1d1d, #fcb045)')"></div>
+                <div class="wallpaper-thumb" style="background: linear-gradient(135deg, #00c6ff, #0072ff);" onclick="setWallpaper('linear-gradient(135deg, #00c6ff, #0072ff)')"></div>
+            </div>
+
+            <p style="font-size: 14px; color: var(--tg-text-muted); margin-top: 15px; margin-bottom: 8px;">Или укажите свою ссылку на картинку:</p>
+            <div class="input-group" style="margin-bottom: 15px;">
+                <i class="fa-solid fa-link" style="left:15px;"></i>
+                <input type="text" id="customWallpaperUrl" placeholder="https://site.com" oninput="setCustomWallpaperImg(this.value)">
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid var(--tg-border); margin: 18px 0;">
+            <h4 style="margin-bottom: 12px; font-size:15px; font-weight:600;">Безопасность и Личность</h4>
+            
+            <button class="auth-btn" style="background: #213040; margin-bottom: 8px; font-size: 13px;" onclick="triggerAvatarUpload()">
+                <i class="fa-solid fa-camera"></i> Сменить свою аватарку
+            </button>
+            <button class="auth-btn" id="2faSystemBtn" style="background: #4a00e0; font-size: 13px;" onclick="toggleTwoFaSystem()">
+                <i class="fa-solid fa-shield-halved"></i> Настройка двухфакторной аутентификации (2FA)
+            </button>
+
+            <button class="auth-btn" style="background:none; color:var(--tg-text-muted); margin-top:15px;" onclick="closeWallpaperModal()">Закрыть</button>
+        </div>
+    </div>
+    <script>
+        // --- 📱 ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И ДАННЫЕ СЕССИИ ---
+        let myUsername = null;        // Никнейм текущего авторизованного юзера
+        let isRegisterMode = false;   // Переключатель режима Вход / Регистрация
+        let activeChatUser = null;   // С кем открыт чат в данный момент
+        let chatInterval = null;      // Таймер регулярного обновления сообщений
+
+        // Автоматический старт при полной загрузке DOM-дерева
+        window.addEventListener('DOMContentLoaded', () => {
+            checkActiveSession();
+        });
+
+        // Проверка наличия активного токена авторизации в куках
+        async function checkActiveSession() {
+            try {
+                // Стучимся на защищенный эндпоинт контактов
+                const res = await fetch('/api/geragram/contacts/list');
+                if (res.ok) {
+                    // Сессия валидна, скрываем форму входа и запускаем мессенджер
+                    initMessengerApp();
+                } else {
+                    showAuthBox();
+                }
+            } catch (err) {
+                showAuthBox();
+            }
+        }
+
+        function showAuthBox() {
+            document.getElementById('authBox').style.display = 'block';
+            document.getElementById('messengerApp').style.display = 'none';
+        }
+
+        function initMessengerApp() {
+            document.getElementById('authBox').style.display = 'none';
+            document.getElementById('messengerApp').style.display = 'block';
+            
+            // Запускаем фоновые циклы мессенджера (их логику добавим в следующем шаге)
+            if (typeof loadContactsAndRequests === 'function') {
+                loadContactsAndRequests();
+            }
+        }
+
+        // Переключение режимов Вход / Регистрация (Анимация текста)
+        function toggleAuthMode() {
+            isRegisterMode = !isRegisterMode;
+            const title = document.getElementById('authTitle');
+            const desc = document.getElementById('authDesc');
+            const toggleBtn = document.getElementById('authToggleMode');
+            const field2fa = document.getElementById('twoFaField');
+
+            if (isRegisterMode) {
+                title.innerText = 'Регистрация в GeraGram';
+                desc.innerText = 'Создайте защищенный криптоаккаунт в СУБД';
+                toggleBtn.innerText = 'Уже есть аккаунт? Войти';
+                field2fa.style.display = 'none'; // При регистрации 2FA не требуется
+            } else {
+                title.innerText = 'Войти в GeraGram';
+                desc.innerText = 'Введите логин и секретный ключ доступа';
+                toggleBtn.innerText = 'Создать защищённый аккаунт';
+            }
+        }
+
+        // --- 🛡️ ОБРАБОТКА АВТОРИЗАЦИИ И РЕГИСТРАЦИИ (Fetch API) ---
+        async function handleAuth() {
+            const usernameInput = document.getElementById('authUsername').value.trim();
+            const passwordInput = document.getElementById('authPassword').value;
+            const twoFaCodeInput = document.getElementById('auth2FaCode').value.trim();
+
+            if (!usernameInput || !passwordInput) {
+                alert('Пожалуйста, заполните все обязательные поля!');
+                return;
+            }
+
+            const endpoint = isRegisterMode ? '/api/geragram/register' : '/api/geragram/login';
+            const payload = {
+                username: usernameInput,
+                password: passwordInput
+            };
+
+            // Если поле 2FA активно, подшиваем код в JSON-запрос
+            if (!isRegisterMode && twoFaCodeInput) {
+                payload.two_fa_code = twoFaCodeInput;
+            }
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    alert(data.detail || 'Произошла ошибка авторизации');
+                    return;
+                }
+
+                if (data.status === 'requires_2fa') {
+                    // Бэкенд сообщил, что у аккаунта включена двухфакторка. Проявляем инпут!
+                    alert(data.msg);
+                    document.getElementById('twoFaField').style.display = 'block';
+                    return;
+                }
+
+                if (data.status === 'success') {
+                    if (isRegisterMode) {
+                        alert('Аккаунт успешно создан в MongoDB Atlas! Теперь вы можете войти.');
+                        toggleAuthMode();
+                    } else {
+                        myUsername = data.username;
+                        initMessengerApp();
+                    }
+                }
+            } catch (error) {
+                console.error('Ошибка сети:', error);
+                alert('Не удалось связаться с сервером Geragram.');
+            }
+        }
+
+        // --- 🎨 МОДУЛЬ КАСТОМИЗАЦИИ И ОБОЕВ ---
+        function openWallpaperModal() { 
+            document.getElementById('wallpaperModal').style.display = 'flex'; 
+        }
+
+        function closeWallpaperModal() { 
+            document.getElementById('wallpaperModal').style.display = 'none'; 
+        }
+
+        // Смена премиум-градиентов (Векторная сетка-паттерн накладывается поверх через CSS)
+        function setWallpaper(gradientValue) {
+            document.getElementById('chatBodyScroll').style.background = gradientValue;
+        }
+
+        // Установка кастомного URL изображения на фон облака чата
+        function setCustomWallpaperImg(url) {
+            if (url.trim() !== '') {
+                document.getElementById('chatBodyScroll').style.background = `url('${url}') center/cover no-repeat`;
+            }
+        }
+
+        // Переключатель двухфакторной аутентификации (2FA) из панели настроек
+        async function toggleTwoFaSystem() {
+            const code = prompt('Введите новый секретный цифровой код для защиты аккаунта (минимум 4 цифры) или оставьте пустым для отключения:');
+            
+            const enabled = (code && code.trim().length >= 4);
+            const payload = {
+                enabled: enabled,
+                pin_code: enabled ? code.trim() : null
+            };
+
+            try {
+                const res = await fetch('/api/geragram/users/toggle-2fa', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                alert(data.msg);
+            } catch (err) {
+                alert('Не удалось изменить настройки безопасности базы данных.');
+            }
+        }
+
+        // Загрузка кастомной аватарки пользователя в облачное хранилище бэкенда
+        function triggerAvatarUpload() {
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
+            
+            fileInput.onchange = async () => {
+                const files = fileInput.files;
+                if (!files || files.length === 0) return;
+
+                const formData = new FormData();
+                formData.append('file', files[0]);
+
+                try {
+                    const res = await fetch('/api/geragram/upload-media', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const data = await res.json();
+                    
+                    if (res.ok) {
+                        alert('Аватар успешно отправлен на сервер! Перезайдите в мессенджер для обновления конфигурации.');
+                    } else {
+                        alert('Ошибка при загрузке аватара.');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('Сбой загрузки файла.');
+                }
+            };
+            
+            fileInput.click();
+        }
+        // --- 🔍 МОДУЛЬ ГЛОБАЛЬНОГО ПОИСКА И КОНТАКТОВ ---
+
+        // Глобальный поиск по никнейму (срабатывает при каждом вводе буквы)
+        async function searchUsersGlobal() {
+            const query = document.getElementById('globalUserSearch').value.trim();
+            const dropdown = document.getElementById('searchResults');
+
+            if (!query) {
+                dropdown.style.display = 'none';
+                dropdown.innerHTML = '';
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/geragram/users/search?q=${encodeURIComponent(query)}`);
+                const users = await res.json();
+
+                if (!res.ok || users.length === 0) {
+                    dropdown.innerHTML = '<div style="padding:10px; color:var(--tg-text-muted); font-size:13px;">Ничего не найдено</div>';
+                    dropdown.style.display = 'block';
+                    return;
+                }
+
+                dropdown.innerHTML = '';
+                users.forEach(user => {
+                    const div = document.createElement('div');
+                    div.className = 'search-user-item';
+                    
+                    // Генерируем HTML аватарки для выпадающего списка
+                    let avatarHtml = '';
+                    if (user.avatar_type === 'letter') {
+                        avatarHtml = `<div class="avatar-circle" style="background: ${user.avatar_data.gradient}; width:36px; height:36px; font-size:14px; margin-right:10px;">${user.avatar_data.letter}</div>`;
+                    } else {
+                        avatarHtml = `<div class="avatar-circle" style="background-image: url('${user.avatar_url}'); width:36px; height:36px; margin-right:10px;"></div>`;
+                    }
+
+                    div.innerHTML = `
+                        ${avatarHtml}
+                        <div>
+                            <div style="font-weight:600; font-size:14px;">${user.display_name}</div>
+                            <div style="font-size:12px; color:var(--tg-text-muted);">@${user.username}</div>
+                        </div>
+                    `;
+
+                    // При клике на пользователя из поиска — открываем чат с ним (написать можно даже без контакта)
+                    div.onclick = () => {
+                        dropdown.style.display = 'none';
+                        document.getElementById('globalUserSearch').value = '';
+                        selectChat(user.username);
+                    };
+
+                    dropdown.appendChild(div);
+                });
+                dropdown.style.display = 'block';
+
+            } catch (err) {
+                console.error('Ошибка поиска:', err);
+            }
+        }
+
+        // Загрузка списков контактов и заявок с бэкенда
+        async function loadContactsAndRequests() {
+            try {
+                const res = await fetch('/api/geragram/contacts/list');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                const container = document.getElementById('chatsContainerList');
+                container.innerHTML = '';
+
+                // 1. Сначала рендерим входящие заявки на обмен контактами (как уведомления)
+                if (data.incoming_requests && data.incoming_requests.length > 0) {
+                    data.incoming_requests.forEach(req => {
+                        const item = document.createElement('div');
+                        item.className = 'chat-item';
+                        item.style.borderLeft = '4px solid var(--tg-button)';
+                        
+                        let avHtml = getAvatarElementHtml(req, 40);
+
+                        item.innerHTML = `
+                            ${avHtml}
+                            <div class="chat-info" style="margin-left:10px;">
+                                <div class="chat-name-row">
+                                    <div class="chat-name" style="color:var(--tg-button); font-size:13px;">Запрос контакта!</div>
+                                </div>
+                                <div class="chat-last-msg" style="color:white; font-weight:600;">@${req.username} хочет обменяться</div>
+                                <button class="auth-btn" style="padding:4px 8px; font-size:11px; margin-top:5px; background:#4cd964;" onclick="acceptContactDirectly('${req.username}', event)">Принять</button>
+                            </div>
+                        `;
+                        container.appendChild(item);
+                    });
+                }
+
+                // 2. Рендерим список подтверждённых контактов
+                if (data.contacts && data.contacts.length > 0) {
+                    data.contacts.forEach(contact => {
+                        const item = document.createElement('div');
+                        item.className = 'chat-item' + (activeChatUser === contact.username ? ' active' : '');
+                        
+                        let avHtml = getAvatarElementHtml(contact, 44);
+
+                        item.innerHTML = `
+                            ${avHtml}
+                            <div class="chat-info">
+                                <div class="chat-name-row">
+                                    <div class="chat-name">${contact.display_name}</div>
+                                </div>
+                                <div class="chat-last-msg">@${contact.username} • Нажмите для чата</div>
+                            </div>
+                        `;
+
+                        item.onclick = () => selectChat(contact.username);
+                        container.appendChild(item);
+                    });
+                } else if (!data.incoming_requests || data.incoming_requests.length === 0) {
+                    container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--tg-text-muted); font-size:13px;">Список контактов пуст. Найдите кого-нибудь через поиск вверху!</div>';
+                }
+
+            } catch (err) {
+                console.error('Ошибка загрузки контактов:', err);
+            }
+        }
+
+        // Вспомогательная функция сборки HTML-кода аватарки
+        function getAvatarElementHtml(user, size) {
+            if (user.avatar_type === 'letter') {
+                return `<div class="avatar-circle" style="background: ${user.avatar_data.gradient}; width:${size}px; height:${size}px; font-size:${size/2.2}px;">${user.avatar_data.letter}</div>`;
+            } else {
+                return `<div class="avatar-circle" style="background-image: url('${user.avatar_url}'); width:${size}px; height:${size}px;"></div>`;
+            }
+        }
+
+        // Быстрое принятие заявки по кнопке из сайдбара
+        async function acceptContactDirectly(username, event) {
+            event.stopPropagation(); // Отменяем клик по самому элементу чата
+            try {
+                const res = await fetch('/api/geragram/contacts/propose', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target_username: username })
+                });
+                if (res.ok) {
+                    alert('Контакт успешно добавлен в ваш список!');
+                    loadContactsAndRequests();
+                }
+            } catch (err) {
+                alert('Не удалось принять запрос.');
+            }
+        }
+
+        // Отправка предложения обмена контактами из шторки профиля
+        async function sendContactRequest() {
+            if (!activeChatUser) return;
+            try {
+                const res = await fetch('/api/geragram/contacts/propose', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target_username: activeChatUser })
+                });
+                const data = await res.json();
+                alert(data.msg);
+            } catch (err) {
+                alert('Ошибка отправки запроса.');
+            }
+      }
+        // --- 💬 МОДУЛЬ ЧАТА, БЛОКИРОВОК И ГОЛОСОВЫХ СООБЩЕНИЙ ---
+
+        // Переключение на конкретного пользователя (Открытие диалога)
+        async function selectChat(username) {
+            activeChatUser = username;
+            
+            // Скрываем начальный экран-заглушку
+            document.getElementById('noChatSelected').style.display = 'none';
+            
+            // Чистим старый таймер обновлений, если он был запущен
+            if (chatInterval) clearInterval(chatInterval);
+            
+            // Перезапрашиваем профиль человека и историю сообщений
+            await syncUserProfileAndPrivacy();
+            await loadChatHistory();
+            
+            // Включаем автообновление переписки каждые 2 секунды
+            chatInterval = setInterval(loadChatHistory, 2000);
+        }
+
+        // Синхронизация данных профиля и прав приватности (Муты / Блокировки)
+        async function syncUserProfileAndPrivacy() {
+            if (!activeChatUser) return;
+            
+            try {
+                const res = await fetch(`/api/geragram/users/profile/${activeChatUser}`);
+                if (!res.ok) return;
+                const profile = await res.json();
+                
+                const lockOverlay = document.getElementById('drawerLockOverlay');
+                const drawerBody = document.getElementById('drawerBodyData');
+                
+                // 🚨 ПРОВЕРКА ПО ТВОЕЙ ЗАДУМКЕ: Если этот юзер нас заблокировал
+                if (profile.is_blocked_by_them) {
+                    lockOverlay.style.display = 'flex';
+                    drawerBody.classList.add('blurred-lock');
+                    
+                    // Обновляем шапку чата в стиле "Заблокированный профиль"
+                    document.getElementById('currentChatName').innerText = `@${activeChatUser}`;
+                    document.getElementById('currentChatStatus').innerText = 'Доступ ограничен';
+                    document.getElementById('currentChatAvatar').innerHTML = '❌';
+                    document.getElementById('currentChatAvatar').style.background = '#333';
+                    return;
+                }
+                
+                // Если всё хорошо — убираем блокировки и размытие
+                lockOverlay.style.display = 'none';
+                drawerBody.classList.remove('blurred-lock');
+                
+                // Заполняем данные в шторке профиля
+                document.getElementById('drawerDisplayName').innerText = profile.display_name;
+                document.getElementById('drawerUsername').innerText = `@${profile.username}`;
+                document.getElementById('drawerStatus').innerText = profile.status;
+                document.getElementById('drawerJoinedDate').innerText = profile.joined_date;
+                
+                // Отрендерим аватар в профиле
+                if (profile.avatar_type === 'letter') {
+                    document.getElementById('drawerAvatar').style.backgroundImage = 'none';
+                    document.getElementById('drawerAvatar').style.background = profile.avatar_data.gradient;
+                    document.getElementById('drawerAvatar').innerText = profile.avatar_data.letter;
+                } else {
+                    document.getElementById('drawerAvatar').innerText = '';
+                    document.getElementById('drawerAvatar').style.backgroundImage = `url('${profile.avatar_url}')`;
+                }
+
+                // Обновляем шапку активного чата сверху
+                document.getElementById('currentChatName').innerText = profile.display_name;
+                document.getElementById('currentChatStatus').innerText = profile.status;
+                
+                const headerAvatar = document.getElementById('currentChatAvatar');
+                if (profile.avatar_type === 'letter') {
+                    headerAvatar.style.backgroundImage = 'none';
+                    headerAvatar.style.background = profile.avatar_data.gradient;
+                    headerAvatar.innerText = profile.avatar_data.letter;
+                } else {
+                    headerAvatar.innerText = '';
+                    headerAvatar.style.backgroundImage = `url('${profile.avatar_url}')`;
+                }
+
+                // Меняем текст кнопок управления
+                document.getElementById('blockToggleBtn').innerHTML = profile.i_blocked_them 
+                    ? '<i class="fa-solid fa-user-check"></i> Разблокировать' 
+                    : '<i class="fa-solid fa-user-slash"></i> Заблокировать';
+                
+                document.getElementById('muteToggleBtn').innerHTML = profile.i_muted_them 
+                    ? '<i class="fa-solid fa-bell"></i> Уведомления: Выкл' 
+                    : '<i class="fa-solid fa-bell-slash"></i> Уведомления: Вкл';
+
+            } catch (err) {
+                console.error('Ошибка синхронизации профиля:', err);
+            }
+        }
+
+        // Загрузка и рендеринг истории сообщений из MongoDB Atlas
+        async function loadChatHistory() {
+            if (!activeChatUser) return;
+            
+            try {
+                const res = await fetch(`/api/geragram/messages/history/${activeChatUser}`);
+                if (!res.ok) return;
+                const messages = await res.json();
+                
+                const container = document.getElementById('messagesContainer');
+                
+                // Проверяем, изменилось ли количество сообщений, чтобы не перерисовывать зря и не дёргать скролл
+                const currentBubblesCount = container.querySelectorAll('.msg-bubble').length;
+                if (messages.length === currentBubblesCount) return;
+                
+                container.innerHTML = '';
+                
+                messages.forEach(msg => {
+                    const bubble = document.createElement('div');
+                    // Проверяем, наше сообщение (исходящее) или собеседника (входящее)
+                    const isOutbound = (msg.from_user !== activeChatUser);
+                    bubble.className = `msg-bubble ${isOutbound ? 'msg-outbound' : 'msg-inbound'}`;
+                    
+                    let bodyContent = '';
+                    
+                    // Если тип контента - текст
+                    if (msg.msg_type === 'text') {
+                        bodyContent = `<span style="white-space: pre-wrap;">${escapeHtml(msg.content)}</span>`;
+                    } 
+                    // Если тип контента - голосовое сообщение (Рендерим Telegram-плеер)
+                    else if (msg.msg_type === 'voice') {
+                        bodyContent = `
+                            <div class="voice-msg-player">
+                                <button class="voice-play-btn" onclick="playVoiceAudio('${msg.content}', this)">
+                                    <i class="fa-solid fa-play"></i>
+                                </button>
+                                <div class="voice-wave-visual">
+                                    <div class="voice-wave-bar" style="height:40%"></div>
+                                    <div class="voice-wave-bar" style="height:70%"></div>
+                                    <div class="voice-wave-bar" style="height:50%"></div>
+                                    <div class="voice-wave-bar" style="height:85%"></div>
+                                    <div class="voice-wave-bar" style="height:30%"></div>
+                                    <div class="voice-wave-bar" style="height:60%"></div>
+                                </div>
+                                <span class="voice-duration">0:05</span>
+                            </div>
+                        `;
+                    }
+                    
+                    // Парсим красивое время
+                    const msgTime = msg.timestamp ? msg.timestamp.substring(11, 16) : '--:--';
+                    
+                    bubble.innerHTML = `
+                        ${bodyContent}
+                        <span class="msg-time">${msgTime}</span>
+                    `;
+                    container.appendChild(bubble);
+                });
+                
+                // Автоматическая прокрутка чата вниз при получении новых мессенджей
+                const scrollWrapper = document.getElementById('chatBodyScroll');
+                scrollWrapper.scrollTop = scrollWrapper.scrollHeight;
+
+            } catch (err) {
+                console.error('Ошибка загрузки сообщений:', err);
+            }
+        }
+
+        // Отправка обычного текстового сообщения
+        async function sendMessage() {
+            const input = document.getElementById('messageInputField');
+            const text = input.value.trim();
+            if (!text || !activeChatUser) return;
+            
+            try {
+                const res = await fetch('/api/getagram/messages/send', { // Примечание: на бэкенде роут geragram, поправим опечатку во фронте
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        to_user: activeChatUser,
+                        content: text,
+                        msg_type: 'text'
+                    })
+                });
+                
+                // Если бэкенд вернул 403 (блокировка), выкидываем ошибку
+                if (res.status === 403) {
+                    alert('Невозможно отправить сообщение: вы заблокированы или заблокировали пользователя.');
+                    return;
+                }
+                
+                if (res.ok) {
+                    input.value = '';
+                    loadChatHistory();
+                }
+            } catch (err) {
+                alert('Ошибка отправки.');
+            }
+        }
+        // --- 🎙️ ДВИЖОК ЗАПИСИ ГОЛОСОВЫХ СООБЩЕНИЙ ---
+        let mediaRecorder = null;
+        let audioChunks = [];
+
+        async function toggleVoiceRecording() {
+            const recBtn = document.getElementById('voiceRecordBtn');
+            
+            if (!isRecording) {
+                // Активируем захват микрофона устройства
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+                    
+                    mediaRecorder.ondataavailable = event => {
+                        audioChunks.push(event.data);
+                    };
+                    
+                    mediaRecorder.onstop = async () => {
+                        // Склеиваем аудио-кусочки в единый WebM блоб
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        await uploadAndSendVoiceMessage(audioBlob);
+                        
+                        // Гасим микрофон, чтобы на устройстве пропал индикатор записи
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                    
+                    mediaRecorder.start();
+                    isRecording = true;
+                    recBtn.classList.add('recording');
+                    recBtn.innerHTML = '<i class="fa-solid fa-stop"></i>';
+                } catch (err) {
+                    alert('Не удалось получить доступ к микрофону устройства.');
+                }
+            } else {
+                // Останавливаем запись звука
+                if (mediaRecorder) mediaRecorder.stop();
+                isRecording = false;
+                recBtn.classList.remove('recording');
+                recBtn.innerHTML = '<i class="fa-solid fa-microphone"></i>';
+            }
+        }
+
+        // Загрузка аудиозаписи в СУБД-облако и отправка её ссылки в чат
+        async function uploadAndSendVoiceMessage(blob) {
+            if (!activeChatUser) return;
+            
+            const formData = new FormData();
+            formData.append('file', blob, 'voice_msg.webm');
+            
+            try {
+                // 1. Отправляем бинарный файл на бэкенд-загрузчик медиа
+                const uploadRes = await fetch('/api/geragram/upload-media', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!uploadRes.ok) return;
+                const uploadData = await uploadRes.json();
+                
+                // 2. Генерируем сообщение типа voice с URL-адресом файла
+                await fetch('/api/geragram/messages/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        to_user: activeChatUser,
+                        content: uploadData.url, 
+                        msg_type: 'voice'
+                    })
+                });
+                
+                loadChatHistory();
+            } catch (err) {
+                console.error('Ошибка обработки аудио:', err);
+            }
+        }
+
+        // Воспроизведение голосового сообщения при клике по кнопке Play
+        let currentPlayingAudio = null;
+        function playVoiceAudio(url, btnElement) {
+            if (currentPlayingAudio) {
+                currentPlayingAudio.pause();
+                // Сбрасываем иконки у всех остальных проигрывателей
+                const activePlayBtns = document.querySelectorAll('.voice-play-btn i');
+                activePlayBtns.forEach(i => { i.className = 'fa-solid fa-play'; });
+            }
+            
+            const icon = btnElement.querySelector('i');
+            currentPlayingAudio = new Audio(url);
+            currentPlayingAudio.play();
+            icon.className = 'fa-solid fa-pause';
+            
+            currentPlayingAudio.onended = () => {
+                icon.className = 'fa-solid fa-play';
+            };
+        }
+
+        // --- ⚙️ СИСТЕМНЫЕ ФУНКЦИИ ПРИВАТНОСТИ ---
+        async function toggleBlockUser() {
+            if (!activeChatUser) return;
+            try {
+                const res = await fetch('/api/geragram/users/toggle-block', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target_username: activeChatUser })
+                });
+                if (res.ok) {
+                    syncUserProfileAndPrivacy();
+                    loadChatHistory();
+                }
+            } catch (err) { alert('Ошибка действия.'); }
+        }
+
+        async function toggleMuteUser() {
+            if (!activeChatUser) return;
+            try {
+                const res = await fetch('/api/geragram/users/toggle-mute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target_username: activeChatUser })
+                });
+                if (res.ok) syncUserProfileAndPrivacy();
+            } catch (err) { alert('Ошибка действия.'); }
+        }
+
+        // Защита от XSS-уязвимостей (экранирование спецсимволов)
+        function escapeHtml(text) {
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+    </script>
+</body>
+</html>
