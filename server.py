@@ -4059,72 +4059,55 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
     await geragram_chats.insert_one(new_msg)
     return {"status": "success", "msg": "Сообщение доставлено в облако"}
 
-# --- ⚙️ НОВЫЕ СЕРВЕРНЫЕ ЭНДПОИНТЫ ДЛЯ УПРАВЛЕНИЯ ЧАТОМ ---
+# --- ⚙️ ИСПРАВЛЕННЫЕ СЕРВЕРНЫЕ ЭНДПОИНТЫ (ЗАМЕНЕНО НА get_current_gera_user) ---
 
 @app.post("/api/geragram/messages/edit")
-async def edit_message(payload: dict, current_user: str = Depends(get_current_user)):
-    """Редактирование текста сообщения автором в MongoDB Atlas"""
+# 🎯 ИСПРАВЛЕНО ЗДЕСЬ:
+async def edit_message(payload: dict, current_user: str = Depends(get_current_gera_user)):
     msg_id = payload.get("message_id")
     new_content = payload.get("new_content")
-    
     if not msg_id or not new_content:
         raise HTTPException(status_code=400, detail="Неполные данные запроса")
-        
-    # Ищем сообщение в базе и проверяем, что его автором является именно текущий юзер
     result = await db.messages.update_one(
         {"_id": ObjectId(msg_id), "from_user": current_user},
         {"$set": {"content": new_content, "is_edited": True}}
     )
-    
     if result.modified_count == 0:
         raise HTTPException(status_code=403, detail="Действие запрещено или сообщение не найдено")
-        
     return {"status": "success", "msg": "Сообщение успешно отредактировано"}
 
 
 @app.post("/api/geragram/messages/delete")
-async def delete_message(payload: dict, current_user: str = Depends(get_current_user)):
-    """Удаление сообщения автором для всех участников"""
+# 🎯 ИСПРАВЛЕНО ЗДЕСЬ:
+async def delete_message(payload: dict, current_user: str = Depends(get_current_gera_user)):
     msg_id = payload.get("message_id")
-    
     if not msg_id:
         raise HTTPException(status_code=400, detail="ID сообщения не указан")
-        
-    # Проверяем авторство перед физическим удалением из MongoDB
     result = await db.messages.delete_one({"_id": ObjectId(msg_id), "from_user": current_user})
-    
     if result.deleted_count == 0:
         raise HTTPException(status_code=403, detail="Невозможно удалить чужое сообщение")
-        
     return {"status": "success", "msg": "Сообщение стёрто из облака Atlas"}
 
 
 @app.post("/api/geragram/chats/pin")
-async def pin_chat_message(payload: dict, current_user: str = Depends(get_current_user)):
-    """Закрепление сообщения в диалоге для обоих юзеров"""
+# 🎯 ИСПРАВЛЕНО ЗДЕСЬ:
+async def pin_chat_message(payload: dict, current_user: str = Depends(get_current_gera_user)):
     target_chat = payload.get("target_username")
     msg_text = payload.get("message_text")
     is_unpin = payload.get("unpin", False)
-    
     if not target_chat:
         raise HTTPException(status_code=400, detail="Не указан целевой чат")
-        
-    # Генерируем уникальный ключ комнаты для пары собеседников
     chat_room_id = "".join(sorted([current_user, target_chat]))
-    
     if is_unpin:
-        # Убираем закреп из коллекции комнат/диалогов
         await db.pinned_messages.delete_one({"room_id": chat_room_id})
         return {"status": "success", "msg": "Закреп успешно снят"}
-        
-    # Сохраняем или обновляем закрепленный текст в базе
     await db.pinned_messages.update_one(
         {"room_id": chat_room_id},
         {"$set": {"text": msg_text, "pinned_by": current_user}},
         upsert=True
     )
-    
     return {"status": "success", "msg": "Сообщение закреплено в базе данных"}
+
     
 # 2. Получить историю переписки с конкретным пользователем
 @app.get("/api/geragram/messages/history/{target_username}")
