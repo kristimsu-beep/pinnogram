@@ -1263,7 +1263,7 @@
             }
         }
 
-        // Загрузка и рендеринг истории сообщений из MongoDB Atlas
+        // Загрузка и рендеринг истории сообщений из MongoDB Atlas (С поддержкой цитат и правок)
         async function loadChatHistory() {
             if (!activeChatUser) return;
             
@@ -1274,7 +1274,7 @@
                 
                 const container = document.getElementById('messagesContainer');
                 
-                // Проверяем, изменилось ли количество сообщений, чтобы не перерисовывать зря и не дёргать скролл
+                // Проверяем, изменилось ли количество сообщений
                 const currentBubblesCount = container.querySelectorAll('.msg-bubble').length;
                 if (messages.length === currentBubblesCount) return;
                 
@@ -1282,19 +1282,32 @@
                 
                 messages.forEach(msg => {
                     const bubble = document.createElement('div');
-                    // Проверяем, наше сообщение (исходящее) или собеседника (входящее)
                     const isOutbound = (msg.from_user !== activeChatUser);
                     bubble.className = `msg-bubble ${isOutbound ? 'msg-outbound' : 'msg-inbound'}`;
                     
+                    // 🎯 КРИТИЧЕСКИЙ ФИКС: Привязываем реальный ID сообщения из MongoDB Atlas к HTML-элементу!
+                    bubble.dataset.id = msg._id || msg.id; 
+                    
                     let bodyContent = '';
+                    let messageText = msg.content;
+                    
+                    // 🎙️ ТЕЛЕГРАМ-ЦИТАТА: Если сообщение является ответом на другое сообщение
+                    if (msg.reply_to_text) {
+                        bodyContent += `
+                            <div class="msg-reply-quote">
+                                <div style="font-weight:600; color:var(--tg-button); font-size:11px;">Ответ</div>
+                                <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(msg.reply_to_text)}</div>
+                            </div>
+                        `;
+                    }
                     
                     // Если тип контента - текст
                     if (msg.msg_type === 'text') {
-                        bodyContent = `<span style="white-space: pre-wrap;">${escapeHtml(msg.content)}</span>`;
+                        bodyContent += `<span style="white-space: pre-wrap;">${escapeHtml(messageText)}</span>`;
                     } 
-                    // Если тип контента - голосовое сообщение (Рендерим Telegram-плеер)
+                    // Если тип контента - голосовое сообщение
                     else if (msg.msg_type === 'voice') {
-                        bodyContent = `
+                        bodyContent += `
                             <div class="voice-msg-player">
                                 <button class="voice-play-btn" onclick="playVoiceAudio('${msg.content}', this)">
                                     <i class="fa-solid fa-play"></i>
@@ -1303,78 +1316,72 @@
                                     <div class="voice-wave-bar" style="height:40%"></div>
                                     <div class="voice-wave-bar" style="height:70%"></div>
                                     <div class="voice-wave-bar" style="height:50%"></div>
-                                    <div class="voice-wave-bar" style="height:85%"></div>
-                                    <div class="voice-wave-bar" style="height:30%"></div>
-                                    <div class="voice-wave-bar" style="height:60%"></div>
                                 </div>
                                 <span class="voice-duration">0:05</span>
                             </div>
                         `;
                     }
                     
-                    // 🔥 ИСПРАВЛЕНО: Динамическая конвертация серверного времени в местное время региона пользователя
+                    // Конвертируем время в местное время региона пользователя
                     let msgTime = '--:--';
                     if (msg.timestamp) {
                         try {
-                            // Если строка времени не оканчивается на Z, подставляем её, чтобы JS понял, что это UTC
                             const dateStr = msg.timestamp.endsWith('Z') ? msg.timestamp : msg.timestamp + 'Z';
-                            const utcDate = new Date(dateStr);
-                            
-                            // Форматируем строго под местный регион пользователя (выведет локальные часы:минуты)
-                            msgTime = utcDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                        } catch(e) {
-                            // Резервный ручной парсинг на случай сбоя формата
-                            msgTime = msg.timestamp.substring(11, 16); 
-                        }
+                            msgTime = new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        } catch(e) { msgTime = msg.timestamp.substring(11, 16); }
                     }
+                    
+                    // ✏️ ТЕЛЕГРАМ-ПЛАШКА "изменено": Добавляем надпись, если у сообщения в базе стоит флаг исправления
+                    const editedLabel = msg.is_edited ? '<span style="font-size:10px; opacity:0.5; margin-right:4px;">изменено</span>' : '';
                     
                     bubble.innerHTML = `
                         ${bodyContent}
-                        <span class="msg-time">${msgTime}</span>
+                        <div style="text-align: right; margin-top: 4px; display: block; font-size: 11px;">
+                            ${editedLabel}
+                            <span class="msg-time" style="color: rgba(255,255,255,0.5);">${msgTime}</span>
+                        </div>
                     `;
                     container.appendChild(bubble);
                 });
                 
-                // Автоматическая прокрутка чата вниз при получении новых мессенджей
                 const scrollWrapper = document.getElementById('chatBodyScroll');
                 scrollWrapper.scrollTop = scrollWrapper.scrollHeight;
 
-            } catch (err) {
-                console.error('Ошибка загрузки сообщений:', err);
-            }
+            } catch (err) { console.error(err); }
         }
 
 
-        // 🔥 СУПЕР-ДВИЖОК ОТПРАВКИ: ТЕКСТ, РЕДАКТИРОВАНИЕ И ЦИТИРОВАНИЕ
+
+        // 🔥 УМНЫЙ ДВИЖОК ОТПРАВКИ: ПОДДЕРЖКА НАСТОЯЩИХ ЦИТАТ И ПРАВОК В БАЗУ ДАННЫХ
         async function sendMessage() {
             const input = document.getElementById('messageInputField');
             const text = input.value.trim();
             if (!text || !activeChatUser) return;
             
-            // 📝 РЕЖИМ 1: Если включено РЕДАКТИРОВАНИЕ нашего сообщения
+            // 📝 1. РЕЖИМ РЕДАКТИРОВАНИЯ (Стучимся на бэкенд в MongoDB)
             if (editMsgId) {
-                const bubble = document.querySelector(`[data-id="${editMsgId}"]`);
-                if (bubble && bubble.querySelector('span')) {
-                    bubble.querySelector('span').innerText = text + " (изменено)";
-                }
-                
-                // В реальном приложении здесь отправляется PUT/POST запрос на бэкенд /api/geragram/messages/edit
-                editMsgId = null; // Сбрасываем флаг правки
-                input.value = '';
+                try {
+                    const res = await fetch('/api/geragram/messages/edit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message_id: editMsgId, new_content: text })
+                    });
+                    if (res.ok) {
+                        editMsgId = null;
+                        input.value = '';
+                        loadChatHistory();
+                    } else { alert('Не удалось сохранить изменения.'); }
+                } catch (err) { alert('Ошибка редактирования.'); }
                 return;
             }
 
-            // 💬 РЕЖИМ 2 и 3: Обычная отправка или ОТВЕТ (цитирование)
+            // 🎙️ 2. РЕЖИМ ОТВЕТА (ЦИТИРОВАНИЯ) И ОБЫЧНОЙ ОТПРАВКИ
             try {
-                const payload = {
-                    to_user: activeChatUser,
-                    content: text,
-                    msg_type: 'text'
-                };
-
-                // Если мы отвечаем на сообщение, подшиваем в контент цитату (для визуализации в чате)
+                const payload = { to_user: activeChatUser, content: text, msg_type: 'text' };
+                
+                // Передаем текст цитаты на бэкенд, чтобы он зашил его в структуру сообщения
                 if (replyToMsgId) {
-                    payload.content = `[В ответ на: ${selectedMsgText}]\n${text}`;
+                    payload.reply_to_text = selectedMsgText; 
                 }
 
                 const res = await fetch('/api/geragram/messages/send', {
@@ -1384,19 +1391,53 @@
                 });
                 
                 if (res.status === 403) {
-                    alert('Невозможно отправить сообщение: вы заблокированы или заблокировали пользователя.');
+                    alert('Невозможно отправить сообщение: приватность ограничена.');
                     return;
                 }
                 
                 if (res.ok) {
                     input.value = '';
-                    if (replyToMsgId) cancelReplyMode(); // Гасим плашку ответа над инпутом после отправки
-                    loadChatHistory(); 
+                    if (replyToMsgId) cancelReplyMode();
+                    loadChatHistory();
                 }
-            } catch (err) {
-                alert('Ошибка отправки сообщения в облако Geragram.');
-            }
+            } catch (err) { alert('Ошибка отправки.'); }
         }
+
+        // 🔥 НАСТОЯЩЕЕ УДАЛЕНИЕ СООБЩЕНИЯ ИЗ БАЗЫ ДАННЫХ ATLAS
+        async function triggerDeleteAction() {
+            if (!selectedMsgId) return;
+            if (!confirm('Вы действительно хотите удалить это сообщение для всех?')) return;
+            
+            try {
+                const res = await fetch('/api/geragram/messages/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message_id: selectedMsgId })
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    // Удаляем пузырь с экрана локально
+                    const bubble = document.querySelector(`[data-id="${selectedMsgId}"]`);
+                    if (bubble) bubble.remove();
+                    loadChatHistory();
+                } else {
+                    alert(data.detail || 'Ошибка удаления');
+                }
+            } catch (err) { alert('Не удалось связаться с сервером для удаления.'); }
+        }
+
+        // Подготовка к редактированию (Подстановка старого текста в инпут ввода)
+        function triggerEditAction() {
+            editMsgId = selectedMsgId;
+            replyToMsgId = null; 
+            cancelReplyMode();
+            
+            const input = document.getElementById('messageInputField');
+            input.value = selectedMsgText; 
+            input.focus();
+        }
+
 
         // --- 🎙️ ДВИЖОК ЗАПИСИ ГОЛОСОВЫХ СООБЩЕНИЙ ---
         let mediaRecorder = null;
@@ -1606,15 +1647,6 @@
         function cancelReplyMode() {
             replyToMsgId = null;
             document.getElementById('replyPreviewBar').style.display = 'none';
-        }
-
-        // Функция активации режима редактирования сообщения
-        function triggerEditAction() {
-            editMsgId = selectedMsgId;
-            replyToMsgId = null; // Сбрасываем ответ
-            const input = document.getElementById('messageInputField');
-            input.value = selectedMsgText; // Подставляем текст в инпут для правки
-            input.focus();
         }
 
         // Функция закрепления сообщения в шапке чата
