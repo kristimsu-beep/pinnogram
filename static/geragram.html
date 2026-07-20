@@ -1264,7 +1264,9 @@
         }
 
 
-        // Загрузка и рендеринг истории сообщений из MongoDB Atlas (С поддержкой цитат, правок и мгновенного удаления)
+
+
+        // 🔥 СУПЕР-ДВИЖОК: ЗАГРУЗКА ИСТОРИИ ЧАТА С ПОЛНОЙ ДЕСЕРИАЛИЗАЦИЕЙ OBJECTID MONGODB
         async function loadChatHistory() {
             if (!activeChatUser) return;
             
@@ -1275,7 +1277,7 @@
                 
                 const container = document.getElementById('messagesContainer');
                 
-                // Сравниваем ID сообщений на экране и сервере для мгновенного обновления
+                // Извлекаем чистые 24-значные строки ID для сверки изменений
                 const currentIds = Array.from(container.querySelectorAll('.msg-bubble')).map(b => b.dataset.id).join(',');
                 const serverIds = messages.map(msg => {
                     if (!msg._id) return msg.id;
@@ -1287,7 +1289,7 @@
                     return bubble && msg.is_edited && !bubble.innerHTML.includes('изменено');
                 });
 
-                if (currentIds === serverIds && !hasEditedChanges) return;
+                if (currentIds === serverIds && !hasEditedChanges) return; // Контент не менялся, не перерисовываем
                 
                 container.innerHTML = '';
                 
@@ -1296,22 +1298,22 @@
                     const isOutbound = (msg.from_user !== activeChatUser);
                     bubble.className = `msg-bubble ${isOutbound ? 'msg-outbound' : 'msg-inbound'}`;
                     
-                    // 🎯 КРИТИЧЕСКИЙ ФИКС: Вытаскиваем ObjectId из любого формата MongoDB Atlas
+                    // 🎯 КРИТИЧЕСКИЙ ФИКС ОШИБКИ UNDEFINED: Жестко вытаскиваем 24-значный ID из базы Atlas
                     if (msg._id) {
                         bubble.dataset.id = (typeof msg._id === 'object' && msg._id.$oid) ? msg._id.$oid : msg._id;
-                    } else {
+                    } else if (msg.id) {
                         bubble.dataset.id = msg.id;
                     }
                     
                     let quoteContent = '';
                     let mainMediaContent = '';
                     
-                    // 🎙️ ДИЗАЙН ЦИТАТЫ TELEGRAM: Отрендерится красивой плашкой внутри пузыря!
+                    // 🎙️ ТЕЛЕГРАМ-ДИЗАЙН ЦИТАТЫ ОТВЕТА С ЛЕВОСТОРОННИМ БОРТИКОМ
                     if (msg.reply_to_text) {
                         quoteContent = `
-                            <div class="msg-reply-quote" style="background: rgba(0,0,0,0.15); border-left: 2px solid var(--tg-button); padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-bottom: 6px; color: var(--tg-text-muted); text-align: left;">
-                                <div style="font-weight:600; color:var(--tg-button); font-size:11px;">Ответ</div>
-                                <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width: 100%;">${escapeHtml(msg.reply_to_text)}</div>
+                            <div class="msg-reply-quote" style="background: rgba(0,0,0,0.15); border-left: 3px solid var(--tg-button); padding: 4px 10px; border-radius: 4px; font-size: 12px; margin-bottom: 6px; color: var(--tg-text-muted); text-align: left;">
+                                <div style="font-weight:700; color:var(--tg-button); font-size:11px; margin-bottom:2px;">Ответ</div>
+                                <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; color:var(--tg-text); font-style: italic;">${escapeHtml(msg.reply_to_text)}</div>
                             </div>
                         `;
                     }
@@ -1322,11 +1324,7 @@
                         mainMediaContent = `
                             <div class="voice-msg-player">
                                 <button class="voice-play-btn" onclick="playVoiceAudio('${msg.content}', this)"><i class="fa-solid fa-play"></i></button>
-                                <div class="voice-wave-visual">
-                                    <div class="voice-wave-bar" style="height:40%"></div>
-                                    <div class="voice-wave-bar" style="height:70%"></div>
-                                    <div class="voice-wave-bar" style="height:50%"></div>
-                                </div>
+                                <div class="voice-wave-visual"><div class="voice-wave-bar" style="height:50%"></div><div class="voice-wave-bar" style="height:70%"></div></div>
                                 <span class="voice-duration">0:05</span>
                             </div>
                         `;
@@ -1340,31 +1338,31 @@
                         } catch(e) { msgTime = msg.timestamp.substring(11, 16); }
                     }
                     
-                    const editedLabel = msg.is_edited ? '<span style="font-size:10px; opacity:0.5; margin-right:4px;">изменено</span>' : '';
+                    // Плашка "изменено" как в Telegram
+                    const editedLabel = msg.is_edited ? '<span style="font-size:10px; opacity:0.5; margin-right:4px; font-style:italic;">изменено</span>' : '';
                     
                     bubble.innerHTML = `
                         ${quoteContent}
                         ${mainMediaContent}
                         <div style="text-align: right; margin-top: 4px; display: block; font-size: 11px;">
                             ${editedLabel}
-                            <span class="msg-time" style="color: rgba(255,255,255,0.5);">${msgTime}</span>
+                            <span class="msg-time" style="color: rgba(255,255,255,0.4);">${msgTime}</span>
                         </div>
                     `;
                     container.appendChild(bubble);
                 });
                 
                 document.getElementById('chatBodyScroll').scrollTop = document.getElementById('chatBodyScroll').scrollHeight;
-            } catch (err) { console.error(err); }
+            } catch (err) { console.error('Ошибка отрисовки чата:', err); }
         }
 
-
-
-        // 🔥 ИСПРАВЛЕННАЯ ОТПРАВКА С ЧИСТЫМ ПЕРЕНОСОМ ЦИТАТ
+        // 🔥 УМНЫЙ ДВИЖОК ОТПРАВКИ: РЕДАКТИРОВАНИЕ И НАСТОЯЩИЕ ЦИТАТЫ
         async function sendMessage() {
             const input = document.getElementById('messageInputField');
             const text = input.value.trim();
             if (!text || !activeChatUser) return;
             
+            // Если мы РЕДАКТИРУЕМ наше сообщение
             if (editMsgId) {
                 try {
                     const res = await fetch('/api/geragram/messages/edit', {
@@ -1373,14 +1371,15 @@
                         body: JSON.stringify({ message_id: editMsgId, new_content: text })
                     });
                     if (res.ok) { editMsgId = null; input.value = ''; loadChatHistory(); }
-                } catch (err) { alert('Ошибка редактирования.'); }
+                } catch (err) { alert('Ошибка отправки правки.'); }
                 return;
             }
 
+            // Обычная отправка и ОТВЕТ (цитирование)
             try {
                 const payload = { to_user: activeChatUser, content: text, msg_type: 'text' };
                 
-                // 🎯 Передаем цитату отдельным полем, а не склеиваем с основным текстом!
+                // Подшиваем цитату ответа в JSON-запрос отдельным полем для бэкенда!
                 if (replyToMsgId) {
                     payload.reply_to_text = selectedMsgText; 
                 }
@@ -1399,35 +1398,13 @@
             } catch (err) { alert('Ошибка отправки.'); }
         }
 
-        // Ловим правый клик и жестко считываем data-id сообщения
-        document.getElementById('messagesContainer').addEventListener('contextmenu', function(e) {
-            const bubble = e.target.closest('.msg-bubble');
-            if (!bubble) return;
-            e.preventDefault();
-            
-            selectedMsgId = bubble.dataset.id;
-            // Перестраховка: если ID всё ещё undefined, ищем его заново
+        // 🔥 НАСТОЯЩЕЕ БОЕВОЕ УДАЛЕНИЕ ИЗ MONGODB ATLAS
+        async function triggerDeleteAction() {
             if (!selectedMsgId || selectedMsgId === "undefined") {
-                console.error("Ошибка: ID сообщения не считался!");
+                alert("Не удалось определить ID сообщения для удаления.");
                 return;
             }
-            
-            selectedMsgText = bubble.querySelector('span') ? bubble.querySelector('span').innerText : "Голосовое сообщение";
-            selectedMsgOwner = bubble.classList.contains('msg-outbound');
-            
-            document.getElementById('ctxEdit').style.display = selectedMsgOwner ? 'flex' : 'none';
-            document.getElementById('ctxDelete').style.display = selectedMsgOwner ? 'flex' : 'none';
-            
-            const menu = document.getElementById('msgContextMenu');
-            menu.style.top = `${e.clientY}px`;
-            menu.style.left = `${e.clientX}px`;
-            menu.style.display = 'block';
-        });
-
-        // 🔥 НАСТОЯЩЕЕ УДАЛЕНИЕ СООБЩЕНИЯ ИЗ БАЗЫ ДАННЫХ ATLAS
-        async function triggerDeleteAction() {
-            if (!selectedMsgId) return;
-            if (!confirm('Вы действительно хотите удалить это сообщение для всех?')) return;
+            if (!confirm('Удалить это сообщение для всех участников беседы?')) return;
             
             try {
                 const res = await fetch('/api/geragram/messages/delete', {
@@ -1435,21 +1412,14 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message_id: selectedMsgId })
                 });
-                const data = await res.json();
-                
-                if (res.ok) {
-                    // Удаляем пузырь с экрана локально
-                    const bubble = document.querySelector(`[data-id="${selectedMsgId}"]`);
-                    if (bubble) bubble.remove();
-                    loadChatHistory();
-                } else {
-                    alert(data.detail || 'Ошибка удаления');
-                }
-            } catch (err) { alert('Не удалось связаться с сервером для удаления.'); }
+                if (res.ok) { loadChatHistory(); } 
+                else { alert('Ошибка удаления на стороне сервера.'); }
+            } catch (err) { alert('Сбой сети.'); }
         }
 
-        // Подготовка к редактированию (Подстановка старого текста в инпут ввода)
+        // Подготовка к изменению сообщения
         function triggerEditAction() {
+            if (!selectedMsgId || selectedMsgId === "undefined") return;
             editMsgId = selectedMsgId;
             replyToMsgId = null; 
             cancelReplyMode();
@@ -1458,6 +1428,42 @@
             input.value = selectedMsgText; 
             input.focus();
         }
+
+        // 📱 ГЛУБОКИЙ ПЕРЕХВАТ ПРАВОГО КЛИКА / ЗАЖАТИЯ ДЛЯ ВЫЗОВА КОНТЕКСТНОГО МЕНЮ
+        document.getElementById('messagesContainer').addEventListener('contextmenu', function(e) {
+            const bubble = e.target.closest('.msg-bubble');
+            if (!bubble) return;
+            e.preventDefault(); // Глушим стандартное меню браузера намертво
+            
+            // 🎯 Считываем ID строго из dataset элемента, который заполнила функция loadChatHistory
+            selectedMsgId = bubble.dataset.id;
+            if (!selectedMsgId || selectedMsgId === "undefined") {
+                console.error("[🚨 ERROR] Сообщение ещё не получило ObjectId от MongoDB Atlas.");
+                return;
+            }
+            
+            // Запоминаем чистый текст сообщения для цитирования или правки
+            const spanText = bubble.querySelector('span');
+            selectedMsgText = spanText ? spanText.innerText : "Голосовое сообщение";
+            
+            // Убираем пометку "(изменено)" из буфера, если правим сообщение повторно
+            if (selectedMsgText.endsWith(" (изменено)")) {
+                selectedMsgText = selectedMsgText.replace(" (изменено)", "");
+            }
+            
+            // Проверяем, наше ли это сообщение (исходящее)
+            selectedMsgOwner = bubble.classList.contains('msg-outbound');
+            
+            // Проявляем кнопки редактирования/удаления строго для наших исходящих сообщений
+            document.getElementById('ctxEdit').style.display = selectedMsgOwner ? 'flex' : 'none';
+            document.getElementById('ctxDelete').style.display = selectedMsgOwner ? 'flex' : 'none';
+            
+            // Позиционируем контекстное меню ровно в месте клика
+            const menu = document.getElementById('msgContextMenu');
+            menu.style.top = `${e.clientY}px`;
+            menu.style.left = `${e.clientX}px`;
+            menu.style.display = 'block';
+        });
 
 
         // --- 🎙️ ДВИЖОК ЗАПИСИ ГОЛОСОВЫХ СООБЩЕНИЙ ---
