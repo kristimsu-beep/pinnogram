@@ -4065,17 +4065,16 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
     return {"status": "success", "msg": "Сообщение доставлено в облако"}
 
 
-# --- ⚙️ ОКОНЧАТЕЛЬНЫЙ ФИКС КИРИЛЛИЦЫ ДЛЯ УДАЛЕНИЯ И РЕДАКТИРОВАНИЯ СООБЩЕНИЙ ---
+# --- 🦾 БРОНИРОВАННЫЙ СЕРВЕРНЫЙ ФИКС АВТОРСТВА (ОБНОВЛЕНО) ---
 
 @app.post("/api/geragram/messages/edit")
 async def edit_message(payload: dict, request: Request):
     from bson import ObjectId
-    from urllib.parse import unquote # Локальный импорт для подстраховки
+    from urllib.parse import unquote
     
     me = await get_current_gera_user(request)
-    
-    # 🎯 ГЛАВНЫЙ ФИКС: Принудительно раскодируем никнейм автора перед проверкой СУБД!
-    my_username = unquote(me["username"]).strip()
+    raw_username = me["username"]          # Имя в том виде, как оно хранится в сессии (например, geras%C3%Abv)
+    clean_username = unquote(raw_username) # Раскодированное имя (например, gerasв)
     
     msg_id = payload.get("message_id")
     new_content = payload.get("new_content")
@@ -4083,42 +4082,50 @@ async def edit_message(payload: dict, request: Request):
     if not msg_id or not new_content:
         raise HTTPException(status_code=400, detail="Неполные данные запроса")
         
-    # Ищем документ и проверяем автора по раскодированному чистому никнейму
-    result = await db.messages.update_one(
-        {"_id": ObjectId(msg_id), "from_user": my_username},
+    # 1. Сначала просто находим сообщение в MongoDB Atlas по его уникальному ID
+    msg = await db.messages.find_one({"_id": ObjectId(msg_id)})
+    if not msg:
+        raise HTTPException(status_code=444, detail="Сообщение не найдено")
+        
+    # 2. 🎯 ПРОВЕРКА: Сверяем автора сообщения И в сыром, И в раскодированном виде!
+    if msg["from_user"] != raw_username and msg["from_user"] != clean_username:
+        raise HTTPException(status_code=403, detail="Вы не можете редактировать чужое сообщение")
+        
+    # 3. Если проверка пройдена — обновляем текст в базе данных
+    await db.messages.update_one(
+        {"_id": ObjectId(msg_id)},
         {"$set": {"content": new_content, "is_edited": True}}
     )
     
-    if result.modified_count == 0:
-        raise HTTPException(status_code=403, detail="Вы не можете редактировать это сообщение")
-        
     return {"status": "success", "msg": "Сообщение успешно отредактировано"}
 
 
 @app.post("/api/geragram/messages/delete")
 async def delete_message(payload: dict, request: Request):
     from bson import ObjectId
-    from urllib.parse import unquote # Локальный импорт, чтобы не падала ошибка
+    from urllib.parse import unquote
     
     me = await get_current_gera_user(request)
-    
-    # 🎯 ГЛАВНЫЙ ФИКС: Принудительно раскодируем никнейм автора перед удалением!
-    my_username = unquote(me["username"]).strip()
+    raw_username = me["username"]
+    clean_username = unquote(raw_username)
     
     msg_id = payload.get("message_id")
     if not msg_id:
         raise HTTPException(status_code=400, detail="ID сообщения не указан")
         
-    # Стираем документ, если раскодированный никнейм на 100% совпал с полем from_user
-    result = await db.messages.delete_one({"_id": ObjectId(msg_id), "from_user": my_username})
-    
-    if result.deleted_count == 0:
+    # 1. Находим сообщение по его уникальному ID
+    msg = await db.messages.find_one({"_id": ObjectId(msg_id)})
+    if not msg:
+        raise HTTPException(status_code=444, detail="Сообщение не найдено")
+        
+    # 2. 🎯 ПРОВЕРКА: Проверяем авторство без единого шанса на ошибку кодировки
+    if msg["from_user"] != raw_username and msg["from_user"] != clean_username:
         raise HTTPException(status_code=403, detail="Невозможно удалить чужое сообщение")
         
+    # 3. Физически удаляем документ из MongoDB Atlas
+    await db.messages.delete_one({"_id": ObjectId(msg_id)})
+    
     return {"status": "success", "msg": "Сообщение стёрто из облака Atlas"}
-
-
-
 
 @app.post("/api/geragram/chats/pin")
 # 🎯 ИСПРАВЛЕНО ЗДЕСЬ:
