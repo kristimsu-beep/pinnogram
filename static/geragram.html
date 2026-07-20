@@ -906,30 +906,33 @@
 
         // Инициализация мессенджера (ФИНАЛЬНЫЙ БЕСШОВНЫЙ ВАРИАНТ)
         function initMessengerApp() {
-            // Скрываем окно входа
+            // 🎯 ШАГ 1: Вешаем класс загрузки, чтобы убрать проскакивание голого макета
+            document.body.classList.add('app-loaded');
+            
             document.getElementById('authBox').style.display = 'none';
             
-            // 🎯 ИСПРАВЛЕНО: Ставим flex вместо block, чтобы разметка мессенджера вставала монолитно
+            // 🎯 ИСПРАВЛЕНО: Ставим flex вместо block, чтобы сетка колонок не ломалась при старте!
             const app = document.getElementById('messengerApp');
             if (app) app.style.display = 'flex'; 
 
-            // Находим и сохраняем имя текущего пользователя в память для loadChatHistory
+            // Автоматически вытаскиваем никнейм текущего пользователя в память для loadChatHistory
             const myProfileNameBlock = document.getElementById('myUsernameDisplay') || document.querySelector('.sidebar-user-name');
             if (myProfileNameBlock) {
                 window.geraCurrentUser = myProfileNameBlock.innerText.replace('@', '').trim();
             }
             
-            // Запускаем подгрузку контактов
+            // 🎯 ШАГ 2: Запускаем подгрузку контактов
             if (typeof loadContactsAndRequests === 'function') {
                 loadContactsAndRequests();
             }
 
-            // UX-Улучшение: Автофокус на поле ввода сообщений
+            // 🎯 БОНУС UX: Автофокус на поле ввода, чтобы можно было сразу писать сообщения!
             setTimeout(() => {
                 const input = document.getElementById('messageInputField');
                 if (input) input.focus();
             }, 100);
         }
+
 
         // Переключение режимов Вход / Регистрация (Анимация текста)
         function toggleAuthMode() {
