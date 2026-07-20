@@ -1373,31 +1373,24 @@
       }
         // --- 💬 МОДУЛЬ ЧАТА, БЛОКИРОВОК И ГОЛОСОВЫХ СООБЩЕНИЙ ---
 
-        // Переключение на конкретного пользователя (УЛЬТРА-СКОРОСТЬ TELEGRAM-STYLE)
+        // Переключение на конкретного пользователя (ОБНОВЛЕНО: МОМЕНТАЛЬНОЕ ПЕРЕКЛЮЧЕНИЕ)
         async function selectChat(username) {
+            // 🎯 ФИКС МИГАНИЯ: Стираем старый текст под ноль до отправки запроса на сервер
             const container = document.getElementById('messagesContainer');
-            const targetUserClean = decodeURIComponent(username).trim();
-            
-            // 🎯 СУПЕР-ФИКС ЗАДЕРЖКИ: Если этой комнаты ЕЩЁ НЕТ в кэше памяти,
-            // только тогда мы очищаем экран. Если она есть — не трогаем DOM, убирая пустую секунду!
-            if (container && (!geragramCache || !geragramCache[targetUserClean])) {
+            if (container) {
                 container.innerHTML = ''; 
             }
             
-            activeChatUser = targetUserClean;
+            activeChatUser = decodeURIComponent(username).trim();
             
-            // Мобильная адаптивность
+            // Адаптивность для мобилок
             document.body.classList.add('chat-open');
             document.getElementById('noChatSelected').style.display = 'none';
             
+            // Сбрасываем старый таймер обновлений
             if (chatInterval) clearInterval(chatInterval);
             
-            // 🎯 МГНОВЕННЫЙ ОНЛАЙН-РЕНДЕР ИЗ ПАМЯТИ: Вызываем рендер прямо сейчас, не дожидаясь сетевых запросов!
-            if (container && geragramCache && geragramCache[activeChatUser]) {
-                renderMessagesFromData(geragramCache[activeChatUser]);
-            }
-            
-            // Параллельно и бесшовно обновляем профиль и сверяем кэш с базой данных MongoDB
+            // Параллельно подгружаем профиль и историю новой комнаты
             await syncUserProfileAndPrivacy();
             await loadChatHistory();
             
@@ -1499,17 +1492,18 @@
             }
         }
 
+        // 🔥 УЛЬТРА-ДВИЖОК С АВТО-КЭШИРОВАНИЕМ TELEGRAM-STYLE
         async function loadChatHistory() {
             if (!activeChatUser) return;
             
             const container = document.getElementById('messagesContainer');
             if (!container) return;
 
-            // Если контейнер пустой и в памяти есть данные — рендерим их мгновенно за 0 миллисекунд
+            // 🎯 ШАГ 1: МГНОВЕННЫЙ ОНЛАЙН-РЕНДЕР ИЗ ПАМЯТИ (ИНТЕРФЕЙС НЕ ЖДЁТ СЕТЬ!)
             if (geragramCache[activeChatUser] && container.innerHTML === '') {
                 renderMessagesFromData(geragramCache[activeChatUser]);
             }
-            
+
             try {
                 // 🎯 ШАГ 2: Делаем запрос к серверу только для сверки или первичной загрузки
                 const res = await fetch(`/api/geragram/messages/history/${activeChatUser}`);
