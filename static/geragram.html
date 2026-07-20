@@ -648,7 +648,17 @@
                             <div class="chat-header-status" id="currentChatStatus">загрузка...</div>
                         </div>
                     </div>
-                    <div class="chat-header-actions">
+                    <div class="chat-header-actions" style="display: flex; align-items: center; gap: 10px;">
+                        <!-- 📈 Статистика участников группы (Скроется в обычных чатах) -->
+                        <span id="groupMembersCountBadge" style="display: none; font-size: 11px; background: rgba(36,129,204,0.15); color: #2481cc; padding: 2px 6px; border-radius: 4px; font-weight: 700; border: 1px solid rgba(36,129,204,0.2);">0 участников</span>
+                        
+                        <!-- ➕ Кнопка «Плюсик» (Появится только у создателя группы) -->
+                        <button id="groupAddMemberBtn" style="display: none; background: none; border: none; color: var(--tg-text); font-size: 16px; cursor: pointer;" onclick="triggerAddGroupMemberFlow()"><i class="fa-solid fa-plus-circle"></i></button>
+                        
+                        <!-- ⚙️ Кнопка «Три точки» для вызова списка участников группы / выхода / удаления -->
+                        <button id="groupManageMenuBtn" style="display: none; background: none; border: none; color: var(--tg-text); font-size: 16px; cursor: pointer;" onclick="openGroupManagementMenu()"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                        
+                        <!-- Стандартная кнопка информации профиля -->
                         <button onclick="openUserProfileDrawer()"><i class="fa-solid fa-circle-info"></i></button>
                     </div>
                 </div>
@@ -743,7 +753,7 @@
         </div> <!-- /main-layout -->
     </div> <!-- /messenger-wrapper -->
 
-    <!-- 🎨 МОДАЛЬНОЕ ОКНО: ОБОИ И БЕЗОПАСНОСТЬ (С ВЫБОРОМ ТЕМ) -->
+    <!-- 🎨 МОДАЛЬНОЕ ОКНО: ОБОИ И БЕЗОПАСНОСТЬ (С ВЫБОРОМ ТЕМ И СОЗДАНИЕМ ГРУПП) -->
     <div class="modal-overlay" id="wallpaperModal">
         <div class="modal-content">
             <h3 style="margin-bottom: 12px; font-weight: 600;">Кастомизация мессенджера</h3>
@@ -774,7 +784,12 @@
                 <i class="fa-solid fa-shield-halved"></i> Настройка двухфакторной аутентификации (2FA)
             </button>
 
-            <!-- 🎯 ВОТ СЮДА ДОБАВИЛИ ВЫБОР ТЕМЫ ОФОРМЛЕНИЯ -->
+            <!-- 🎯 ВШИЛИ КНОПКУ СОЗДАНИЯ ГРУППОВОГО ЧАТА -->
+            <button class="auth-btn" style="background: #101921; border: 1px solid var(--tg-border); margin-top: 8px; font-size: 13px; font-weight: 600;" onclick="openCreateGroupModal()">
+                <i class="fa-solid fa-users"></i> Создать новую группу чата
+            </button>
+
+            <!-- 🎯 ТЕМЫ ОФОРМЛЕНИЯ -->
             <hr style="border: 0; border-top: 1px solid var(--tg-border); margin: 18px 0;">
             <h4 style="margin-bottom: 12px; font-size:15px; font-weight:600;">Тема оформления</h4>
             <div style="display: flex; gap: 8px; margin-bottom: 15px;">
@@ -1198,7 +1213,7 @@
             closeUserProfileDrawer();
         }
         
-        // Синхронизация данных профиля и прав приватности (ОБНОВЛЕНО: ГАЛОЧКИ В ШАПКЕ И ШТОРКЕ)
+        // Синхронизация данных профиля и прав приватности (ИСПРАВЛЕНО: Правильный вызов группового контроля)
         async function syncUserProfileAndPrivacy() {
             if (!activeChatUser) return;
             
@@ -1226,12 +1241,12 @@
                 lockOverlay.style.display = 'none';
                 drawerBody.classList.remove('blurred-lock');
                 
-                // 👑 ТЕЛЕГРАМ-СТИЛЬ: Генерируем красивую синюю галочку и плашку OFFICIAL, если флаг is_official взведён в MongoDB Atlas!
+                // 👑 ТЕЛЕГРАМ-СТИЛЬ: Галочки и плашки OFFICIAL из MongoDB Atlas
                 let officialBadge = profile.is_official 
                     ? ` <i class="fa-solid fa-circle-check" style="color: #2481cc; font-size:15px;"></i> <span style="background: rgba(36,129,204,0.15); color: #2481cc; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 4px; border: 1px solid rgba(36,129,204,0.3);">OFFICIAL</span>` 
                     : '';
 
-                // Заполняем данные в шторке профиля (ИСПРАВЛЕНО на innerHTML для отображения галочки)
+                // Заполняем данные в шторке профиля
                 document.getElementById('drawerDisplayName').innerHTML = profile.display_name + officialBadge;
                 document.getElementById('drawerUsername').innerText = `@${profile.username}`;
                 document.getElementById('drawerStatus').innerText = profile.status;
@@ -1248,7 +1263,7 @@
                     avContainer.style.backgroundImage = `url('${profile.avatar_url}')`;
                 }
 
-                // Обновляем шапку активного чата сверху (ИСПРАВЛЕНО на innerHTML для отображения галочки)
+                // Обновляем шапку активного чата сверху
                 document.getElementById('currentChatName').innerHTML = profile.display_name + officialBadge;
                 document.getElementById('currentChatStatus').innerText = profile.status;
                 
@@ -1271,10 +1286,14 @@
                     ? '<i class="fa-solid fa-bell"></i> Уведомления: Выкл' 
                     : '<i class="fa-solid fa-bell-slash"></i> Уведомления: Вкл';
 
+                // 🔥 ВНУТРЕННИЙ ФИКС: Вызываем групповой контроль ДО окончания блока try, пока переменная profile жива!
+                toggleGroupHeaderControls(profile);
+
             } catch (err) {
                 console.error('Ошибка синхронизации профиля:', err);
             }
         }
+
 
         // 🔥 СУПЕР-ДВИЖОК: ЗАГРУЗКА ИСТОРИИ ЧАТА (УПРОЩЕННЫЙ ПОД ЧИСТЫЕ СТРОКИ С СЕРВЕРА)
         async function loadChatHistory() {
@@ -1688,8 +1707,157 @@
         function unpinMessageGlobal() {
             document.getElementById('pinnedMessageBar').style.display = 'none';
         }
+        // --- 👥 JAVASCRIPT-МОДУЛЬ ГРУППОВЫХ ЧАТОВ GERAGRAM ---
+        let currentGroupData = null; // Хранилище метаданных текущей группы
 
-        
+        // Функции модального окна создания группы
+        function openCreateGroupModal() {
+            closeWallpaperModal(); // Закрываем предыдущее окно кастомизации
+            document.getElementById('createGroupModal').style.display = 'flex';
+        }
+        function closeCreateGroupModal() {
+            document.getElementById('createGroupModal').style.display = 'none';
+            document.getElementById('newGroupNameInput').value = '';
+        }
+
+        // Сетевая отправка формы на создание группы в MongoDB Atlas
+        async function submitCreateGroupChat() {
+            const input = document.getElementById('newGroupNameInput');
+            const groupName = input.value.trim();
+            
+            if (!groupName) {
+                alert('Пожалуйста, введите название группы!');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/geragram/groups/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: groupName })
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    alert('Группа успешно создана в MongoDB Atlas!');
+                    closeCreateGroupModal();
+                    loadContactsAndRequests(); // Мгновенно перерисовываем контакты
+                    selectChat(data.group_id); // Автоматически переходим в созданную группу
+                } else {
+                    alert(data.detail || 'Ошибка создания группы');
+                }
+            } catch (err) {
+                alert('Не удалось связаться с сервером.');
+            }
+        }
+
+        // Модифицируем переключение шапки в зависимости от типа чата (вызывать внутри syncUserProfileAndPrivacy)
+        function toggleGroupHeaderControls(profile) {
+            const membersCount = document.getElementById('groupMembersCountBadge');
+            const addMemberBtn = document.getElementById('groupAddMemberBtn');
+            const manageMenuBtn = document.getElementById('groupManageMenuBtn');
+
+            // Сохраняем состояние текущей комнаты
+            currentGroupData = profile.is_group ? profile : null;
+
+            if (profile.is_group) {
+                // Если это группа — проявляем статистику участников и кнопки
+                membersCount.innerText = profile.status;
+                membersCount.style.display = 'inline-block';
+                manageMenuBtn.style.display = 'inline-block';
+
+                // Плюсик для добавления участников показываем ТОЛЬКО создателю (владельцу)
+                addMemberBtn.style.display = profile.i_not_owner ? 'none' : 'inline-block';
+            } else {
+                // Если обычный чат — полностью скрываем групповые элементы управления
+                membersCount.style.display = 'none';
+                addMemberBtn.style.display = 'none';
+                manageMenuBtn.style.display = 'none';
+            }
+        }
+
+        // ➕ Логика кнопки «Плюсик» (Добавление контактов владельцем)
+        async function triggerAddGroupMemberFlow() {
+            if (!currentGroupData) return;
+            
+            const targetUsername = prompt('Введите точный никнейм контакта, которого вы хотите добавить в эту группу:');
+            if (!targetUsername || targetUsername.trim() === '') return;
+
+            try {
+                const res = await fetch('/api/geragram/groups/add-member', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ group_id: currentGroupData.username, username: targetUsername.trim() })
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    alert(data.msg);
+                    syncUserProfileAndPrivacy(); // Перезапрашиваем профиль для обновления счетчика
+                } else {
+                    alert(data.detail || 'Ошибка добавления участника');
+                }
+            } catch (err) { alert('Сбой сети.'); }
+        }
+
+        // ⚙️ Логика кнопки «Три точки» (Покинуть группу / Удалить группу / Управление)
+        async function openGroupManagementMenu() {
+            if (!currentGroupData) return;
+
+            // Если текущий юзер — создатель (владелец), у него расширенные права
+            if (!currentGroupData.i_not_owner) {
+                const action = prompt(
+                    `Управление группой "${currentGroupData.display_name}":\n\n` +
+                    `Текущий состав: @${currentGroupData.group_members.join(', @')}\n\n` +
+                    `Введите 1 — Чтобы полностью УДАЛИТЬ группу\n` +
+                    `Введите никнейм пользователя (без @) — Чтобы ИСКЛЮЧИТЬ его из группы\n` +
+                    `Или оставьте пустым для отмены:`
+                );
+
+                if (!action) return;
+
+                if (action.trim() === '1') {
+                    if (confirm('Вы уверены, что хотите полностью удалить эту группу и всю её историю для всех участников?')) {
+                        const res = await fetch('/api/geragram/groups/delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ group_id: currentGroupData.username })
+                        });
+                        if (res.ok) {
+                            alert('Группа успешно ликвидирована.');
+                            backToSidebar();
+                            loadContactsAndRequests();
+                        }
+                    }
+                } else {
+                    // Исключение участника
+                    const userToRemove = action.trim().toLowerCase();
+                    const res = await fetch('/api/geragram/groups/remove-member', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ group_id: currentGroupData.username, username: userToRemove })
+                    });
+                    if (res.ok) {
+                        alert(`Пользователь @${userToRemove} исключен из группы.`);
+                        syncUserProfileAndPrivacy();
+                    } else { alert('Не удалось исключить пользователя.'); }
+                }
+            } else {
+                // Действие для обычного участника (Только выход)
+                if (confirm(`Вы действительно хотите покинуть группу "${currentGroupData.display_name}"?`)) {
+                    const res = await fetch('/api/geragram/groups/remove-member', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ group_id: currentGroupData.username, username: myUsername }) // Передаем наш ник для выхода
+                    });
+                    if (res.ok) {
+                        alert('Вы успешно покинули группу.');
+                        backToSidebar();
+                        loadContactsAndRequests();
+                    }
+                }
+            }
+        }
     </script>
     <!-- 📱 КОНТЕКСТНОЕ МЕНЮ GERAGRAM -->
     <div class="context-menu" id="msgContextMenu">
@@ -1698,6 +1866,21 @@
         <div class="context-menu-item" id="ctxPin" onclick="triggerPinAction()"><i class="fa-solid fa-thumbtack"></i> Закрепить</div>
         <div class="context-menu-item" id="ctxEdit" onclick="triggerEditAction()"><i class="fa-solid fa-pen"></i> Редактировать</div>
         <div class="context-menu-item danger" id="ctxDelete" onclick="triggerDeleteAction()"><i class="fa-solid fa-trash"></i> Удалить</div>
+    </div>
+    <!-- 👥 МОДАЛЬНОЕ ОКНО: СОЗДАНИЕ ГРУППЫ GERAGRAM -->
+    <div class="modal-overlay" id="createGroupModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 10002; justify-content: center; align-items: center;">
+        <div class="modal-content" style="background: var(--tg-sidebar); border: 1px solid var(--tg-border); padding: 24px; border-radius: 16px; width: 340px; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.5);">
+            <h3 style="margin-bottom: 12px; font-weight: 600; color: var(--tg-text);">Создание группы</h3>
+            <p style="font-size: 13px; color: var(--tg-text-muted); margin-bottom: 15px;">Введите название для нового группового чата:</p>
+            
+            <div class="input-group" style="margin-bottom: 20px; position: relative;">
+                <i class="fa-solid fa-font" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--tg-text-muted);"></i>
+                <input type="text" id="newGroupNameInput" placeholder="Название группы..." style="width: 100%; padding: 12px 12px 12px 40px; background: var(--tg-bg); border: 1px solid var(--tg-border); border-radius: 8px; color: var(--tg-text); font-size: 14px; outline: none;">
+            </div>
+
+            <button class="auth-btn" style="background: var(--tg-button); width: 100%; margin-bottom: 8px; font-weight: 600;" onclick="submitCreateGroupChat()">Создать группу</button>
+            <button class="auth-btn" style="background: none; color: var(--tg-text-muted); width: 100%;" onclick="closeCreateGroupModal()">Отмена</button>
+        </div>
     </div>
 </body>
 </html>
