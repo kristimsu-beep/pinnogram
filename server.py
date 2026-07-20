@@ -3937,55 +3937,72 @@ async def geragram_propose_contact(data: ContactActionModel, request: Request):
             
     return {"status": "already_contacts", "msg": "Вы уже являетесь контактами"}
 
-# 3. Получить список контактов (ОБНОВЛЕНО: Бот всегда на связи)
+# 3. Получить список контактов (ИСПРАВЛЕНО: Возвращаем пропавших юзеров для любого типа никнейма)
 @app.get("/api/geragram/contacts/list")
 async def geragram_get_contacts(request: Request):
+    from urllib.parse import unquote
     me = await get_current_gera_user(request)
     
-    # Вытаскиваем стандартные контакты юзера из базы
-    contacts_cursor = geragram_users.find({"username": {"$in": me.get("contacts", [])}})
+    # Собираем все никнеймы из списка контактов текущего пользователя
+    my_raw_contacts = me.get("contacts", [])
+    
+    # 🎯 ГЛАВНЫЙ ФИКС: Создаем расширенный список поиска, закидывая туда имена и в сыром, и в раскодированном виде
+    search_usernames = []
+    for username in my_raw_contacts:
+        search_usernames.append(username)
+        search_usernames.append(unquote(username).strip())
+        search_usernames.append(username.lower())
+        search_usernames.append(unquote(username).strip().lower())
+        
+    # Ищем пользователей в коллекции geragram_users по расширенному списку совпадений
+    contacts_cursor = geragram_users.find({
+        "username": {"$in": list(set(search_usernames))} # убираем дубликаты через set()
+    })
     contacts_list = await contacts_cursor.to_list(length=100)
     
     formatted_contacts = []
-    # 🤖 СИНИЙ БОТ GERAGRAM: Искусственно подшиваем бота в самое начало списка!
+    
+    # 🤖 СИНИЙ БОТ GERAGRAM: Всегда гордо стоит на первом месте в списке
     formatted_contacts.append({
-        "username": BOT_USERNAME,
+        "username": "geragram_bot",
         "display_name": "GeraGram Ассистент 🤖",
         "avatar_type": "letter",
         "avatar_data": {
-            "gradient": "linear-gradient(135deg, #00c6ff, #0072ff)", # Фирменный синий градиент
+            "gradient": "linear-gradient(135deg, #00c6ff, #0072ff)",
             "letter": "🤖"
         },
-        "status": "Бот-помощник",
-        "is_official": True # У самого бота, естественно, тоже есть галочка
+        "status": "Бот-помощник всегда на связи",
+        "is_official": True
     })
     
-    # Рендерим остальных обычных пользователей с проверкой галочки из базы
+    # 👥 РЕНДЕРИНГ ОСТАЛЬНЫХ ЮЗЕРОВ: Возвращаем всех пропавших друзей на экран!
     for c in contacts_list:
-        # Проверяем, есть ли у пользователя в базе данных галочка верификации
         is_off = c.get("is_official", False)
-        display_name = c["display_name"]
         
         formatted_contacts.append({
             "username": c["username"],
-            "display_name": display_name,
+            "display_name": c.get("display_name", c["username"]),
             "avatar_type": c.get("avatar_type", "letter"),
             "avatar_url": c.get("avatar_url", ""),
             "avatar_data": c.get("avatar_data", {"gradient": "linear-gradient(135deg, #3a6073, #3a6073)", "letter": "U"}),
             "status": c.get("status", "в сети"),
-            "is_official": is_off # Передаем статус верификации на фронтенд
+            "is_official": is_off
         })
         
-    # Запросы на добавление (входящие) оставляем без изменений
+    # Запросы на обмен контактами (входящие заявки) оставляем рабочими
     incoming_cursor = geragram_users.find({"username": {"$in": me.get("incoming_requests", [])}})
     incoming_list = await incoming_cursor.to_list(length=100)
-    formatted_incoming = [{"username": i["username"], "display_name": i["display_name"], "avatar_type": i.get("avatar_type", "letter"), "avatar_data": i.get("avatar_data", {})} for i in incoming_list]
+    formatted_incoming = [{
+        "username": i["username"], 
+        "display_name": i.get("display_name", i["username"]), 
+        "avatar_type": i.get("avatar_type", "letter"), 
+        "avatar_data": i.get("avatar_data", {})
+    } for i in incoming_list]
     
     return {
         "contacts": formatted_contacts,
         "incoming_requests": formatted_incoming
     }
-
 
 # 1. Тогл блокировки пользователя
 @app.post("/api/geragram/users/toggle-block")
