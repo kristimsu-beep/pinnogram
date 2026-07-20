@@ -1015,34 +1015,47 @@
             document.getElementById('messengerApp').style.display = 'none';
         }
 
-        // Инициализация мессенджера (ФИНАЛЬНЫЙ БЕСШОВНЫЙ ВАРИАНТ)
+        // Инициализация мессенджера (ИСПРАВЛЕННЫЙ БРОНИРОВАННЫЙ ВАРИАНТ)
         function initMessengerApp() {
             // 🎯 ШАГ 1: Вешаем класс загрузки, чтобы убрать проскакивание голого макета
             document.body.classList.add('app-loaded');
             
-            document.getElementById('authBox').style.display = 'none';
+            const authBox = document.getElementById('authBox');
+            if (authBox) authBox.style.display = 'none';
             
             // 🎯 ИСПРАВЛЕНО: Ставим flex вместо block, чтобы сетка колонок не ломалась при старте!
             const app = document.getElementById('messengerApp');
             if (app) app.style.display = 'flex'; 
 
-            // Автоматически вытаскиваем никнейм текущего пользователя в память для loadChatHistory
+            // 🎯 БЕЗОПАСНЫЙ ФИКС: Вытаскиваем никнейм текущего пользователя только если элементы существуют!
             const myProfileNameBlock = document.getElementById('myUsernameDisplay') || document.querySelector('.sidebar-user-name');
-            if (myProfileNameBlock) {
+            if (myProfileNameBlock && myProfileNameBlock.innerText) {
                 window.geraCurrentUser = myProfileNameBlock.innerText.replace('@', '').trim();
+            } else {
+                // Если элементов в DOM еще нет, временно берём имя из localStorage или оставляем пустым
+                window.geraCurrentUser = localStorage.getItem('geraUsername') || '';
             }
             
             // 🎯 ШАГ 2: Запускаем подгрузку контактов
             if (typeof loadContactsAndRequests === 'function') {
                 loadContactsAndRequests();
+            } else {
+                console.warn("⚠️ Функция loadContactsAndRequests ещё не доступна или отсутствует.");
             }
 
             // 🎯 БОНУС UX: Автофокус на поле ввода, чтобы можно было сразу писать сообщения!
             setTimeout(() => {
                 const input = document.getElementById('messageInputField');
                 if (input) input.focus();
-            }, 100);
+                
+                // На всякий случай пробуем обновить имя пользователя ещё раз, когда DOM точно прогрузился
+                const retryBlock = document.getElementById('myUsernameDisplay') || document.querySelector('.sidebar-user-name');
+                if (retryBlock && retryBlock.innerText && !window.geraCurrentUser) {
+                    window.geraCurrentUser = retryBlock.innerText.replace('@', '').trim();
+                }
+            }, 300);
         }
+
 
 
         // Переключение режимов Вход / Регистрация (Анимация текста)
