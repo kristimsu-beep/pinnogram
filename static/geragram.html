@@ -1050,7 +1050,7 @@
             }
         }
 
-        // Загрузка списков контактов и заявок с бэкенда
+        // Рендерим список контактов (ОБНОВЛЕНО: Поддержка галочек и тэгов OFFICIAL)
         async function loadContactsAndRequests() {
             try {
                 const res = await fetch('/api/geragram/contacts/list');
@@ -1060,7 +1060,7 @@
                 const container = document.getElementById('chatsContainerList');
                 container.innerHTML = '';
 
-                // 1. Сначала рендерим входящие заявки на обмен контактами (как уведомления)
+                // 1. Сначала рендерим входящие заявки на обмен контактами
                 if (data.incoming_requests && data.incoming_requests.length > 0) {
                     data.incoming_requests.forEach(req => {
                         const item = document.createElement('div');
@@ -1083,7 +1083,7 @@
                     });
                 }
 
-                // 2. Рендерим список подтверждённых контактов
+                // 2. Рендерим список подтверждённых контактов (с ботом и галочками)
                 if (data.contacts && data.contacts.length > 0) {
                     data.contacts.forEach(contact => {
                         const item = document.createElement('div');
@@ -1091,11 +1091,16 @@
                         
                         let avHtml = getAvatarElementHtml(contact, 44);
 
+                        // 👑 ТЕЛЕГРАМ-СТИЛЬ: Если у пользователя или бота стоит флаг верификации, дорисовываем галочку и тэг!
+                        let officialBadge = contact.is_official 
+                            ? ` <i class="fa-solid fa-circle-check" style="color: #2481cc; font-size:14px;" title="Верифицированный аккаунт"></i> <span style="background: rgba(36,129,204,0.15); color: #2481cc; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 4px; border: 1px solid rgba(36,129,204,0.3);">OFFICIAL</span>` 
+                            : '';
+
                         item.innerHTML = `
                             ${avHtml}
                             <div class="chat-info">
                                 <div class="chat-name-row">
-                                    <div class="chat-name">${contact.display_name}</div>
+                                    <div class="chat-name">${contact.display_name}${officialBadge}</div>
                                 </div>
                                 <div class="chat-last-msg">@${contact.username} • Нажмите для чата</div>
                             </div>
@@ -1193,7 +1198,7 @@
             closeUserProfileDrawer();
         }
         
-        // Синхронизация данных профиля и прав приватности (Муты / Блокировки)
+        // Синхронизация данных профиля и прав приватности (ОБНОВЛЕНО: ГАЛОЧКИ В ШАПКЕ И ШТОРКЕ)
         async function syncUserProfileAndPrivacy() {
             if (!activeChatUser) return;
             
@@ -1205,12 +1210,11 @@
                 const lockOverlay = document.getElementById('drawerLockOverlay');
                 const drawerBody = document.getElementById('drawerBodyData');
                 
-                // 🚨 ПРОВЕРКА ПО ТВОЕЙ ЗАДУМКЕ: Если этот юзер нас заблокировал
+                // 🚨 Если этот юзер нас заблокировал
                 if (profile.is_blocked_by_them) {
                     lockOverlay.style.display = 'flex';
                     drawerBody.classList.add('blurred-lock');
                     
-                    // Обновляем шапку чата в стиле "Заблокированный профиль"
                     document.getElementById('currentChatName').innerText = `@${activeChatUser}`;
                     document.getElementById('currentChatStatus').innerText = 'Доступ ограничен';
                     document.getElementById('currentChatAvatar').innerHTML = '❌';
@@ -1222,24 +1226,30 @@
                 lockOverlay.style.display = 'none';
                 drawerBody.classList.remove('blurred-lock');
                 
-                // Заполняем данные в шторке профиля
-                document.getElementById('drawerDisplayName').innerText = profile.display_name;
+                // 👑 ТЕЛЕГРАМ-СТИЛЬ: Генерируем красивую синюю галочку и плашку OFFICIAL, если флаг is_official взведён в MongoDB Atlas!
+                let officialBadge = profile.is_official 
+                    ? ` <i class="fa-solid fa-circle-check" style="color: #2481cc; font-size:15px;"></i> <span style="background: rgba(36,129,204,0.15); color: #2481cc; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 4px; border: 1px solid rgba(36,129,204,0.3);">OFFICIAL</span>` 
+                    : '';
+
+                // Заполняем данные в шторке профиля (ИСПРАВЛЕНО на innerHTML для отображения галочки)
+                document.getElementById('drawerDisplayName').innerHTML = profile.display_name + officialBadge;
                 document.getElementById('drawerUsername').innerText = `@${profile.username}`;
                 document.getElementById('drawerStatus').innerText = profile.status;
                 document.getElementById('drawerJoinedDate').innerText = profile.joined_date;
                 
                 // Отрендерим аватар в профиле
+                let avContainer = document.getElementById('drawerAvatar');
                 if (profile.avatar_type === 'letter') {
-                    document.getElementById('drawerAvatar').style.backgroundImage = 'none';
-                    document.getElementById('drawerAvatar').style.background = profile.avatar_data.gradient;
-                    document.getElementById('drawerAvatar').innerText = profile.avatar_data.letter;
+                    avContainer.style.backgroundImage = 'none';
+                    avContainer.style.background = profile.avatar_data.gradient;
+                    avContainer.innerText = profile.avatar_data.letter;
                 } else {
-                    document.getElementById('drawerAvatar').innerText = '';
-                    document.getElementById('drawerAvatar').style.backgroundImage = `url('${profile.avatar_url}')`;
+                    avContainer.innerText = '';
+                    avContainer.style.backgroundImage = `url('${profile.avatar_url}')`;
                 }
 
-                // Обновляем шапку активного чата сверху
-                document.getElementById('currentChatName').innerText = profile.display_name;
+                // Обновляем шапку активного чата сверху (ИСПРАВЛЕНО на innerHTML для отображения галочки)
+                document.getElementById('currentChatName').innerHTML = profile.display_name + officialBadge;
                 document.getElementById('currentChatStatus').innerText = profile.status;
                 
                 const headerAvatar = document.getElementById('currentChatAvatar');
@@ -1265,9 +1275,6 @@
                 console.error('Ошибка синхронизации профиля:', err);
             }
         }
-
-
-
 
         // 🔥 СУПЕР-ДВИЖОК: ЗАГРУЗКА ИСТОРИИ ЧАТА (УПРОЩЕННЫЙ ПОД ЧИСТЫЕ СТРОКИ С СЕРВЕРА)
         async function loadChatHistory() {
