@@ -629,10 +629,88 @@
         .messages-container.loading {
             opacity: 0;
         }
+        /* 🔔 ДИСКОРД-СТИЛЬ: ВСПЛЫВАЮЩИЕ УВЕДОМЛЕНИЯ */
+        .discord-notify-container {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none; /* Чтобы контейнер не мешал кликать под ним */
+        }
+
+        .discord-toast {
+            background: rgba(28, 40, 52, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 12px 16px;
+            width: 320px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            color: #ffffff;
+            cursor: pointer;
+            pointer-events: auto; /* Возвращаем кликабельность самой плашке */
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            animation: toastSlideDown 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            transition: transform 0.4s ease, opacity 0.4s ease;
+        }
+
+        @keyframes toastSlideDown {
+            from { transform: translateY(-40px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .discord-toast-header {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--tg-button);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .discord-toast-author {
+            font-size: 13px;
+            font-weight: 600;
+            color: #ffffff;
+        }
+
+        .discord-toast-body {
+            font-size: 13px;
+            color: var(--tg-text-muted);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* 🔥 СТЕКАЮЩАЯ ШКАЛА ТАЙМЕРА (3 секунды) */
+        .discord-toast-progress {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            height: 3px;
+            background: var(--tg-button);
+            width: 100%;
+            animation: toastProgressLinear 3s linear forwards;
+        }
+
+        @keyframes toastProgressLinear {
+            from { width: 100%; }
+            to { width: 0%; }
+        }
     </style>
 </head>
 <body>
-
+    <!-- 🔔 Контейнер для всплывающих Дискорд-уведомлений -->
+    <div class="discord-notify-container" id="discordNotifyContainer"></div>
+    
     <!-- 🛡️ БЛОК АВТОРИЗАЦИИ И РЕГИСТРАЦИИ -->
     <div class="auth-container" id="authBox">
         <!-- Трёхмерное Roblox лого с GS по центру -->
@@ -877,6 +955,9 @@
         let selectedMsgOwner = false;  // Моё ли это сообщение
         let replyToMsgId = null;       // ID сообщения, на которое отвечаем
         let editMsgId = null;          // ID сообщения, которое редактируем
+        let knownMessageIds = new Set(); // Хранилище ID сообщений, чтобы не спамить уведомлениями
+        let isFirstHistoryLoad = true;   // Флаг, чтобы не вызывать уведомления при первой загрузке приложения
+        
         
         // Автоматический старт при полной загрузке DOM-дерева
         window.addEventListener('DOMContentLoaded', () => {
@@ -1972,6 +2053,102 @@
                 }
             }
         }
+        // 🔥 ДВИЖОК ДИСКОРД-УВЕДОМЛЕНИЙ С ТАЙМЕРОМ И КЛИК-ПЕРЕХОДОМ
+        function showDiscordNotification(author, text, targetRoomId, roomName) {
+            const container = document.getElementById('discordNotifyContainer');
+            if (!container) return;
+
+            const toast = document.createElement('div');
+            toast.className = 'discord-toast';
+            
+            // Если прилетело из группы — пишем имя группы, если из лички — "Новое сообщение"
+            const headerTitle = targetRoomId.length === 24 ? `Группа: ${roomName}` : 'Новое сообщение';
+
+            toast.innerHTML = `
+                <div class="discord-toast-header">${headerTitle}</div>
+                <div class="discord-toast-author">@${author}</div>
+                <div class="discord-toast-body">${escapeHtml(text)}</div>
+                <div class="discord-toast-progress"></div>
+            `;
+
+            // 🎯 КЛИК-ПЕРЕХОД: При нажатии на плашку перекидываем пользователя прямо в ту комнату!
+            toast.onclick = function() {
+                selectChat(targetRoomId);
+                toast.remove(); // Сразу убираем плашку после клика
+            };
+
+            container.appendChild(toast);
+
+            // Таймер на изменение прозрачности и плавный взлёт вверх
+            let startTime = Date.now();
+            const duration = 3000; // 3 секунды
+
+            const fadeInterval = setInterval(() => {
+                let elapsed = Date.now() - startTime;
+                let progress = elapsed / duration;
+
+                if (progress >= 1) {
+                    clearInterval(fadeInterval);
+                    // Плавно поднимаем вверх и гасим
+                    toast.style.transform = 'translateY(-40px)';
+                    toast.style.opacity = '0';
+                    setTimeout(() => toast.remove(), 400); // Окончательно удаляем элемент из DOM
+                } else {
+                    // Чем ближе к 3 секундам, тем больше прозрачность окошка
+                    toast.style.opacity = (1 - progress).toString();
+                }
+            }, 50); // Обновляем прозрачность каждые 50 миллисекунд для идеальной плавности
+        }
+        // Фоновое прослушивание всех чатов на предмет новых сообщений для уведомлений
+        async function checkGlobalNotifications() {
+            try {
+                // Запрашиваем полный список наших контактов и групп
+                const resList = await fetch('/api/geragram/contacts/list');
+                if (!resList.ok) return;
+                const data = await resList.json();
+                
+                // Собираем все доступные комнаты (личные чаты и группы)
+                let rooms = data.contacts || [];
+                
+                for (let room of rooms) {
+                    // Делаем лёгкий запрос истории для каждой комнаты
+                    const resHistory = await fetch(`/api/geragram/messages/history/${room.username}`);
+                    if (!resHistory.ok) continue;
+                    const messages = await resHistory.json();
+                    
+                    if (messages.length === 0) continue;
+                    
+                    // Берём самое последнее сообщение в этой комнате
+                    const lastMsg = messages[messages.length - 1];
+                    const lastMsgId = lastMsg._id || lastMsg.id;
+                    
+                    // Проверяем: если приложение только открылось, просто заносим старые ID в базу известных
+                    if (isFirstHistoryLoad) {
+                        messages.forEach(m => knownMessageIds.add(m._id || m.id));
+                        continue;
+                    }
+                    
+                    // 🎯 ГЛАВНОЕ УСЛОВИЕ: Если сообщение нам ещё неизвестно, оно прилетело НЕ от нас,
+                    // и мы СЕЙЧАС находимся НЕ в этой комнате — запускаем Дискорд-уведомление!
+                    if (!knownMessageIds.has(lastMsgId)) {
+                        knownMessageIds.add(lastMsgId);
+                        
+                        const isFromMe = lastMsg.from_user === window.geraCurrentUser;
+                        const isCurrentRoomOpen = activeChatUser && (activeChatUser.toString().toLowerCase() === room.username.toString().toLowerCase());
+                        
+                        if (!isFromMe && !isCurrentRoomOpen) {
+                            showDiscordNotification(lastMsg.from_user, lastMsg.content, room.username, room.display_name);
+                        }
+                    }
+                }
+                
+                if (isFirstHistoryLoad) isFirstHistoryLoad = false; // Снимаем стартовый флаг после первого прохода
+                
+            } catch (e) { console.error("Ошибка системы уведомлений:", e); }
+        }
+
+        // Запускаем фоновый мониторинг скрытых комнат каждые 3 секунды
+        setInterval(checkGlobalNotifications, 3000);
     </script>
     <!-- 📱 КОНТЕКСТНОЕ МЕНЮ GERAGRAM -->
     <div class="context-menu" id="msgContextMenu">
