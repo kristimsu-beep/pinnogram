@@ -906,33 +906,30 @@
 
         // Инициализация мессенджера (ФИНАЛЬНЫЙ БЕСШОВНЫЙ ВАРИАНТ)
         function initMessengerApp() {
-            // 🎯 ШАГ 1: Вешаем класс загрузки, чтобы убрать проскакивание голого макета
-            document.body.classList.add('app-loaded');
-            
+            // Скрываем окно входа
             document.getElementById('authBox').style.display = 'none';
             
-            // 🎯 ИСПРАВЛЕНО: Ставим flex вместо block, чтобы сетка колонок не ломалась при старте!
+            // 🎯 ИСПРАВЛЕНО: Ставим flex вместо block, чтобы разметка мессенджера вставала монолитно
             const app = document.getElementById('messengerApp');
             if (app) app.style.display = 'flex'; 
 
-            // Автоматически вытаскиваем никнейм текущего пользователя в память для loadChatHistory
+            // Находим и сохраняем имя текущего пользователя в память для loadChatHistory
             const myProfileNameBlock = document.getElementById('myUsernameDisplay') || document.querySelector('.sidebar-user-name');
             if (myProfileNameBlock) {
                 window.geraCurrentUser = myProfileNameBlock.innerText.replace('@', '').trim();
             }
             
-            // 🎯 ШАГ 2: Запускаем подгрузку контактов
+            // Запускаем подгрузку контактов
             if (typeof loadContactsAndRequests === 'function') {
                 loadContactsAndRequests();
             }
 
-            // 🎯 БОНУС UX: Автофокус на поле ввода, чтобы можно было сразу писать сообщения!
+            // UX-Улучшение: Автофокус на поле ввода сообщений
             setTimeout(() => {
                 const input = document.getElementById('messageInputField');
                 if (input) input.focus();
             }, 100);
         }
-
 
         // Переключение режимов Вход / Регистрация (Анимация текста)
         function toggleAuthMode() {
@@ -1289,30 +1286,28 @@
       }
         // --- 💬 МОДУЛЬ ЧАТА, БЛОКИРОВОК И ГОЛОСОВЫХ СООБЩЕНИЙ ---
 
-        // Переключение на конкретного пользователя (ОБНОВЛЕНО: МГНОВЕННАЯ ОЧИСТКА ХВОСТОВ)
+        // Переключение на конкретного пользователя (ОБНОВЛЕНО: МОМЕНТАЛЬНОЕ ПЕРЕКЛЮЧЕНИЕ)
         async function selectChat(username) {
-            // 🎯 ШАГ 1: Мгновенно гасим старый чат на экране, чтобы не было "каши" из чужих сообщений
+            // 🎯 ФИКС МИГАНИЯ: Стираем старый текст под ноль до отправки запроса на сервер
             const container = document.getElementById('messagesContainer');
             if (container) {
-                container.innerHTML = ''; // Стираем старый текст под ноль
-                container.classList.add('loading'); // Временно скрываем блок через CSS
+                container.innerHTML = ''; 
             }
             
             activeChatUser = decodeURIComponent(username).trim();
+            
+            // Адаптивность для мобилок
             document.body.classList.add('chat-open');
             document.getElementById('noChatSelected').style.display = 'none';
             
+            // Сбрасываем старый таймер обновлений
             if (chatInterval) clearInterval(chatInterval);
             
-            // Запускаем параллельную подгрузку без ожидания
-            Promise.all([
-                syncUserProfileAndPrivacy(),
-                loadChatHistory()
-            ]).then(() => {
-                // 🎯 ШАГ 2: Проявляем новый чат, как только данные полностью отрисовались
-                if (container) container.classList.remove('loading');
-            });
+            // Параллельно подгружаем профиль и историю новой комнаты
+            await syncUserProfileAndPrivacy();
+            await loadChatHistory();
             
+            // Перезапускаем автообновление чата
             chatInterval = setInterval(loadChatHistory, 2000);
         }
 
