@@ -614,6 +614,21 @@
             align-self: flex-end;
             background: #2b5278 !important; /* Твой фирменный синий для своих */
         }
+        /* 🏎️ ИЗНАЧАЛЬНО СКРЫВАЕМ ПРИЛОЖЕНИЕ ДО ПРОВЕРКИ АВТОРИЗАЦИИ */
+        #messengerApp {
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        }
+
+        /* Класс, который JS повесит после успешного входа */
+        .app-loaded #messengerApp {
+            opacity: 1 !important;
+        }
+
+        /* Фикс для мгновенного скрытия старых сообщений при смене комнат */
+        .messages-container.loading {
+            opacity: 0;
+        }
     </style>
 </head>
 <body>
@@ -889,15 +904,35 @@
             document.getElementById('messengerApp').style.display = 'none';
         }
 
+        // Инициализация мессенджера (ФИНАЛЬНЫЙ БЕСШОВНЫЙ ВАРИАНТ)
         function initMessengerApp() {
-            document.getElementById('authBox').style.display = 'none';
-            document.getElementById('messengerApp').style.display = 'block';
+            // 🎯 ШАГ 1: Вешаем класс загрузки, чтобы убрать проскакивание голого макета
+            document.body.classList.add('app-loaded');
             
-            // Запускаем фоновые циклы мессенджера (их логику добавим в следующем шаге)
+            document.getElementById('authBox').style.display = 'none';
+            
+            // 🎯 ИСПРАВЛЕНО: Ставим flex вместо block, чтобы сетка колонок не ломалась при старте!
+            const app = document.getElementById('messengerApp');
+            if (app) app.style.display = 'flex'; 
+
+            // Автоматически вытаскиваем никнейм текущего пользователя в память для loadChatHistory
+            const myProfileNameBlock = document.getElementById('myUsernameDisplay') || document.querySelector('.sidebar-user-name');
+            if (myProfileNameBlock) {
+                window.geraCurrentUser = myProfileNameBlock.innerText.replace('@', '').trim();
+            }
+            
+            // 🎯 ШАГ 2: Запускаем подгрузку контактов
             if (typeof loadContactsAndRequests === 'function') {
                 loadContactsAndRequests();
             }
+
+            // 🎯 БОНУС UX: Автофокус на поле ввода, чтобы можно было сразу писать сообщения!
+            setTimeout(() => {
+                const input = document.getElementById('messageInputField');
+                if (input) input.focus();
+            }, 100);
         }
+
 
         // Переключение режимов Вход / Регистрация (Анимация текста)
         function toggleAuthMode() {
@@ -1254,28 +1289,32 @@
       }
         // --- 💬 МОДУЛЬ ЧАТА, БЛОКИРОВОК И ГОЛОСОВЫХ СООБЩЕНИЙ ---
 
-        // Переключение на конкретного пользователя (ИСПРАВЛЕНО: Безопасный регистр букв)
+        // Переключение на конкретного пользователя (ОБНОВЛЕНО: МГНОВЕННАЯ ОЧИСТКА ХВОСТОВ)
         async function selectChat(username) {
-            // 🎯 КРИТИЧЕСКИЙ ФИКС: Очищаем никнейм от кракозябр, но КАТЕГОРИЧЕСКИ сохраняем большие и маленькие буквы!
+            // 🎯 ШАГ 1: Мгновенно гасим старый чат на экране, чтобы не было "каши" из чужих сообщений
+            const container = document.getElementById('messagesContainer');
+            if (container) {
+                container.innerHTML = ''; // Стираем старый текст под ноль
+                container.classList.add('loading'); // Временно скрываем блок через CSS
+            }
+            
             activeChatUser = decodeURIComponent(username).trim();
-            
-            // 📱 АДАПТИВНОСТЬ: Добавляем класс на body для смартфонов
             document.body.classList.add('chat-open');
-            
-            // Скрываем начальный экран-заглушку
             document.getElementById('noChatSelected').style.display = 'none';
             
-            // Чистим старый таймер обновлений
             if (chatInterval) clearInterval(chatInterval);
             
-            // Перезапрашиваем профиль человека и историю сообщений
-            await syncUserProfileAndPrivacy();
-            await loadChatHistory();
+            // Запускаем параллельную подгрузку без ожидания
+            Promise.all([
+                syncUserProfileAndPrivacy(),
+                loadChatHistory()
+            ]).then(() => {
+                // 🎯 ШАГ 2: Проявляем новый чат, как только данные полностью отрисовались
+                if (container) container.classList.remove('loading');
+            });
             
-            // Включаем автообновление переписки каждые 2 секунды
             chatInterval = setInterval(loadChatHistory, 2000);
         }
-
 
         // Функция возврата к списку контактов для мобильных устройств
         function backToSidebar() {
