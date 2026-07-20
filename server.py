@@ -3939,70 +3939,50 @@ async def geragram_propose_contact(data: ContactActionModel, request: Request):
     return {"status": "already_contacts", "msg": "Вы уже являетесь контактами"}
 
 
-# 3. Получить список контактов (УЛЬТИМАТИВНЫЙ НЕУЯЗВИМЫЙ ВАРИАНТ ДЛЯ СЫРЫХ И ЧИСТЫХ НИКНЕЙМОВ)
+# 3. Получить список контактов (ИСПРАВЛЕНО: Считываем связи из правильной коллекции geragram_contacts)
 @app.get("/api/geragram/contacts/list")
 async def geragram_get_contacts(request: Request):
     import re
-    from urllib.parse import unquote, quote
+    from urllib.parse import unquote
     
     me = await get_current_gera_user(request)
-    my_raw_contacts = me.get("contacts", [])
+    my_username = me["username"]
     
-    # 🎯 СОБИРАЕМ ВСЕ ВОЗМОЖНЫЕ ВАРИАНТЫ НАПИСАНИЯ НИКНЕЙМОВ (И с процентами, и чистые!)
+    # 🎯 ГЛАВНЫЙ СУБД-ФИКС: Находим все подтвержденные связи в коллекции geragram_contacts!
+    cursor_links = geragram_contacts.find({
+        "status": "accepted",
+        "$or": [
+            {"from_user": my_username},
+            {"to_user": my_username}
+        ]
+    })
+    links_list = await cursor_links.to_list(length=200)
+    
+    # Собираем чистые никнеймы друзей, отсекая свой собственный никнейм
     search_names = []
-    for username in my_raw_contacts:
-        search_names.append(username.strip())          # Сырой вариант (например, geras%C3%Abv)
-        search_names.append(unquote(username).strip())  # Чистая кириллица (например, gerasв)
-        search_names.append(quote(username).strip())    # Перестраховка кодирования
+    for link in links_list:
+        friend = link["to_user"] if link["from_user"] == my_username else link["from_user"]
+        search_names.append(friend.strip())
+        search_names.append(unquote(friend).strip())
         
     search_names = list(set(search_names)) # Удаляем дубликаты
     
     formatted_contacts = []
     
-    # 🤖 СИНИЙ БОТ GERAGRAM: Всегда на первом месте в списке
+    # 1. 🤖 РОБОТ-ПОМОЩНИК (Всегда первый в списке)
     formatted_contacts.append({
         "username": "geragram_bot",
         "display_name": "GeraGram Ассистент 🤖",
         "avatar_type": "letter",
-        "avatar_data": {
-            "gradient": "linear-gradient(135deg, #00c6ff, #0072ff)",
-            "letter": "🤖"
-        },
+        "avatar_data": {"gradient": "linear-gradient(135deg, #00c6ff, #0072ff)", "letter": "🤖"},
         "status": "Бот-помощник всегда на связи",
         "is_official": True,
         "is_group": False
     })
     
-    # 🎯 ИЩЕМ СОВПАДЕНИЯ В БАЗЕ ПО ВСЕМ ИМЕНАМ С ИГНОРИРОВАНИЕМ РЕГИСТРА
-    if search_names:
-        or_conditions = []
-        for name in search_names:
-            or_conditions.append({"username": {"$regex": f"^{re.escape(name)}$", "$options": "i"}})
-            
-        contacts_cursor = geragram_users.find({"$or": or_conditions})
-        contacts_list = await contacts_cursor.to_list(length=100)
-        
-        # 👥 РЕНДЕРИНГ ОБЫЧНЫХ ЮЗЕРОВ
-        for c in contacts_list:
-            if c["username"].lower() == "geragram_bot":
-                continue
-                
-            is_off = c.get("is_official", False)
-            formatted_contacts.append({
-                "username": c["username"], # Отдаем тот username, который реально записан в СУБД
-                "display_name": c.get("display_name", c["username"]),
-                "avatar_type": c.get("avatar_type", "letter"),
-                "avatar_url": c.get("avatar_url", ""),
-                "avatar_data": c.get("avatar_data", {"gradient": "linear-gradient(135deg, #3a6073, #3a6073)", "letter": "U"}),
-                "status": c.get("status", "в сети"),
-                "is_official": is_off,
-                "is_group": False
-            })
-            
-    # 👥 2. ПОДГРУЗКА ГРУППОВЫХ ЧАТОВ ИЗ MONGODB ATLAS
-    groups_cursor = geragram_groups.find({"members": me["username"]})
+    # 2. 👥 ГРУППОВЫЕ ЧАТЫ (Вытаскиваем группы из коллекции geragram_groups)
+    groups_cursor = geragram_groups.find({"members": my_username})
     groups_list = await groups_cursor.to_list(length=100)
-    
     for g in groups_list:
         formatted_contacts.append({
             "username": str(g["_id"]),
@@ -4014,29 +3994,57 @@ async def geragram_get_contacts(request: Request):
             "is_group": True,
             "owner": g["owner"]
         })
+    
+    # 3. 👤 ОБЫЧНЫЕ ДРУЗЬЯ (Теперь они 100% подгрузятся из коллекции geragram_users)
+    if search_names:
+        or_conditions = []
+        for name in search_names:
+            or_conditions.append({"username": {"$regex": f"^{re.escape(name)}$", "$options": "i"}})
+            
+        contacts_cursor = geragram_users.find({"$or": or_conditions})
+        contacts_list = await contacts_cursor.to_list(length=100)
         
-    # Входящие заявки на контакты (с полной поддержкой $or-поиска)
-    incoming_list = []
-    my_incoming_reqs = me.get("incoming_requests", [])
-    if my_incoming_reqs:
-        or_inc_conditions = []
-        for i in my_incoming_reqs:
-            or_inc_conditions.append({"username": {"$regex": f"^{re.escape(i)}$", "$options": "i"}})
-            or_inc_conditions.append({"username": {"$regex": f"^{re.escape(unquote(i))}$", "$options": "i"}})
-        incoming_cursor = geragram_users.find({"$or": or_inc_conditions})
-        incoming_list = await incoming_cursor.to_list(length=100)
+        for c in contacts_list:
+            if c["username"].lower() == "geragram_bot":
+                continue
+            formatted_contacts.append({
+                "username": c["username"],
+                "display_name": c.get("display_name", c["username"]),
+                "avatar_type": c.get("avatar_type", "letter"),
+                "avatar_url": c.get("avatar_url", ""),
+                "avatar_data": c.get("avatar_data", {"gradient": "linear-gradient(135deg, #3a6073, #3a6073)", "letter": "U"}),
+                "status": c.get("status", "в сети"),
+                "is_official": c.get("is_official", False),
+                "is_group": False
+            })
+            
+    # 4. Входящие заявки на обмен контактами (Берем статус pending из geragram_contacts)
+    incoming_cursor = geragram_contacts.find({
+        "to_user": my_username,
+        "status": "pending"
+    })
+    incoming_links = await incoming_cursor.to_list(length=100)
+    
+    formatted_incoming = []
+    if incoming_links:
+        inc_names = [link["from_user"] for link in incoming_links]
+        or_inc_conditions = [{"username": {"$regex": f"^{re.escape(i)}$", "$options": "i"}} for i in inc_names]
         
-    formatted_incoming = [{
-        "username": i["username"], 
-        "display_name": i.get("display_name", i["username"]), 
-        "avatar_type": i.get("avatar_type", "letter"), 
-        "avatar_data": i.get("avatar_data", {})
-    } for i in incoming_list]
+        inc_users_cursor = geragram_users.find({"$or": or_inc_conditions})
+        inc_users_list = await inc_users_cursor.to_list(length=100)
+        
+        formatted_incoming = [{
+            "username": i["username"], 
+            "display_name": i.get("display_name", i["username"]), 
+            "avatar_type": i.get("avatar_type", "letter"), 
+            "avatar_data": i.get("avatar_data", {})
+        } for i in inc_users_list]
     
     return {
         "contacts": formatted_contacts,
         "incoming_requests": formatted_incoming
     }
+
 
 # 1. Тогл блокировки пользователя
 @app.post("/api/geragram/users/toggle-block")
