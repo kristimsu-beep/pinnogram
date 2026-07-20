@@ -4065,14 +4065,17 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
     return {"status": "success", "msg": "Сообщение доставлено в облако"}
 
 
-# --- ⚙️ ФИКС ЗАЩИТЫ АВТОРСТВА ДЛЯ РЕДАКТИРОВАНИЯ И УДАЛЕНИЯ СООБЩЕНИЙ ---
+# --- ⚙️ ОКОНЧАТЕЛЬНЫЙ ФИКС КИРИЛЛИЦЫ ДЛЯ УДАЛЕНИЯ И РЕДАКТИРОВАНИЯ СООБЩЕНИЙ ---
 
 @app.post("/api/geragram/messages/edit")
 async def edit_message(payload: dict, request: Request):
     from bson import ObjectId
-    # 🎯 ИСПРАВЛЕНО: Извлекаем объект текущего юзера GeraGram через Request сессию
+    from urllib.parse import unquote # Локальный импорт для подстраховки
+    
     me = await get_current_gera_user(request)
-    my_username = me["username"] # Получаем чистую строку никнейма автора
+    
+    # 🎯 ГЛАВНЫЙ ФИКС: Принудительно раскодируем никнейм автора перед проверкой СУБД!
+    my_username = unquote(me["username"]).strip()
     
     msg_id = payload.get("message_id")
     new_content = payload.get("new_content")
@@ -4080,7 +4083,7 @@ async def edit_message(payload: dict, request: Request):
     if not msg_id or not new_content:
         raise HTTPException(status_code=400, detail="Неполные данные запроса")
         
-    # Ищем документ в базе и сверяем строку автора на 100% совпадение
+    # Ищем документ и проверяем автора по раскодированному чистому никнейму
     result = await db.messages.update_one(
         {"_id": ObjectId(msg_id), "from_user": my_username},
         {"$set": {"content": new_content, "is_edited": True}}
@@ -4095,21 +4098,25 @@ async def edit_message(payload: dict, request: Request):
 @app.post("/api/geragram/messages/delete")
 async def delete_message(payload: dict, request: Request):
     from bson import ObjectId
-    # 🎯 ИСПРАВЛЕНО: Извлекаем объект текущего юзера GeraGram через Request сессию
+    from urllib.parse import unquote # Локальный импорт, чтобы не падала ошибка
+    
     me = await get_current_gera_user(request)
-    my_username = me["username"] # Получаем чистую строку никнейма автора
+    
+    # 🎯 ГЛАВНЫЙ ФИКС: Принудительно раскодируем никнейм автора перед удалением!
+    my_username = unquote(me["username"]).strip()
     
     msg_id = payload.get("message_id")
     if not msg_id:
         raise HTTPException(status_code=400, detail="ID сообщения не указан")
         
-    # Сверяем автора сообщения перед физическим стиранием документа из MongoDB
+    # Стираем документ, если раскодированный никнейм на 100% совпал с полем from_user
     result = await db.messages.delete_one({"_id": ObjectId(msg_id), "from_user": my_username})
     
     if result.deleted_count == 0:
         raise HTTPException(status_code=403, detail="Невозможно удалить чужое сообщение")
         
     return {"status": "success", "msg": "Сообщение стёрто из облака Atlas"}
+
 
 
 
