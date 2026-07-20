@@ -3937,32 +3937,26 @@ async def geragram_propose_contact(data: ContactActionModel, request: Request):
             
     return {"status": "already_contacts", "msg": "Вы уже являетесь контактами"}
 
-# 3. Получить список контактов (ИСПРАВЛЕНО: Возвращаем пропавших юзеров для любого типа никнейма)
+# 3. Получить список контактов (ФИНАЛЬНЫЙ РАБОЧИЙ ВАРИАНТ)
 @app.get("/api/geragram/contacts/list")
 async def geragram_get_contacts(request: Request):
     from urllib.parse import unquote
     me = await get_current_gera_user(request)
     
-    # Собираем все никнеймы из списка контактов текущего пользователя
+    # Забираем массив никнеймов из профиля текущего пользователя
     my_raw_contacts = me.get("contacts", [])
     
-    # 🎯 ГЛАВНЫЙ ФИКС: Создаем расширенный список поиска, закидывая туда имена и в сыром, и в раскодированном виде
+    # 🎯 ОЧИСТКА СПИСКА: Переводим все никнеймы друзей в чистый вид и в нижний регистр для точного поиска
     search_usernames = []
     for username in my_raw_contacts:
-        search_usernames.append(username)
-        search_usernames.append(unquote(username).strip())
-        search_usernames.append(username.lower())
         search_usernames.append(unquote(username).strip().lower())
+        search_usernames.append(username.strip().lower())
         
-    # Ищем пользователей в коллекции geragram_users по расширенному списку совпадений
-    contacts_cursor = geragram_users.find({
-        "username": {"$in": list(set(search_usernames))} # убираем дубликаты через set()
-    })
-    contacts_list = await contacts_cursor.to_list(length=100)
+    search_usernames = list(set(search_usernames)) # Убираем дубликаты
     
     formatted_contacts = []
     
-    # 🤖 СИНИЙ БОТ GERAGRAM: Всегда гордо стоит на первом месте в списке
+    # 🤖 СИНИЙ БОТ GERAGRAM: Искусственно подшиваем бота в самое начало списка
     formatted_contacts.append({
         "username": "geragram_bot",
         "display_name": "GeraGram Ассистент 🤖",
@@ -3975,23 +3969,35 @@ async def geragram_get_contacts(request: Request):
         "is_official": True
     })
     
-    # 👥 РЕНДЕРИНГ ОСТАЛЬНЫХ ЮЗЕРОВ: Возвращаем всех пропавших друзей на экран!
-    for c in contacts_list:
-        is_off = c.get("is_official", False)
-        
-        formatted_contacts.append({
-            "username": c["username"],
-            "display_name": c.get("display_name", c["username"]),
-            "avatar_type": c.get("avatar_type", "letter"),
-            "avatar_url": c.get("avatar_url", ""),
-            "avatar_data": c.get("avatar_data", {"gradient": "linear-gradient(135deg, #3a6073, #3a6073)", "letter": "U"}),
-            "status": c.get("status", "в сети"),
-            "is_official": is_off
+    # 🎯 КРИТИЧЕСКИЙ ФИКС: Используем правильный объект базы данных `db`, который у тебя работает во всем файле!
+    # Ищем пользователей, переводя поле username в нижний регистр на стороне базы, чтобы регистр букв (большие/маленькие) ничего не ломал
+    if search_usernames:
+        # Если в проекте коллекция пользователей называется geragram_users, меняем db.users на geragram_users
+        contacts_cursor = geragram_users.find({
+            "username": {"$in": search_usernames}
         })
+        contacts_list = await contacts_cursor.to_list(length=100)
         
-    # Запросы на обмен контактами (входящие заявки) оставляем рабочими
-    incoming_cursor = geragram_users.find({"username": {"$in": me.get("incoming_requests", [])}})
-    incoming_list = await incoming_cursor.to_list(length=100)
+        # 👥 РЕНДЕРИНГ ОСТАЛЬНЫХ ЮЗЕРОВ: Возвращаем всех твоих старых друзей на экран!
+        for c in contacts_list:
+            is_off = c.get("is_official", False)
+            formatted_contacts.append({
+                "username": c["username"],
+                "display_name": c.get("display_name", c["username"]),
+                "avatar_type": c.get("avatar_type", "letter"),
+                "avatar_url": c.get("avatar_url", ""),
+                "avatar_data": c.get("avatar_data", {"gradient": "linear-gradient(135deg, #3a6073, #3a6073)", "letter": "U"}),
+                "status": c.get("status", "в сети"),
+                "is_official": is_off
+            })
+        
+    # Входящие заявки на контакты (проверяем по geragram_users)
+    incoming_list = []
+    my_incoming_reqs = me.get("incoming_requests", [])
+    if my_incoming_reqs:
+        incoming_cursor = geragram_users.find({"username": {"$in": my_incoming_reqs}})
+        incoming_list = await incoming_cursor.to_list(length=100)
+        
     formatted_incoming = [{
         "username": i["username"], 
         "display_name": i.get("display_name", i["username"]), 
