@@ -4064,34 +4064,52 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
     return {"status": "success", "msg": "Сообщение доставлено в облако"}
 
 
-# --- ⚙️ ИСПРАВЛЕННЫЕ СЕРВЕРНЫЕ ЭНДПОИНТЫ (ЗАМЕНЕНО НА get_current_gera_user) ---
+# --- ⚙️ ФИКС ЗАЩИТЫ АВТОРСТВА ДЛЯ РЕДАКТИРОВАНИЯ И УДАЛЕНИЯ СООБЩЕНИЙ ---
 
 @app.post("/api/geragram/messages/edit")
-# 🎯 ИСПРАВЛЕНО ЗДЕСЬ:
-async def edit_message(payload: dict, current_user: str = Depends(get_current_gera_user)):
+async def edit_message(payload: dict, request: Request):
+    from bson import ObjectId
+    # 🎯 ИСПРАВЛЕНО: Извлекаем объект текущего юзера GeraGram через Request сессию
+    me = await get_current_gera_user(request)
+    my_username = me["username"] # Получаем чистую строку никнейма автора
+    
     msg_id = payload.get("message_id")
     new_content = payload.get("new_content")
+    
     if not msg_id or not new_content:
         raise HTTPException(status_code=400, detail="Неполные данные запроса")
+        
+    # Ищем документ в базе и сверяем строку автора на 100% совпадение
     result = await db.messages.update_one(
-        {"_id": ObjectId(msg_id), "from_user": current_user},
+        {"_id": ObjectId(msg_id), "from_user": my_username},
         {"$set": {"content": new_content, "is_edited": True}}
     )
+    
     if result.modified_count == 0:
-        raise HTTPException(status_code=403, detail="Действие запрещено или сообщение не найдено")
+        raise HTTPException(status_code=403, detail="Вы не можете редактировать это сообщение")
+        
     return {"status": "success", "msg": "Сообщение успешно отредактировано"}
 
 
 @app.post("/api/geragram/messages/delete")
-# 🎯 ИСПРАВЛЕНО ЗДЕСЬ:
-async def delete_message(payload: dict, current_user: str = Depends(get_current_gera_user)):
+async def delete_message(payload: dict, request: Request):
+    from bson import ObjectId
+    # 🎯 ИСПРАВЛЕНО: Извлекаем объект текущего юзера GeraGram через Request сессию
+    me = await get_current_gera_user(request)
+    my_username = me["username"] # Получаем чистую строку никнейма автора
+    
     msg_id = payload.get("message_id")
     if not msg_id:
         raise HTTPException(status_code=400, detail="ID сообщения не указан")
-    result = await db.messages.delete_one({"_id": ObjectId(msg_id), "from_user": current_user})
+        
+    # Сверяем автора сообщения перед физическим стиранием документа из MongoDB
+    result = await db.messages.delete_one({"_id": ObjectId(msg_id), "from_user": my_username})
+    
     if result.deleted_count == 0:
         raise HTTPException(status_code=403, detail="Невозможно удалить чужое сообщение")
+        
     return {"status": "success", "msg": "Сообщение стёрто из облака Atlas"}
+
 
 
 @app.post("/api/geragram/chats/pin")
