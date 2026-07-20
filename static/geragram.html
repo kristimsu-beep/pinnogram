@@ -1405,6 +1405,18 @@
             chatInterval = setInterval(loadChatHistory, 2000);
         }
 
+        // Функция возврата к списку контактов для мобильных устройств
+        function backToSidebar() {
+            activeChatUser = null;
+            if (chatInterval) clearInterval(chatInterval);
+            
+            // Убираем мобильный класс чата — возвращается сайдбар контактов
+            document.body.classList.remove('chat-open');
+            document.getElementById('noChatSelected').style.display = 'flex';
+            
+            // На всякий случай закрываем шторку профиля, если она была открыта
+            closeUserProfileDrawer();
+        }
         
         // Синхронизация данных профиля и прав приватности (ИСПРАВЛЕНО: Правильный вызов группового контроля)
         async function syncUserProfileAndPrivacy() {
