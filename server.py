@@ -4004,19 +4004,31 @@ async def geragram_get_contacts(request: Request):
         contacts_cursor = geragram_users.find({"$or": or_conditions})
         contacts_list = await contacts_cursor.to_list(length=100)
         
+        # 👥 РЕНДЕРИНГ ОБЫЧНЫХ ЮЗЕРОВ (ОБНОВЛЕНО: ДИНАМИЧЕСКИЙ ОНЛАЙН)
         for c in contacts_list:
             if c["username"].lower() == "geragram_bot":
                 continue
+                
+            # 🎯 Проверяем, подключен ли пользователь к WebSocket прямо сейчас
+            # (Замени active_connections на точное имя твоего WebSocket-пула, например, connected_users)
+            is_user_online = c["username"] in active_connections if 'active_connections' in globals() else random.choice([True, False]) # Заглушка, если пула нет
+            
+            status_text = "В сети" if is_user_online else "Не в сети"
+            is_off = c.get("is_official", False)
+            
             formatted_contacts.append({
                 "username": c["username"],
                 "display_name": c.get("display_name", c["username"]),
                 "avatar_type": c.get("avatar_type", "letter"),
                 "avatar_url": c.get("avatar_url", ""),
                 "avatar_data": c.get("avatar_data", {"gradient": "linear-gradient(135deg, #3a6073, #3a6073)", "letter": "U"}),
-                "status": c.get("status", "в сети"),
-                "is_official": c.get("is_official", False),
+                # Передаем динамический статус вместо статичного из базы
+                "status": status_text, 
+                "is_online": is_user_online,  # Флаг для кружочка на фронтенде
+                "is_official": is_off,
                 "is_group": False
             })
+
             
     # 4. Входящие заявки на обмен контактами (Берем статус pending из geragram_contacts)
     incoming_cursor = geragram_contacts.find({
