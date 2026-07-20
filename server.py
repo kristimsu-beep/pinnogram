@@ -3937,26 +3937,26 @@ async def geragram_propose_contact(data: ContactActionModel, request: Request):
             
     return {"status": "already_contacts", "msg": "Вы уже являетесь контактами"}
 
-# 3. Получить список контактов (ФИНАЛЬНЫЙ РАБОЧИЙ ВАРИАНТ)
+# 3. Получить список контактов (ФИНАЛЬНЫЙ НЕУЯЗВИМЫЙ ВАРИАНТ К РЕГИСТРУ И КИРИЛЛИЦЕ)
 @app.get("/api/geragram/contacts/list")
 async def geragram_get_contacts(request: Request):
+    import re
     from urllib.parse import unquote
-    me = await get_current_gera_user(request)
     
-    # Забираем массив никнеймов из профиля текущего пользователя
+    me = await get_current_gera_user(request)
     my_raw_contacts = me.get("contacts", [])
     
-    # 🎯 ОЧИСТКА СПИСКА: Переводим все никнеймы друзей в чистый вид и в нижний регистр для точного поиска
-    search_usernames = []
+    # 🎯 ОЧИСТКА: Собираем уникальные чистые имена пользователей
+    clean_names = []
     for username in my_raw_contacts:
-        search_usernames.append(unquote(username).strip().lower())
-        search_usernames.append(username.strip().lower())
-        
-    search_usernames = list(set(search_usernames)) # Убираем дубликаты
+        clean_names.append(unquote(username).strip())
+        clean_names.append(username.strip())
+    
+    clean_names = list(set(clean_names)) # Убираем дубликаты
     
     formatted_contacts = []
     
-    # 🤖 СИНИЙ БОТ GERAGRAM: Искусственно подшиваем бота в самое начало списка
+    # 🤖 СИНИЙ БОТ GERAGRAM: Всегда на первом месте в списке
     formatted_contacts.append({
         "username": "geragram_bot",
         "display_name": "GeraGram Ассистент 🤖",
@@ -3969,17 +3969,22 @@ async def geragram_get_contacts(request: Request):
         "is_official": True
     })
     
-    # 🎯 КРИТИЧЕСКИЙ ФИКС: Используем правильный объект базы данных `db`, который у тебя работает во всем файле!
-    # Ищем пользователей, переводя поле username в нижний регистр на стороне базы, чтобы регистр букв (большие/маленькие) ничего не ломал
-    if search_usernames:
-        # Если в проекте коллекция пользователей называется geragram_users, меняем db.users на geragram_users
-        contacts_cursor = geragram_users.find({
-            "username": {"$in": search_usernames}
-        })
+    # 🎯 ГЛАВНЫЙ ФИКС РЕГИСТРА И КОДИРОВОК:
+    # Делаем поиск через регулярное выражение с флагом "i" (игнорировать регистр больших/маленьких букв)
+    if clean_names:
+        or_conditions = []
+        for name in clean_names:
+            or_conditions.append({"username": {"$regex": f"^{re.escape(name)}$", "$options": "i"}})
+            
+        contacts_cursor = geragram_users.find({"$or": or_conditions})
         contacts_list = await contacts_cursor.to_list(length=100)
         
-        # 👥 РЕНДЕРИНГ ОСТАЛЬНЫХ ЮЗЕРОВ: Возвращаем всех твоих старых друзей на экран!
+        # 👥 РЕНДЕРИНГ ОСТАЛЬНЫХ ЮЗЕРОВ
         for c in contacts_list:
+            # Пропускаем дублирование бота, если он вдруг затесался в контактах СУБД
+            if c["username"].lower() == "geragram_bot":
+                continue
+                
             is_off = c.get("is_official", False)
             formatted_contacts.append({
                 "username": c["username"],
@@ -3995,7 +4000,8 @@ async def geragram_get_contacts(request: Request):
     incoming_list = []
     my_incoming_reqs = me.get("incoming_requests", [])
     if my_incoming_reqs:
-        incoming_cursor = geragram_users.find({"username": {"$in": my_incoming_reqs}})
+        or_inc_conditions = [{"username": {"$regex": f"^{re.escape(unquote(i).strip())}$", "$options": "i"}} for i in my_incoming_reqs]
+        incoming_cursor = geragram_users.find({"$or": or_inc_conditions})
         incoming_list = await incoming_cursor.to_list(length=100)
         
     formatted_incoming = [{
@@ -4009,6 +4015,7 @@ async def geragram_get_contacts(request: Request):
         "contacts": formatted_contacts,
         "incoming_requests": formatted_incoming
     }
+
 
 # 1. Тогл блокировки пользователя
 @app.post("/api/geragram/users/toggle-block")
