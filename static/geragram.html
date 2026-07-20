@@ -944,7 +944,26 @@
         </div>
     </div>
 
-    <script>      
+    <script> 
+        // 🎯 ШАГ 1: АВТО-УНИЧТОЖЕНИЕ ЛЮБОГО СТАРЫЙ КЭША И SERVICE WORKER
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                for (let registration of registrations) {
+                    registration.unregister().then(function(boolean) {
+                        console.log('❌ [SW-KILLER] Старый фоновый кэш успешно стёрт:', boolean);
+                    });
+                }
+            }).catch(function(err) {
+                console.error('Ошибка очистки воркеров:', err);
+            });
+        }
+
+        // Автоматически вычищаем хранилище кэша браузера при загрузке
+        if (window.caches) {
+            caches.keys().then(function(names) {
+                for (let name of names) caches.delete(name);
+            });
+        }
         // --- 📱 ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И ДАННЫЕ СЕССИИ ---
         let myUsername = null;        // Никнейм текущего авторизованного юзера
         let isRegisterMode = false;   // Переключатель режима Вход / Регистрация
