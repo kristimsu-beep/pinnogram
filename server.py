@@ -21,6 +21,7 @@ from fastapi import Form, File, UploadFile
 from typing import List
 from fastapi.staticfiles import StaticFiles
 from bson import ObjectId  # 🎯 ВОТ ЭТОТ ИМПОРТ ВСЁ ИСПРАВИТ!
+from urllib.parse import unquote  # 🎯 Этот инструмент превратит кракозябры обратно в русские буквы!
 
 
 # Вечное облачное хранилище для видео и голосовых Pinnogram
@@ -4132,11 +4133,13 @@ async def pin_chat_message(payload: dict, current_user: str = Depends(get_curren
     return {"status": "success", "msg": "Сообщение закреплено в базе данных"}
 
     
-# 2. Получить историю переписки с конкретным пользователем (ОБНОВЛЕНО)
+# 2. Получить историю переписки с конкретным пользователем (ИСПРАВЛЕНО ДЛЯ КИРИЛЛИЦЫ)
 @app.get("/api/geragram/messages/history/{target_username}")
 async def geragram_get_history(target_username: str, request: Request):
     me = await get_current_gera_user(request)
-    target = target_username.strip().lower()
+    
+    # 🎯 КРИТИЧЕСКИЙ ФИКС: Принудительно раскодируем кракозябры вроде %C3%Abv в ровный текст!
+    target = unquote(target_username).strip()
     
     cursor = geragram_chats.find({
         "$or": [
@@ -4148,20 +4151,16 @@ async def geragram_get_history(target_username: str, request: Request):
     history = []
     async for msg in cursor:
         history.append({
-            # 🎯 КРИТИЧЕСКИЙ ФИКС ДЛЯ УДАЛЕНИЯ И ПРАВОК: отдаем 24-значный ID сообщения строкой!
             "_id": str(msg["_id"]), 
             "from_user": msg["from_user"],
             "to_user": msg["to_user"],
             "content": msg["content"],
             "msg_type": msg.get("msg_type", "text"),
             "timestamp": msg["timestamp"],
-            # 🎯 ТЕЛЕГРАМ-ФИКС ПРАВОК: отдаем флаг изменения сообщения
             "is_edited": msg.get("is_edited", False),
-            # 🎯 ТЕЛЕГРАМ-ФИКС ЦИТАТ: отдаем текст цитаты ответа на фронтенд
             "reply_to_text": msg.get("reply_to_text", None)
         })
     return history
-
 
 import os
 from fastapi import UploadFile, File
