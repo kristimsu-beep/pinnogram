@@ -565,6 +565,35 @@
             margin-bottom: 6px;
             color: var(--tg-text-muted);
         }
+        /* 🟢 СТИЛИ ИНДИКАТОРОВ СТАТУСА ОНЛАЙНА */
+        .avatar-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 44px;
+        }
+        
+        .status-badge {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid var(--tg-sidebar); /* Красивая обводка под цвет фона */
+            z-index: 2;
+            transition: background-color 0.3s ease;
+        }
+        
+        /* Цвета статусов */
+        .status-badge.online {
+            background-color: #4cd964 !important; /* Ярко-зелёный */
+            box-shadow: 0 0 6px #4cd964;
+        }
+        
+        .status-badge.offline {
+            background-color: #7f91a4 !important; /* Серый */
+        }
     </style>
 </head>
 <body>
@@ -1098,26 +1127,42 @@
                     });
                 }
 
-                // 2. Рендерим список подтверждённых контактов (с ботом и галочками)
+                // 2. Рендерим список подтверждённых контактов (с кружочками онлайна)
                 if (data.contacts && data.contacts.length > 0) {
                     data.contacts.forEach(contact => {
                         const item = document.createElement('div');
                         item.className = 'chat-item' + (activeChatUser === contact.username ? ' active' : '');
                         
                         let avHtml = getAvatarElementHtml(contact, 44);
+                        
+                        // 🟢 ТЕЛЕГРАМ-СТИЛЬ: Оборачиваем аватар и вешаем индикатор статуса
+                        let badgeClass = contact.is_online ? 'online' : 'offline';
+                        
+                        // Для групп и бота делаем статус "всегда в сети" (или скрываем кружочек, если хочешь)
+                        if (contact.is_group) badgeClass = 'online'; 
+                        if (contact.username === 'geragram_bot') badgeClass = 'online';
 
-                        // 👑 ТЕЛЕГРАМ-СТИЛЬ: Если у пользователя или бота стоит флаг верификации, дорисовываем галочку и тэг!
+                        let avatarWithStatusHtml = `
+                            <div class="avatar-wrapper">
+                                ${avHtml}
+                                <div class="status-badge ${badgeClass}"></div>
+                            </div>
+                        `;
+
                         let officialBadge = contact.is_official 
-                            ? ` <i class="fa-solid fa-circle-check" style="color: #2481cc; font-size:14px;" title="Верифицированный аккаунт"></i> <span style="background: rgba(36,129,204,0.15); color: #2481cc; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 4px; border: 1px solid rgba(36,129,204,0.3);">OFFICIAL</span>` 
+                            ? ` <i class="fa-solid fa-circle-check" style="color: #2481cc; font-size:14px;"></i> <span style="background: rgba(36,129,204,0.15); color: #2481cc; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 4px; border: 1px solid rgba(36,129,204,0.3);">OFFICIAL</span>` 
                             : '';
 
+                        // Меняем подпись под ником: для групп пишем участников, для людей - статус В сети / Не в сети
+                        let subStatusText = contact.is_group ? contact.status : contact.status;
+
                         item.innerHTML = `
-                            ${avHtml}
-                            <div class="chat-info">
+                            ${avatarWithStatusHtml}
+                            <div class="chat-info" style="margin-left: 12px;">
                                 <div class="chat-name-row">
                                     <div class="chat-name">${contact.display_name}${officialBadge}</div>
                                 </div>
-                                <div class="chat-last-msg">@${contact.username} • Нажмите для чата</div>
+                                <div class="chat-last-msg">${subStatusText}</div>
                             </div>
                         `;
 
