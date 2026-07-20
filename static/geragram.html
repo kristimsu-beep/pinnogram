@@ -1266,7 +1266,7 @@
 
 
 
-        // 🔥 СУПЕР-ДВИЖОК: ЗАГРУЗКА ИСТОРИИ ЧАТА С ПОЛНОЙ ДЕСЕРИАЛИЗАЦИЕЙ OBJECTID MONGODB
+        // 🔥 СУПЕР-ДВИЖОК: ЗАГРУЗКА ИСТОРИИ ЧАТА (УПРОЩЕННЫЙ ПОД ЧИСТЫЕ СТРОКИ С СЕРВЕРА)
         async function loadChatHistory() {
             if (!activeChatUser) return;
             
@@ -1277,19 +1277,16 @@
                 
                 const container = document.getElementById('messagesContainer');
                 
-                // Извлекаем чистые 24-значные строки ID для сверки изменений
+                // 🎯 ИСПРАВЛЕНО: Извлекаем ID напрямую, так как бэкенд теперь шлёт их чистыми строками
                 const currentIds = Array.from(container.querySelectorAll('.msg-bubble')).map(b => b.dataset.id).join(',');
-                const serverIds = messages.map(msg => {
-                    if (!msg._id) return msg.id;
-                    return (typeof msg._id === 'object' && msg._id.$oid) ? msg._id.$oid : msg._id;
-                }).join(',');
+                const serverIds = messages.map(msg => msg._id || msg.id).join(',');
                 
                 const hasEditedChanges = messages.some((msg, idx) => {
                     const bubble = container.querySelectorAll('.msg-bubble')[idx];
                     return bubble && msg.is_edited && !bubble.innerHTML.includes('изменено');
                 });
 
-                if (currentIds === serverIds && !hasEditedChanges) return; // Контент не менялся, не перерисовываем
+                if (currentIds === serverIds && !hasEditedChanges) return; // Контент не менялся, выходим
                 
                 container.innerHTML = '';
                 
@@ -1298,12 +1295,8 @@
                     const isOutbound = (msg.from_user !== activeChatUser);
                     bubble.className = `msg-bubble ${isOutbound ? 'msg-outbound' : 'msg-inbound'}`;
                     
-                    // 🎯 КРИТИЧЕСКИЙ ФИКС ОШИБКИ UNDEFINED: Жестко вытаскиваем 24-значный ID из базы Atlas
-                    if (msg._id) {
-                        bubble.dataset.id = (typeof msg._id === 'object' && msg._id.$oid) ? msg._id.$oid : msg._id;
-                    } else if (msg.id) {
-                        bubble.dataset.id = msg.id;
-                    }
+                    // 🎯 ИСПРАВЛЕНО: Привязываем чистый текстовый ID к датасету пузыря
+                    bubble.dataset.id = msg._id || msg.id;
                     
                     let quoteContent = '';
                     let mainMediaContent = '';
