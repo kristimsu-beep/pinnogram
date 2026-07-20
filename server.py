@@ -3753,6 +3753,7 @@ async def robux_withdraw(data: WithdrawRequest, request: Request):
 geragram_users = db["geragram_users"]
 geragram_chats = db["geragram_chats"]
 geragram_contacts = db["geragram_contacts"]
+geragram_groups = db["geragram_groups"]  # 🎯 ДОБАВЬ ЭТУ СТРОКУ ДЛЯ НАШИХ ГРУПП
 # Имя нашего встроенного ИИ-ассистента в базе данных
 BOT_USERNAME = "geragram_bot"
     
@@ -3937,7 +3938,7 @@ async def geragram_propose_contact(data: ContactActionModel, request: Request):
             
     return {"status": "already_contacts", "msg": "Вы уже являетесь контактами"}
 
-# 3. Получить список контактов (ЛОГИРОВАНИЕ ДАННЫХ ДЛЯ РЕНДЕР)
+# 3. Получить список контактов (ОБНОВЛЕНО: Поддержка обычных чатов, Бота и Групп)
 @app.get("/api/geragram/contacts/list")
 async def geragram_get_contacts(request: Request):
     import re
@@ -3946,22 +3947,16 @@ async def geragram_get_contacts(request: Request):
     me = await get_current_gera_user(request)
     my_raw_contacts = me.get("contacts", [])
     
-    # 🚨 ВЫВОДИМ ДАННЫЕ В ЛОГИ РЕНДЕР ДЛЯ ОНЛАЙН-АНАЛИЗА
-    print(f"\n[📡 GERAGRAM DEBUG START]")
-    print(f"-> Подключился пользователь: '{me.get('username')}'")
-    print(f"-> Сырой список его контактов в базе: {my_raw_contacts}")
-    
+    # ОЧИСТКА: Собираем уникальные чистые имена пользователей для поиска контактов
     clean_names = []
     for username in my_raw_contacts:
         clean_names.append(unquote(username).strip())
         clean_names.append(username.strip())
     
     clean_names = list(set(clean_names))
-    print(f"-> Очищенные имена для сборки регулярных выражений: {clean_names}")
-    
     formatted_contacts = []
     
-    # 🤖 СИНИЙ БОТ GERAGRAM
+    # 🤖 СИНИЙ БОТ GERAGRAM: Всегда на первом месте в списке
     formatted_contacts.append({
         "username": "geragram_bot",
         "display_name": "GeraGram Ассистент 🤖",
@@ -3971,9 +3966,11 @@ async def geragram_get_contacts(request: Request):
             "letter": "🤖"
         },
         "status": "Бот-помощник всегда на связи",
-        "is_official": True
+        "is_official": True,
+        "is_group": False  // Флаг, чтобы фронтенд отличал обычный чат от группы
     })
     
+    # 👥 1. ПОДГРУЗКА ОБЫЧНЫХ КОНТАКТОВ
     if clean_names:
         or_conditions = []
         for name in clean_names:
@@ -3981,8 +3978,6 @@ async def geragram_get_contacts(request: Request):
             
         contacts_cursor = geragram_users.find({"$or": or_conditions})
         contacts_list = await contacts_cursor.to_list(length=100)
-        
-        print(f"-> База MongoDB нашла подходящих юзеров: {[u['username'] for u in contacts_list]}")
         
         for c in contacts_list:
             if c["username"].lower() == "geragram_bot":
@@ -3996,11 +3991,28 @@ async def geragram_get_contacts(request: Request):
                 "avatar_url": c.get("avatar_url", ""),
                 "avatar_data": c.get("avatar_data", {"gradient": "linear-gradient(135deg, #3a6073, #3a6073)", "letter": "U"}),
                 "status": c.get("status", "в сети"),
-                "is_official": is_off
+                "is_official": is_off,
+                "is_group": False
             })
             
-    print(f"[📡 GERAGRAM DEBUG END]\n")
+    # 👥 2. 🔥 ДОБАВЛЕНО: АВТО-ПОДГРУЗКА ГРУППОВЫХ ЧАТОВ ИЗ MONGODB
+    # Ищем все группы, где текущий пользователь записан в массиве "members"
+    groups_cursor = geragram_groups.find({"members": me["username"]})
+    groups_list = await groups_cursor.to_list(length=100)
+    
+    for g in groups_list:
+        formatted_contacts.append({
+            "username": str(g["_id"]),  # Для групп вместо никнейма используем ID документа из базы
+            "display_name": g["name"],
+            "avatar_type": "letter",
+            "avatar_data": g.get("avatar_data", {"gradient": "linear-gradient(135deg, #654ea3, #eaafc8)", "letter": "G"}),
+            "status": f"{len(g['members'])} участников",  # Динамический счетчик людей в сайдбаре
+            "is_official": False,
+            "is_group": True,  // Флаг, который активирует кнопки управления группой на фронтенде
+            "owner": g["owner"]
+        })
         
+    # Входящие заявки на контакты (без изменений)
     incoming_list = []
     my_incoming_reqs = me.get("incoming_requests", [])
     if my_incoming_reqs:
@@ -4019,8 +4031,6 @@ async def geragram_get_contacts(request: Request):
         "contacts": formatted_contacts,
         "incoming_requests": formatted_incoming
     }
-
-
 
 # 1. Тогл блокировки пользователя
 @app.post("/api/geragram/users/toggle-block")
@@ -4052,17 +4062,45 @@ async def geragram_toggle_mute(data: ContactActionModel, request: Request):
         await geragram_users.update_one({"username": me["username"]}, {"$addToSet": {"muted_users": target}})
         return {"status": "muted"}
 
-# 3. Безопасное получение данных чужого профиля (ОБНОВЛЕНО: ПОДДЕРЖКА БОТА И ГАЛОЧЕК)
+# 3. Безопасное получение данных профиля (ОБНОВЛЕНО: ДИАЛОГИ, БОТ И ГРУППОВЫЕ ЧАТЫ)
 @app.get("/api/geragram/users/profile/{target_username}")
 async def geragram_get_profile(target_username: str, request: Request):
     from urllib.parse import unquote
+    from bson import ObjectId
+    
     me = await get_current_gera_user(request)
     
     # Декодируем никнейм от кракозябр
-    target = unquote(target_username).strip().lower()
+    target_clean = unquote(target_username).strip()
+    target_lower = target_clean.lower()
     
-    # 🤖 ПОДДЕРЖКА КАРТОЧКИ БОТА: Если кликнули на бота, отдаем готовый виртуальный профиль без запроса в СУБД
-    if target == "geragram_bot":
+    # 🎯 👥 ПОДДЕРЖКА ПРОФИЛЯ ГРУППЫ: Проверяем, является ли цель 24-значным ID документа СУБД
+    is_group = len(target_clean) == 24 and all(c in "0123456789abcdefABCDEF" for c in target_clean)
+    
+    if is_group:
+        group = await geragram_groups.find_one({"_id": ObjectId(target_clean)})
+        if not group:
+            raise HTTPException(status_code=404, detail="Группа не найдена в базе данных")
+            
+        return {
+            "is_blocked_by_them": False,
+            "username": str(group["_id"]),
+            "display_name": group["name"],
+            "avatar_type": "letter",
+            "avatar_data": group.get("avatar_data", {"gradient": "linear-gradient(135deg, #654ea3, #eaafc8)", "letter": "G"}),
+            "status": f"Группа • {len(group['members'])} участников", # Динамическая статистика
+            "joined_date": "Создана в GeraGram",
+            "i_blocked_them": False,
+            "i_muted_them": False,
+            "is_official": False,
+            "is_group": True, # 🎯 Флаг для фронтенда, что это групповой чат
+            "owner": group["owner"],
+            "i_not_owner": group["owner"] != me["username"], # Защита: проверяем, создатель ли мы
+            "group_members": group["members"] # Массив участников для шторки управления
+        }
+    
+    # 🤖 ПОДДЕРЖКА КАРТОЧКИ БОТА
+    if target_lower == "geragram_bot":
         return {
             "is_blocked_by_them": False,
             "username": "geragram_bot",
@@ -4073,11 +4111,12 @@ async def geragram_get_profile(target_username: str, request: Request):
             "joined_date": "20.07.2026",
             "i_blocked_them": False,
             "i_muted_them": False,
-            "is_official": True  # У бота галочка включена по умолчанию
+            "is_official": True,
+            "is_group": False
         }
         
     # Для обычных людей делаем стандартный запрос в MongoDB Atlas
-    target_user = await geragram_users.find_one({"username": target})
+    target_user = await geragram_users.find_one({"username": target_lower})
     if not target_user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
         
@@ -4086,8 +4125,8 @@ async def geragram_get_profile(target_username: str, request: Request):
         return {"is_blocked_by_them": True}
         
     # Проверяем наши флаги для этого юзера
-    am_i_blocked_them = target in me.get("blocked_users", [])
-    am_i_muted_them = target in me.get("muted_users", [])
+    am_i_blocked_them = target_lower in me.get("blocked_users", [])
+    am_i_muted_them = target_lower in me.get("muted_users", [])
     
     return {
         "is_blocked_by_them": False,
@@ -4100,10 +4139,121 @@ async def geragram_get_profile(target_username: str, request: Request):
         "joined_date": target_user.get("joined_date", "Неизвестно"),
         "i_blocked_them": am_i_blocked_them,
         "i_muted_them": am_i_muted_them,
-        # 👑 ТЕЛЕГРАМ-ФИКС: Отдаем реальный статус верификации из базы данных на фронтенд!
-        "is_official": target_user.get("is_official", False)
+        "is_official": target_user.get("is_official", False),
+        "is_group": False
     }
 
+import random
+from urllib.parse import unquote
+from bson import ObjectId
+
+# --- 👥 МОДУЛЬ ГРУППОВЫХ ЧАТОВ GERAGRAM (БЭКЕНД) ---
+
+@app.post("/api/geragram/groups/create")
+async def create_group_chat(payload: dict, request: Request):
+    """Создание новой группы с рандомным градиентом аватара"""
+    me = await get_current_gera_user(request)
+    group_name = payload.get("name", "").strip()
+    
+    if not group_name:
+        raise HTTPException(status_code=400, detail="Название группы не может быть пустым")
+        
+    # Список премиальных градиентов для аватара группы
+    gradients = [
+        "linear-gradient(135deg, #f857a6, #ff5858)",
+        "linear-gradient(135deg, #11998e, #38ef7d)",
+        "linear-gradient(135deg, #ff9966, #ff5e62)",
+        "linear-gradient(135deg, #4ea1d3, #485563)",
+        "linear-gradient(135deg, #a8c0ff, #3f2b96)",
+        "linear-gradient(135deg, #654ea3, #eaafc8)"
+    ]
+    
+    new_group = {
+        "name": group_name,
+        "owner": me["username"],
+        "members": [me["username"]],  # Создатель сразу становится первым участником
+        "avatar_data": {
+            "gradient": random.choice(gradients),
+            "letter": group_name[0].upper() if group_name else "G"
+        },
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+    
+    result = await geragram_groups.insert_one(new_group)
+    return {"status": "success", "msg": "Группа успешно создана!", "group_id": str(result.inserted_id)}
+
+
+@app.post("/api/geragram/groups/add-member")
+async def add_member_to_group(payload: dict, request: Request):
+    """Добавление контакта в группу (Только для владельца)"""
+    me = await get_current_gera_user(request)
+    group_id = payload.get("group_id")
+    target_member = unquote(payload.get("username", "")).strip().lower()
+    
+    group = await geragram_groups.find_one({"_id": ObjectId(group_id)})
+    if not group:
+        raise HTTPException(status_code=404, detail="Группа не найдена")
+        
+    if group["owner"] != me["username"]:
+        raise HTTPException(status_code=403, detail="Только владелец может добавлять участников")
+        
+    if target_member in group["members"]:
+        raise HTTPException(status_code=400, detail="Пользователь уже состоит в этой группе")
+        
+    # Пушим нового участника в массив СУБД Atlas
+    await geragram_groups.update_one(
+        {"_id": ObjectId(group_id)},
+        {"$push": {"members": target_member}}
+    )
+    return {"status": "success", "msg": f"@{target_member} добавлен в группу"}
+
+
+@app.post("/api/geragram/groups/remove-member")
+async def remove_member_from_group(payload: dict, request: Request):
+    """Удаление участника владельцем ИЛИ добровольный выход из группы"""
+    me = await get_current_gera_user(request)
+    group_id = payload.get("group_id")
+    target_member = unquote(payload.get("username", "")).strip().lower()
+    
+    group = await geragram_groups.find_one({"_id": ObjectId(group_id)})
+    if not group:
+        raise HTTPException(status_code=404, detail="Группа не найдена")
+        
+    # Если текущий юзер пытается удалить кого-то, проверяем что он владелец.
+    # Если юзер удаляет самого себя — это операция "Покинуть группу".
+    if target_member != me["username"] and group["owner"] != me["username"]:
+        raise HTTPException(status_code=403, detail="У вас нет прав на это действие")
+        
+    if group["owner"] == target_member and target_member == me["username"]:
+        raise HTTPException(status_code=400, detail="Владелец не может покинуть группу. Только удалить её полностью.")
+
+    await geragram_groups.update_one(
+        {"_id": ObjectId(group_id)},
+        {"$pull": {"members": target_member}}
+    )
+    return {"status": "success", "msg": "Участник успешно удален/вышел"}
+
+
+@app.post("/api/geragram/groups/delete")
+async def delete_entire_group(payload: dict, request: Request):
+    """Полное уничтожение группы её создателем"""
+    me = await get_current_gera_user(request)
+    group_id = payload.get("group_id")
+    
+    group = await geragram_groups.find_one({"_id": ObjectId(group_id)})
+    if not group:
+        raise HTTPException(status_code=404, detail="Группа не найдена")
+        
+    if group["owner"] != me["username"]:
+        raise HTTPException(status_code=403, detail="Действие запрещено: вы не являетесь владельцем")
+        
+    # Стираем группу из MongoDB Atlas
+    await geragram_groups.delete_one({"_id": ObjectId(group_id)})
+    # Опционально: стираем историю сообщений этой группы
+    await geragram_chats.delete_many({"to_user": group_id})
+    
+    return {"status": "success", "msg": "Группа полностью ликвидирована"}
+    
 class MessageSendModel(BaseModel):
     to_user: str
     content: str
@@ -4112,23 +4262,38 @@ class MessageSendModel(BaseModel):
 
 import re
 
+# 1. Отправить сообщение (ОБНОВЛЕНО: ПОДДЕРЖКА ДИАЛОГОВ, БОТА И ГРУПП)
 @app.post("/api/geragram/messages/send")
 async def geragram_send_message(data: MessageSendModel, request: Request):
+    import re
     me = await get_current_gera_user(request)
-    target = data.to_user.strip().lower()
+    target = data.to_user.strip()
     
-    # Если пишем обычному юзеру (не боту), проверяем его существование и блокировки
-    if target != BOT_USERNAME:
-        target_user = await geragram_users.find_one({"username": target})
+    # 🎯 ГРУППОВОЙ ФИКС: Проверяем, является ли цель ID группы (24 шестнадцатеричных символа)
+    is_target_group = len(target) == 24 and all(c in "0123456789abcdefABCDEF" for c in target)
+    
+    if is_target_group:
+        from bson import ObjectId
+        # Проверяем наличие группы и членство в ней в MongoDB Atlas
+        group = await geragram_groups.find_one({"_id": ObjectId(target)})
+        if not group:
+            raise HTTPException(status_code=404, detail="Целевая группа не найдена")
+        if me["username"] not in group["members"]:
+            raise HTTPException(status_code=403, detail="Вы не являетесь участником этой группы")
+            
+    elif target.lower() != BOT_USERNAME:
+        # Стандартные проверки блокировок для обычных пользователей
+        target_lower = target.lower()
+        target_user = await geragram_users.find_one({"username": target_lower})
         if not target_user:
             raise HTTPException(status_code=404, detail="Получатель не найден")
-        if target in me.get("blocked_users", []) or me["username"] in target_user.get("blocked_users", []):
+        if target_lower in me.get("blocked_users", []) or me["username"] in target_user.get("blocked_users", []):
             raise HTTPException(status_code=403, detail="Невозможно отправить сообщение: пользователь заблокирован")
 
-    # Сохраняем сообщение от текущего пользователя в MongoDB
+    # Формируем и сохраняем документ сообщения в СУБД Atlas
     new_msg = {
         "from_user": me["username"],
-        "to_user": target,
+        "to_user": target if is_target_group else target.lower(),
         "content": data.content,
         "msg_type": data.msg_type,
         "timestamp": datetime.utcnow().isoformat() + "Z",
@@ -4138,39 +4303,30 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
     }
     await geragram_chats.insert_one(new_msg)
 
-    # 🤖 РАБОТА СУПЕР-БОТА GERAGRAM
-    if target == BOT_USERNAME:
+    # 🤖 РАБОТА СУПЕР-БОТА GERAGRAM (Отрабатывает только в ЛС с ботом)
+    if target.lower() == BOT_USERNAME:
         text = data.content.strip()
-        # Проверяем триггеры на оба префикса (! или /)
         if text.startswith("!") or text.startswith("/"):
-            # Отсекаем префикс и разбиваем строку на команду и аргументы
             command_parts = text[1:].split(maxsplit=1)
             cmd = command_parts[0].lower()
             args = command_parts[1] if len(command_parts) > 1 else ""
 
-            # Реализация команды верификации tag
             if cmd == "tag":
-                # Извлекаем никнейм из формата @user067 или просто текста
                 match = re.search(r'@?([\wа-яА-ЯёЁ]+)', args)
                 if match:
                     target_tag_user = match.group(1).strip().lower()
-                    
-                    # Ищем указанного пользователя в MongoDB Atlas
                     user_in_db = await geragram_users.find_one({"username": target_tag_user})
                     
                     if user_in_db:
-                        # Проверяем, нет ли уже у пользователя этой отметки
                         if user_in_db.get("is_official", False):
                             bot_response = f"⚠️ У пользователя @{target_tag_user} уже имеется статус Official!"
                         else:
-                            # 👑 Намертво прописываем статус верификации в MongoDB Atlas!
                             await geragram_users.update_one(
                                 {"username": target_tag_user},
                                 {"$set": {"is_official": True}}
                             )
                             bot_response = f"👑 Успех! Пользователю @{target_tag_user} выдан официальный статус, галочка и тег 'official'."
                             
-                            # Бот автоматически пишет системное уведомление самому верифицированному пользователю в ЛС!
                             sys_notification = {
                                 "from_user": BOT_USERNAME,
                                 "to_user": target_tag_user,
@@ -4187,7 +4343,6 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
             else:
                 bot_response = "🤖 Неизвестная команда. Доступные команды: !tag @username"
             
-            # Эмулируем мгновенный ответ бота в этот же чат
             bot_msg = {
                 "from_user": BOT_USERNAME,
                 "to_user": me["username"],
@@ -4198,7 +4353,8 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
             }
             await geragram_chats.insert_one(bot_msg)
 
-    return {"status": "success", "msg": "Сообщение отправлено"}
+    return {"status": "success", "msg": "Сообщение успешно доставлено"}
+
 
 
 # --- 🏆 ОКОНЧАТЕЛЬНЫЙ ФИНАЛЬНЫЙ СЕРВЕРНЫЙ ВАРИАНТ (КОЛЛЕКЦИЯ geragram_chats) ---
@@ -4282,21 +4438,27 @@ async def pin_chat_message(payload: dict, current_user: str = Depends(get_curren
     return {"status": "success", "msg": "Сообщение закреплено в базе данных"}
 
     
-# 2. Получить историю переписки с конкретным пользователем (ИСПРАВЛЕНО ДЛЯ КИРИЛЛИЦЫ)
 @app.get("/api/geragram/messages/history/{target_username}")
 async def geragram_get_history(target_username: str, request: Request):
     me = await get_current_gera_user(request)
-    
-    # 🎯 КРИТИЧЕСКИЙ ФИКС: Принудительно раскодируем кракозябры вроде %C3%Abv в ровный текст!
     target = unquote(target_username).strip()
     
-    cursor = geragram_chats.find({
-        "$or": [
-            {"from_user": me["username"], "to_user": target},
-            {"from_user": target, "to_user": me["username"]}
-        ]
-    }).sort("timestamp", 1) # Сортируем от старых к новым
+    # 🎯 ГРУППОВОЙ ФИКС: Проверяем, запрашивается ли группа
+    is_group = len(target) == 24 and all(c in "0123456789abcdefABCDEF" for c in target)
     
+    if is_group:
+        # Выкачиваем сообщения группы (to_user равен ID группы)
+        cursor = geragram_chats.find({"to_user": target}).sort("timestamp", 1)
+    else:
+        # Обычный приватный чат
+        target_lower = target.lower()
+        cursor = geragram_chats.find({
+            "$or": [
+                {"from_user": me["username"], "to_user": target_lower},
+                {"from_user": target_lower, "to_user": me["username"]}
+            ]
+        }).sort("timestamp", 1)
+        
     history = []
     async for msg in cursor:
         history.append({
@@ -4310,6 +4472,7 @@ async def geragram_get_history(target_username: str, request: Request):
             "reply_to_text": msg.get("reply_to_text", None)
         })
     return history
+
 
 import os
 from fastapi import UploadFile, File
