@@ -1373,24 +1373,31 @@
       }
         // --- 💬 МОДУЛЬ ЧАТА, БЛОКИРОВОК И ГОЛОСОВЫХ СООБЩЕНИЙ ---
 
-        // Переключение на конкретного пользователя (ОБНОВЛЕНО: МОМЕНТАЛЬНОЕ ПЕРЕКЛЮЧЕНИЕ)
+        // Переключение на конкретного пользователя (УЛЬТРА-СКОРОСТЬ TELEGRAM-STYLE)
         async function selectChat(username) {
-            // 🎯 ФИКС МИГАНИЯ: Стираем старый текст под ноль до отправки запроса на сервер
             const container = document.getElementById('messagesContainer');
-            if (container) {
+            const targetUserClean = decodeURIComponent(username).trim();
+            
+            // 🎯 СУПЕР-ФИКС ЗАДЕРЖКИ: Если этой комнаты ЕЩЁ НЕТ в кэше памяти,
+            // только тогда мы очищаем экран. Если она есть — не трогаем DOM, убирая пустую секунду!
+            if (container && (!geragramCache || !geragramCache[targetUserClean])) {
                 container.innerHTML = ''; 
             }
             
-            activeChatUser = decodeURIComponent(username).trim();
+            activeChatUser = targetUserClean;
             
-            // Адаптивность для мобилок
+            // Мобильная адаптивность
             document.body.classList.add('chat-open');
             document.getElementById('noChatSelected').style.display = 'none';
             
-            // Сбрасываем старый таймер обновлений
             if (chatInterval) clearInterval(chatInterval);
             
-            // Параллельно подгружаем профиль и историю новой комнаты
+            // 🎯 МГНОВЕННЫЙ ОНЛАЙН-РЕНДЕР ИЗ ПАМЯТИ: Вызываем рендер прямо сейчас, не дожидаясь сетевых запросов!
+            if (container && geragramCache && geragramCache[activeChatUser]) {
+                renderMessagesFromData(geragramCache[activeChatUser]);
+            }
+            
+            // Параллельно и бесшовно обновляем профиль и сверяем кэш с базой данных MongoDB
             await syncUserProfileAndPrivacy();
             await loadChatHistory();
             
@@ -1398,18 +1405,6 @@
             chatInterval = setInterval(loadChatHistory, 2000);
         }
 
-        // Функция возврата к списку контактов для мобильных устройств
-        function backToSidebar() {
-            activeChatUser = null;
-            if (chatInterval) clearInterval(chatInterval);
-            
-            // Убираем мобильный класс чата — возвращается сайдбар контактов
-            document.body.classList.remove('chat-open');
-            document.getElementById('noChatSelected').style.display = 'flex';
-            
-            // На всякий случай закрываем шторку профиля, если она была открыта
-            closeUserProfileDrawer();
-        }
         
         // Синхронизация данных профиля и прав приватности (ИСПРАВЛЕНО: Правильный вызов группового контроля)
         async function syncUserProfileAndPrivacy() {
@@ -1492,18 +1487,17 @@
             }
         }
 
-        // 🔥 УЛЬТРА-ДВИЖОК С АВТО-КЭШИРОВАНИЕМ TELEGRAM-STYLE
         async function loadChatHistory() {
             if (!activeChatUser) return;
             
             const container = document.getElementById('messagesContainer');
             if (!container) return;
 
-            // 🎯 ШАГ 1: МГНОВЕННЫЙ ОНЛАЙН-РЕНДЕР ИЗ ПАМЯТИ (ИНТЕРФЕЙС НЕ ЖДЁТ СЕТЬ!)
+            // Если контейнер пустой и в памяти есть данные — рендерим их мгновенно за 0 миллисекунд
             if (geragramCache[activeChatUser] && container.innerHTML === '') {
                 renderMessagesFromData(geragramCache[activeChatUser]);
             }
-
+            
             try {
                 // 🎯 ШАГ 2: Делаем запрос к серверу только для сверки или первичной загрузки
                 const res = await fetch(`/api/geragram/messages/history/${activeChatUser}`);
