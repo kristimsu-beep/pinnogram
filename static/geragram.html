@@ -1275,17 +1275,19 @@
                 
                 const container = document.getElementById('messagesContainer');
                 
-                // 🔥 УМНЫЙ ТЕЛЕГРАМ-ФИЛЬТР: Сравниваем ID сообщений. Если в базе что-то удалили или изменили — перерисовываем чат мгновенно
+                // Сравниваем ID сообщений на экране и сервере для мгновенного обновления
                 const currentIds = Array.from(container.querySelectorAll('.msg-bubble')).map(b => b.dataset.id).join(',');
-                const serverIds = messages.map(msg => (typeof msg._id === 'object' && msg._id.$oid) ? msg._id.$oid : (msg._id || msg.id)).join(',');
+                const serverIds = messages.map(msg => {
+                    if (!msg._id) return msg.id;
+                    return (typeof msg._id === 'object' && msg._id.$oid) ? msg._id.$oid : msg._id;
+                }).join(',');
                 
-                // Ищем флаги правок (is_edited), чтобы заметить, если сообщение изменили на сервере
                 const hasEditedChanges = messages.some((msg, idx) => {
                     const bubble = container.querySelectorAll('.msg-bubble')[idx];
                     return bubble && msg.is_edited && !bubble.innerHTML.includes('изменено');
                 });
 
-                if (currentIds === serverIds && !hasEditedChanges) return; // Контент не изменился, выходим
+                if (currentIds === serverIds && !hasEditedChanges) return;
                 
                 container.innerHTML = '';
                 
@@ -1294,7 +1296,7 @@
                     const isOutbound = (msg.from_user !== activeChatUser);
                     bubble.className = `msg-bubble ${isOutbound ? 'msg-outbound' : 'msg-inbound'}`;
                     
-                    // Бронированный сбор ID сообщения из MongoDB Atlas
+                    // 🎯 КРИТИЧЕСКИЙ ФИКС: Вытаскиваем ObjectId из любого формата MongoDB Atlas
                     if (msg._id) {
                         bubble.dataset.id = (typeof msg._id === 'object' && msg._id.$oid) ? msg._id.$oid : msg._id;
                     } else {
@@ -1303,29 +1305,23 @@
                     
                     let quoteContent = '';
                     let mainMediaContent = '';
-                    let messageText = msg.content;
                     
-                    // 🎙️ ТЕЛЕГРАМ-ЦИТАТА: Если сообщение является ответом
+                    // 🎙️ ДИЗАЙН ЦИТАТЫ TELEGRAM: Отрендерится красивой плашкой внутри пузыря!
                     if (msg.reply_to_text) {
                         quoteContent = `
-                            <div class="msg-reply-quote">
+                            <div class="msg-reply-quote" style="background: rgba(0,0,0,0.15); border-left: 2px solid var(--tg-button); padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-bottom: 6px; color: var(--tg-text-muted); text-align: left;">
                                 <div style="font-weight:600; color:var(--tg-button); font-size:11px;">Ответ</div>
-                                <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(msg.reply_to_text)}</div>
+                                <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width: 100%;">${escapeHtml(msg.reply_to_text)}</div>
                             </div>
                         `;
                     }
                     
-                    // Если тип контента - текст
                     if (msg.msg_type === 'text') {
-                        mainMediaContent = `<span style="white-space: pre-wrap;">${escapeHtml(messageText)}</span>`;
-                    } 
-                    // Если тип контента - голосовое сообщение
-                    else if (msg.msg_type === 'voice') {
+                        mainMediaContent = `<span style="white-space: pre-wrap; display: block; text-align: left;">${escapeHtml(msg.content)}</span>`;
+                    } else if (msg.msg_type === 'voice') {
                         mainMediaContent = `
                             <div class="voice-msg-player">
-                                <button class="voice-play-btn" onclick="playVoiceAudio('${msg.content}', this)">
-                                    <i class="fa-solid fa-play"></i>
-                                </button>
+                                <button class="voice-play-btn" onclick="playVoiceAudio('${msg.content}', this)"><i class="fa-solid fa-play"></i></button>
                                 <div class="voice-wave-visual">
                                     <div class="voice-wave-bar" style="height:40%"></div>
                                     <div class="voice-wave-bar" style="height:70%"></div>
@@ -1336,7 +1332,6 @@
                         `;
                     }
                     
-                    // Конвертируем время в местное время региона пользователя
                     let msgTime = '--:--';
                     if (msg.timestamp) {
                         try {
@@ -1345,10 +1340,8 @@
                         } catch(e) { msgTime = msg.timestamp.substring(11, 16); }
                     }
                     
-                    // ТЕЛЕГРАМ-ПЛАШКА "изменено"
                     const editedLabel = msg.is_edited ? '<span style="font-size:10px; opacity:0.5; margin-right:4px;">изменено</span>' : '';
                     
-                    // 🔥 ИСПРАВЛЕНО: Склеиваем цитату, основной текст сообщения и блок времени вместе!
                     bubble.innerHTML = `
                         ${quoteContent}
                         ${mainMediaContent}
@@ -1360,21 +1353,18 @@
                     container.appendChild(bubble);
                 });
                 
-                const scrollWrapper = document.getElementById('chatBodyScroll');
-                scrollWrapper.scrollTop = scrollWrapper.scrollHeight;
-
-            } catch (err) { console.error('Сбой рендеринга:', err); }
+                document.getElementById('chatBodyScroll').scrollTop = document.getElementById('chatBodyScroll').scrollHeight;
+            } catch (err) { console.error(err); }
         }
 
 
 
-        // 🔥 УМНЫЙ ДВИЖОК ОТПРАВКИ: ПОДДЕРЖКА НАСТОЯЩИХ ЦИТАТ И ПРАВОК В БАЗУ ДАННЫХ
+        // 🔥 ИСПРАВЛЕННАЯ ОТПРАВКА С ЧИСТЫМ ПЕРЕНОСОМ ЦИТАТ
         async function sendMessage() {
             const input = document.getElementById('messageInputField');
             const text = input.value.trim();
             if (!text || !activeChatUser) return;
             
-            // 📝 1. РЕЖИМ РЕДАКТИРОВАНИЯ (Стучимся на бэкенд в MongoDB)
             if (editMsgId) {
                 try {
                     const res = await fetch('/api/geragram/messages/edit', {
@@ -1382,20 +1372,15 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ message_id: editMsgId, new_content: text })
                     });
-                    if (res.ok) {
-                        editMsgId = null;
-                        input.value = '';
-                        loadChatHistory();
-                    } else { alert('Не удалось сохранить изменения.'); }
+                    if (res.ok) { editMsgId = null; input.value = ''; loadChatHistory(); }
                 } catch (err) { alert('Ошибка редактирования.'); }
                 return;
             }
 
-            // 🎙️ 2. РЕЖИМ ОТВЕТА (ЦИТИРОВАНИЯ) И ОБЫЧНОЙ ОТПРАВКИ
             try {
                 const payload = { to_user: activeChatUser, content: text, msg_type: 'text' };
                 
-                // Передаем текст цитаты на бэкенд, чтобы он зашил его в структуру сообщения
+                // 🎯 Передаем цитату отдельным полем, а не склеиваем с основным текстом!
                 if (replyToMsgId) {
                     payload.reply_to_text = selectedMsgText; 
                 }
@@ -1406,11 +1391,6 @@
                     body: JSON.stringify(payload)
                 });
                 
-                if (res.status === 403) {
-                    alert('Невозможно отправить сообщение: приватность ограничена.');
-                    return;
-                }
-                
                 if (res.ok) {
                     input.value = '';
                     if (replyToMsgId) cancelReplyMode();
@@ -1418,6 +1398,31 @@
                 }
             } catch (err) { alert('Ошибка отправки.'); }
         }
+
+        // Ловим правый клик и жестко считываем data-id сообщения
+        document.getElementById('messagesContainer').addEventListener('contextmenu', function(e) {
+            const bubble = e.target.closest('.msg-bubble');
+            if (!bubble) return;
+            e.preventDefault();
+            
+            selectedMsgId = bubble.dataset.id;
+            // Перестраховка: если ID всё ещё undefined, ищем его заново
+            if (!selectedMsgId || selectedMsgId === "undefined") {
+                console.error("Ошибка: ID сообщения не считался!");
+                return;
+            }
+            
+            selectedMsgText = bubble.querySelector('span') ? bubble.querySelector('span').innerText : "Голосовое сообщение";
+            selectedMsgOwner = bubble.classList.contains('msg-outbound');
+            
+            document.getElementById('ctxEdit').style.display = selectedMsgOwner ? 'flex' : 'none';
+            document.getElementById('ctxDelete').style.display = selectedMsgOwner ? 'flex' : 'none';
+            
+            const menu = document.getElementById('msgContextMenu');
+            menu.style.top = `${e.clientY}px`;
+            menu.style.left = `${e.clientX}px`;
+            menu.style.display = 'block';
+        });
 
         // 🔥 НАСТОЯЩЕЕ УДАЛЕНИЕ СООБЩЕНИЯ ИЗ БАЗЫ ДАННЫХ ATLAS
         async function triggerDeleteAction() {
