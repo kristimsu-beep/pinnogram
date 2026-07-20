@@ -3967,7 +3967,7 @@ async def geragram_get_contacts(request: Request):
         },
         "status": "Бот-помощник всегда на связи",
         "is_official": True,
-        "is_group": False  // Флаг, чтобы фронтенд отличал обычный чат от группы
+        "is_group": False  # Флаг, чтобы фронтенд отличал обычный чат от группы
     })
     
     # 👥 1. ПОДГРУЗКА ОБЫЧНЫХ КОНТАКТОВ
@@ -4008,7 +4008,7 @@ async def geragram_get_contacts(request: Request):
             "avatar_data": g.get("avatar_data", {"gradient": "linear-gradient(135deg, #654ea3, #eaafc8)", "letter": "G"}),
             "status": f"{len(g['members'])} участников",  # Динамический счетчик людей в сайдбаре
             "is_official": False,
-            "is_group": True,  // Флаг, который активирует кнопки управления группой на фронтенде
+            "is_group": True,  # Флаг, который активирует кнопки управления группой на фронтенде
             "owner": g["owner"]
         })
         
