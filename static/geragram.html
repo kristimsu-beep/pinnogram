@@ -944,7 +944,17 @@
         </div>
     </div>
 
-    <script> 
+    <script>
+        // 🎯 СБРОС СЕТЕВОГО КЭША (ДЛЯ РАБОТЫ ОБНОВЛЕНИЙ ФРОНТЕНДА)
+        if (window.caches) {
+            caches.keys().then(function(names) {
+                for (let name of names) {
+                    caches.delete(name);
+                }
+            });
+            console.log("🔄 [КЭШ ОЧИЩЕН] Старые копии страниц удалены из памяти");
+        }
+        
         // 🎯 ШАГ 1: АВТО-УНИЧТОЖЕНИЕ ЛЮБОГО СТАРЫЙ КЭША И SERVICE WORKER
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.getRegistrations().then(function(registrations) {
