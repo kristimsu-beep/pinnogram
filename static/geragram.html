@@ -945,6 +945,33 @@
     </div>
 
     <script>
+        // =====================================================================
+        // 🚨 ГЛОБАЛЬНЫЙ ПЕРЕХВАТЧИК ОШИБОК ДЛЯ ОТЛАДКИ ТЁМНОГО ЭКРАНА
+        // =====================================================================
+        window.onerror = function(message, source, lineno, colno, error) {
+            console.error("=== 💥 КРИТИЧЕСКИЙ СБОЙ ФРОНТЕНДА ===");
+            console.error("Ошибка:", message);
+            console.error("Файл:", source);
+            console.error("Строка:", lineno, "Колонка:", colno);
+            if (error) console.error("Стек вызовов:", error.stack);
+            
+            const alertDiv = document.createElement('div');
+            alertDiv.style = "position: fixed; top: 20px; left: 20px; right: 20px; padding: 20px; color: #ff6b6b; font-family: monospace; text-align: left; background: rgba(15,15,15,0.95); border: 2px solid #ff6b6b; border-radius: 8px; z-index: 999999; box-shadow: 0 10px 30px rgba(0,0,0,0.5);";
+            alertDiv.innerHTML = `
+                <h3 style="margin-top:0; color:#ff6b6b;">🚨 Скрипт Geragram заблокирован ошибкой:</h3>
+                <p><b>Текст ошибки:</b> ${message}</p>
+                <p><b>Файл/Строка:</b> ${source ? source.split('/').pop() : 'unknown'}:${lineno}</p>
+                <p style="font-size: 11px; opacity: 0.7; margin-bottom:0; color:#fff;">Открой консоль браузера (клавиша F12 -> вкладка Console) для полной картины.</p>
+            `;
+            document.body.appendChild(alertDiv);
+            return false;
+        };
+
+        window.addEventListener('unhandledrejection', function (event) {
+            console.error("=== 💥 НЕОБРАБОТАННЫЙ ОТКАЗ ПРОМИСА ===");
+            console.error("Причина:", event.reason);
+        });
+        
         // --- 📱 ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И ДАННЫЕ СЕССИИ ---
         let myUsername = null;        // Никнейм текущего авторизованного юзера
         let isRegisterMode = false;   // Переключатель режима Вход / Регистрация
