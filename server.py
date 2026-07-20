@@ -3753,7 +3753,9 @@ async def robux_withdraw(data: WithdrawRequest, request: Request):
 geragram_users = db["geragram_users"]
 geragram_chats = db["geragram_chats"]
 geragram_contacts = db["geragram_contacts"]
-
+# Имя нашего встроенного ИИ-ассистента в базе данных
+BOT_USERNAME = "geragram_bot"
+    
 import hashlib
 import random
 
@@ -3935,40 +3937,55 @@ async def geragram_propose_contact(data: ContactActionModel, request: Request):
             
     return {"status": "already_contacts", "msg": "Вы уже являетесь контактами"}
 
-# 2. Получить список подтвержденных контактов и входящих заявок
+# 3. Получить список контактов (ОБНОВЛЕНО: Бот всегда на связи)
 @app.get("/api/geragram/contacts/list")
 async def geragram_get_contacts(request: Request):
     me = await get_current_gera_user(request)
-    my_name = me["username"]
     
-    # Ищем все записи, где мы фигурируем
-    cursor = geragram_contacts.find({
-        "$or": [{"from_user": my_name}, {"to_user": my_name}]
+    # Вытаскиваем стандартные контакты юзера из базы
+    contacts_cursor = geragram_users.find({"username": {"$in": me.get("contacts", [])}})
+    contacts_list = await contacts_cursor.to_list(length=100)
+    
+    formatted_contacts = []
+    # 🤖 СИНИЙ БОТ GERAGRAM: Искусственно подшиваем бота в самое начало списка!
+    formatted_contacts.append({
+        "username": BOT_USERNAME,
+        "display_name": "GeraGram Ассистент 🤖",
+        "avatar_type": "letter",
+        "avatar_data": {
+            "gradient": "linear-gradient(135deg, #00c6ff, #0072ff)", # Фирменный синий градиент
+            "letter": "🤖"
+        },
+        "status": "Бот-помощник",
+        "is_official": True # У самого бота, естественно, тоже есть галочка
     })
     
-    contacts_list = []
-    incoming_requests = []
+    # Рендерим остальных обычных пользователей с проверкой галочки из базы
+    for c in contacts_list:
+        # Проверяем, есть ли у пользователя в базе данных галочка верификации
+        is_off = c.get("is_official", False)
+        display_name = c["display_name"]
+        
+        formatted_contacts.append({
+            "username": c["username"],
+            "display_name": display_name,
+            "avatar_type": c.get("avatar_type", "letter"),
+            "avatar_url": c.get("avatar_url", ""),
+            "avatar_data": c.get("avatar_data", {"gradient": "linear-gradient(135deg, #3a6073, #3a6073)", "letter": "U"}),
+            "status": c.get("status", "в сети"),
+            "is_official": is_off # Передаем статус верификации на фронтенд
+        })
+        
+    # Запросы на добавление (входящие) оставляем без изменений
+    incoming_cursor = geragram_users.find({"username": {"$in": me.get("incoming_requests", [])}})
+    incoming_list = await incoming_cursor.to_list(length=100)
+    formatted_incoming = [{"username": i["username"], "display_name": i["display_name"], "avatar_type": i.get("avatar_type", "letter"), "avatar_data": i.get("avatar_data", {})} for i in incoming_list]
     
-    async for link in cursor:
-        # Определяем, кто для нас "другой пользователь"
-        other = link["to_user"] if link["from_user"] == my_name else link["from_user"]
-        u_data = await geragram_users.find_one({"username": other})
-        if not u_data: continue
-        
-        profile_payload = {
-            "username": u_data["username"],
-            "display_name": u_data.get("display_name", u_data["username"]),
-            "avatar_type": u_data.get("avatar_type", "letter"),
-            "avatar_data": u_data.get("avatar_data", {}),
-            "status": u_data.get("status", "В сети")
-        }
-        
-        if link["status"] == "accepted":
-            contacts_list.append(profile_payload)
-        elif link["status"] == "pending" and link["to_user"] == my_name:
-            incoming_requests.append(profile_payload)
-            
-    return {"contacts": contacts_list, "incoming_requests": incoming_requests}
+    return {
+        "contacts": formatted_contacts,
+        "incoming_requests": formatted_incoming
+    }
+
 
 # 1. Тогл блокировки пользователя
 @app.post("/api/geragram/users/toggle-block")
@@ -4000,19 +4017,38 @@ async def geragram_toggle_mute(data: ContactActionModel, request: Request):
         await geragram_users.update_one({"username": me["username"]}, {"$addToSet": {"muted_users": target}})
         return {"status": "muted"}
 
-# 3. Безопасное получение данных чужого профиля с проверкой блокировки
+# 3. Безопасное получение данных чужого профиля (ОБНОВЛЕНО: ПОДДЕРЖКА БОТА И ГАЛОЧЕК)
 @app.get("/api/geragram/users/profile/{target_username}")
 async def geragram_get_profile(target_username: str, request: Request):
+    from urllib.parse import unquote
     me = await get_current_gera_user(request)
-    target = target_username.strip().lower()
     
+    # Декодируем никнейм от кракозябр
+    target = unquote(target_username).strip().lower()
+    
+    # 🤖 ПОДДЕРЖКА КАРТОЧКИ БОТА: Если кликнули на бота, отдаем готовый виртуальный профиль без запроса в СУБД
+    if target == "geragram_bot":
+        return {
+            "is_blocked_by_them": False,
+            "username": "geragram_bot",
+            "display_name": "GeraGram Ассистент 🤖",
+            "avatar_type": "letter",
+            "avatar_data": {"gradient": "linear-gradient(135deg, #00c6ff, #0072ff)", "letter": "🤖"},
+            "status": "Бот-помощник всегда на связи",
+            "joined_date": "20.07.2026",
+            "i_blocked_them": False,
+            "i_muted_them": False,
+            "is_official": True  # У бота галочка включена по умолчанию
+        }
+        
+    # Для обычных людей делаем стандартный запрос в MongoDB Atlas
     target_user = await geragram_users.find_one({"username": target})
     if not target_user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
         
-    # 🚨 ПРОВЕРКА: Заблокировал ли ЦЕЛЕВОЙ пользователь МЕНЯ?
+    # ПРОВЕРКА: Заблокировал ли ЦЕЛЕВОЙ пользователь МЕНЯ?
     if me["username"] in target_user.get("blocked_users", []):
-        return {"is_blocked_by_them": True} # Фронтенд получит флаг и включит размытие/значок запрета
+        return {"is_blocked_by_them": True}
         
     # Проверяем наши флаги для этого юзера
     am_i_blocked_them = target in me.get("blocked_users", [])
@@ -4023,11 +4059,14 @@ async def geragram_get_profile(target_username: str, request: Request):
         "username": target_user["username"],
         "display_name": target_user.get("display_name", target_user["username"]),
         "avatar_type": target_user.get("avatar_type", "letter"),
+        "avatar_url": target_user.get("avatar_url", ""),
         "avatar_data": target_user.get("avatar_data", {}),
         "status": target_user.get("status", "В сети"),
         "joined_date": target_user.get("joined_date", "Неизвестно"),
         "i_blocked_them": am_i_blocked_them,
-        "i_muted_them": am_i_muted_them
+        "i_muted_them": am_i_muted_them,
+        # 👑 ТЕЛЕГРАМ-ФИКС: Отдаем реальный статус верификации из базы данных на фронтенд!
+        "is_official": target_user.get("is_official", False)
     }
 
 class MessageSendModel(BaseModel):
@@ -4036,33 +4075,95 @@ class MessageSendModel(BaseModel):
     msg_type: str = "text"
     reply_to_text: str = None  # 🎯 ДОБАВИТЬ ЭТУ СТРОКУ (по умолчанию None, если это обычное сообщение)
 
-# 1. Отправить сообщение (ОБНОВЛЕНО: С поддержкой Telegram-цитат)
+import re
+
 @app.post("/api/geragram/messages/send")
 async def geragram_send_message(data: MessageSendModel, request: Request):
     me = await get_current_gera_user(request)
     target = data.to_user.strip().lower()
     
-    target_user = await geragram_users.find_one({"username": target})
-    if not target_user:
-        raise HTTPException(status_code=404, detail="Получатель не найден")
-        
-    # Проверка блокировок с обеих сторон
-    if target in me.get("blocked_users", []) or me["username"] in target_user.get("blocked_users", []):
-        raise HTTPException(status_code=403, detail="Невозможно отправить сообщение: пользователь заблокирован")
+    # Если пишем обычному юзеру (не боту), проверяем его существование и блокировки
+    if target != BOT_USERNAME:
+        target_user = await geragram_users.find_one({"username": target})
+        if not target_user:
+            raise HTTPException(status_code=404, detail="Получатель не найден")
+        if target in me.get("blocked_users", []) or me["username"] in target_user.get("blocked_users", []):
+            raise HTTPException(status_code=403, detail="Невозможно отправить сообщение: пользователь заблокирован")
 
+    # Сохраняем сообщение от текущего пользователя в MongoDB
     new_msg = {
         "from_user": me["username"],
         "to_user": target,
         "content": data.content,
         "msg_type": data.msg_type,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
         "read": False,
-        "is_edited": False,  # Флаг для плашки "изменено" при будущей правке
-        "reply_to_text": data.reply_to_text  # 🎯 ФИКС: Сохраняем текст цитаты ответа в базу Atlas!
+        "is_edited": False,
+        "reply_to_text": data.reply_to_text
     }
-    
     await geragram_chats.insert_one(new_msg)
-    return {"status": "success", "msg": "Сообщение доставлено в облако"}
+
+    # 🤖 РАБОТА СУПЕР-БОТА GERAGRAM
+    if target == BOT_USERNAME:
+        text = data.content.strip()
+        # Проверяем триггеры на оба префикса (! или /)
+        if text.startswith("!") or text.startswith("/"):
+            # Отсекаем префикс и разбиваем строку на команду и аргументы
+            command_parts = text[1:].split(maxsplit=1)
+            cmd = command_parts[0].lower()
+            args = command_parts[1] if len(command_parts) > 1 else ""
+
+            # Реализация команды верификации tag
+            if cmd == "tag":
+                # Извлекаем никнейм из формата @user067 или просто текста
+                match = re.search(r'@?([\wа-яА-ЯёЁ]+)', args)
+                if match:
+                    target_tag_user = match.group(1).strip().lower()
+                    
+                    # Ищем указанного пользователя в MongoDB Atlas
+                    user_in_db = await geragram_users.find_one({"username": target_tag_user})
+                    
+                    if user_in_db:
+                        # Проверяем, нет ли уже у пользователя этой отметки
+                        if user_in_db.get("is_official", False):
+                            bot_response = f"⚠️ У пользователя @{target_tag_user} уже имеется статус Official!"
+                        else:
+                            # 👑 Намертво прописываем статус верификации в MongoDB Atlas!
+                            await geragram_users.update_one(
+                                {"username": target_tag_user},
+                                {"$set": {"is_official": True}}
+                            )
+                            bot_response = f"👑 Успех! Пользователю @{target_tag_user} выдан официальный статус, галочка и тег 'official'."
+                            
+                            # Бот автоматически пишет системное уведомление самому верифицированному пользователю в ЛС!
+                            sys_notification = {
+                                "from_user": BOT_USERNAME,
+                                "to_user": target_tag_user,
+                                "content": "🎉 Поздравляем! Администрация GeraGram через официального бота присвоила вашему аккаунту статус Верифицированного пользователя (Official).",
+                                "msg_type": "text",
+                                "timestamp": datetime.utcnow().isoformat() + "Z",
+                                "read": False
+                            }
+                            await geragram_chats.insert_one(sys_notification)
+                    else:
+                        bot_response = f"❌ Ошибка: Пользователь с никнеймом @{target_tag_user} не найден в базе данных MongoDB Atlas."
+                else:
+                    bot_response = "💡 Шаблон команды: !tag @username или /tag @username"
+            else:
+                bot_response = "🤖 Неизвестная команда. Доступные команды: !tag @username"
+            
+            # Эмулируем мгновенный ответ бота в этот же чат
+            bot_msg = {
+                "from_user": BOT_USERNAME,
+                "to_user": me["username"],
+                "content": bot_response,
+                "msg_type": "text",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "read": False
+            }
+            await geragram_chats.insert_one(bot_msg)
+
+    return {"status": "success", "msg": "Сообщение отправлено"}
 
 
 # --- 🏆 ОКОНЧАТЕЛЬНЫЙ ФИНАЛЬНЫЙ СЕРВЕРНЫЙ ВАРИАНТ (КОЛЛЕКЦИЯ geragram_chats) ---
