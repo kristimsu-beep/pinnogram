@@ -594,6 +594,26 @@
         .status-badge.offline {
             background-color: #7f91a4 !important; /* Серый */
         }
+        /* 👤 СТИЛЬ НИКНЕЙМА АВТОРА В ГРУППОВЫХ ЧАТАХ */
+        .msg-author-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #5288c1; /* Приятный телеграмный сине-голубой цвет */
+            margin-bottom: 4px;
+            display: block;
+            text-align: left;
+            cursor: pointer;
+        }
+        
+        /* Цветовое разделение: входящие сообщения в группах делаем чуть темнее фона */
+        .msg-inbound {
+            align-self: flex-start;
+            background: #182533 !important; /* Серый цвет для чужих сообщений */
+        }
+        .msg-outbound {
+            align-self: flex-end;
+            background: #2b5278 !important; /* Твой фирменный синий для своих */
+        }
     </style>
 </head>
 <body>
@@ -1094,7 +1114,7 @@
             }
         }
 
-        // Рендерим список контактов (ОБНОВЛЕНО: Поддержка галочек и тэгов OFFICIAL)
+        // Рендерим список контактов (ОБНОВЛЕНО: ДИНАМИЧЕСКИЙ ОПРЕДЕЛИТЕЛЬ СЕССИИ И ОНЛАЙНА)
         async function loadContactsAndRequests() {
             try {
                 const res = await fetch('/api/geragram/contacts/list');
@@ -1103,6 +1123,14 @@
 
                 const container = document.getElementById('chatsContainerList');
                 container.innerHTML = '';
+
+                // 🎯 УНИВЕРСАЛЬНЫЙ СИНХРОНИЗАТОР СЕССИИ:
+                // Вытаскиваем никнейм текущего авторизованного пользователя из разметки экрана (например, из профиля или скрытого блока),
+                // чтобы история чата loadChatHistory знала, кто сидит за монитором, и правильно делила сообщения по сторонам!
+                const myProfileNameBlock = document.getElementById('myUsernameDisplay') || document.querySelector('.sidebar-user-name');
+                if (myProfileNameBlock) {
+                    window.geraCurrentUser = myProfileNameBlock.innerText.replace('@', '').trim();
+                }
 
                 // 1. Сначала рендерим входящие заявки на обмен контактами
                 if (data.incoming_requests && data.incoming_requests.length > 0) {
@@ -1127,25 +1155,29 @@
                     });
                 }
 
-                // 2. Рендерим список подтверждённых контактов (с кружочками онлайна)
+                // 2. Рендерим список подтверждённых контактов (с кружочками онлайна и фиксом фоновой подсветки групп)
                 if (data.contacts && data.contacts.length > 0) {
                     data.contacts.forEach(contact => {
                         const item = document.createElement('div');
-                        item.className = 'chat-item' + (activeChatUser === contact.username ? ' active' : '');
+                        
+                        // 🎯 ИСПРАВЛЕНО: Приводим ID групп и имена юзеров к одному регистру, чтобы активная комната ВСЕГДА подсвечивалась синим фоном!
+                        const isCurrentActive = activeChatUser && contact.username && (activeChatUser.toString().toLowerCase() === contact.username.toString().toLowerCase());
+                        item.className = 'chat-item' + (isCurrentActive ? ' active' : '');
                         
                         let avHtml = getAvatarElementHtml(contact, 44);
                         
-                        // 🟢 ТЕЛЕГРАМ-СТИЛЬ: Оборачиваем аватар и вешаем индикатор статуса
+                        // 🟢 ТЕЛЕГРАМ-СТИЛЬ: Индикатор статуса онлайна
                         let badgeClass = contact.is_online ? 'online' : 'offline';
                         
-                        // Для групп и бота делаем статус "всегда в сети" (или скрываем кружочек, если хочешь)
-                        if (contact.is_group) badgeClass = 'online'; 
-                        if (contact.username === 'geragram_bot') badgeClass = 'online';
+                        // Группы и боты всегда визуально находятся в сети
+                        if (contact.is_group || contact.username === 'geragram_bot') {
+                            badgeClass = 'online'; 
+                        }
 
                         let avatarWithStatusHtml = `
-                            <div class="avatar-wrapper">
+                            <div class="avatar-wrapper" style="position: relative; display: inline-block;">
                                 ${avHtml}
-                                <div class="status-badge ${badgeClass}"></div>
+                                <div class="status-badge ${badgeClass}" style="position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--tg-sidebar); z-index: 2;"></div>
                             </div>
                         `;
 
@@ -1153,8 +1185,7 @@
                             ? ` <i class="fa-solid fa-circle-check" style="color: #2481cc; font-size:14px;"></i> <span style="background: rgba(36,129,204,0.15); color: #2481cc; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 4px; border: 1px solid rgba(36,129,204,0.3);">OFFICIAL</span>` 
                             : '';
 
-                        // Меняем подпись под ником: для групп пишем участников, для людей - статус В сети / Не в сети
-                        let subStatusText = contact.is_group ? contact.status : contact.status;
+                        let subStatusText = contact.status;
 
                         item.innerHTML = `
                             ${avatarWithStatusHtml}
@@ -1177,6 +1208,7 @@
                 console.error('Ошибка загрузки контактов:', err);
             }
         }
+
 
         // Вспомогательная функция сборки HTML-кода аватарки
         function getAvatarElementHtml(user, size) {
