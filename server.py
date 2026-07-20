@@ -4065,7 +4065,7 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
     return {"status": "success", "msg": "Сообщение доставлено в облако"}
 
 
-# --- 🦾 БРОНИРОВАННЫЙ СЕРВЕРНЫЙ ФИКС АВТОРСТВА (ОБНОВЛЕНО) ---
+# --- 🏆 ОКОНЧАТЕЛЬНЫЙ ФИНАЛЬНЫЙ СЕРВЕРНЫЙ ВАРИАНТ (КОЛЛЕКЦИЯ geragram_chats) ---
 
 @app.post("/api/geragram/messages/edit")
 async def edit_message(payload: dict, request: Request):
@@ -4073,8 +4073,8 @@ async def edit_message(payload: dict, request: Request):
     from urllib.parse import unquote
     
     me = await get_current_gera_user(request)
-    raw_username = me["username"]          # Имя в том виде, как оно хранится в сессии (например, geras%C3%Abv)
-    clean_username = unquote(raw_username) # Раскодированное имя (например, gerasв)
+    raw_username = me["username"]          
+    clean_username = unquote(raw_username) 
     
     msg_id = payload.get("message_id")
     new_content = payload.get("new_content")
@@ -4082,17 +4082,16 @@ async def edit_message(payload: dict, request: Request):
     if not msg_id or not new_content:
         raise HTTPException(status_code=400, detail="Неполные данные запроса")
         
-    # 1. Сначала просто находим сообщение в MongoDB Atlas по его уникальному ID
-    msg = await db.messages.find_one({"_id": ObjectId(msg_id)})
+    # 🎯 ИСПРАВЛЕНО: Ищем строго в правильной коллекции geragram_chats!
+    msg = await geragram_chats.find_one({"_id": ObjectId(msg_id)})
     if not msg:
-        raise HTTPException(status_code=444, detail="Сообщение не найдено")
+        raise HTTPException(status_code=444, detail="Сообщение не найдено в geragram_chats")
         
-    # 2. 🎯 ПРОВЕРКА: Сверяем автора сообщения И в сыром, И в раскодированном виде!
     if msg["from_user"] != raw_username and msg["from_user"] != clean_username:
         raise HTTPException(status_code=403, detail="Вы не можете редактировать чужое сообщение")
         
-    # 3. Если проверка пройдена — обновляем текст в базе данных
-    await db.messages.update_one(
+    # 🎯 ИСПРАВЛЕНО: Обновляем в geragram_chats
+    await geragram_chats.update_one(
         {"_id": ObjectId(msg_id)},
         {"$set": {"content": new_content, "is_edited": True}}
     )
@@ -4113,19 +4112,19 @@ async def delete_message(payload: dict, request: Request):
     if not msg_id:
         raise HTTPException(status_code=400, detail="ID сообщения не указан")
         
-    # 1. Находим сообщение по его уникальному ID
-    msg = await db.messages.find_one({"_id": ObjectId(msg_id)})
+    # 🎯 ИСПРАВЛЕНО: Ищем строго в правильной коллекции geragram_chats!
+    msg = await geragram_chats.find_one({"_id": ObjectId(msg_id)})
     if not msg:
-        raise HTTPException(status_code=444, detail="Сообщение не найдено")
+        raise HTTPException(status_code=444, detail="Сообщение не найдено в geragram_chats")
         
-    # 2. 🎯 ПРОВЕРКА: Проверяем авторство без единого шанса на ошибку кодировки
     if msg["from_user"] != raw_username and msg["from_user"] != clean_username:
         raise HTTPException(status_code=403, detail="Невозможно удалить чужое сообщение")
         
-    # 3. Физически удаляем документ из MongoDB Atlas
-    await db.messages.delete_one({"_id": ObjectId(msg_id)})
+    # 🎯 ИСПРАВЛЕНО: Удаляем из geragram_chats
+    await geragram_chats.delete_one({"_id": ObjectId(msg_id)})
     
     return {"status": "success", "msg": "Сообщение стёрто из облака Atlas"}
+
 
 @app.post("/api/geragram/chats/pin")
 # 🎯 ИСПРАВЛЕНО ЗДЕСЬ:
