@@ -1157,17 +1157,18 @@
       }
         // --- 💬 МОДУЛЬ ЧАТА, БЛОКИРОВОК И ГОЛОСОВЫХ СООБЩЕНИЙ ---
 
-        // Переключение на конкретного пользователя (Открытие диалога)
+        // Переключение на конкретного пользователя (Открытие диалога с декодером)
         async function selectChat(username) {
-            activeChatUser = username;
+            // 🎯 КРИТИЧЕСКИЙ ФИКС КРАКОЗЯБР: Принудительно очищаем никнейм от %C3%Ab и прочего мусора
+            activeChatUser = decodeURIComponent(username).trim().lower();
             
-            // 📱 АДАПТИВНОСТЬ: Добавляем класс на body, чтобы на смартфонах скрылся список и открылся чат
+            // 📱 АДАПТИВНОСТЬ: Добавляем класс на body для смартфонов
             document.body.classList.add('chat-open');
             
             // Скрываем начальный экран-заглушку
             document.getElementById('noChatSelected').style.display = 'none';
             
-            // Чистим старый таймер обновлений, если он был запущен
+            // Чистим старый таймер обновлений
             if (chatInterval) clearInterval(chatInterval);
             
             // Перезапрашиваем профиль человека и историю сообщений
@@ -1177,6 +1178,7 @@
             // Включаем автообновление переписки каждые 2 секунды
             chatInterval = setInterval(loadChatHistory, 2000);
         }
+
         // Функция возврата к списку контактов для мобильных устройств
         function backToSidebar() {
             activeChatUser = null;
