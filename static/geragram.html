@@ -957,6 +957,9 @@
         let editMsgId = null;          // ID сообщения, которое редактируем
         let knownMessageIds = new Set(); // Хранилище ID сообщений, чтобы не спамить уведомлениями
         let isFirstHistoryLoad = true;   // Флаг, чтобы не вызывать уведомления при первой загрузке приложения
+        // 🧠 TELEGRAM-STYLE IN-MEMORY КЭШ ДЛЯ МГНОВЕННОЙ ЗАГРУЗКИ ЧАТОВ
+        let geragramCache = {}; // Структура: { "room_id_или_username": [массив сообщений] }
+        
         
         
         // Автоматический старт при полной загрузке DOM-дерева
@@ -1489,88 +1492,121 @@
             }
         }
 
-
-        // 🔥 СУПЕР-ДВИЖОК: ЗАГРУЗКА ИСТОРИИ ЧАТА (УПРОЩЕННЫЙ ПОД ЧИСТЫЕ СТРОКИ С СЕРВЕРА)
+        // 🔥 УЛЬТРА-ДВИЖОК С АВТО-КЭШИРОВАНИЕМ TELEGRAM-STYLE
         async function loadChatHistory() {
             if (!activeChatUser) return;
             
+            const container = document.getElementById('messagesContainer');
+            if (!container) return;
+
+            // 🎯 ШАГ 1: МГНОВЕННЫЙ ОНЛАЙН-РЕНДЕР ИЗ ПАМЯТИ (ИНТЕРФЕЙС НЕ ЖДЁТ СЕТЬ!)
+            if (geragramCache[activeChatUser] && container.innerHTML === '') {
+                renderMessagesFromData(geragramCache[activeChatUser]);
+            }
+
             try {
+                // 🎯 ШАГ 2: Делаем запрос к серверу только для сверки или первичной загрузки
                 const res = await fetch(`/api/geragram/messages/history/${activeChatUser}`);
                 if (!res.ok) return;
-                const messages = await res.json();
+                const serverMessages = await res.json();
                 
-                const container = document.getElementById('messagesContainer');
+                // Проверяем, изменилось ли что-то по сравнению с нашим кэшем
+                const cachedCount = geragramCache[activeChatUser] ? geragramCache[activeChatUser].length : 0;
                 
-                // 🎯 ИСПРАВЛЕНО: Извлекаем ID напрямую, так как бэкенд теперь шлёт их чистыми строками
-                const currentIds = Array.from(container.querySelectorAll('.msg-bubble')).map(b => b.dataset.id).join(',');
-                const serverIds = messages.map(msg => msg._id || msg.id).join(',');
-                
-                const hasEditedChanges = messages.some((msg, idx) => {
-                    const bubble = container.querySelectorAll('.msg-bubble')[idx];
-                    return bubble && msg.is_edited && !bubble.innerHTML.includes('изменено');
+                // Проверяем флаги редактирования (is_edited)
+                const hasEditedChanges = geragramCache[activeChatUser] && serverMessages.some((msg, idx) => {
+                    const cachedMsg = geragramCache[activeChatUser][idx];
+                    return cachedMsg && msg.is_edited && !cachedMsg.is_edited;
                 });
 
-                if (currentIds === serverIds && !hasEditedChanges) return; // Контент не менялся, выходим
+                // Если количество сообщений совпадает и правок нет — сеть больше не трогает DOM-дерево!
+                if (cachedCount === serverMessages.length && !hasEditedChanges) {
+                    if (container.classList.contains('loading')) container.classList.remove('loading');
+                    return; 
+                }
                 
-                container.innerHTML = '';
+                // Обновляем локальный кэш свежими данными из MongoDB Atlas
+                geragramCache[activeChatUser] = serverMessages;
                 
-                messages.forEach(msg => {
-                    const bubble = document.createElement('div');
-                    const isOutbound = (msg.from_user !== activeChatUser);
-                    bubble.className = `msg-bubble ${isOutbound ? 'msg-outbound' : 'msg-inbound'}`;
-                    
-                    // 🎯 ИСПРАВЛЕНО: Привязываем чистый текстовый ID к датасету пузыря
-                    bubble.dataset.id = msg._id || msg.id;
-                    
-                    let quoteContent = '';
-                    let mainMediaContent = '';
-                    
-                    // 🎙️ ТЕЛЕГРАМ-ДИЗАЙН ЦИТАТЫ ОТВЕТА С ЛЕВОСТОРОННИМ БОРТИКОМ
-                    if (msg.reply_to_text) {
-                        quoteContent = `
-                            <div class="msg-reply-quote" style="background: rgba(0,0,0,0.15); border-left: 3px solid var(--tg-button); padding: 4px 10px; border-radius: 4px; font-size: 12px; margin-bottom: 6px; color: var(--tg-text-muted); text-align: left;">
-                                <div style="font-weight:700; color:var(--tg-button); font-size:11px; margin-bottom:2px;">Ответ</div>
-                                <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; color:var(--tg-text); font-style: italic;">${escapeHtml(msg.reply_to_text)}</div>
-                            </div>
-                        `;
-                    }
-                    
-                    if (msg.msg_type === 'text') {
-                        mainMediaContent = `<span style="white-space: pre-wrap; display: block; text-align: left;">${escapeHtml(msg.content)}</span>`;
-                    } else if (msg.msg_type === 'voice') {
-                        mainMediaContent = `
-                            <div class="voice-msg-player">
-                                <button class="voice-play-btn" onclick="playVoiceAudio('${msg.content}', this)"><i class="fa-solid fa-play"></i></button>
-                                <div class="voice-wave-visual"><div class="voice-wave-bar" style="height:50%"></div><div class="voice-wave-bar" style="height:70%"></div></div>
-                                <span class="voice-duration">0:05</span>
-                            </div>
-                        `;
-                    }
-                    
-                    let msgTime = '--:--';
-                    if (msg.timestamp) {
-                        try {
-                            const dateStr = msg.timestamp.endsWith('Z') ? msg.timestamp : msg.timestamp + 'Z';
-                            msgTime = new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                        } catch(e) { msgTime = msg.timestamp.substring(11, 16); }
-                    }
-                    
-                    // Плашка "изменено" как в Telegram
-                    const editedLabel = msg.is_edited ? '<span style="font-size:10px; opacity:0.5; margin-right:4px; font-style:italic;">изменено</span>' : '';
-                    
-                    bubble.innerHTML = `
-                        ${quoteContent}
-                        ${mainMediaContent}
-                        <div style="text-align: right; margin-top: 4px; display: block; font-size: 11px;">
-                            ${editedLabel}
-                            <span class="msg-time" style="color: rgba(255,255,255,0.4);">${msgTime}</span>
+                // Отрисовываем обновлённую историю
+                renderMessagesFromData(serverMessages);
+                
+                if (container.classList.contains('loading')) container.classList.remove('loading');
+
+            } catch (err) { console.error('Ошибка синхронизации кэша истории:', err); }
+        }
+
+        // Выделенная изолированная функция рендеринга пузырей из готового массива данных
+        function renderMessagesFromData(messagesArray) {
+            const container = document.getElementById('messagesContainer');
+            container.innerHTML = ''; // Очищаем контейнер перед прорисовкой
+            
+            messagesArray.forEach(msg => {
+                const bubble = document.createElement('div');
+                const currentLoggedInUser = window.geraCurrentUser || window.myUsername || '';
+                
+                // Проверяем авторство
+                const isMyOwnMessage = (msg.from_user.toLowerCase().trim() === currentLoggedInUser.toLowerCase().trim());
+                
+                bubble.className = `msg-bubble ${isMyOwnMessage ? 'msg-outbound' : 'msg-inbound'}`;
+                bubble.dataset.id = msg._id || msg.id;
+                
+                let authorNameHtml = '';
+                let quoteContent = '';
+                let mainMediaContent = '';
+                
+                // Подпись автора в группах
+                if (currentGroupData && !isMyOwnMessage) {
+                    authorNameHtml = `<div class="msg-author-name">@${msg.from_user}</div>`;
+                }
+                
+                // Цитата ответа
+                if (msg.reply_to_text) {
+                    quoteContent = `
+                        <div class="msg-reply-quote" style="background: rgba(0,0,0,0.15); border-left: 3px solid var(--tg-button); padding: 4px 10px; border-radius: 4px; font-size: 12px; margin-bottom: 6px; color: var(--tg-text-muted); text-align: left;">
+                            <div style="font-weight:700; color:var(--tg-button); font-size:11px; margin-bottom:2px;">Ответ</div>
+                            <div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; color:var(--tg-text); font-style: italic;">${escapeHtml(msg.reply_to_text)}</div>
                         </div>
                     `;
-                    container.appendChild(bubble);
-                });
+                }
                 
-                document.getElementById('chatBodyScroll').scrollTop = document.getElementById('chatBodyScroll').scrollHeight;
-            } catch (err) { console.error('Ошибка отрисовки чата:', err); }
+                if (msg.msg_type === 'text') {
+                    mainMediaContent = `<span style="white-space: pre-wrap; display: block; text-align: left;">${escapeHtml(msg.content)}</span>`;
+                } else if (msg.msg_type === 'voice') {
+                    mainMediaContent = `
+                        <div class="voice-msg-player">
+                            <button class="voice-play-btn" onclick="playVoiceAudio('${msg.content}', this)"><i class="fa-solid fa-play"></i></button>
+                            <div class="voice-wave-visual"><div class="voice-wave-bar" style="height:50%"></div><div class="voice-wave-bar" style="height:70%"></div></div>
+                            <span class="voice-duration">0:05</span>
+                        </div>
+                    `;
+                }
+                
+                let msgTime = '--:--';
+                if (msg.timestamp) {
+                    try {
+                        const dateStr = msg.timestamp.endsWith('Z') ? msg.timestamp : msg.timestamp + 'Z';
+                        msgTime = new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    } catch(e) { msgTime = msg.timestamp.substring(11, 16); }
+                }
+                
+                const editedLabel = msg.is_edited ? '<span style="font-size:10px; opacity:0.5; margin-right:4px; font-style:italic;">изменено</span>' : '';
+                
+                bubble.innerHTML = `
+                    ${authorNameHtml}
+                    ${quoteContent}
+                    ${mainMediaContent}
+                    <div style="text-align: right; margin-top: 4px; display: block; font-size: 11px;">
+                        ${editedLabel}
+                        <span class="msg-time" style="color: rgba(255,255,255,0.4);">${msgTime}</span>
+                    </div>
+                `;
+                container.appendChild(bubble);
+            });
+            
+            // Мягкая прокрутка вниз
+            const scrollWrapper = document.getElementById('chatBodyScroll');
+            scrollWrapper.scrollTop = scrollWrapper.scrollHeight;
         }
 
         // 🔥 УМНЫЙ ДВИЖОК ОТПРАВКИ: РЕДАКТИРОВАНИЕ И НАСТОЯЩИЕ ЦИТАТЫ
@@ -1592,15 +1628,36 @@
                 return;
             }
 
-            // Обычная отправка и ОТВЕТ (цитирование)
+            // Обычная отправка и ОТВЕТ (Внутри try функции sendMessage)
             try {
                 const payload = { to_user: activeChatUser, content: text, msg_type: 'text' };
-                
-                // Подшиваем цитату ответа в JSON-запрос отдельным полем для бэкенда!
                 if (replyToMsgId) {
                     payload.reply_to_text = selectedMsgText; 
                 }
 
+                // 🎯 ОПТИМИЗАЦИОННЫЙ ПУШ: Имитируем мгновенную доставку в локальный кэш браузера!
+                const localOptimisticMsg = {
+                    _id: Math.random().toString(), // Временный ID до синхронизации с MongoDB
+                    from_user: window.geraCurrentUser || 'whispyy',
+                    to_user: activeChatUser,
+                    content: text,
+                    msg_type: 'text',
+                    timestamp: new Date().toISOString(),
+                    is_edited: false,
+                    reply_to_text: replyToMsgId ? selectedMsgText : null
+                };
+
+                // Если кэша для этой комнаты ещё нет — инициализируем его
+                if (!geragramCache[activeChatUser]) geragramCache[activeChatUser] = [];
+                geragramCache[activeChatUser].push(localOptimisticMsg);
+                
+                // Мгновенно перерисовываем экран из памяти за 0 миллисекунд!
+                renderMessagesFromData(geragramCache[activeChatUser]);
+                
+                input.value = ''; // Чистим поле ввода сразу
+                if (replyToMsgId) cancelReplyMode();
+
+                // Отправляем запрос в облако в фоновом режиме, не заставляя пользователя ждать
                 const res = await fetch('/api/geragram/messages/send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1608,12 +1665,13 @@
                 });
                 
                 if (res.ok) {
-                    input.value = '';
-                    if (replyToMsgId) cancelReplyMode();
-                    loadChatHistory();
+                    // Перезапрашиваем историю, чтобы синхронизировать временный случайный ID с реальным ObjectId из базы Atlas
+                    const freshHistoryRes = await fetch(`/api/geragram/messages/history/${activeChatUser}`);
+                    if (freshHistoryRes.ok) {
+                        geragramCache[activeChatUser] = await freshHistoryRes.json();
+                    }
                 }
             } catch (err) { alert('Ошибка отправки.'); }
-        }
 
         // 🔥 НАСТОЯЩЕЕ БОЕВОЕ УДАЛЕНИЕ ИЗ MONGODB ATLAS
         async function triggerDeleteAction() {
