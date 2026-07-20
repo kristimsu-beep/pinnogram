@@ -1536,31 +1536,44 @@
             } catch (err) { console.error('Ошибка синхронизации кэша истории:', err); }
         }
 
-        // Выделенная изолированная функция рендеринга пузырей из готового массива данных
+        // 🔥 ИСПРАВЛЕННЫЙ РЕНДЕРЕР: Защита от undefined-переменных и бронированный парсинг ObjectId
         function renderMessagesFromData(messagesArray) {
             const container = document.getElementById('messagesContainer');
+            if (!container) return; // Защита на случай, если DOM ещё не готов
+            
             container.innerHTML = ''; // Очищаем контейнер перед прорисовкой
+            
+            // Безопасно проверяем, инициализирован ли групповой чат
+            const isGroupActive = (typeof currentGroupData !== 'undefined' && currentGroupData);
             
             messagesArray.forEach(msg => {
                 const bubble = document.createElement('div');
                 const currentLoggedInUser = window.geraCurrentUser || window.myUsername || '';
                 
-                // Проверяем авторство
-                const isMyOwnMessage = (msg.from_user.toLowerCase().trim() === currentLoggedInUser.toLowerCase().trim());
+                // Проверяем авторство (безопасный trim)
+                const fromUserStr = msg.from_user ? String(msg.from_user).toLowerCase().trim() : '';
+                const loggedUserStr = currentLoggedInUser ? String(currentLoggedInUser).toLowerCase().trim() : '';
+                const isMyOwnMessage = fromUserStr === loggedUserStr;
                 
                 bubble.className = `msg-bubble ${isMyOwnMessage ? 'msg-outbound' : 'msg-inbound'}`;
-                bubble.dataset.id = msg._id || msg.id;
+                
+                // 🎯 ФИКС ObjectId: Парсим ID из MongoDB Atlas, даже если он пришёл объектом {$oid: ...}
+                if (msg._id) {
+                    bubble.dataset.id = (typeof msg._id === 'object' && msg._id.$oid) ? msg._id.$oid : msg._id;
+                } else {
+                    bubble.dataset.id = msg.id || '';
+                }
                 
                 let authorNameHtml = '';
                 let quoteContent = '';
                 let mainMediaContent = '';
                 
-                // Подпись автора в группах
-                if (currentGroupData && !isMyOwnMessage) {
-                    authorNameHtml = `<div class="msg-author-name">@${msg.from_user}</div>`;
+                // Подпись автора в группах (с защитой от падения скрипта)
+                if (isGroupActive && !isMyOwnMessage && msg.from_user) {
+                    authorNameHtml = `<div class="msg-author-name" style="font-weight:600; color:var(--tg-button); font-size:12px; margin-bottom:4px; text-align:left;">@${escapeHtml(msg.from_user)}</div>`;
                 }
                 
-                // Цитата ответа
+                // Цитата ответа в стиле Telegram
                 if (msg.reply_to_text) {
                     quoteContent = `
                         <div class="msg-reply-quote" style="background: rgba(0,0,0,0.15); border-left: 3px solid var(--tg-button); padding: 4px 10px; border-radius: 4px; font-size: 12px; margin-bottom: 6px; color: var(--tg-text-muted); text-align: left;">
@@ -1570,8 +1583,9 @@
                     `;
                 }
                 
-                if (msg.msg_type === 'text') {
-                    mainMediaContent = `<span style="white-space: pre-wrap; display: block; text-align: left;">${escapeHtml(msg.content)}</span>`;
+                if (msg.msg_type === 'text' || !msg.msg_type) {
+                    // Класс msg-text-content нужен, чтобы контекстное меню без ошибок считывало текст для изменения
+                    mainMediaContent = `<span class="msg-text-content" style="white-space: pre-wrap; display: block; text-align: left; word-break: break-word;">${escapeHtml(msg.content)}</span>`;
                 } else if (msg.msg_type === 'voice') {
                     mainMediaContent = `
                         <div class="voice-msg-player">
@@ -1606,7 +1620,9 @@
             
             // Мягкая прокрутка вниз
             const scrollWrapper = document.getElementById('chatBodyScroll');
-            scrollWrapper.scrollTop = scrollWrapper.scrollHeight;
+            if (scrollWrapper) {
+                scrollWrapper.scrollTop = scrollWrapper.scrollHeight;
+            }
         }
 
         // 🔥 УМНЫЙ ДВИЖОК ОТПРАВКИ: РЕДАКТИРОВАНИЕ И НАСТОЯЩИЕ ЦИТАТЫ
