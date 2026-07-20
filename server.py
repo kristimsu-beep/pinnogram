@@ -4032,9 +4032,10 @@ async def geragram_get_profile(target_username: str, request: Request):
 class MessageSendModel(BaseModel):
     to_user: str
     content: str
-    msg_type: str = "text" # "text" или "voice"
+    msg_type: str = "text"
+    reply_to_text: str = None  # 🎯 ДОБАВИТЬ ЭТУ СТРОКУ (по умолчанию None, если это обычное сообщение)
 
-# 1. Отправить сообщение
+# 1. Отправить сообщение (ОБНОВЛЕНО: С поддержкой Telegram-цитат)
 @app.post("/api/geragram/messages/send")
 async def geragram_send_message(data: MessageSendModel, request: Request):
     me = await get_current_gera_user(request)
@@ -4054,11 +4055,14 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
         "content": data.content,
         "msg_type": data.msg_type,
         "timestamp": datetime.now().isoformat(),
-        "read": False
+        "read": False,
+        "is_edited": False,  # Флаг для плашки "изменено" при будущей правке
+        "reply_to_text": data.reply_to_text  # 🎯 ФИКС: Сохраняем текст цитаты ответа в базу Atlas!
     }
     
     await geragram_chats.insert_one(new_msg)
     return {"status": "success", "msg": "Сообщение доставлено в облако"}
+
 
 # --- ⚙️ ИСПРАВЛЕННЫЕ СЕРВЕРНЫЕ ЭНДПОИНТЫ (ЗАМЕНЕНО НА get_current_gera_user) ---
 
