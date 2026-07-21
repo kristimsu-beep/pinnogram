@@ -1428,9 +1428,24 @@
                             </div>
                         `;
 
-                        let officialBadge = contact.is_official 
-                            ? ` <i class="fa-solid fa-circle-check" style="color: #2481cc; font-size:14px;"></i> <span style="background: rgba(36,129,204,0.15); color: #2481cc; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 4px; border: 1px solid rgba(36,129,204,0.3);">OFFICIAL</span>` 
-                            : '';
+                        // 🎯 СУПЕР-ФИКС: ДИНАМИЧЕСКИЙ ЦВЕТНОЙ РОБЛОКС-БЕЙДЖ ДЛЯ ТЕГОВ
+                        let officialBadge = '';
+                        
+                        // Если у пользователя включена синяя галочка верификации
+                        if (contact.is_official) {
+                            officialBadge += ` <i class="fa-solid fa-circle-check" style="color: #2481cc; font-size:14px; margin-left: 4px;"></i>`;
+                        }
+                        
+                        // Если аднинистрация выдала пользователю кастомный тег через бота
+                        if (contact.custom_tag) {
+                            // Подставляем переданное админом название цвета (или HEX) прямо в стили CSS
+                            const badgeColor = contact.custom_tag_color || '#2481cc';
+                            officialBadge += `
+                                <span style="background: rgba(0, 0, 0, 0.2); color: ${badgeColor}; font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 700; margin-left: 6px; border: 1px solid ${badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;">
+                                    ${contact.custom_tag}
+                                </span>
+                            `;
+                        }
 
                         let subStatusText = contact.status;
 
@@ -1438,7 +1453,7 @@
                             ${avatarWithStatusHtml}
                             <div class="chat-info" style="margin-left: 12px;">
                                 <div class="chat-name-row">
-                                    <div class="chat-name">${contact.display_name}${officialBadge}</div>
+                                    <div class="chat-name" style="display: flex; align-items: center; gap: 2px;">${contact.display_name}${officialBadge}</div>
                                 </div>
                                 <div class="chat-last-msg">${subStatusText}</div>
                             </div>
