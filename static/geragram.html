@@ -1554,7 +1554,7 @@
             closeUserProfileDrawer();
         }
         
-        // Синхронизация данных профиля и прав приватности (ИСПРАВЛЕНО: Правильный вызов группового контроля)
+        // Синхронизация данных профиля и прав приватности (ОБНОВЛЕНО: ЦВЕТНЫЕ ТЕГИ В ПРОФИЛЕ И ШАПКЕ)
         async function syncUserProfileAndPrivacy() {
             if (!activeChatUser) return;
             
@@ -1582,13 +1582,37 @@
                 lockOverlay.style.display = 'none';
                 drawerBody.classList.remove('blurred-lock');
                 
-                // 👑 ТЕЛЕГРАМ-СТИЛЬ: Галочки и плашки OFFICIAL из MongoDB Atlas
-                let officialBadge = profile.is_official 
-                    ? ` <i class="fa-solid fa-circle-check" style="color: #2481cc; font-size:15px;"></i> <span style="background: rgba(36,129,204,0.15); color: #2481cc; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 4px; border: 1px solid rgba(36,129,204,0.3);">OFFICIAL</span>` 
-                    : '';
+                // 👑 🎯 ТЕЛЕГРАМ/РОБЛОКС СТИЛЬ: Собираем бейджи верификации и кастомных тегов
+                let officialBadge = '';
+                
+                // 1. Синяя галочка верификации
+                if (profile.is_official) {
+                    officialBadge += ` <i class="fa-solid fa-circle-check" style="color: #2481cc; font-size:15px; margin-left: 4px;"></i>`;
+                }
+                
+                // 2. Логика текстовой цветной плашки (с авто-подстраховкой для стандартного OFFICIAL)
+                const hasProfileCustomTag = profile.custom_tag && String(profile.custom_tag).trim() !== '' && String(profile.custom_tag) !== 'null';
+                const profileActiveTagText = hasProfileCustomTag ? profile.custom_tag : (profile.is_official ? 'OFFICIAL' : null);
+                
+                if (profileActiveTagText) {
+                    const badgeColor = profile.custom_tag_color || '#2481cc';
+                    officialBadge += `
+                        <span style="background: rgba(0, 0, 0, 0.2); color: ${badgeColor}; font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 700; margin-left: 6px; border: 1px solid ${badgeColor}; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; vertical-align: middle;">
+                            ${profileActiveTagText}
+                        </span>
+                    `;
+                }
 
                 // Заполняем данные в шторке профиля
-                document.getElementById('drawerDisplayName').innerHTML = profile.display_name + officialBadge;
+                const drawerTitle = document.getElementById('drawerDisplayName');
+                if (drawerTitle) {
+                    drawerTitle.style.display = "flex";
+                    drawerTitle.style.alignItems = "center";
+                    drawerTitle.style.justifyContent = "center";
+                    drawerTitle.style.gap = "4px";
+                    drawerTitle.innerHTML = `<span>${profile.display_name}</span>${officialBadge}`;
+                }
+                
                 document.getElementById('drawerUsername').innerText = `@${profile.username}`;
                 document.getElementById('drawerStatus').innerText = profile.status;
                 document.getElementById('drawerJoinedDate').innerText = profile.joined_date;
@@ -1604,8 +1628,15 @@
                     avContainer.style.backgroundImage = `url('${profile.avatar_url}')`;
                 }
 
-                // Обновляем шапку активного чата сверху
-                document.getElementById('currentChatName').innerHTML = profile.display_name + officialBadge;
+                // Обновляем шапку активного чата сверху (Тег загорится и вверху экрана тоже!)
+                const headerTitle = document.getElementById('currentChatName');
+                if (headerTitle) {
+                    headerTitle.style.display = "flex";
+                    headerTitle.style.alignItems = "center";
+                    headerTitle.style.gap = "4px";
+                    headerTitle.innerHTML = `<span>${profile.display_name}</span>${officialBadge}`;
+                }
+                
                 document.getElementById('currentChatStatus').innerText = profile.status;
                 
                 const headerAvatar = document.getElementById('currentChatAvatar');
