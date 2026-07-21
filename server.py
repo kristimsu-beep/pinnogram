@@ -4184,6 +4184,7 @@ async def geragram_get_profile(target_username: str, request: Request):
     am_i_blocked_them = target_lower in me.get("blocked_users", [])
     am_i_muted_them = target_lower in me.get("muted_users", [])
     
+    # 🎯 ФИКС ПРОФИЛЯ: Обязательно подмешиваем новые поля тегов в ответ профиля!
     return {
         "is_blocked_by_them": False,
         "username": target_user["username"],
@@ -4196,7 +4197,10 @@ async def geragram_get_profile(target_username: str, request: Request):
         "i_blocked_them": am_i_blocked_them,
         "i_muted_them": am_i_muted_them,
         "is_official": target_user.get("is_official", False),
-        "is_group": False
+        "is_group": False,
+        # 🔥 НАШИ НОВЫЕ ПОЛЯ РОЛЕЙ ДЛЯ ВЫПЛЫВАЮЩЕЙ ШТОРКИ
+        "custom_tag": target_user.get("custom_tag"),
+        "custom_tag_color": target_user.get("custom_tag_color", "#2481cc")
     }
 
 import random
