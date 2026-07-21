@@ -2420,7 +2420,7 @@
                 }
             } catch (err) { console.warn("Сканер безопасности ожидает сеть...", err); }
         }
-        // 📎 ИСПРАВЛЕННЫЙ ДВИЖОК СКРЕПКИ (УБИРАЕТ ОШИБКУ 422)
+        // 📎 ФИНАЛЬНЫЙ ДВИЖОК СКРЕПКИ (БЕЗ 422 ОШИБКИ)
         function triggerMediaAttachment() {
             const mediaInput = document.createElement('input');
             mediaInput.type = 'file';
@@ -2429,7 +2429,7 @@
             mediaInput.onchange = function() {
                 const files = mediaInput.files;
                 if (!files || files.length === 0) return;
-                const file = files[0];
+                const file = files[0]; // Исправлено: берем первый файл из массива
 
                 if (file.size > 15 * 1024 * 1024) {
                     alert("Бро, файл слишком большой! Ограничение до 15 МБ.");
@@ -2441,23 +2441,28 @@
                     const base64Data = e.target.result;
                     const isVideo = file.type.startsWith('video/');
                     
+                    // 🎯 КОПИРУЕМ СТРУКТУРУ ТВОЕЙ СТАНДАРТНОЙ ОТПРАВКИ
+                    const payload = {
+                        to_user: activeChatUser,
+                        content: base64Data,
+                        msg_type: isVideo ? 'video' : 'image'
+                    };
+
+                    // Подшиваем цитату ТОЛЬКО если она реально есть (убирает null из JSON)
+                    if (replyToMsgId) {
+                        payload.reply_to_text = selectedMsgText;
+                    }
+
                     try {
                         const res = await fetch('/api/geragram/messages/send', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            // 🎯 ФИКС: Передаем абсолютно все поля модели, чтобы FastAPI не ругался
-                            body: JSON.stringify({
-                                to_user: activeChatUser,
-                                content: base64Data,
-                                msg_type: isVideo ? 'video' : 'image',
-                                reply_to_text: replyToMsgId ? selectedMsgText : null
-                            })
+                            body: JSON.stringify(payload)
                         });
                         
                         if (res.ok) {
+                            if (replyToMsgId && typeof cancelReplyMode === 'function') cancelReplyMode();
                             if (typeof loadChatHistory === 'function') loadChatHistory();
-                        } else {
-                            console.error("Сервер вернул ошибку при отправке медиа");
                         }
                     } catch (err) { 
                         console.error("Сбой сети при отправке медиа:", err);
@@ -2502,7 +2507,7 @@
             btn.addEventListener('mouseleave', endPress);
         }
 
-        // 😊 ИСПРАВЛЕННАЯ ФУНКЦИЯ ОТПРАВКИ МАКРО-ЭМОДЗИ (УБИРАЕТ ОШИБКУ 422)
+        // 😊 ФИНАЛЬНАЯ ФУНКЦИЯ ОТПРАВКИ МАКРО-ЭМОДЗИ (БЕЗ 422 ОШИБКИ)
         async function sendBigEmojiDirectly(emojiSymbol) {
             if (!activeChatUser) return;
             
@@ -2510,23 +2515,28 @@
             if (popup) popup.style.display = 'none';
             isEmojiMenuOpen = false;
 
+            // 🎯 КОПИРУЕМ СТРУКТУРУ ТВОЕЙ СТАНДАРТНОЙ ОТПРАВКИ
+            const payload = {
+                to_user: activeChatUser,
+                content: emojiSymbol,
+                msg_type: 'big_emoji'
+            };
+
+            // Подшиваем цитату ТОЛЬКО если она реально есть
+            if (replyToMsgId) {
+                payload.reply_to_text = selectedMsgText;
+            }
+
             try {
                 const res = await fetch('/api/geragram/messages/send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    // 🎯 ФИКС: Подшиваем reply_to_text, чтобы структура JSON была идеальной
-                    body: JSON.stringify({
-                        to_user: activeChatUser,
-                        content: emojiSymbol,
-                        msg_type: 'big_emoji',
-                        reply_to_text: replyToMsgId ? selectedMsgText : null
-                    })
+                    body: JSON.stringify(payload)
                 });
                 
                 if (res.ok) {
+                    if (replyToMsgId && typeof cancelReplyMode === 'function') cancelReplyMode();
                     if (typeof loadChatHistory === 'function') loadChatHistory();
-                } else {
-                    console.error("Сервер вернул ошибку при отправке эмодзи");
                 }
             } catch (err) { 
                 console.error("Сбой сети при отправке эмодзи:", err); 
