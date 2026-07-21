@@ -3754,6 +3754,16 @@ geragram_users = db["geragram_users"]
 geragram_chats = db["geragram_chats"]
 geragram_contacts = db["geragram_contacts"]
 geragram_groups = db["geragram_groups"]  # 🎯 ДОБАВЬ ЭТУ СТРОКУ ДЛЯ НАШИХ ГРУПП
+import os
+import re
+from datetime import datetime, timedelta
+
+# Считываем секретный пароль из переменных окружения Render
+ADMIN_PASSWORD = os.getenv("GERAGRAM_ADMIN_PASSWORD", "дефолтный_пароль_если_забыл_указать")
+
+# Коллекция для хранения забаненных аккаунтов
+geragram_bans = db["geragram_bans"]
+
 # Имя нашего встроенного ИИ-ассистента в базе данных
 BOT_USERNAME = "geragram_bot"
     
@@ -3939,14 +3949,21 @@ async def geragram_propose_contact(data: ContactActionModel, request: Request):
     return {"status": "already_contacts", "msg": "Вы уже являетесь контактами"}
 
 
-# 3. Получить список контактов (ИСПРАВЛЕНО: Считываем связи из правильной коллекции geragram_contacts)
+# 3. Получить список контактов (ОБНОВЛЕНО: ЧАСТЬ 1 — БЛОКПОСТ БАНА И СБОР ГРУПП)
 @app.get("/api/geragram/contacts/list")
 async def geragram_get_contacts(request: Request):
     import re
+    import random
     from urllib.parse import unquote
     
     me = await get_current_gera_user(request)
     my_username = me["username"]
+    
+    # 🚨 ЖЕСТКИЙ БЛОКПОСТ БАНА: Проверяем статус блокировки в MongoDB Atlas перед отдачей данных!
+    ban_check = await check_user_ban_status(my_username)
+    if ban_check:
+        # Если нарушитель забанен — намертво шлём 403 ошибку с деталями бана, закрывая доступ!
+        raise HTTPException(status_code=403, detail=ban_check)
     
     # 🎯 ГЛАВНЫЙ СУБД-ФИКС: Находим все подтвержденные связи в коллекции geragram_contacts!
     cursor_links = geragram_contacts.find({
@@ -3994,8 +4011,9 @@ async def geragram_get_contacts(request: Request):
             "is_group": True,
             "owner": g["owner"]
         })
+
     
-    # 3. 👤 ОБЫЧНЫЕ ДРУЗЬЯ (Теперь они 100% подгрузятся из коллекции geragram_users)
+    # 3. 👤 ОБЫЧНЫЕ ДРУЗЬЯ (ЧАСТЬ 2 — ЮЗЕРЫ, ОНЛАЙН И ВХОДЯЩИЕ ЗАЯВКИ)
     if search_names:
         or_conditions = []
         for name in search_names:
@@ -4010,8 +4028,7 @@ async def geragram_get_contacts(request: Request):
                 continue
                 
             # 🎯 Проверяем, подключен ли пользователь к WebSocket прямо сейчас
-            # (Замени active_connections на точное имя твоего WebSocket-пула, например, connected_users)
-            is_user_online = c["username"] in active_connections if 'active_connections' in globals() else random.choice([True, False]) # Заглушка, если пула нет
+            is_user_online = c["username"] in active_connections if 'active_connections' in globals() else False
             
             status_text = "В сети" if is_user_online else "Не в сети"
             is_off = c.get("is_official", False)
@@ -4022,14 +4039,12 @@ async def geragram_get_contacts(request: Request):
                 "avatar_type": c.get("avatar_type", "letter"),
                 "avatar_url": c.get("avatar_url", ""),
                 "avatar_data": c.get("avatar_data", {"gradient": "linear-gradient(135deg, #3a6073, #3a6073)", "letter": "U"}),
-                # Передаем динамический статус вместо статичного из базы
                 "status": status_text, 
                 "is_online": is_user_online,  # Флаг для кружочка на фронтенде
                 "is_official": is_off,
                 "is_group": False
             })
 
-            
     # 4. Входящие заявки на обмен контактами (Берем статус pending из geragram_contacts)
     incoming_cursor = geragram_contacts.find({
         "to_user": my_username,
@@ -4052,13 +4067,14 @@ async def geragram_get_contacts(request: Request):
             "avatar_data": i.get("avatar_data", {})
         } for i in inc_users_list]
     
-    # 🎯 САМЫЙ ГЛАВНЫЙ СИНХРОНИЗАТОР БЭКЕНДА: Подмешиваем имя текущего юзера в корень ответа!
+    # 🎯 САМЫЙ ГЛАВНЫЙ СИНХРОНИЗАТОР БЭКЕНДА: Отдаём всё вместе с ником
     return {
         "status": "success",
-        "current_user": my_username,  # Жестко отдаем ник фронтенду, чтобы убрать надпись "@загрузка"
+        "current_user": my_username,  
         "contacts": formatted_contacts,
         "incoming_requests": formatted_incoming
     }
+
 
 # 1. Тогл блокировки пользователя
 @app.post("/api/geragram/users/toggle-block")
@@ -4290,7 +4306,7 @@ class MessageSendModel(BaseModel):
 
 import re
 
-# 1. Отправить сообщение (ОБНОВЛЕНО: ПОДДЕРЖКА ДИАЛОГОВ, БОТА И ГРУПП)
+# 1. Отправить сообщение (ОБНОВЛЕНО: ЧАСТЬ 1 — БАЗОВЫЕ ПРОВЕРКИ И СОХРАНЕНИЕ)
 @app.post("/api/geragram/messages/send")
 async def geragram_send_message(data: MessageSendModel, request: Request):
     import re
@@ -4330,8 +4346,7 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
         "reply_to_text": data.reply_to_text
     }
     await geragram_chats.insert_one(new_msg)
-
-    # 🤖 РАБОТА СУПЕР-БОТА GERAGRAM (Отрабатывает только в ЛС с ботом)
+    # 🤖 РАБОТА СУПЕР-БОТА GERAGRAM (ЧАСТЬ 2 — АДМИН-КОМАНДЫ БАНА И ВЫЛЕТА)
     if target.lower() == BOT_USERNAME:
         text = data.content.strip()
         if text.startswith("!") or text.startswith("/"):
@@ -4339,7 +4354,102 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
             cmd = command_parts[0].lower()
             args = command_parts[1] if len(command_parts) > 1 else ""
 
-            if cmd == "tag":
+            # 🔨 1. НОВАЯ АДМИН-КОМАНДА: /ban @username 3h причина пароль
+            if cmd == "ban":
+                # Регулярка вытаскивает: никнейм, время(слитно), причину и пароль
+                match_ban = re.match(r"^@?([\wа-яА-ЯёЁ]+)\s+(\d+[mhd])\s+(.+)\s+(\S+)$", args)
+                if match_ban:
+                    target_tag_user, time_str, reason, input_pwd = match_ban.groups()
+                    target_tag_user = target_tag_user.lower().strip()
+
+                    # Проверяем секретный пароль админа из переменных окружения Render
+                    if input_pwd != ADMIN_PASSWORD:
+                        bot_response = "❌ Ошибка безопасности: Передан неверный секретный админ-пароль системы!"
+                    else:
+                        # Проверяем, существует ли вообще такой юзер в СУБД перед баном
+                        user_in_db = await geragram_users.find_one({"username": target_tag_user})
+                        if not user_in_db:
+                            bot_response = f"❌ Ошибка: Пользователь @{target_tag_user} не зарегистрирован в мессенджере."
+                        else:
+                            # Высчитываем точный временной интервал и метку unban_timestamp
+                            amount = int(re.search(r"\d+", time_str).group())
+                            unit = time_str[-1].lower()
+                            
+                            now = datetime.utcnow()
+                            if unit == 'm':   ban_duration = timedelta(minutes=amount)
+                            elif unit == 'h': ban_duration = timedelta(hours=amount)
+                            elif unit == 'd': ban_duration = timedelta(days=amount)
+                            else: ban_duration = timedelta(minutes=15) # Дефолт при сбое регулярки
+                            
+                            unban_ts = (now + ban_duration).timestamp()
+
+                            # Записываем бан в MongoDB Atlas (перезаписывает старый, если был)
+                            await geragram_bans.update_one(
+                                {"username": target_tag_user},
+                                {"$set": {
+                                    "username": target_tag_user,
+                                    "unban_timestamp": unban_ts,
+                                    "reason": reason,
+                                    "banned_at": now.timestamp()
+                                }},
+                                upsert=True
+                            )
+
+                            bot_response = f"🔨 Успех! Пользователь @{target_tag_user} успешно забанен в MongoDB Atlas на {time_str}. Причина: {reason}"
+
+                            # 🔥 ОНЛАЙН WS-КИЛЛЕР: Отправляем сигнал мгновенного вылета через WebSocket-соединения
+                            ban_signal = {
+                                "action": "banned_event",
+                                "reason": reason,
+                                "unban_timestamp": unban_ts
+                            }
+                            
+                            # Бронированная отправка по всем возможным названиям WebSocket пулов
+                            ws_globals = globals()
+                            for pool_name in ['active_connections', 'connected_users', 'connected_clients']:
+                                if pool_name in ws_globals:
+                                    pool = ws_globals[pool_name]
+                                    # Если пул — это словарь вида {username: websocket}
+                                    if isinstance(pool, dict) and target_tag_user in pool:
+                                        try: await pool[target_tag_user].send_json(ban_signal)
+                                        except: pass
+                                    # Если пул — это менеджер со списком активных сокетов
+                                    elif hasattr(pool, 'send_personal_message'):
+                                        try: await pool.send_personal_message(ban_signal, target_tag_user)
+                                        except: pass
+                else:
+                    bot_response = "💡 Шаблон бана: /ban @username 3h Оскорбление секретный_пароль"
+
+            # 🔓 2. НОВАЯ АДМИН-КОМАНДА: /unban @username причина пароль
+            elif cmd == "unban":
+                match_unban = re.match(r"^@?([\wа-яА-ЯёЁ]+)\s+(.+)\s+(\S+)$", args)
+                if match_unban:
+                    target_tag_user, reason, input_pwd = match_unban.groups()
+                    target_tag_user = target_tag_user.lower().strip()
+
+                    if input_pwd != ADMIN_PASSWORD:
+                        bot_response = "❌ Ошибка безопасности: Передан неверный секретный admin-пароль системы!"
+                    else:
+                        # Удаляем запись бана из облачной базы MongoDB Atlas
+                        delete_result = await geragram_bans.delete_one({"username": target_tag_user})
+                        
+                        if delete_result.deleted_count == 0:
+                            bot_response = f"⚠️ Предупреждение: Пользователь @{target_tag_user} не найден в списке активных банов."
+                        else:
+                            bot_response = f"🔓 Амнистия! Пользователь @{target_tag_user} успешно разбанен в MongoDB Atlas. Причина: {reason}"
+
+                            # Мгновенно убираем бан-окно у пользователя через WebSocket-сигнал
+                            unban_signal = {"action": "unbanned_event"}
+                            ws_globals = globals()
+                            for pool_name in ['active_connections', 'connected_users', 'connected_clients']:
+                                if pool_name in ws_globals:
+                                    pool = ws_globals[pool_name]
+                                    if isinstance(pool, dict) and target_tag_user in pool:
+                                        try: await pool[target_tag_user].send_json(unban_signal)
+                                        except: pass
+
+            # 👑 3. СТАРАЯ ПРОВЕРЕННАЯ КОМАНДА: !tag / /tag
+            elif cmd == "tag":
                 match = re.search(r'@?([\wа-яА-ЯёЁ]+)', args)
                 if match:
                     target_tag_user = match.group(1).strip().lower()
@@ -4369,7 +4479,7 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
                 else:
                     bot_response = "💡 Шаблон команды: !tag @username или /tag @username"
             else:
-                bot_response = "🤖 Неизвестная команда. Доступные команды: !tag @username"
+                bot_response = f"🤖 Неизвестная команда. Доступные команды: /ban, /unban, /tag"
             
             bot_msg = {
                 "from_user": BOT_USERNAME,
@@ -4382,9 +4492,24 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
             await geragram_chats.insert_one(bot_msg)
 
     return {"status": "success", "msg": "Сообщение успешно доставлено"}
-
-
-
+    
+async def check_user_ban_status(username: str):
+    if not username: return None
+    ban_doc = await geragram_bans.find_one({"username": username.lower()})
+    if ban_doc:
+        now_ts = datetime.utcnow().timestamp()
+        if now_ts < ban_doc["unban_timestamp"]:
+            # Юзер всё ещё забанен! Возвращаем данные бана
+            return {
+                "is_banned": True,
+                "reason": ban_doc["reason"],
+                "unban_timestamp": ban_doc["unban_timestamp"]
+            }
+        else:
+            # Время бана вышло, удаляем запись из СУБД (авто-амнистия)
+            await geragram_bans.delete_one({"username": username.lower()})
+    return None
+    
 # --- 🏆 ОКОНЧАТЕЛЬНЫЙ ФИНАЛЬНЫЙ СЕРВЕРНЫЙ ВАРИАНТ (КОЛЛЕКЦИЯ geragram_chats) ---
 
 @app.post("/api/geragram/messages/edit")
