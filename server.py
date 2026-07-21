@@ -4200,7 +4200,7 @@ async def geragram_get_profile(target_username: str, request: Request):
     is_user_online = target_user["username"] in active_connections if 'active_connections' in globals() else False
     status_text = "В сети" if is_user_online else "Не в сети"
 
-    # 🎯 ФИКС ПРОФИЛЯ: Отдаем живой статус, теги и цвета в выплывающую шторку и шапку!
+    # 🎯 ФИКС ПРОФИЛЯ: Отдаем живой статус, теги, цвета и гео-метки в выплывающую шторку и шапку!
     return {
         "is_blocked_by_them": False,
         "username": target_user["username"],
@@ -4216,9 +4216,58 @@ async def geragram_get_profile(target_username: str, request: Request):
         "is_group": False,
         # 🔥 НАШИ НОВЫЕ ПОЛЯ РОЛЕЙ ДЛЯ ВЫПЛЫВАЮЩЕЙ ШТОРКИ
         "custom_tag": target_user.get("custom_tag"),
-        "custom_tag_color": target_user.get("custom_tag_color", "#2481cc")
+        "custom_tag_color": target_user.get("custom_tag_color", "#2481cc"),
+        # 🔥 НАШИ НОВЫЕ ГЕО-МАРКЕРЫ ДЛЯ СИНХРОНИЗАЦИИ ПОГОДЫ МЕЖДУ ЮЗЕРАМИ:
+        "geo_lat": target_user.get("geo_lat"),
+        "geo_lon": target_user.get("geo_lon"),
+        "geo_tz_offset": target_user.get("geo_tz_offset", 0)
     }
 
+# =====================================================================
+# 🌍 ГЕО-ПОГОДНЫЙ ДВИЖОК: СОХРАНЕНИЕ КООРДИНАТ И ВРЕМЕНИ
+# =====================================================================
+@app.post("/api/geragram/users/update-geo")
+async def geragram_update_geo(data: dict, request: Request):
+    me = await get_current_gera_user(request)
+    lat = data.get("latitude")
+    lon = data.get("longitude")
+    tz_offset = data.get("timezone_offset")  # Смещение времени в секундах от UTC
+
+    if lat is None or lon is None:
+        raise HTTPException(status_code=400, detail="Координаты не переданы")
+
+    # Жестко обновляем документ пользователя в MongoDB Atlas
+    await geragram_users.update_one(
+        {"username": me["username"].lower().strip()},
+        {"$set": {
+            "geo_lat": float(lat),
+            "geo_lon": float(lon),
+            "geo_tz_offset": int(tz_offset) if tz_offset is not None else 0,
+            "geo_updated_at": datetime.utcnow().timestamp()
+        }}
+    )
+    return {"status": "success", "msg": "Геолокация обновлена в MongoDB Atlas"}
+
+
+# =====================================================================
+# 🌍 АВТО-СБРОС ГЕОЛОКАЦИИ ПРИ ПЕРЕЗАГРУЗКЕ СТРАНИЦЫ
+# =====================================================================
+@app.post("/api/geragram/users/reset-geo")
+async def geragram_reset_geo(request: Request):
+    me = await get_current_gera_user(request)
+    
+    # Стираем координаты в MongoDB Atlas, обеспечивая сессионную приватность
+    await geragram_users.update_one(
+        {"username": me["username"].lower().strip()},
+        {"$set": {
+            "geo_lat": None,
+            "geo_lon": None,
+            "geo_tz_offset": 0,
+            "geo_updated_at": None
+        }}
+    )
+    return {"status": "success", "msg": "Геолокация успешно стёрта из СУБД"}
+    
 import random
 from urllib.parse import unquote
 from bson import ObjectId
