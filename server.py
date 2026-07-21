@@ -4022,16 +4022,21 @@ async def geragram_get_contacts(request: Request):
         contacts_cursor = geragram_users.find({"$or": or_conditions})
         contacts_list = await contacts_cursor.to_list(length=100)
         
-        # 👥 РЕНДЕРИНГ ОБЫЧНЫХ ЮЗЕРОВ (ОБНОВЛЕНО: ДИНАМИЧЕСКИЙ ОНЛАЙН)
+        # 👥 РЕНДЕРИНГ ОБЫЧНЫХ ЮЗЕРОВ (ЧАСТЬ 2 — ОБНОВЛЕНО: ЦВЕТНЫЕ КАСТ СТАТУСЫ)
         for c in contacts_list:
             if c["username"].lower() == "geragram_bot":
                 continue
                 
-            # 🎯 Проверяем, подключен ли пользователь к WebSocket прямо сейчас
+            # Проверяем, подключен ли пользователь к WebSocket прямо сейчас
             is_user_online = c["username"] in active_connections if 'active_connections' in globals() else False
             
             status_text = "В сети" if is_user_online else "Не в сети"
             is_off = c.get("is_official", False)
+            
+            # 🎯 СЧИТЫВАЕМ КАСТ ОБОЗНАЧЕНИЯ И ЦВЕТА ИЗ MONGODB ATLAS
+            c_tag = c.get("custom_tag", "OFFICIAL" if is_off else None)
+            # Дефолтный цвет — фирменный телеграмный синий (#2481cc), если админ не указал свой цвет
+            c_tag_color = c.get("custom_tag_color", "#2481cc")
             
             formatted_contacts.append({
                 "username": c["username"],
@@ -4040,8 +4045,11 @@ async def geragram_get_contacts(request: Request):
                 "avatar_url": c.get("avatar_url", ""),
                 "avatar_data": c.get("avatar_data", {"gradient": "linear-gradient(135deg, #3a6073, #3a6073)", "letter": "U"}),
                 "status": status_text, 
-                "is_online": is_user_online,  # Флаг для кружочка на фронтенде
+                "is_online": is_user_online,  
                 "is_official": is_off,
+                # 🔥 Новые поля, которые улетают на фронтенд
+                "custom_tag": c_tag,
+                "custom_tag_color": c_tag_color,
                 "is_group": False
             })
 
@@ -4478,6 +4486,55 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
                         bot_response = f"❌ Ошибка: Пользователь с никнеймом @{target_tag_user} не найден в базе данных MongoDB Atlas."
                 else:
                     bot_response = "💡 Шаблон команды: !tag @username или /tag @username"
+            # 🎨 НОВАЯ АДМИН-КОМАНДА: /give_tag @username тэг цвет пароль
+            elif cmd == "give_tag":
+                # Регулярка вытаскивает: никнейм, текст тега (с пробелами), цвет (слитно) и пароль
+                match_tag = re.match(r"^@?([\wа-яА-ЯёЁ]+)\s+([\wа-яА-ЯёЁ\s\-\!\+]+)\s+(\w+)\s+(\S+)$", args)
+                if match_tag:
+                    target_tag_user, custom_tag_name, tag_color, input_pwd = match_tag.groups()
+                    target_tag_user = target_tag_user.lower().strip()
+                    custom_tag_name = custom_tag_name.strip()
+                    tag_color = tag_color.strip().lower()
+
+                    # 1. Проверяем секретный пароль админа из переменных Render
+                    if input_pwd != ADMIN_PASSWORD:
+                        bot_response = "❌ Ошибка безопасности: Передан неверный секретный админ-пароль системы!"
+                    else:
+                        # 2. Проверяем, существует ли вообще такой пользователь в MongoDB Atlas
+                        user_in_db = await geragram_users.find_one({"username": target_tag_user})
+                        if not user_in_db:
+                            bot_response = f"❌ Ошибка: Пользователь @{target_tag_user} не найден в базе данных СУБД."
+                        else:
+                            # 3. Сохраняем галочку, если у юзера уже был статус official
+                            was_official = user_in_db.get("is_official", False) or (user_in_db.get("custom_tag") == "official")
+                            
+                            # 4. Пишем новый кастомный тег и его цвет в документ пользователя
+                            update_fields = {
+                                "custom_tag": custom_tag_name,
+                                "custom_tag_color": tag_color # Сохраняем цвет (red, green, blue, #ff00ff и т.д.)
+                            }
+                            if was_official:
+                                update_fields["is_official"] = True # Гарантируем, что синяя галочка НЕ пропадёт!
+
+                            await geragram_users.update_one(
+                                {"username": target_tag_user},
+                                {"$set": update_fields}
+                            )
+
+                            bot_response = f"👑 УСПЕХ! Пользователю @{target_tag_user} присвоен тег '{custom_tag_name}' с цветом '{tag_color}' в MongoDB Atlas. Галочка сохранена: {'Да' if was_official else 'Нет'}."
+
+                            # 5. Шлём системное уведомление в ЛС пользователю от имени бота
+                            sys_notification = {
+                                "from_user": BOT_USERNAME,
+                                "to_user": target_tag_user,
+                                "content": f"🎉 Внимание! Администрация мессенджера присвоила вашему аккаунту новый отличительный цветной тег: '{custom_tag_name}' (Цвет: {tag_color}).",
+                                "msg_type": "text",
+                                "timestamp": datetime.utcnow().isoformat() + "Z",
+                                "read": False
+                            }
+                            await geragram_chats.insert_one(sys_notification)
+                else:
+                    bot_response = "💡 Шаблон выдачи цветного тега: /give_tag @username VIP green секретный_пароль"
             else:
                 bot_response = f"🤖 Неизвестная команда. Доступные команды: /ban, /unban, /tag"
             
