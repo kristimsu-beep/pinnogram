@@ -1559,7 +1559,7 @@
             closeUserProfileDrawer();
         }
      
-        // Синхронизация данных профиля и прав приватности (ОБНОВЛЕНО: ЦВЕТНЫЕ ТЕГИ В ПРОФИЛЕ И ШАПКЕ)
+        // Синхронизация данных профиля и прав приватности (ОБНОВЛЕНО: ЖИВОЙ ЦВЕТНОЙ ОНЛАЙН СТАТУС)
         async function syncUserProfileAndPrivacy() {
             if (!activeChatUser) return;
             
@@ -1619,8 +1619,19 @@
                 }
                 
                 document.getElementById('drawerUsername').innerText = `@${profile.username}`;
-                document.getElementById('drawerStatus').innerText = profile.status;
                 document.getElementById('drawerJoinedDate').innerText = profile.joined_date;
+                
+                // 🎯 ТЕЛЕГРАМ-ПОДДСВЕТКА СТАТУСА В ШТОРКЕ ПРОФИЛЯ
+                const drawerStatusText = document.getElementById('drawerStatus');
+                if (drawerStatusText) {
+                    drawerStatusText.innerText = profile.status;
+                    // Если строка содержит "В сети" — красим в сочный зеленый
+                    if (profile.status && profile.status.includes("В сети")) {
+                        drawerStatusText.style.color = "#4cd964"; 
+                    } else {
+                        drawerStatusText.style.color = "var(--tg-text-muted)";
+                    }
+                }
                 
                 // Отрендерим аватар в профиле
                 let avContainer = document.getElementById('drawerAvatar');
@@ -1633,7 +1644,7 @@
                     avContainer.style.backgroundImage = `url('${profile.avatar_url}')`;
                 }
 
-                // Обновляем шапку активного чата сверху (Тег загорится и вверху экрана тоже!)
+                // Обновляем шапку активного чата сверху
                 const headerTitle = document.getElementById('currentChatName');
                 if (headerTitle) {
                     headerTitle.style.display = "flex";
@@ -1642,7 +1653,17 @@
                     headerTitle.innerHTML = `<span>${profile.display_name}</span>${officialBadge}`;
                 }
                 
-                document.getElementById('currentChatStatus').innerText = profile.status;
+                // 🎯 ТЕЛЕГРАМ-ПОДДСВЕТКА СТАТУСА В ШАПКЕ ЧАТА СВЕРХУ
+                const chatStatusHeader = document.getElementById('currentChatStatus');
+                if (chatStatusHeader) {
+                    chatStatusHeader.innerText = profile.status;
+                    // Если строка содержит "В сети" — красим в фирменный сине-голубой онлайн-цвет
+                    if (profile.status && profile.status.includes("В сети")) {
+                        chatStatusHeader.style.color = "#5288c1"; 
+                    } else {
+                        chatStatusHeader.style.color = "var(--tg-text-muted)";
+                    }
+                }
                 
                 const headerAvatar = document.getElementById('currentChatAvatar');
                 if (profile.avatar_type === 'letter') {
