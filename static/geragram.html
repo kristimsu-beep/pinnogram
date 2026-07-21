@@ -1056,31 +1056,21 @@
         }
 
         function initMessengerApp() {
-            const auth = document.getElementById('authBox');
-            const app = document.getElementById('messengerApp');
+            // Просто включаем видимость мессенджера и прячем авторизацию
+            const auth = document.getElementById('authBox') || document.getElementById('authScreen') || document.getElementById('loginContainer');
+            const app = document.getElementById('messengerApp') || document.getElementById('messengerMainLayout');
             
-            // Ничего не прячем, включаем всё на полную
-            if (auth) auth.style.display = 'block';
-            if (app) app.style.display = 'flex'; 
+            if (auth) auth.style.display = 'none';
+            if (app) app.style.display = 'flex';
             
-            // Восстанавливаем никнейм из всех возможных мест
-            const myProfileNameBlock = document.getElementById('myUsernameDisplay') || document.querySelector('.sidebar-user-name');
-            if (myProfileNameBlock && myProfileNameBlock.innerText) {
-                window.geraCurrentUser = myProfileNameBlock.innerText.replace('@', '').trim();
-            } else {
-                window.geraCurrentUser = localStorage.getItem('geraUsername') || myUsername || '';
-            }
-            
-            // Дублируем в старую переменную для handleAuth
-            myUsername = window.geraCurrentUser;
-            
-            console.log("👤 Авторизован юзер:", window.geraCurrentUser);
+            document.body.classList.add('app-loaded');
 
-            // Подгружаем контакты
+            // Сразу же дёргаем контакты, которые за секунду подтянут реальный никнейм вместо "@загрузка..."
             if (typeof loadContactsAndRequests === 'function') {
                 loadContactsAndRequests();
             }
         }
+
 
         // Переключение режимов Вход / Регистрация (Анимация текста)
         function toggleAuthMode() {
@@ -1318,16 +1308,37 @@
                 if (!res.ok) return;
                 const data = await res.json();
 
-                const container = document.getElementById('chatsContainerList');
-                container.innerHTML = '';
-
-                // 🎯 УНИВЕРСАЛЬНЫЙ СИНХРОНИЗАТОР СЕССИИ:
-                // Вытаскиваем никнейм текущего авторизованного пользователя из разметки экрана (например, из профиля или скрытого блока),
-                // чтобы история чата loadChatHistory знала, кто сидит за монитором, и правильно делила сообщения по сторонам!
-                const myProfileNameBlock = document.getElementById('myUsernameDisplay') || document.querySelector('.sidebar-user-name');
-                if (myProfileNameBlock) {
-                    window.geraCurrentUser = myProfileNameBlock.innerText.replace('@', '').trim();
+                // 🎯 ЖЕСТКИЙ ФИКС НИКНЕЙМА И СТИРАНИЯ ФОРМЫ ВХОДА (ВМЕСТО СТАРОГО СИНХРОНИЗАТОРА)
+                // Забираем реальное имя из ответа сервера, либо из памяти браузера
+                const realUsername = data.current_user || data.username || localStorage.getItem('geraUsername') || '';
+                
+                if (realUsername) {
+                    // 1. Прописываем имя во все глобальные переменные фронтенда
+                    myUsername = realUsername;
+                    window.geraCurrentUser = realUsername;
+                    localStorage.setItem('geraUsername', realUsername);
+                    
+                    // 2. Меняем заглушку на реальный ник в боковом меню
+                    const myDisplay = document.getElementById('myUsernameDisplay');
+                    if (myDisplay) {
+                        myDisplay.innerText = `@${realUsername}`;
+                    }
+                    
+                    // 3. Прячем форму входа, так как сессия подтверждена и контакты загружены
+                    const auth = document.getElementById('authBox') || document.getElementById('authScreen') || document.getElementById('loginContainer');
+                    if (auth) {
+                        auth.style.display = 'none';
+                    }
+                    
+                    // 4. Гарантируем, что сам интерфейс мессенджера отображается сеткой
+                    const app = document.getElementById('messengerApp') || document.getElementById('messengerMainLayout');
+                    if (app) {
+                        app.style.display = 'flex';
+                    }
                 }
+
+                const container = document.getElementById('chatsContainerList');
+                if (container) container.innerHTML = '';
 
                 // 1. Сначала рендерим входящие заявки на обмен контактами
                 if (data.incoming_requests && data.incoming_requests.length > 0) {
@@ -1395,16 +1406,17 @@
                         `;
 
                         item.onclick = () => selectChat(contact.username);
-                        container.appendChild(item);
+                        if (container) container.appendChild(item);
                     });
                 } else if (!data.incoming_requests || data.incoming_requests.length === 0) {
-                    container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--tg-text-muted); font-size:13px;">Список контактов пуст. Найдите кого-нибудь через поиск вверху!</div>';
+                    if (container) container.innerHTML = '<div style="padding:20px; text-align:center; color:var(--tg-text-muted); font-size:13px;">Список контактов пуст. Найдите кого-нибудь через поиск вверху!</div>';
                 }
 
             } catch (err) {
                 console.error('Ошибка загрузки контактов:', err);
             }
         }
+
 
 
         // Вспомогательная функция сборки HTML-кода аватарки
