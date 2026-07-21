@@ -955,49 +955,10 @@
             });
             console.log("🔄 [КЭШ ОЧИЩЕН] Старые копии страниц удалены из памяти");
         }
-        
-        // 🎯 ШАГ 1: АВТО-УНИЧТОЖЕНИЕ ЛЮБОГО СТАРЫЙ КЭША И SERVICE WORKER
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                for (let registration of registrations) {
-                    registration.unregister().then(function(boolean) {
-                        console.log('❌ [SW-KILLER] Старый фоновый кэш успешно стёрт:', boolean);
-                    });
-                }
-            }).catch(function(err) {
-                console.error('Ошибка очистки воркеров:', err);
-            });
-        }
 
-        // Автоматически вычищаем хранилище кэша браузера при загрузке
-        if (window.caches) {
-            caches.keys().then(function(names) {
-                for (let name of names) caches.delete(name);
-            });
-        }
-        // 🔬 ОТЛАДОЧНЫЙ ТАЙМЕР: ПРИНУДИТЕЛЬНО ВКЛЮЧАЕМ ВИДИМОСТЬ ВСЕХ БЛОКОВ (БЕЗ NONE)
-        setTimeout(() => {
-            // Вешаем класс для старых стилей, если они где-то остались
-            document.body.classList.add('app-loaded');
-            
-            // Находим форму входа и мессенджер по всем возможным ID
-            const auth = document.getElementById('authBox') || document.getElementById('authScreen') || document.getElementById('loginContainer');
-            const app = document.getElementById('messengerApp') || document.getElementById('messengerMainLayout');
-            
-            // ЖЕСТКО УБИРАЕМ NONE: Выводим оба блока на экран друг под другом для тестов!
-            if (auth) {
-                auth.style.display = 'block';
-                auth.style.opacity = '1';
-            }
-            if (app) {
-                app.style.display = 'flex';
-                app.style.opacity = '1';
-            }
-            
-            console.log("🧼 [ОТЛАДКА] Все экраны принудительно открыты, скрытие отключено!");
-        }, 500);
-
-        
+        // При загрузке страницы сразу вешаем класс, чтобы активировать базовые стили CSS
+        document.body.classList.add('app-loaded');
+   
         // --- 📱 ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И ДАННЫЕ СЕССИИ ---
         let myUsername = null;        // Никнейм текущего авторизованного юзера
         let isRegisterMode = false;   // Переключатель режима Вход / Регистрация
@@ -1018,32 +979,45 @@
             checkActiveSession();
         });
 
-        // 🎯 АВТОНОМНАЯ ПРОВЕРКА СЕССИИ (ТЕПЕРЬ НЕ БЛОКИРУЕТ ВХОД)
+        // Проверка наличия активного токена авторизации в куках
         async function checkActiveSession() {
-            // Сначала проверяем, помнит ли браузер наш никнейм локально
+            // Пытаемся сразу поставить ник из локальной памяти браузера, чтобы не висело слово "загрузка"
             const savedUser = localStorage.getItem('geraUsername');
+            if (savedUser) {
+                myUsername = savedUser;
+                window.geraCurrentUser = savedUser;
+                const myDisplay = document.getElementById('myUsernameDisplay');
+                if (myDisplay) myDisplay.innerText = `@${savedUser}`;
+            }
             
             try {
+                // Стучимся на защищенный эндпоинт контактов
                 const res = await fetch('/api/geragram/contacts/list');
-                // Если сервер подтвердил сессию ИЛИ у нас есть локальное имя — пускаем!
-                if (res.ok || savedUser) {
-                    if (savedUser && !window.geraCurrentUser) {
-                        window.geraCurrentUser = savedUser;
+                if (res.ok) {
+                    const data = await res.json();
+                    
+                    // Если сервер вернул имя юзера — жестко фиксируем его
+                    const serverUser = data.current_user || data.username;
+                    if (serverUser) {
+                        myUsername = serverUser;
+                        window.geraCurrentUser = serverUser;
+                        localStorage.setItem('geraUsername', serverUser);
+                        
+                        const myDisplay = document.getElementById('myUsernameDisplay');
+                        if (myDisplay) myDisplay.innerText = `@${serverUser}`;
                     }
+                    
+                    // Сессия валидна, запускаем мессенджер
                     initMessengerApp();
                 } else {
-                    showAuthBox();
+                    // Если сервер выплюнул ошибку авторизации, но мы тестируем — все равно пускаем по локальному имени
+                    if (savedUser) initMessengerApp(); else showAuthBox();
                 }
             } catch (err) {
-                // В случае сетевого сбоя, если имя есть в памяти — всё равно пытаемся зайти
-                if (savedUser) {
-                    window.geraCurrentUser = savedUser;
-                    initMessengerApp();
-                } else {
-                    showAuthBox();
-                }
+                if (savedUser) initMessengerApp(); else showAuthBox();
             }
         }
+
         // 🔬 ВРЕМЕННЫЙ ОТКРЫТЫЙ ВАРИАНТ ДЛЯ ОТЛАДКИ (НИЧЕГО НЕ СКРЫВАЕМ)
         function showAuthBox() {
             const auth = document.getElementById('authBox');
