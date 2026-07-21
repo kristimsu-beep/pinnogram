@@ -1516,7 +1516,7 @@
       }
         // --- 💬 МОДУЛЬ ЧАТА, БЛОКИРОВОК И ГОЛОСОВЫХ СООБЩЕНИЙ ---
 
-        // Переключение на конкретного пользователя (ОБНОВЛЕНО: МОМЕНТАЛЬНОЕ ПЕРЕКЛЮЧЕНИЕ)
+        // Переключение на конкретного пользователя (ОБНОВЛЕНО: ГАЛОЧКИ ПРОЧТЕНИЯ НА ЛЕТУ)
         async function selectChat(username) {
             // 🎯 ФИКС МИГАНИЯ: Стираем старый текст под ноль до отправки запроса на сервер
             const container = document.getElementById('messagesContainer');
@@ -1533,6 +1533,11 @@
             // Сбрасываем старый таймер обновлений
             if (chatInterval) clearInterval(chatInterval);
             
+            // 🎯 СИНХРОНИЗАЦИЯ ГАЛОЧЕК: Маркируем входящие сообщения этой комнаты как прочитанные
+            if (typeof markCurrentChatMessagesAsRead === 'function') {
+                await markCurrentChatMessagesAsRead();
+            }
+
             // Параллельно подгружаем профиль и историю новой комнаты
             await syncUserProfileAndPrivacy();
             await loadChatHistory();
@@ -1553,7 +1558,7 @@
             // На всякий случай закрываем шторку профиля, если она была открыта
             closeUserProfileDrawer();
         }
-        
+     
         // Синхронизация данных профиля и прав приватности (ОБНОВЛЕНО: ЦВЕТНЫЕ ТЕГИ В ПРОФИЛЕ И ШАПКЕ)
         async function syncUserProfileAndPrivacy() {
             if (!activeChatUser) return;
@@ -1666,7 +1671,7 @@
             }
         }
 
-        // 🔄 СТАРЫЙ НАДЕЖНЫЙ ЗАПРОС ИСТОРИИ (С ИНТЕГРАЦИЕЙ ROBLOX-БАНА)
+        // 🔄 СТАРЫЙ НАДЕЖНЫЙ ЗАПРОС ИСТОРИИ (С ИНТЕГРАЦИЕЙ ROBLOX-БАНА И АВТОПРОЧТЕНИЕМ)
         async function loadChatHistory() {
             if (!activeChatUser) return;
             
@@ -1674,6 +1679,11 @@
             if (!container) return;
 
             try {
+                // 🎯 АВТОПРОЧТЕНИЕ НА ЛЕТУ: Пока чат открыт, все новые входящие сообщения сбрасывают галочки
+                if (typeof markCurrentChatMessagesAsRead === 'function') {
+                    markCurrentChatMessagesAsRead();
+                }
+
                 const res = await fetch(`/api/geragram/messages/history/${activeChatUser}`);
                 
                 // 🚨 ПЕРЕХВАТ БАНА НАМЕРТВО: Если сервер вернул 403 ошибку блокировки СУБД
@@ -1703,7 +1713,7 @@
             }
         }
 
-        // 🎨 2.БАЗОВЫЙ РЕНДЕРЕР (ОБНОВЛЕНО: ПОДДЕРЖКА ФОТО, ВИДЕО И МАКРО-ЭМОДЗИ)
+        // 🎨 2.БАЗОВЫЙ РЕНДЕРЕР (ОБНОВЛЕНО: ГАЛОЧКИ ПРОЧТЕНИЯ И СУММИРОВАНИЕ РЕАКЦИЙ)
         function renderMessagesFromData(messagesArray) {
             const container = document.getElementById('messagesContainer');
             if (!container) return;
@@ -1714,7 +1724,7 @@
                 const bubble = document.createElement('div');
                 const currentLoggedInUser = window.geraCurrentUser || window.myUsername || '';
                 
-                // Простейшая проверка авторства без жестких вызовов методов очистки строк
+                // Простейшая проверка авторства
                 const isMyOwnMessage = (msg.from_user === currentLoggedInUser);
                 
                 bubble.className = `msg-bubble ${isMyOwnMessage ? 'msg-outbound' : 'msg-inbound'}`;
@@ -1735,7 +1745,7 @@
                     `;
                 }
                 
-                // 🎯 КОНТЕНТ СООБЩЕНИЯ (РАСПРЕДЕЛЕНИЕ ТИПОВ ДАННЫХ)
+                // КОНТЕНТ СООБЩЕНИЯ (РАСПРЕДЕЛЕНИЕ ТИПОВ ДАННЫХ)
                 if (msg.msg_type === 'voice') {
                     mainMediaContent = `
                         <div class="voice-msg-player">
@@ -1745,19 +1755,15 @@
                         </div>
                     `;
                 } 
-                // 📸 ОТРИСОВКА КАРТИНКИ ИЗ СКРЕПКИ (С КЛИКОМ НА ОТКРЫТИЕ)
                 else if (msg.msg_type === 'image') {
                     mainMediaContent = `<img src="${msg.content}" style="width: 100%; max-width: 280px; border-radius: 8px; display: block; margin-top: 4px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2);" onclick="window.open('${msg.content}', '_blank')">`;
                 }
-                // 🎥 ОТРИСОВКА ПЛЕЕРА ВИДЕО ИЗ СКРЕПКИ
                 else if (msg.msg_type === 'video') {
                     mainMediaContent = `<video src="${msg.content}" controls style="width: 100%; max-width: 280px; border-radius: 8px; display: block; margin-top: 4px; background: #000; box-shadow: 0 4px 12px rgba(0,0,0,0.2);"></video>`;
                 }
-                // 😊 ОТРИСОВКА УВЕЛИЧЕННЫХ МАКРО-ЭМОДЗИ TELEGRAM-STYLE
                 else if (msg.msg_type === 'big_emoji') {
                     mainMediaContent = `<span style="font-size: 52px; display: block; text-align: left; line-height: 1; padding: 4px 0; transform-origin: left center; animation: emojiPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">${msg.content}</span>`;
                 }
-                // СТАНДАРТНЫЙ ТЕКСТ
                 else {
                     mainMediaContent = `<span style="white-space: pre-wrap; display: block; text-align: left; word-break: break-word;">${escapeHtml(msg.content)}</span>`;
                 }
@@ -1775,13 +1781,51 @@
                 
                 const editedLabel = msg.is_edited ? '<span style="font-size:10px; opacity:0.5; margin-right:4px; font-style:italic;">изменено</span>' : '';
                 
+                // 🎯 ФИШКА 1: ОПРЕДЕЛЯЕМ ГАЛОЧКИ ДЛЯ СВОИХ СООБЩЕНИЙ
+                let checkmarksHtml = '';
+                if (isMyOwnMessage) {
+                    // Если сообщение прочитано — две галочки, если нет — одна
+                    const isRead = msg.read === true;
+                    checkmarksHtml = `<span style="margin-left: 4px; font-weight: bold; color: ${isRead ? '#4cd964' : 'rgba(255,255,255,0.4)'};">${isRead ? '✓✓' : '✓'}</span>`;
+                }
+
+                // 🎯 ФИШКА 2: ГРУППИРОВКА И СУММИРОВАНИЕ РЕАКЦИЙ С ЦИФРАМИ
+                let reactionsHtml = '';
+                const rawReactions = msg.reactions || [];
+                if (rawReactions.length > 0) {
+                    // Подсчитываем, сколько раз встретилось каждое эмодзи
+                    const emojiCounts = {};
+                    rawReactions.forEach(r => {
+                        if (r.emoji) {
+                            emojiCounts[r.emoji] = (emojiCounts[r.emoji] || 0) + 1;
+                        }
+                    });
+
+                    // Собираем HTML-строку для блока реакций
+                    reactionsHtml = `<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; justify-content: ${isMyOwnMessage ? 'flex-end' : 'flex-start'};">`;
+                    
+                    for (const [emoji, count] of Object.entries(emojiCounts)) {
+                        // Если смайлик один — цифру не пишем, если больше одного — выводим сумму цифрой
+                        const countDisplay = count > 1 ? ` <span style="font-size: 11px; font-weight: 700; margin-left: 2px; opacity: 0.9;">${count}</span>` : '';
+                        
+                        reactionsHtml += `
+                            <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid var(--tg-border); padding: 3px 8px; border-radius: 8px; display: flex; align-items: center; cursor: pointer; user-select: none; animation: emojiPop 0.2s ease;" onclick="selectedMsgId='${msg.id || msg._id}'; addMessageReactionDirectly('${emoji}');">
+                                <span style="font-size: 14px; line-height: 1;">${emoji}</span>${countDisplay}
+                            </div>
+                        `;
+                    }
+                    reactionsHtml += `</div>`;
+                }
+                
                 bubble.innerHTML = `
                     ${quoteContent}
                     ${mainMediaContent}
                     <div style="text-align: right; margin-top: 4px; display: block; font-size: 11px;">
                         ${editedLabel}
                         <span class="msg-time" style="color: rgba(255,255,255,0.4);">${msgTime}</span>
+                        ${checkmarksHtml}
                     </div>
+                    ${reactionsHtml}
                 `;
                 container.appendChild(bubble);
             });
@@ -1792,6 +1836,7 @@
                 scrollWrapper.scrollTop = scrollWrapper.scrollHeight;
             }
         }
+
 
         // 🔥 УМНЫЙ ДВИЖОК ОТПРАВКИ: РЕДАКТИРОВАНИЕ И НАСТОЯЩИЕ ЦИТАТЫ
         async function sendMessage() {
@@ -2600,9 +2645,56 @@
             }
         });
         // Вставь вызов setupEmojiLongPress(); внутрь своей функции initMessengerApp()
+        // 😊 ДВИЖОК РЕАКЦИЙ: Шлём эмодзи для сообщения в СУБД Atlas
+        async function addMessageReactionDirectly(emojiSymbol) {
+            if (!selectedMsgId) return;
+            
+            // Прячем контекстное меню сразу
+            const menu = document.getElementById('msgContextMenu');
+            if (menu) menu.style.display = 'none';
+
+            try {
+                const res = await fetch('/api/geragram/messages/react', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message_id: selectedMsgId,
+                        emoji: emojiSymbol
+                    })
+                });
+                if (res.ok) {
+                    // Сразу дёргаем историю, чтобы новые смайлики прогрузились на экране
+                    if (typeof loadChatHistory === 'function') loadChatHistory();
+                }
+            } catch (err) { console.error("Ошибка отправки реакции:", err); }
+        }
+
+        // 📈 ДВИЖОК ПРОЧТЕНИЯ: Отправляем сигнал на бэкенд, что мы открыли этот чат
+        async function markCurrentChatMessagesAsRead() {
+            if (!activeChatUser) return;
+            try {
+                await fetch('/api/geragram/messages/read', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_user: activeChatUser })
+                });
+            } catch (err) { console.error("Ошибка автопрочтения:", err); }
+        }
     </script>
-    <!-- 📱 КОНТЕКСТНОЕ МЕНЮ GERAGRAM -->
-    <div class="context-menu" id="msgContextMenu">
+    <!-- 📱 КОНТЕКСТНОЕ МЕНЮ GERAGRAM (ОБНОВЛЕНО: С ПАНЕЛЬЮ РЕАКЦИЙ TELEGRAM-STYLE) -->
+    <div class="context-menu" id="msgContextMenu" style="position: fixed; background: var(--menu-bg); border: 1px solid var(--tg-border); border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,0.6); padding: 8px; z-index: 5000; display: none; min-width: 230px; animation: menuFadeIn 0.15s ease;">
+        
+        <!-- 😊 Горизонтальный блок реакций (как в Telegram) -->
+        <div style="display: flex; justify-content: space-between; padding: 4px 6px 10px 6px; border-bottom: 1px solid var(--tg-border); margin-bottom: 6px; gap: 8px;">
+            <span style="font-size: 22px; cursor: pointer; transition: transform 0.1s; display: inline-block;" onclick="addMessageReactionDirectly('👍')" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">👍</span>
+            <span style="font-size: 22px; cursor: pointer; transition: transform 0.1s; display: inline-block;" onclick="addMessageReactionDirectly('🔥')">🔥</span>
+            <span style="font-size: 22px; cursor: pointer; transition: transform 0.1s; display: inline-block;" onclick="addMessageReactionDirectly('😂')">😂</span>
+            <span style="font-size: 22px; cursor: pointer; transition: transform 0.1s; display: inline-block;" onclick="addMessageReactionDirectly('❤️')">❤️</span>
+            <span style="font-size: 22px; cursor: pointer; transition: transform 0.1s; display: inline-block;" onclick="addMessageReactionDirectly('💀')">💀</span>
+            <span style="font-size: 22px; cursor: pointer; transition: transform 0.1s; display: inline-block;" onclick="addMessageReactionDirectly('🎉')">🎉</span>
+        </div>
+
+        <!-- Сохраненные оригинальные пункты твоего меню -->
         <div class="context-menu-item" id="ctxReply" onclick="triggerReplyAction()"><i class="fa-solid fa-reply"></i> Ответить</div>
         <div class="context-menu-item" id="ctxCopy" onclick="triggerCopyAction()"><i class="fa-solid fa-copy"></i> Копировать</div>
         <div class="context-menu-item" id="ctxPin" onclick="triggerPinAction()"><i class="fa-solid fa-thumbtack"></i> Закрепить</div>
