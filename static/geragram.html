@@ -695,6 +695,32 @@
             from { width: 100%; }
             to { width: 0%; }
         }
+        /* 😊 АНИМАЦИЯ ВЫПРЫГИВАНИЯ МАКРО-ЭМОДЗИ TELEGRAM-STYLE */
+        @keyframes emojiPop {
+            0% { 
+                transform: scale(0.3); 
+                opacity: 0; 
+            }
+            70% { 
+                transform: scale(1.15); 
+            }
+            100% { 
+                transform: scale(1); 
+                opacity: 1; 
+            }
+        }
+
+        /* 🧼 АНИМАЦИЯ ПЛАВНОГО ПОЯВЛЕНИЯ ПАНЕЛИ СМАЙЛИКОВ */
+        @keyframes menuFadeIn {
+            from { 
+                opacity: 0; 
+                transform: translateY(10px) scale(0.95); 
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0) scale(1); 
+            }
+        }
     </style>
 </head>
 <body>
@@ -830,9 +856,24 @@
                     <button class="footer-action-btn" onclick="cancelReplyMode()" style="font-size:14px; background:none; border:none; color:var(--tg-text-muted); cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
                 </div>
 
-                <!-- Поле ввода и управления медиа -->
-                <div class="chat-footer">
-                    <button class="footer-action-btn"><i class="fa-regular fa-face-smile"></i></button>
+                <!-- Поле ввода и управления медиа (ОБНОВЛЕНО: СКРЕПКА И ЭМОДЗИ) -->
+                <div class="chat-footer" style="position: relative;">
+                    <!-- 😊 Панель быстрых премиум-эмодзи Telegram-Style (Врезана прямо внутрь футера) -->
+                    <div id="quickEmojiPopup" style="position: absolute; bottom: 70px; left: 20px; background: var(--menu-bg); border: 1px solid var(--tg-border); border-radius: 12px; padding: 8px; display: none; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 1000; animation: menuFadeIn 0.15s ease;">
+                        <span style="font-size: 26px; cursor: pointer; transition: transform 0.1s;" onclick="sendBigEmojiDirectly('👍')">👍</span>
+                        <span style="font-size: 26px; cursor: pointer; transition: transform 0.1s;" onclick="sendBigEmojiDirectly('🔥')">🔥</span>
+                        <span style="font-size: 26px; cursor: pointer; transition: transform 0.1s;" onclick="sendBigEmojiDirectly('😂')">😂</span>
+                        <span style="font-size: 26px; cursor: pointer; transition: transform 0.1s;" onclick="sendBigEmojiDirectly('❤️')">❤️</span>
+                        <span style="font-size: 26px; cursor: pointer; transition: transform 0.1s;" onclick="sendBigEmojiDirectly('💀')">💀</span>
+                        <span style="font-size: 26px; cursor: pointer; transition: transform 0.1s;" onclick="sendBigEmojiDirectly('😎')">😎</span>
+                    </div>
+
+                    <!-- Кнопка вызова смайликов (Добавлен ID для отслеживания удержания пальцем) -->
+                    <button class="footer-action-btn" id="emojiMenuTriggerBtn"><i class="fa-regular fa-face-smile"></i></button>
+                    
+                    <!-- 📎 Новая кнопка скрепки для бесшовного выбора файлов (медиа в базу не пишется!) -->
+                    <button class="footer-action-btn" onclick="triggerMediaAttachment()"><i class="fa-solid fa-paperclip"></i></button>
+                    
                     <input type="text" class="chat-input-field" id="messageInputField" placeholder="Напишите сообщение..." onkeypress="checkSendKey(event)">
                     
                     <!-- Кнопка голосовых сообщений -->
@@ -1051,6 +1092,11 @@
             
             // 🎯 ЗАПУСКАЕМ СВЕРХСКОРОСТНОЙ СКАНЕР: Проверяет статус бана каждые 2.5 секунды
             setInterval(runBackgroundBanScanner, 2500);
+
+            // 🎯 ИНИЦИАЛИЗИРУЕМ ДАТЧИКИ ТЕЛЕГРАМ-СМАЙЛИКОВ: Активируем лонгпресс для всплывающей панели
+            if (typeof setupEmojiLongPress === 'function') {
+                setupEmojiLongPress();
+            }
         }
 
         // Переключение режимов Вход / Регистрация (Анимация текста)
@@ -1610,7 +1656,7 @@
             }
         }
 
-        // 🎨 2.БАЗОВЫЙ РЕНДЕРЕР (БЕЗ СЛОЖНЫХ ПРОВЕРОК OBJECTID)
+        // 🎨 2.БАЗОВЫЙ РЕНДЕРЕР (ОБНОВЛЕНО: ПОДДЕРЖКА ФОТО, ВИДЕО И МАКРО-ЭМОДЗИ)
         function renderMessagesFromData(messagesArray) {
             const container = document.getElementById('messagesContainer');
             if (!container) return;
@@ -1642,7 +1688,7 @@
                     `;
                 }
                 
-                // Контент сообщения
+                // 🎯 КОНТЕНТ СООБЩЕНИЯ (РАСПРЕДЕЛЕНИЕ ТИПОВ ДАННЫХ)
                 if (msg.msg_type === 'voice') {
                     mainMediaContent = `
                         <div class="voice-msg-player">
@@ -1651,8 +1697,22 @@
                             <span class="voice-duration">0:05</span>
                         </div>
                     `;
-                } else {
-                    mainMediaContent = `<span style="white-space: pre-wrap; display: block; text-align: left;">${escapeHtml(msg.content)}</span>`;
+                } 
+                // 📸 ОТРИСОВКА КАРТИНКИ ИЗ СКРЕПКИ (С КЛИКОМ НА ОТКРЫТИЕ)
+                else if (msg.msg_type === 'image') {
+                    mainMediaContent = `<img src="${msg.content}" style="width: 100%; max-width: 280px; border-radius: 8px; display: block; margin-top: 4px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2);" onclick="window.open('${msg.content}', '_blank')">`;
+                }
+                // 🎥 ОТРИСОВКА ПЛЕЕРА ВИДЕО ИЗ СКРЕПКИ
+                else if (msg.msg_type === 'video') {
+                    mainMediaContent = `<video src="${msg.content}" controls style="width: 100%; max-width: 280px; border-radius: 8px; display: block; margin-top: 4px; background: #000; box-shadow: 0 4px 12px rgba(0,0,0,0.2);"></video>`;
+                }
+                // 😊 ОТРИСОВКА УВЕЛИЧЕННЫХ МАКРО-ЭМОДЗИ TELEGRAM-STYLE
+                else if (msg.msg_type === 'big_emoji') {
+                    mainMediaContent = `<span style="font-size: 52px; display: block; text-align: left; line-height: 1; padding: 4px 0; transform-origin: left center; animation: emojiPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);">${msg.content}</span>`;
+                }
+                // СТАНДАРТНЫЙ ТЕКСТ
+                else {
+                    mainMediaContent = `<span style="white-space: pre-wrap; display: block; text-align: left; word-break: break-word;">${escapeHtml(msg.content)}</span>`;
                 }
                 
                 // Время
@@ -1685,7 +1745,6 @@
                 scrollWrapper.scrollTop = scrollWrapper.scrollHeight;
             }
         }
-
 
         // 🔥 УМНЫЙ ДВИЖОК ОТПРАВКИ: РЕДАКТИРОВАНИЕ И НАСТОЯЩИЕ ЦИТАТЫ
         async function sendMessage() {
@@ -2361,6 +2420,120 @@
                 }
             } catch (err) { console.warn("Сканер безопасности ожидает сеть...", err); }
         }
+        // 📎 ДВИЖОК СКРЕПКИ: Отправка медиа без нагрузки на MongoDB
+        function triggerMediaAttachment() {
+            const mediaInput = document.createElement('input');
+            mediaInput.type = 'file';
+            mediaInput.accept = 'image/*,video/*'; // Принимаем и фото, и видео
+            
+            mediaInput.onchange = function() {
+                const file = mediaInput.files[0];
+                if (!file) return;
+
+                // Защита от гигантских файлов (ограничим до 10-15 МБ, чтобы сеть не легла)
+                if (file.size > 15 * 1024 * 1024) {
+                    alert("Бро, файл слишком большой! Ограничение до 15 МБ.");
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = async function(e) {
+                    const base64Data = e.target.result;
+                    const isVideo = file.type.startsWith('video/');
+                    
+                    try {
+                        // Шлём медиа-строку прямо в твой рабочий эндпоинт отправки сообщений
+                        const res = await fetch('/api/geragram/messages/send', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                to_user: activeChatUser,
+                                content: base64Data, // Медиа-контент летит внутри строки
+                                msg_type: isVideo ? 'video' : 'image', // Маркируем тип
+                                reply_to_text: replyToMsgId ? selectedMsgText : null
+                            })
+                        });
+                        
+                        if (res.ok) {
+                            if (typeof loadChatHistory === 'function') loadChatHistory();
+                        }
+                    } catch (err) { alert("Ошибка отправки медиа-файла."); }
+                };
+                
+                reader.readAsDataURL(file); // Конвертируем файл в текстовую Base64 строку
+            };
+            mediaInput.click();
+        }
+        // 😊 ДВИЖОК СУПЕР-ЭМОДЗИ TELEGRAM-STYLE
+        let emojiTouchTimeout = null;
+        let isEmojiMenuOpen = false;
+
+        function setupEmojiLongPress() {
+            const btn = document.getElementById('emojiMenuTriggerBtn');
+            if (!btn) return;
+
+            // Функция начала удержания (работает на ПК и смартфонах)
+            const startPress = (e) => {
+                if (e.type === 'touchstart') e.preventDefault(); // Защита мобильного зума
+                
+                emojiTouchTimeout = setTimeout(() => {
+                    const popup = document.getElementById('quickEmojiPopup');
+                    if (popup) {
+                        popup.style.display = 'flex';
+                        isEmojiMenuOpen = true;
+                    }
+                }, 400); // 400 миллисекунд удерживаем — и меню открывается!
+            };
+
+            // Функция отмены, если кнопку отпустили раньше времени
+            const endPress = () => {
+                if (emojiTouchTimeout) clearTimeout(emojiTouchTimeout);
+            };
+
+            btn.addEventListener('mousedown', startPress);
+            btn.addEventListener('touchstart', startPress, { passive: false });
+            btn.addEventListener('mouseup', endPress);
+            btn.addEventListener('touchend', endPress);
+            btn.addEventListener('mouseleave', endPress);
+        }
+
+        // Мгновенная отправка большого эмодзи в чат
+        async function sendBigEmojiDirectly(emojiSymbol) {
+            if (!activeChatUser) return;
+            
+            // Прячем меню сразу
+            const popup = document.getElementById('quickEmojiPopup');
+            if (popup) popup.style.display = 'none';
+            isEmojiMenuOpen = false;
+
+            try {
+                const res = await fetch('/api/geragram/messages/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        to_user: activeChatUser,
+                        content: emojiSymbol, // Летит сам символ смайлика
+                        msg_type: 'big_emoji', // Помечаем как супер-эмодзи
+                        reply_to_text: replyToMsgId ? selectedMsgText : null
+                    })
+                });
+                
+                if (res.ok) {
+                    if (typeof loadChatHistory === 'function') loadChatHistory();
+                }
+            } catch (err) { console.error("Ошибка отправки эмодзи:", err); }
+        }
+
+        // Автоматически закрываем меню смайлов при клике в любое свободное место чата
+        document.addEventListener('click', function(e) {
+            const popup = document.getElementById('quickEmojiPopup');
+            const btn = document.getElementById('emojiMenuTriggerBtn');
+            if (popup && isEmojiMenuOpen && !popup.contains(e.target) && !btn.contains(e.target)) {
+                popup.style.display = 'none';
+                isEmojiMenuOpen = false;
+            }
+        });
+        // Вставь вызов setupEmojiLongPress(); внутрь своей функции initMessengerApp()
     </script>
     <!-- 📱 КОНТЕКСТНОЕ МЕНЮ GERAGRAM -->
     <div class="context-menu" id="msgContextMenu">
@@ -2385,8 +2558,8 @@
             <button class="auth-btn" style="background: none; color: var(--tg-text-muted); width: 100%;" onclick="closeCreateGroupModal()">Отмена</button>
         </div>
     </div>
-    <!-- 🚨 ROBLOX-STYLE ОКНО БАНА (ИЗНАЧАЛЬНО СКРЫТО) -->
-    <div id="robloxBanOverlay" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); z-index: 999999; display: none; flex-direction: column; align-items: center; justify-content: center; color: white; font-family: 'Inter', sans-serif;">
+    <!-- 🚨 ОБНОВЛЕННЫЙ ROBLOX-STYLE БАННЕР С КРИСТАЛЬНЫМ РАЗМЫТИЕМ -->
+    <div id="robloxBanOverlay" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(14, 22, 33, 0.4); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); z-index: 999999; display: none; flex-direction: column; align-items: center; justify-content: center; color: white; font-family: 'Inter', sans-serif;">    
         <div style="background: #1c2834; border: 2px solid #ff3333; border-radius: 16px; padding: 40px; width: 90%; max-width: 500px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.7); animation: toastSlideDown 0.4s ease;">
             <div style="width: 80px; height: 80px; background: #ff3333; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; box-shadow: 0 0 20px #ff3333;">
                 <i class="fa-solid fa-gavel" style="font-size: 38px; color: white;"></i>
