@@ -2420,17 +2420,17 @@
                 }
             } catch (err) { console.warn("Сканер безопасности ожидает сеть...", err); }
         }
-        // 📎 ДВИЖОК СКРЕПКИ: Отправка медиа без нагрузки на MongoDB
+        // 📎 ИСПРАВЛЕННЫЙ ДВИЖОК СКРЕПКИ (УБИРАЕТ ОШИБКУ 422)
         function triggerMediaAttachment() {
             const mediaInput = document.createElement('input');
             mediaInput.type = 'file';
-            mediaInput.accept = 'image/*,video/*'; // Принимаем и фото, и видео
+            mediaInput.accept = 'image/*,video/*';
             
             mediaInput.onchange = function() {
-                const file = mediaInput.files[0];
-                if (!file) return;
+                const files = mediaInput.files;
+                if (!files || files.length === 0) return;
+                const file = files[0];
 
-                // Защита от гигантских файлов (ограничим до 10-15 МБ, чтобы сеть не легла)
                 if (file.size > 15 * 1024 * 1024) {
                     alert("Бро, файл слишком большой! Ограничение до 15 МБ.");
                     return;
@@ -2442,28 +2442,33 @@
                     const isVideo = file.type.startsWith('video/');
                     
                     try {
-                        // Шлём медиа-строку прямо в твой рабочий эндпоинт отправки сообщений
                         const res = await fetch('/api/geragram/messages/send', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
+                            // 🎯 ФИКС: Передаем абсолютно все поля модели, чтобы FastAPI не ругался
                             body: JSON.stringify({
                                 to_user: activeChatUser,
-                                content: base64Data, // Медиа-контент летит внутри строки
-                                msg_type: isVideo ? 'video' : 'image', // Маркируем тип
+                                content: base64Data,
+                                msg_type: isVideo ? 'video' : 'image',
                                 reply_to_text: replyToMsgId ? selectedMsgText : null
                             })
                         });
                         
                         if (res.ok) {
                             if (typeof loadChatHistory === 'function') loadChatHistory();
+                        } else {
+                            console.error("Сервер вернул ошибку при отправке медиа");
                         }
-                    } catch (err) { alert("Ошибка отправки медиа-файла."); }
+                    } catch (err) { 
+                        console.error("Сбой сети при отправке медиа:", err);
+                    }
                 };
                 
-                reader.readAsDataURL(file); // Конвертируем файл в текстовую Base64 строку
+                reader.readAsDataURL(file);
             };
             mediaInput.click();
         }
+
         // 😊 ДВИЖОК СУПЕР-ЭМОДЗИ TELEGRAM-STYLE
         let emojiTouchTimeout = null;
         let isEmojiMenuOpen = false;
@@ -2497,11 +2502,10 @@
             btn.addEventListener('mouseleave', endPress);
         }
 
-        // Мгновенная отправка большого эмодзи в чат
+        // 😊 ИСПРАВЛЕННАЯ ФУНКЦИЯ ОТПРАВКИ МАКРО-ЭМОДЗИ (УБИРАЕТ ОШИБКУ 422)
         async function sendBigEmojiDirectly(emojiSymbol) {
             if (!activeChatUser) return;
             
-            // Прячем меню сразу
             const popup = document.getElementById('quickEmojiPopup');
             if (popup) popup.style.display = 'none';
             isEmojiMenuOpen = false;
@@ -2510,18 +2514,23 @@
                 const res = await fetch('/api/geragram/messages/send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    // 🎯 ФИКС: Подшиваем reply_to_text, чтобы структура JSON была идеальной
                     body: JSON.stringify({
                         to_user: activeChatUser,
-                        content: emojiSymbol, // Летит сам символ смайлика
-                        msg_type: 'big_emoji', // Помечаем как супер-эмодзи
+                        content: emojiSymbol,
+                        msg_type: 'big_emoji',
                         reply_to_text: replyToMsgId ? selectedMsgText : null
                     })
                 });
                 
                 if (res.ok) {
                     if (typeof loadChatHistory === 'function') loadChatHistory();
+                } else {
+                    console.error("Сервер вернул ошибку при отправке эмодзи");
                 }
-            } catch (err) { console.error("Ошибка отправки эмодзи:", err); }
+            } catch (err) { 
+                console.error("Сбой сети при отправке эмодзи:", err); 
+            }
         }
 
         // Автоматически закрываем меню смайлов при клике в любое свободное место чата
