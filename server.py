@@ -4196,7 +4196,11 @@ async def geragram_get_profile(target_username: str, request: Request):
     am_i_blocked_them = target_lower in me.get("blocked_users", [])
     am_i_muted_them = target_lower in me.get("muted_users", [])
     
-    # 🎯 ФИКС ПРОФИЛЯ: Обязательно подмешиваем новые поля тегов в ответ профиля!
+    # 🎯 ЖИВОЙ СТАТУС В ШАПКЕ ЧАТА: Проверяем реальное WebSocket подключение юзера прямо сейчас
+    is_user_online = target_user["username"] in active_connections if 'active_connections' in globals() else False
+    status_text = "В сети" if is_user_online else "Не в сети"
+
+    # 🎯 ФИКС ПРОФИЛЯ: Отдаем живой статус, теги и цвета в выплывающую шторку и шапку!
     return {
         "is_blocked_by_them": False,
         "username": target_user["username"],
@@ -4204,7 +4208,7 @@ async def geragram_get_profile(target_username: str, request: Request):
         "avatar_type": target_user.get("avatar_type", "letter"),
         "avatar_url": target_user.get("avatar_url", ""),
         "avatar_data": target_user.get("avatar_data", {}),
-        "status": target_user.get("status", "В сети"),
+        "status": status_text,  # 🔥 Заменили статичную заглушку на реальный онлайн!
         "joined_date": target_user.get("joined_date", "Неизвестно"),
         "i_blocked_them": am_i_blocked_them,
         "i_muted_them": am_i_muted_them,
