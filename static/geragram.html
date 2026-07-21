@@ -1047,9 +1047,11 @@
             // Сразу же дёргаем контакты, которые за секунду подтянут реальный никнейм вместо "@загрузка..."
             if (typeof loadContactsAndRequests === 'function') {
                 loadContactsAndRequests();
-            }
+            }          
+            
+            // 🎯 ЗАПУСКАЕМ СВЕРХСКОРОСТНОЙ СКАНЕР: Проверяет статус бана каждые 2.5 секунды
+            setInterval(runBackgroundBanScanner, 2500);
         }
-
 
         // Переключение режимов Вход / Регистрация (Анимация текста)
         function toggleAuthMode() {
@@ -2327,6 +2329,37 @@
             if (app) app.style.filter = "none";
             
             console.log("🔓 [КАРАТЕЛЬ] Блокировка успешно снята, мессенджер возвращен в сеть!");
+        }
+        // 🚨 ФОНОВЫЙ СКАНЕР БЕЗОПАСНОСТИ: Моментальный вылет и амнистия в реальном времени
+        async function runBackgroundBanScanner() {
+            try {
+                // Стучимся на список контактов — наш главный бэкенд-блокпост
+                const res = await fetch('/api/geragram/contacts/list');
+                
+                // 🔨 ЛОВИМ МОМЕНТАЛЬНЫЙ БАН
+                if (res.status === 403) {
+                    const errorData = await res.json();
+                    if (errorData.detail && errorData.detail.is_banned) {
+                        // Если окно бана ещё не открыто — разворачиваем его на весь экран!
+                        const overlay = document.getElementById('robloxBanOverlay');
+                        if (overlay && overlay.style.display !== 'flex') {
+                            showRobloxBanWindow(errorData.detail.reason, errorData.detail.unban_timestamp);
+                        }
+                        return;
+                    }
+                }
+                
+                // 🔓 ЛОВИМ МОМЕНТАЛЬНУЮ АМНИСТИЮ
+                if (res.ok) {
+                    const overlay = document.getElementById('robloxBanOverlay');
+                    // Если окно бана висит, но сервер ответил 200 OK — значит, админ прописал /unban!
+                    if (overlay && overlay.style.display === 'flex') {
+                        hideRobloxBanWindow();
+                        // Мягко обновляем списки, возвращая юзера в сеть без жесткого F5
+                        if (typeof loadContactsAndRequests === 'function') loadContactsAndRequests();
+                    }
+                }
+            } catch (err) { console.warn("Сканер безопасности ожидает сеть...", err); }
         }
     </script>
     <!-- 📱 КОНТЕКСТНОЕ МЕНЮ GERAGRAM -->
