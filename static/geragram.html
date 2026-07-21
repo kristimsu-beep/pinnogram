@@ -735,6 +735,16 @@
             
             <!-- ЛЕВАЯ КОЛОНКА: СЕРВИСНАЯ ПАНЕЛЬ И КОНТАКТЫ -->
             <div class="sidebar">
+                <!-- 🎯 ФИКС: ПАНЕЛЬ ТВОЕГО ПРОФИЛЯ (СПАСАЕТ JS ОТ ПАДЕНИЯ) -->
+                <div style="padding: 16px 16px 4px 16px; display: flex; align-items: center; gap: 12px;">
+                    <div class="avatar-circle" style="width: 36px; height: 36px; background: var(--tg-button); font-size: 14px;">😎</div>
+                    <div style="display: flex; flex-direction: column; min-width: 0;">
+                        <span style="font-size: 11px; color: var(--tg-text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Вы вошли как</span>
+                        <!-- Тот самый критический ID, который искал скрипт -->
+                        <span id="myUsernameDisplay" class="sidebar-user-name" style="font-size: 14px; font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@загрузка...</span>
+                    </div>
+                </div>
+
                 <div class="sidebar-header">
                     <div class="search-wrapper">
                         <i class="fa-solid fa-magnifying-glass"></i>
@@ -744,6 +754,7 @@
                     <!-- Выпадающий список найденных людей -->
                     <div class="search-results-dropdown" id="searchResults"></div>
                 </div>
+
                 
                 <!-- Список чатов / контактов -->
                 <div class="chats-list" id="chatsContainerList">
@@ -1679,36 +1690,17 @@
                 return;
             }
 
-            // Обычная отправка и ОТВЕТ (Внутри try функции sendMessage)
+            // Обычная отправка и ОТВЕТ
             try {
                 const payload = { to_user: activeChatUser, content: text, msg_type: 'text' };
                 if (replyToMsgId) {
                     payload.reply_to_text = selectedMsgText; 
                 }
 
-                // 🎯 ОПТИМИЗАЦИОННЫЙ ПУШ: Имитируем мгновенную доставку в локальный кэш браузера!
-                const localOptimisticMsg = {
-                    _id: Math.random().toString(), // Временный ID до синхронизации с MongoDB
-                    from_user: window.geraCurrentUser || 'whispyy',
-                    to_user: activeChatUser,
-                    content: text,
-                    msg_type: 'text',
-                    timestamp: new Date().toISOString(),
-                    is_edited: false,
-                    reply_to_text: replyToMsgId ? selectedMsgText : null
-                };
-
-                // Если кэша для этой комнаты ещё нет — инициализируем его
-                if (!geragramCache[activeChatUser]) geragramCache[activeChatUser] = [];
-                geragramCache[activeChatUser].push(localOptimisticMsg);
-                
-                // Мгновенно перерисовываем экран из памяти за 0 миллисекунд!
-                renderMessagesFromData(geragramCache[activeChatUser]);
-                
                 input.value = ''; // Чистим поле ввода сразу
                 if (replyToMsgId) cancelReplyMode();
 
-                // Отправляем запрос в облако в фоновом режиме, не заставляя пользователя ждать
+                // Отправляем запрос в облако
                 const res = await fetch('/api/geragram/messages/send', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1716,13 +1708,10 @@
                 });
                 
                 if (res.ok) {
-                    // Перезапрашиваем историю, чтобы синхронизировать временный случайный ID с реальным ObjectId из базы Atlas
-                    const freshHistoryRes = await fetch(`/api/geragram/messages/history/${activeChatUser}`);
-                    if (freshHistoryRes.ok) {
-                        geragramCache[activeChatUser] = await freshHistoryRes.json();
-                    }
+                    loadChatHistory(); // Перезапрашиваем историю с сервера
                 }
             } catch (err) { alert('Ошибка отправки.'); }
+        } // 🎯 ФИКС: ВОТ ЭТА ЗАКРЫВАЮЩАЯ СКОБКА СПАСАЕТ ВЕСЬ МЕССЕНДЖЕР!
 
         // 🔥 НАСТОЯЩЕЕ БОЕВОЕ УДАЛЕНИЕ ИЗ MONGODB ATLAS
         async function triggerDeleteAction() {
@@ -1751,8 +1740,10 @@
             cancelReplyMode();
             
             const input = document.getElementById('messageInputField');
-            input.value = selectedMsgText; 
-            input.focus();
+            if (input) {
+                input.value = selectedMsgText; 
+                input.focus();
+            }
         }
 
         // 📱 ГЛУБОКИЙ ПЕРЕХВАТ ПРАВОГО КЛИКА / ЗАЖАТИЯ ДЛЯ ВЫЗОВА КОНТЕКСТНОГО МЕНЮ
