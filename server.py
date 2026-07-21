@@ -4022,22 +4022,26 @@ async def geragram_get_contacts(request: Request):
         contacts_cursor = geragram_users.find({"$or": or_conditions})
         contacts_list = await contacts_cursor.to_list(length=100)
         
-        # 👥 РЕНДЕРИНГ ОБЫЧНЫХ ЮЗЕРОВ (ЧАСТЬ 2 — ОБНОВЛЕНО: ЦВЕТНЫЕ КАСТ СТАТУСЫ)
+        # 👥 РЕНДЕРИНГ ОБЫЧНЫХ ЮЗЕРОВ (БРОНИРОВАННЫЙ ФИКС СЧИТЫВАНИЯ ТЕГОВ)
         for c in contacts_list:
             if c["username"].lower() == "geragram_bot":
                 continue
                 
-            # Проверяем, подключен ли пользователь к WebSocket прямо сейчас
             is_user_online = c["username"] in active_connections if 'active_connections' in globals() else False
-            
             status_text = "В сети" if is_user_online else "Не в сети"
             is_off = c.get("is_official", False)
             
-            # 🎯 СЧИТЫВАЕМ КАСТ ОБОЗНАЧЕНИЯ И ЦВЕТА ИЗ MONGODB ATLAS
-            c_tag = c.get("custom_tag", "OFFICIAL" if is_off else None)
-            # Дефолтный цвет — фирменный телеграмный синий (#2481cc), если админ не указал свой цвет
-            c_tag_color = c.get("custom_tag_color", "#2481cc")
+            # 🎯 ФИКС: Гарантируем, что если тега нет, прилетит None, а не поломанный ключ
+            raw_tag = c.get("custom_tag")
+            c_tag = str(raw_tag).strip() if raw_tag else ( "OFFICIAL" if is_off else None )
             
+            raw_color = c.get("custom_tag_color")
+            c_tag_color = str(raw_color).strip().lower() if raw_color else "#2481cc"
+            
+            # Если тег в базе равен пустой строке, принудительно гасим его
+            if c_tag == "" or c_tag == "None":
+                c_tag = "OFFICIAL" if is_off else None
+
             formatted_contacts.append({
                 "username": c["username"],
                 "display_name": c.get("display_name", c["username"]),
@@ -4047,11 +4051,11 @@ async def geragram_get_contacts(request: Request):
                 "status": status_text, 
                 "is_online": is_user_online,  
                 "is_official": is_off,
-                # 🔥 Новые поля, которые улетают на фронтенд
-                "custom_tag": c_tag,
-                "custom_tag_color": c_tag_color,
+                "custom_tag": c_tag,            # Теперь летит гарантированная чистая строка или None
+                "custom_tag_color": c_tag_color,  # Гарантированный цвет
                 "is_group": False
             })
+
 
     # 4. Входящие заявки на обмен контактами (Берем статус pending из geragram_contacts)
     incoming_cursor = geragram_contacts.find({
