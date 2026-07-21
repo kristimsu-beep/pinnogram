@@ -974,6 +974,18 @@
                 for (let name of names) caches.delete(name);
             });
         }
+        // 🚨 НЕУБИВАЕМЫЙ ТАЙМЕР: Принудительно убираем черную заглушку через 500мс, несмотря на любые ошибки в коде
+        setTimeout(() => {
+            document.body.classList.add('app-loaded');
+            
+            // На случай, если заглушка сделана через отдельный ID элемента
+            const splash = document.getElementById('splashScreen') || document.getElementById('preloader') || document.getElementById('loadingOverlay');
+            if (splash) {
+                splash.style.display = 'none';
+            }
+            console.log("🧼 [ЗАГЛУШКА СНЯТА] Интерфейс принудительно открыт для пользователя");
+        }, 500);
+        
         // --- 📱 ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И ДАННЫЕ СЕССИИ ---
         let myUsername = null;        // Никнейм текущего авторизованного юзера
         let isRegisterMode = false;   // Переключатель режима Вход / Регистрация
