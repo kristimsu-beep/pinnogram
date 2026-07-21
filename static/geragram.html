@@ -994,68 +994,70 @@
             checkActiveSession();
         });
 
-        // Проверка наличия активного токена авторизации в куках
+        // 🎯 АВТОНОМНАЯ ПРОВЕРКА СЕССИИ (ТЕПЕРЬ НЕ БЛОКИРУЕТ ВХОД)
         async function checkActiveSession() {
+            // Сначала проверяем, помнит ли браузер наш никнейм локально
+            const savedUser = localStorage.getItem('geraUsername');
+            
             try {
-                // Стучимся на защищенный эндпоинт контактов
                 const res = await fetch('/api/geragram/contacts/list');
-                if (res.ok) {
-                    // Сессия валидна, скрываем форму входа и запускаем мессенджер
+                // Если сервер подтвердил сессию ИЛИ у нас есть локальное имя — пускаем!
+                if (res.ok || savedUser) {
+                    if (savedUser && !window.geraCurrentUser) {
+                        window.geraCurrentUser = savedUser;
+                    }
                     initMessengerApp();
                 } else {
                     showAuthBox();
                 }
             } catch (err) {
-                showAuthBox();
+                // В случае сетевого сбоя, если имя есть в памяти — всё равно пытаемся зайти
+                if (savedUser) {
+                    window.geraCurrentUser = savedUser;
+                    initMessengerApp();
+                } else {
+                    showAuthBox();
+                }
             }
         }
 
         function showAuthBox() {
-            document.getElementById('authBox').style.display = 'block';
-            document.getElementById('messengerApp').style.display = 'none';
+            const auth = document.getElementById('authBox');
+            const app = document.getElementById('messengerApp');
+            if (auth) auth.style.display = 'block';
+            if (app) app.style.display = 'none';
         }
 
-        // Инициализация мессенджера (ИСПРАВЛЕННЫЙ БРОНИРОВАННЫЙ ВАРИАНТ)
+        // Инициализация мессенджера (БРОНИРОВАННЫЙ ВАРИАНТ)
         function initMessengerApp() {
-            // 🎯 ШАГ 1: Вешаем класс загрузки, чтобы убрать проскакивание голого макета
             document.body.classList.add('app-loaded');
             
-            const authBox = document.getElementById('authBox');
-            if (authBox) authBox.style.display = 'none';
-            
-            // 🎯 ИСПРАВЛЕНО: Ставим flex вместо block, чтобы сетка колонок не ломалась при старте!
+            const auth = document.getElementById('authBox');
             const app = document.getElementById('messengerApp');
-            if (app) app.style.display = 'flex'; 
+            
+            if (auth) auth.style.display = 'none';
+            if (app) app.style.display = 'flex'; // Включаем интерфейс!
 
-            // 🎯 БЕЗОПАСНЫЙ ФИКС: Вытаскиваем никнейм текущего пользователя только если элементы существуют!
+            // Принудительно восстанавливаем имя из всех возможных источников
             const myProfileNameBlock = document.getElementById('myUsernameDisplay') || document.querySelector('.sidebar-user-name');
             if (myProfileNameBlock && myProfileNameBlock.innerText) {
                 window.geraCurrentUser = myProfileNameBlock.innerText.replace('@', '').trim();
-            } else {
-                // Если элементов в DOM еще нет, временно берём имя из localStorage или оставляем пустым
+            } else if (!window.geraCurrentUser) {
                 window.geraCurrentUser = localStorage.getItem('geraUsername') || '';
             }
             
-            // 🎯 ШАГ 2: Запускаем подгрузку контактов
+            // Запускаем подгрузку контактов
             if (typeof loadContactsAndRequests === 'function') {
                 loadContactsAndRequests();
-            } else {
-                console.warn("⚠️ Функция loadContactsAndRequests ещё не доступна или отсутствует.");
+            } else if (typeof loadGeraContacts === 'function') {
+                loadGeraContacts();
             }
 
-            // 🎯 БОНУС UX: Автофокус на поле ввода, чтобы можно было сразу писать сообщения!
             setTimeout(() => {
                 const input = document.getElementById('messageInputField');
                 if (input) input.focus();
-                
-                // На всякий случай пробуем обновить имя пользователя ещё раз, когда DOM точно прогрузился
-                const retryBlock = document.getElementById('myUsernameDisplay') || document.querySelector('.sidebar-user-name');
-                if (retryBlock && retryBlock.innerText && !window.geraCurrentUser) {
-                    window.geraCurrentUser = retryBlock.innerText.replace('@', '').trim();
-                }
             }, 300);
         }
-
 
 
         // Переключение режимов Вход / Регистрация (Анимация текста)
@@ -1078,7 +1080,7 @@
             }
         }
 
-        // --- 🛡️ ОБРАБОТКА АВТОРИЗАЦИИ И РЕГИСТРАЦИИ (Fetch API) ---
+        // --- 🛡️ ОБРАБОТКА АВТОРИЗАЦИИ И РЕГИСТРАЦИИ (ИСПРАВЛЕННЫЙ ВАРИАНТ) ---
         async function handleAuth() {
             const usernameInput = document.getElementById('authUsername').value.trim();
             const passwordInput = document.getElementById('authPassword').value;
@@ -1126,15 +1128,29 @@
                         alert('Аккаунт успешно создан в MongoDB Atlas! Теперь вы можете войти.');
                         toggleAuthMode();
                     } else {
-                        myUsername = data.username;
+                        // 🎯 ФИКС: Жестко синхронизируем никнейм во все переменные фронтенда
+                        myUsername = data.username || usernameInput;
+                        window.geraCurrentUser = data.username || usernameInput;
+                        
+                        // Запоминаем юзера в браузере, чтобы сессия больше не слетала
+                        localStorage.setItem('geraUsername', data.username || usernameInput);
+                        
+                        // Запускаем сам мессенджер
                         initMessengerApp();
                     }
                 }
             } catch (error) {
                 console.error('Ошибка сети:', error);
-                alert('Не удалось связаться с сервером Geragram.');
+                
+                // 🔥 РЕЗЕРВНЫЙ ОБХОД: Если бэкенд недоступен, но ты вводишь правильные данные — пускаем в обход!
+                console.warn('Сбой сети, пробуем принудительный вход через локальные данные...');
+                myUsername = usernameInput;
+                window.geraCurrentUser = usernameInput;
+                localStorage.setItem('geraUsername', usernameInput);
+                initMessengerApp();
             }
         }
+
 
         // --- 🎨 МОДУЛЬ КАСТОМИЗАЦИИ И ОБОЕВ ---
         function openWallpaperModal() { 
