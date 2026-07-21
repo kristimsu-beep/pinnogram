@@ -614,16 +614,6 @@
             align-self: flex-end;
             background: #2b5278 !important; /* Твой фирменный синий для своих */
         }
-        /* 🏎️ ИЗНАЧАЛЬНО СКРЫВАЕМ ПРИЛОЖЕНИЕ ДО ПРОВЕРКИ АВТОРИЗАЦИИ */
-        #messengerApp {
-            opacity: 0;
-            transition: opacity 0.2s ease-in-out;
-        }
-
-        /* Класс, который JS повесит после успешного входа */
-        .app-loaded #messengerApp {
-            opacity: 1 !important;
-        }
 
         /* Фикс для мгновенного скрытия старых сообщений при смене комнат */
         .messages-container.loading {
@@ -974,17 +964,28 @@
                 for (let name of names) caches.delete(name);
             });
         }
-        // 🚨 НЕУБИВАЕМЫЙ ТАЙМЕР: Принудительно убираем черную заглушку через 500мс, несмотря на любые ошибки в коде
+        // 🔬 ОТЛАДОЧНЫЙ ТАЙМЕР: ПРИНУДИТЕЛЬНО ВКЛЮЧАЕМ ВИДИМОСТЬ ВСЕХ БЛОКОВ (БЕЗ NONE)
         setTimeout(() => {
+            // Вешаем класс для старых стилей, если они где-то остались
             document.body.classList.add('app-loaded');
             
-            // На случай, если заглушка сделана через отдельный ID элемента
-            const splash = document.getElementById('splashScreen') || document.getElementById('preloader') || document.getElementById('loadingOverlay');
-            if (splash) {
-                splash.style.display = 'none';
+            // Находим форму входа и мессенджер по всем возможным ID
+            const auth = document.getElementById('authBox') || document.getElementById('authScreen') || document.getElementById('loginContainer');
+            const app = document.getElementById('messengerApp') || document.getElementById('messengerMainLayout');
+            
+            // ЖЕСТКО УБИРАЕМ NONE: Выводим оба блока на экран друг под другом для тестов!
+            if (auth) {
+                auth.style.display = 'block';
+                auth.style.opacity = '1';
             }
-            console.log("🧼 [ЗАГЛУШКА СНЯТА] Интерфейс принудительно открыт для пользователя");
+            if (app) {
+                app.style.display = 'flex';
+                app.style.opacity = '1';
+            }
+            
+            console.log("🧼 [ОТЛАДКА] Все экраны принудительно открыты, скрытие отключено!");
         }, 500);
+
         
         // --- 📱 ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И ДАННЫЕ СЕССИИ ---
         let myUsername = null;        // Никнейм текущего авторизованного юзера
@@ -1032,45 +1033,43 @@
                 }
             }
         }
-
+        // 🔬 ВРЕМЕННЫЙ ОТКРЫТЫЙ ВАРИАНТ ДЛЯ ОТЛАДКИ (НИЧЕГО НЕ СКРЫВАЕМ)
         function showAuthBox() {
             const auth = document.getElementById('authBox');
             const app = document.getElementById('messengerApp');
+            
+            // Заставляем оба блока быть видимыми, чтобы найти, где баг!
             if (auth) auth.style.display = 'block';
-            if (app) app.style.display = 'none';
+            if (app) app.style.display = 'flex'; 
+            console.log("⚠️ showAuthBox вызвана: оба экрана принудительно открыты!");
         }
 
-        // Инициализация мессенджера (БРОНИРОВАННЫЙ ВАРИАНТ)
         function initMessengerApp() {
-            document.body.classList.add('app-loaded');
-            
             const auth = document.getElementById('authBox');
             const app = document.getElementById('messengerApp');
             
-            if (auth) auth.style.display = 'none';
-            if (app) app.style.display = 'flex'; // Включаем интерфейс!
-
-            // Принудительно восстанавливаем имя из всех возможных источников
+            // Ничего не прячем, включаем всё на полную
+            if (auth) auth.style.display = 'block';
+            if (app) app.style.display = 'flex'; 
+            
+            // Восстанавливаем никнейм из всех возможных мест
             const myProfileNameBlock = document.getElementById('myUsernameDisplay') || document.querySelector('.sidebar-user-name');
             if (myProfileNameBlock && myProfileNameBlock.innerText) {
                 window.geraCurrentUser = myProfileNameBlock.innerText.replace('@', '').trim();
-            } else if (!window.geraCurrentUser) {
-                window.geraCurrentUser = localStorage.getItem('geraUsername') || '';
+            } else {
+                window.geraCurrentUser = localStorage.getItem('geraUsername') || myUsername || '';
             }
             
-            // Запускаем подгрузку контактов
+            // Дублируем в старую переменную для handleAuth
+            myUsername = window.geraCurrentUser;
+            
+            console.log("👤 Авторизован юзер:", window.geraCurrentUser);
+
+            // Подгружаем контакты
             if (typeof loadContactsAndRequests === 'function') {
                 loadContactsAndRequests();
-            } else if (typeof loadGeraContacts === 'function') {
-                loadGeraContacts();
             }
-
-            setTimeout(() => {
-                const input = document.getElementById('messageInputField');
-                if (input) input.focus();
-            }, 300);
         }
-
 
         // Переключение режимов Вход / Регистрация (Анимация текста)
         function toggleAuthMode() {
