@@ -4052,11 +4052,13 @@ async def geragram_get_contacts(request: Request):
             "avatar_data": i.get("avatar_data", {})
         } for i in inc_users_list]
     
+    # 🎯 САМЫЙ ГЛАВНЫЙ СИНХРОНИЗАТОР БЭКЕНДА: Подмешиваем имя текущего юзера в корень ответа!
     return {
+        "status": "success",
+        "current_user": my_username,  # Жестко отдаем ник фронтенду, чтобы убрать надпись "@загрузка"
         "contacts": formatted_contacts,
         "incoming_requests": formatted_incoming
     }
-
 
 # 1. Тогл блокировки пользователя
 @app.post("/api/geragram/users/toggle-block")
