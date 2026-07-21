@@ -1301,40 +1301,52 @@
             }
         }
 
-        // Рендерим список контактов (ОБНОВЛЕНО: ДИНАМИЧЕСКИЙ ОПРЕДЕЛИТЕЛЬ СЕССИИ И ОНЛАЙНА)
+        // Рендерим список контактов (ОБНОВЛЕНО: БРОНИРОВАННЫЙ СЧИТЫВАТЕЛЬ КУК СЕССИИ)
         async function loadContactsAndRequests() {
             try {
                 const res = await fetch('/api/geragram/contacts/list');
                 if (!res.ok) return;
                 const data = await res.json();
 
-                // 🎯 ЖЕСТКИЙ ФИКС НИКНЕЙМА И СТИРАНИЯ ФОРМЫ ВХОДА (ВМЕСТО СТАРОГО СИНХРОНИЗАТОРА)
-                // Забираем реальное имя из ответа сервера, либо из памяти браузера
-                const realUsername = data.current_user || data.username || localStorage.getItem('geraUsername') || '';
+                // 🎯 ФИКС АВТОРА: Достаем точный никнейм прямо из Cookies браузера, если бэк молчит
+                let cookieUser = "";
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    const eqIdx = cookie.indexOf('=');
+                    if (eqIdx !== -1) {
+                        const name = cookie.substring(0, eqIdx).trim();
+                        const val = cookie.substring(eqIdx + 1).trim();
+                        // Проверяем все стандартные имена кук для FastAPI сессий
+                        if (name === 'gera_user' || name === 'username' || name === 'user_session' || name === 'session_user') {
+                            cookieUser = decodeURIComponent(val);
+                            break;
+                        }
+                    }
+                }
+
+                // Собираем имя по приоритету: ответ сервера ➡️ куки браузера ➡️ локальная память
+                const realUsername = data.current_user || data.username || cookieUser || localStorage.getItem('geraUsername') || '';
                 
                 if (realUsername) {
-                    // 1. Прописываем имя во все глобальные переменные фронтенда
+                    // Жестко привязываем ник к движку переписки
                     myUsername = realUsername;
                     window.geraCurrentUser = realUsername;
                     localStorage.setItem('geraUsername', realUsername);
                     
-                    // 2. Меняем заглушку на реальный ник в боковом меню
+                    // Обновляем текст на экране с @загрузка... на твой ник
                     const myDisplay = document.getElementById('myUsernameDisplay');
                     if (myDisplay) {
                         myDisplay.innerText = `@${realUsername}`;
                     }
                     
-                    // 3. Прячем форму входа, так как сессия подтверждена и контакты загружены
+                    // Скрываем форму входа
                     const auth = document.getElementById('authBox') || document.getElementById('authScreen') || document.getElementById('loginContainer');
-                    if (auth) {
-                        auth.style.display = 'none';
-                    }
+                    if (auth) auth.style.display = 'none';
                     
-                    // 4. Гарантируем, что сам интерфейс мессенджера отображается сеткой
+                    // Включаем сетку мессенджера
                     const app = document.getElementById('messengerApp') || document.getElementById('messengerMainLayout');
-                    if (app) {
-                        app.style.display = 'flex';
-                    }
+                    if (app) app.style.display = 'flex';
                 }
 
                 const container = document.getElementById('chatsContainerList');
@@ -1359,7 +1371,7 @@
                                 <button class="auth-btn" style="padding:4px 8px; font-size:11px; margin-top:5px; background:#4cd964;" onclick="acceptContactDirectly('${req.username}', event)">Принять</button>
                             </div>
                         `;
-                        container.appendChild(item);
+                        if (container) container.appendChild(item);
                     });
                 }
 
@@ -1416,8 +1428,6 @@
                 console.error('Ошибка загрузки контактов:', err);
             }
         }
-
-
 
         // Вспомогательная функция сборки HTML-кода аватарки
         function getAvatarElementHtml(user, size) {
