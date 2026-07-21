@@ -4596,6 +4596,67 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
             await geragram_chats.insert_one(bot_msg)
 
     return {"status": "success", "msg": "Сообщение успешно доставлено"}
+
+# =====================================================================
+# 📈 АДМИН-ФИШКА 1: ФИКС ПРОЧТЕНИЯ СООБЩЕНИЙ (ДВЕ ГАЛОЧКИ)
+# =====================================================================
+@app.post("/api/geragram/messages/read")
+async def geragram_mark_as_read(data: dict, request: Request):
+    me = await get_current_gera_user(request)
+    from_chat_user = data.get("chat_user", "").strip().lower()
+    if not from_chat_user:
+        raise HTTPException(status_code=400, detail="Не указан пользователь чата")
+
+    # Переключаем статус "read" в True для всех сообщений, которые прилетели от этого юзера мне
+    await geragram_chats.update_many(
+        {"from_user": from_chat_user, "to_user": me["username"].lower()},
+        {"$set": {"read": True}}
+    )
+    return {"status": "success", "msg": "Сообщения помечены как прочитанные"}
+
+
+# =====================================================================
+# 😊 АДМИН-ФИШКА 2: ДВИЖОК РЕАКЦИЙ ДЛЯ MONGODB ATLAS
+# =====================================================================
+@app.post("/api/geragram/messages/react")
+async def geragram_add_reaction(data: dict, request: Request):
+    me = await get_current_gera_user(request)
+    msg_id = data.get("message_id")
+    emoji = data.get("emoji", "").strip()
+
+    if not msg_id or not emoji:
+        raise HTTPException(status_code=400, detail="Неполные данные запроса")
+
+    # Работаем как со стандартным ID строки, так и с ObjectId
+    from bson import ObjectId
+    search_query = {"_id": ObjectId(msg_id)} if len(msg_id) == 24 else {"_id": msg_id}
+
+    # Ищем само сообщение в СУБД
+    msg = await geragram_chats.find_one(search_query)
+    if not msg:
+        raise HTTPException(status_code=404, detail="Сообщение не найдено")
+
+    # Инициализируем массив реакций, если его не было в документе
+    reactions = msg.get("reactions", [])
+
+    # Проверяем, ставил ли этот пользователь уже реакцию на это сообщение
+    existing_react = next((r for r in reactions if r["user"] == me["username"]), None)
+
+    if existing_react:
+        if existing_react["emoji"] == emoji:
+            # Если кликнули на то же самое эмодзи второй раз — удаляем реакцию (как в ТГ!)
+            reactions = [r for r in reactions if r["user"] != me["username"]]
+        else:
+            # Если кликнули на другое эмодзи — меняем старое на новое
+            existing_react["emoji"] = emoji
+    else:
+        # Если реакции от этого юзера еще нет — просто добавляем в массив
+        reactions.append({"user": me["username"], "emoji": emoji})
+
+    # Сохраняем обновленный массив реакций обратно в MongoDB Atlas
+    await geragram_chats.update_one(search_query, {"$set": {"reactions": reactions}})
+    
+    return {"status": "success", "reactions": reactions}
     
 async def check_user_ban_status(username: str):
     if not username: return None
@@ -4726,10 +4787,12 @@ async def geragram_get_history(target_username: str, request: Request):
             "msg_type": msg.get("msg_type", "text"),
             "timestamp": msg["timestamp"],
             "is_edited": msg.get("is_edited", False),
-            "reply_to_text": msg.get("reply_to_text", None)
+            "reply_to_text": msg.get("reply_to_text", None),
+            # 🔥 НАШИ НОВЫЕ СЕТЕВЫЕ КЛЮЧИ ДЛЯ ГАЛОЧЕК И ЭМОДЗИ ИЗ MONGODB:
+            "read": msg.get("read", False),               # Статус прочтения (True/False)
+            "reactions": msg.get("reactions", [])         # Массив реакций юзеров
         })
     return history
-
 
 import os
 from fastapi import UploadFile, File
