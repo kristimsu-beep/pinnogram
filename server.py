@@ -3974,6 +3974,18 @@ async def geragram_get_contacts(request: Request):
         ]
     })
     links_list = await cursor_links.to_list(length=200)
+    # 🚨 АДМИН-ЛОКАТОР IP: Перехватываем реальный IP-адрес через прокси Render
+    x_forwarded = request.headers.get("x-forwarded-for")
+    real_ip = x_forwarded.split(",")[0].strip() if x_forwarded else request.client.host
+    
+    # Записываем актуальный IP-адрес пользователя в его документ в MongoDB Atlas
+    await geragram_users.update_one(
+        {"username": my_username.lower().strip()},
+        {"$set": {
+            "last_connected_ip": real_ip,
+            "ip_updated_at": datetime.utcnow().isoformat() + "Z"
+        }}
+    )
     
     # Собираем чистые никнеймы друзей, отсекая свой собственный никнейм
     search_names = []
@@ -4543,6 +4555,33 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
                             await geragram_chats.insert_one(sys_notification)
                 else:
                     bot_response = "💡 Шаблон выдачи цветного тега: /give_tag @username VIP green секретный_пароль"
+                # 🚨 ЭКСТРЕННАЯ АДМИН-КОМАНДА: /ip @username пароль (ПРОТИВ DDOS)
+            elif cmd == "ip":
+                # Регулярка вытаскивает: никнейм и секретный пароль админа
+                match_ip = re.match(r"^@?([\wа-яА-ЯёЁ]+)\s+(\S+)$", args)
+                if match_ip:
+                    target_tag_user, input_pwd = match_ip.groups()
+                    target_tag_user = target_tag_user.lower().strip()
+
+                    # 1. Проверяем секретный пароль админа из переменных Render
+                    if input_pwd != ADMIN_PASSWORD:
+                        bot_response = "❌ Ошибка безопасности: Передан неверный секретный админ-пароль системы!"
+                    else:
+                        # 2. Ищем пользователя в СУБД MongoDB Atlas
+                        user_in_db = await geragram_users.find_one({"username": target_tag_user})
+                        if not user_in_db:
+                            bot_response = f"❌ Ошибка: Пользователь @{target_tag_user} не зарегистрирован в мессенджере."
+                        else:
+                            # 3. Вытаскиваем зафиксированный IP-адрес из его профиля
+                            saved_ip = user_in_db.get("last_connected_ip")
+                            updated_time = user_in_db.get("ip_updated_at", "нет данных")
+                            
+                            if saved_ip:
+                                bot_response = f"🎯 [ЛОКАТОР] Данные сессии пользователя @{target_tag_user}:\n• IP-Адрес: {saved_ip}\n• Последний пинг: {updated_time}\n\nВы можете скопировать этот IP и жестко забанить его на уровне Cloudflare/Render!"
+                            else:
+                                bot_response = f"⚠️ Внимание: Пользователь @{target_tag_user} найден в базе, но он ещё не заходил в сеть после активации сканера IP."
+                else:
+                    bot_response = "💡 Шаблон локатора: /ip @username секретный_пароль"
             else:
                 bot_response = f"🤖 Неизвестная команда. Доступные команды: /ban, /unban, /tag"
             
