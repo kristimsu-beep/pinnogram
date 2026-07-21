@@ -887,7 +887,7 @@
                 </div>
             </div>
 
-            <!-- 👤 ВЫПЛЫВАЮЩИЙ БОКОВОЙ ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ -->
+            <!-- 👤 ВЫПЛЫВАЮЩИЙ БОКОВОЙ ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ (ОБНОВЛЕНО: CANVAS ПОГОДА И ВРЕМЯ) -->
             <div class="user-profile-drawer" id="profileDrawer">
                 <div class="drawer-header">
                     <button class="drawer-close" onclick="closeUserProfileDrawer()"><i class="fa-solid fa-xmark"></i></button>
@@ -903,7 +903,20 @@
 
                     <!-- Основное тело профиля -->
                     <div class="drawer-body" id="drawerBodyData">
-                        <div class="profile-drawer-avatar" id="drawerAvatar"></div>
+                        
+                        <!-- 🎯 МНОГОСЛОЙНЫЙ АВАТАР ДЛЯ ЦИКЛИЧНЫХ CANVAS АНИМАЦИЙ -->
+                        <div style="position: relative; width: 110px; height: 110px; margin-bottom: 12px; flex-shrink: 0;">
+                            <div class="profile-drawer-avatar" id="drawerAvatar" style="width: 110px; height: 110px; margin-bottom: 0; position: absolute; top: 0; left: 0; z-index: 1;"></div>
+                            <!-- Прозрачный холст для погодных спецэффектов (дождь, солнце, гроза) -->
+                            <canvas id="weatherAvatarCanvas" width="110" height="110" style="position: absolute; top: 0; left: 0; width: 110px; height: 110px; border-radius: 50%; pointer-events: none; z-index: 2;"></canvas>
+                        </div>
+
+                        <!-- 🎯 ПОДПЛАНКА ЖИВОГО МЕСТНОГО ВРЕМЕНИ И ПОГОДЫ (ИЗНАЧАЛЬНО СКРЫТА) -->
+                        <div id="drawerGeoWeatherBar" style="display: none; flex-direction: column; align-items: center; margin-bottom: 16px; background: rgba(0,0,0,0.15); padding: 6px 14px; border-radius: 16px; border: 1px solid var(--tg-border); width: 100%; max-width: 240px; box-shadow: inset 0 1px 4px rgba(0,0,0,0.2);">
+                            <div style="font-size: 13px; font-weight: 700; color: #4cd964;" id="drawerLocalTimeText"><i class="fa-regular fa-clock"></i> 00:00</div>
+                            <div style="font-size: 11px; color: var(--tg-text-muted); margin-top: 2px; font-weight: 500;" id="drawerWeatherText">определяем...</div>
+                        </div>
+
                         <div class="profile-drawer-name" id="drawerDisplayName">Никнейм</div>
                         <div class="profile-drawer-status" id="drawerStatus">в сети</div>
                         
@@ -937,7 +950,6 @@
         </div> <!-- /main-layout -->
     </div> <!-- /messenger-wrapper -->
 
-    <!-- 🎨 МОДАЛЬНОЕ ОКНО: ОБОИ И БЕЗОПАСНОСТЬ (С ВЫБОРОМ ТЕМ И СОЗДАНИЕМ ГРУПП) -->
     <div class="modal-overlay" id="wallpaperModal">
         <div class="modal-content">
             <h3 style="margin-bottom: 12px; font-weight: 600;">Кастомизация мессенджера</h3>
@@ -961,6 +973,11 @@
             <hr style="border: 0; border-top: 1px solid var(--tg-border); margin: 18px 0;">
             <h4 style="margin-bottom: 12px; font-size:15px; font-weight:600;">Безопасность и Личность</h4>
             
+            <!-- 🎯 НОВАЯ ИЗУМРУДНАЯ КНОПКА ВКЛЮЧЕНИЯ ЛОКАЛЬНОЙ ГЕОЛОКАЦИИ И ПОГОДЫ -->
+            <button class="auth-btn" id="geoSystemBtn" style="background: #10b981; margin-bottom: 8px; font-size: 13px; font-weight: 600;" onclick="requestUserGeolocationSystem()">
+                <i class="fa-solid fa-location-dot"></i> Включить трансляцию геолокации и погоды
+            </button>
+
             <button class="auth-btn" style="background: #213040; margin-bottom: 8px; font-size: 13px;" onclick="triggerAvatarUpload()">
                 <i class="fa-solid fa-camera"></i> Сменить свою аватарку
             </button>
@@ -1684,8 +1701,14 @@
                     ? '<i class="fa-solid fa-bell"></i> Уведомления: Выкл' 
                     : '<i class="fa-solid fa-bell-slash"></i> Уведомления: Вкл';
 
-                // 🔥 ВНУТРЕННИЙ ФИКС: Вызываем групповой контроль ДО окончания блока try, пока переменная profile жива!
+                // 🔥 ВНУТРЕННИЙ ФИКС: Вызываем групповой контроль ДО окончания блока try
                 toggleGroupHeaderControls(profile);
+
+                // 🎯 ВКЛЮЧАЕМ ЖИВУЮ ЛОКАЛЬНУЮ ПОГОДУ И CANVAS НА АВАТАРЕ
+                if (typeof initProfileWeatherAndClock === 'function') {
+                    initProfileWeatherAndClock(profile);
+                }
+
 
             } catch (err) {
                 console.error('Ошибка синхронизации профиля:', err);
@@ -2701,6 +2724,200 @@
                 });
             } catch (err) { console.error("Ошибка автопрочтения:", err); }
         }
+        // =====================================================================
+        // 🌍 ЛОКАЛЬНЫЙ СЕССИОННЫЙ ГЕО-ПОГОДНЫЙ ДВИЖОК (БЕЗ ЗАПИСИ В MONGO)
+        // =====================================================================
+        window.myLocalGeoWeatherData = null; // Хранилище погоды строго в памяти браузера
+        let weatherCanvasAnimationId = null;
+        let weatherCanvasCtx = null;
+        let weatherParticlesArray = [];
+        let profileClockInterval = null;
+
+        // Кнопка в настройках: Запрашивает гео и погоду строго локально
+        function requestUserGeolocationSystem() {
+            if (!navigator.geolocation) {
+                alert("Бро, твой браузер не поддерживает геолокацию.");
+                return;
+            }
+
+            console.log("🌍 [ГЕО] Локальный запрос координат у GPS-датчика...");
+            
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                // Получаем смещение часового пояса в секундах от UTC
+                const tzOffset = -new Date().getTimezoneOffset() * 60;
+
+                try {
+                    // Стучимся напрямую в бесплатное API Open-Meteo без лимитов и ключей
+                    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=weather_code,temperature_2m`;
+                    const response = await fetch(weatherUrl);
+                    const weatherData = await response.json();
+                    
+                    if (weatherData && weatherData.current_weather) {
+                        const temp = Math.round(weatherData.current_weather.temperature);
+                        const code = weatherData.current_weather.weathercode;
+                        
+                        // Классифицируем погодные коды Open-Meteo
+                        let weatherType = "clear"; 
+                        let statusStr = `☀️ Ясно, ${temp}°C`;
+
+                        if ([1, 2, 3, 45, 48].includes(code)) {
+                            weatherType = "cloudy";
+                            statusStr = `☁️ Облачно, ${temp}°C`;
+                        } else if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) {
+                            weatherType = "rain";
+                            statusStr = `🌧️ Идёт дождь, ${temp}°C`;
+                        } else if ([71, 73, 75, 77, 85, 86].includes(code)) {
+                            weatherType = "snow";
+                            statusStr = `❄️ Идёт снег, ${temp}°C`;
+                        } else if ([95, 96, 99].includes(code)) {
+                            weatherType = "thunder";
+                            statusStr = `⚡ Гроза, ${temp}°C`;
+                        }
+
+                        // Запоминаем данные в оперативку браузера (при F5 они сотрутся!)
+                        window.myLocalGeoWeatherData = {
+                            weather_type: weatherType,
+                            status_string: statusStr,
+                            tz_offset: tzOffset
+                        };
+
+                        alert(`🌍 Погода и время успешно определены локально!\n• Статус: ${statusStr}\n\nДанные не сохраняются в СУБД и исчезнут после F5.`);
+                    }
+                } catch (err) {
+                    console.error("Ошибка получения погоды:", err);
+                    alert("Не удалось связаться с погодным сервером Open-Meteo.");
+                }
+            }, (err) => {
+                alert("Доступ к геолокации отклонён в настройках браузера.");
+            });
+        }
+
+        // Рендеринг панели погоды и запуск Canvas-анимации в шторке профиля
+        function initProfileWeatherAndClock(profile) {
+            const geoBar = document.getElementById('drawerGeoWeatherBar');
+            const timeText = document.getElementById('drawerLocalTimeText');
+            const weatherText = document.getElementById('drawerWeatherText');
+            
+            if (profileClockInterval) clearInterval(profileClockInterval);
+            stopWeatherAvatarAnimation();
+
+            const currentLoggedInUser = window.geraCurrentUser || window.myUsername || '';
+            
+            // Проверяем: если мы смотрим чужой профиль ИЛИ если мы ещё не нажимали кнопку гео
+            if (profile.username !== currentLoggedInUser || !window.myLocalGeoWeatherData) {
+                if (geoBar) geoBar.style.display = 'none';
+                return;
+            }
+
+            // Вытаскиваем локальные сессионные данные из памяти
+            const geo = window.myLocalGeoWeatherData;
+            if (geoBar) geoBar.style.display = 'flex';
+
+            // 1. ЗАПУСКАЕМ ЖИВЫЕ ЧАСЫ ПОД ЛОКАЛЬНЫЙ ЧАСОВОЙ ПОЯС
+            function updateProfileClock() {
+                const utc = new Date().getTime() + (new Date().getTimezoneOffset() * 60000);
+                const localDate = new Date(utc + (geo.tz_offset * 1000));
+                if (timeText) {
+                    timeText.innerHTML = `<i class="fa-regular fa-clock"></i> Местное время: ${localDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                }
+            }
+            updateProfileClock();
+            profileClockInterval = setInterval(updateProfileClock, 10000);
+
+            // 2. ВЫВОДИМ ПОГОДУ И ЗАПУСКАЕМ CANVAS
+            if (weatherText) weatherText.innerText = geo.status_string;
+            startWeatherAvatarAnimation(geo.weather_type);
+        }
+
+        // ДВИЖОК CANVAS-ЧАСТИЦ ДЛЯ АВАТАРА
+        function startWeatherAvatarAnimation(type) {
+            const canvas = document.getElementById('weatherAvatarCanvas');
+            if (!canvas) return;
+            weatherCanvasCtx = canvas.getContext('2d');
+            weatherParticlesArray = [];
+
+            if (type === 'rain' || type === 'thunder') {
+                for (let i = 0; i < 25; i++) {
+                    weatherParticlesArray.push({ x: Math.random() * 110, y: Math.random() * 110, length: Math.random() * 8 + 4, speed: Math.random() * 4 + 4 });
+                }
+            } else if (type === 'snow') {
+                for (let i = 0; i < 20; i++) {
+                    weatherParticlesArray.push({ x: Math.random() * 110, y: Math.random() * 110, radius: Math.random() * 2 + 1, speed: Math.random() * 1 + 0.5 });
+                }
+            }
+
+            let sunAngle = 0;
+
+            function animate() {
+                if (!weatherCanvasCtx) return;
+                weatherCanvasCtx.clearRect(0, 0, 110, 110);
+
+                // ☀️ АНИМАЦИЯ СОЛНЦА (Вращающиеся лучи по краям аватара)
+                if (type === 'clear') {
+                    sunAngle += 0.01;
+                    weatherCanvasCtx.save();
+                    weatherCanvasCtx.translate(90, 20); 
+                    weatherCanvasCtx.rotate(sunAngle);
+                    weatherCanvasCtx.fillStyle = "rgba(252, 176, 69, 0.4)";
+                    for (let i = 0; i < 8; i++) {
+                        weatherCanvasCtx.rotate(Math.PI / 4);
+                        weatherCanvasCtx.fillRect(-2, -12, 4, 24);
+                    }
+                    weatherCanvasCtx.beginPath();
+                    weatherCanvasCtx.arc(0, 0, 7, 0, Math.PI * 2);
+                    weatherCanvasCtx.fillStyle = "#fcb045";
+                    weatherCanvasCtx.fill();
+                    weatherCanvasCtx.restore();
+                }
+                // ☁️ АНИМАЦИЯ ТУМАНА / ПАСМУРНОСТИ
+                else if (type === 'cloudy') {
+                    let cloudPulse = Math.sin(Date.now() / 1000) * 0.05 + 0.15;
+                    weatherCanvasCtx.fillStyle = `rgba(255, 255, 255, ${cloudPulse})`;
+                    weatherCanvasCtx.fillRect(0, 0, 110, 30);
+                }
+                // 🌧️ АНИМАЦИЯ ДОЖДЯ (Падающие под наклоном штрихи)
+                else if (type === 'rain' || type === 'thunder') {
+                    weatherCanvasCtx.strokeStyle = "rgba(174, 219, 255, 0.6)";
+                    weatherCanvasCtx.lineWidth = 1.5;
+                    weatherParticlesArray.forEach(p => {
+                        weatherCanvasCtx.beginPath();
+                        weatherCanvasCtx.moveTo(p.x, p.y);
+                        weatherCanvasCtx.lineTo(p.x - 1, p.y + p.length);
+                        weatherCanvasCtx.stroke();
+                        p.y += p.speed;
+                        if (p.y > 110) { p.y = -10; p.x = Math.random() * 110; }
+                    });
+
+                    if (type === 'thunder' && Math.random() > 0.98) {
+                        weatherCanvasCtx.fillStyle = "rgba(255, 255, 255, 0.3)";
+                        weatherCanvasCtx.fillRect(0, 0, 110, 110);
+                    }
+                }
+                // ❄️ АНИМАЦИЯ СНЕГА
+                else if (type === 'snow') {
+                    weatherCanvasCtx.fillStyle = "rgba(255, 255, 255, 0.7)";
+                    weatherParticlesArray.forEach(p => {
+                        weatherCanvasCtx.beginPath();
+                        weatherCanvasCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                        weatherCanvasCtx.fill();
+                        p.y += p.speed;
+                        p.x += Math.sin(p.y / 10) * 0.2; 
+                        if (p.y > 110) { p.y = -5; p.x = Math.random() * 110; }
+                    });
+                }
+
+                weatherCanvasAnimationId = requestAnimationFrame(animate);
+            }
+            animate();
+        }
+
+        function stopWeatherAvatarAnimation() {
+            if (weatherCanvasAnimationId) cancelAnimationFrame(weatherCanvasAnimationId);
+            if (weatherCanvasCtx) weatherCanvasCtx.clearRect(0, 0, 110, 110);
+        }
+        
     </script>
     <!-- 📱 КОНТЕКСТНОЕ МЕНЮ GERAGRAM (ОБНОВЛЕНО: С ПАНЕЛЬЮ РЕАКЦИЙ TELEGRAM-STYLE) -->
     <div class="context-menu" id="msgContextMenu" style="position: fixed; background: var(--menu-bg); border: 1px solid var(--tg-border); border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,0.6); padding: 8px; z-index: 5000; display: none; min-width: 230px; animation: menuFadeIn 0.15s ease;">
