@@ -2733,69 +2733,87 @@
         let weatherParticlesArray = [];
         let profileClockInterval = null;
 
-        // Кнопка в настройках: Запрашивает гео и погоду строго локально
+        // Кнопка в настройках: Запрашивает гео и отправляет в СУБД для синхронизации между юзерами
         function requestUserGeolocationSystem() {
             if (!navigator.geolocation) {
                 alert("Бро, твой браузер не поддерживает геолокацию.");
                 return;
             }
 
-            console.log("🌍 [ГЕО] Локальный запрос координат у GPS-датчика...");
+            // 🛡️ ЛОКАЛЬНЫЙ АНТИ-СПАМ ПРЕДОХРАНИТЕЛЯ КНОПКИ
+            const nowTime = Math.floor(Date.now() / 1000);
+            if (window.lastLocalGeoClickTime && (nowTime - window.lastLocalGeoClickTime < 60)) {
+                const secondsLeft = 60 - (nowTime - window.lastLocalGeoClickTime);
+                alert(`⏳ Погоди, бро! Повторный пинг погоды будет доступен через ${secondsLeft} сек.`);
+                return;
+            }
+            window.lastLocalGeoClickTime = nowTime;
+
+            console.log("🌍 [ГЕО] Запрос координат у GPS-датчика устройства...");
             
             navigator.geolocation.getCurrentPosition(async (position) => {
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
-                // Получаем смещение часового пояса в секундах от UTC
+                // Находим смещение часового пояса в секундах от UTC
                 const tzOffset = -new Date().getTimezoneOffset() * 60;
 
                 try {
-                    // Стучимся напрямую в бесплатное API Open-Meteo без лимитов и ключей
-                    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=weather_code,temperature_2m`;
-                    const response = await fetch(weatherUrl);
-                    const weatherData = await response.json();
+                    // 1. ОТПРАВЛЯЕМ ДАННЫЕ В БАЗУ MONGODB ATLAS (Чтобы другие юзеры могли загрузить эти данные)
+                    const res = await fetch('/api/geragram/users/update-geo', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ latitude: lat, longitude: lon, timezone_offset: tzOffset })
+                    });
                     
-                    if (weatherData && weatherData.current_weather) {
-                        const temp = Math.round(weatherData.current_weather.temperature);
-                        const code = weatherData.current_weather.weathercode;
+                    if (res.ok) {
+                        // 2. ЗАПРАШИВАЕМ ДАННЫЕ С ОТКРЫТОГО API OPEN-METEO
+                        const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code`;
+                        const response = await fetch(weatherUrl);
+                        const weatherData = await response.json();
                         
-                        // Классифицируем погодные коды Open-Meteo
-                        let weatherType = "clear"; 
-                        let statusStr = `☀️ Ясно, ${temp}°C`;
+                        // 🎯 СЧИТЫВАЕМ ДАННЫЕ ИЗ СТРУКТУРЫ CURRENT ПО НАШЕЙ НОВОЙ ССЫЛКЕ
+                        if (weatherData && weatherData.current) {
+                            const temp = Math.round(weatherData.current.temperature_2m);
+                            const code = weatherData.current.weather_code;
+                            
+                            // Классифицируем погодные коды Open-Meteo под типы анимаций
+                            let weatherType = "clear"; 
+                            let statusStr = `☀️ Ясно, ${temp}°C`;
 
-                        if ([1, 2, 3, 45, 48].includes(code)) {
-                            weatherType = "cloudy";
-                            statusStr = `☁️ Облачно, ${temp}°C`;
-                        } else if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) {
-                            weatherType = "rain";
-                            statusStr = `🌧️ Идёт дождь, ${temp}°C`;
-                        } else if ([71, 73, 75, 77, 85, 86].includes(code)) {
-                            weatherType = "snow";
-                            statusStr = `❄️ Идёт снег, ${temp}°C`;
-                        } else if ([95, 96, 99].includes(code)) {
-                            weatherType = "thunder";
-                            statusStr = `⚡ Гроза, ${temp}°C`;
+                            if ([1, 2, 3, 45, 48].includes(code)) {
+                                weatherType = "cloudy";
+                                statusStr = `☁️ Облачно, ${temp}°C`;
+                            } else if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) {
+                                weatherType = "rain";
+                                statusStr = `🌧️ Идёт дождь, ${temp}°C`;
+                            } else if ([71, 73, 75, 77, 85, 86].includes(code)) {
+                                weatherType = "snow";
+                                statusStr = `❄️ Идёт снег, ${temp}°C`;
+                            } else if ([95, 96, 99].includes(code)) {
+                                weatherType = "thunder";
+                                statusStr = `⚡ Гроза, ${temp}°C`;
+                            }
+
+                            // Дублируем в локальную оперативку для мгновенного собственного рендера
+                            window.myLocalGeoWeatherData = {
+                                weather_type: weatherType,
+                                status_string: statusStr,
+                                tz_offset: tzOffset
+                            };
+
+                            alert(`🌍 Геолокация успешно активирована!\n• Статус: ${statusStr}\n\nТеперь любой пользователь чата увидит погоду в твоём профиле. При F5 данные сотрутся автоматически.`);
                         }
-
-                        // Запоминаем данные в оперативку браузера (при F5 они сотрутся!)
-                        window.myLocalGeoWeatherData = {
-                            weather_type: weatherType,
-                            status_string: statusStr,
-                            tz_offset: tzOffset
-                        };
-
-                        alert(`🌍 Погода и время успешно определены локально!\n• Статус: ${statusStr}\n\nДанные не сохраняются в СУБД и исчезнут после F5.`);
                     }
                 } catch (err) {
-                    console.error("Ошибка получения погоды:", err);
-                    alert("Не удалось связаться с погодным сервером Open-Meteo.");
+                    console.error("Ошибка синхронизации погоды:", err);
+                    alert("Не удалось связаться с серверами.");
                 }
             }, (err) => {
-                alert("Доступ к геолокации отклонён в настройках браузера.");
+                alert("Доступ к геолокации отклонён в настройках конфиденциальности браузера.");
             });
         }
 
-        // Рендеринг панели погоды и запуск Canvas-анимации в шторке профиля
-        function initProfileWeatherAndClock(profile) {
+        async function initProfileWeatherAndClock(profile) {
             const geoBar = document.getElementById('drawerGeoWeatherBar');
             const timeText = document.getElementById('drawerLocalTimeText');
             const weatherText = document.getElementById('drawerWeatherText');
@@ -2803,22 +2821,18 @@
             if (profileClockInterval) clearInterval(profileClockInterval);
             stopWeatherAvatarAnimation();
 
-            const currentLoggedInUser = window.geraCurrentUser || window.myUsername || '';
-            
-            // Проверяем: если мы смотрим чужой профиль ИЛИ если мы ещё не нажимали кнопку гео
-            if (profile.username !== currentLoggedInUser || !window.myLocalGeoWeatherData) {
+            // 🎯 ОБНОВЛЕНО: Если в профиле юзера НЕТ координат из базы — скрываем плашку
+            if (!profile.geo_lat || !profile.geo_lon) {
                 if (geoBar) geoBar.style.display = 'none';
                 return;
             }
 
-            // Вытаскиваем локальные сессионные данные из памяти
-            const geo = window.myLocalGeoWeatherData;
             if (geoBar) geoBar.style.display = 'flex';
 
-            // 1. ЗАПУСКАЕМ ЖИВЫЕ ЧАСЫ ПОД ЛОКАЛЬНЫЙ ЧАСОВОЙ ПОЯС
+            // 1. ЗАПУСКАЕМ ЖИВЫЕ ЧАСЫ ПОД ЧАСОВОЙ ПОЯС ЭТОГО ПОЛЬЗОВАТЕЛЯ
             function updateProfileClock() {
                 const utc = new Date().getTime() + (new Date().getTimezoneOffset() * 60000);
-                const localDate = new Date(utc + (geo.tz_offset * 1000));
+                const localDate = new Date(utc + (profile.geo_tz_offset * 1000));
                 if (timeText) {
                     timeText.innerHTML = `<i class="fa-regular fa-clock"></i> Местное время: ${localDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
                 }
@@ -2826,9 +2840,28 @@
             updateProfileClock();
             profileClockInterval = setInterval(updateProfileClock, 10000);
 
-            // 2. ВЫВОДИМ ПОГОДУ И ЗАПУСКАЕМ CANVAS
-            if (weatherText) weatherText.innerText = geo.status_string;
-            startWeatherAvatarAnimation(geo.weather_type);
+            // 2. СТУЧИМСЯ В OPEN-METEO ЗА ТЕКУЩЕЙ ПОГОДОЙ ДЛЯ ЕГО КООРДИНАТ
+            try {
+                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${profile.geo_lat}&longitude=${profile.geo_lon}&current=temperature_2m,weather_code`;
+                const response = await fetch(weatherUrl);
+                const weatherData = await response.json();
+                
+                if (weatherData && weatherData.current) {
+                    const temp = Math.round(weatherData.current.temperature_2m);
+                    const code = weatherData.current.weather_code;
+                    
+                    let weatherType = "clear"; let statusStr = `☀️ Ясно, ${temp}°C`;
+                    if ([1,2,3,45,48].includes(code)) { weatherType = "cloudy"; statusStr = `☁️ Облачно, ${temp}°C`; }
+                    else if ([51,53,55,61,63,65,80,81,82].includes(code)) { weatherType = "rain"; statusStr = `🌧️ Дождь, ${temp}°C`; }
+                    else if ([71,73,75,85,86].includes(code)) { weatherType = "snow"; statusStr = `❄️ Снег, ${temp}°C`; }
+                    else if ([95,96,99].includes(code)) { weatherType = "thunder"; statusStr = `⚡ Гроза, ${temp}°C`; }
+
+                    if (weatherText) weatherText.innerText = statusStr;
+                    startWeatherAvatarAnimation(weatherType);
+                }
+            } catch (err) {
+                if (weatherText) weatherText.innerText = "Погода недоступна";
+            }
         }
 
         // ДВИЖОК CANVAS-ЧАСТИЦ ДЛЯ АВАТАРА
