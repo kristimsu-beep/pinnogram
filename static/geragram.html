@@ -1428,21 +1428,22 @@
                             </div>
                         `;
 
-                        // 🎯 СУПЕР-ФИКС: ДИНАМИЧЕСКИЙ ЦВЕТНОЙ РОБЛОКС-БЕЙДЖ ДЛЯ ТЕГОВ
+                        // 🎯 СУПЕР-ФИКС: ЗАЩИТА ОТ NULL И КРИВЫХ ТИПОВ ДАННЫХ
                         let officialBadge = '';
                         
-                        // Если у пользователя включена синяя галочка верификации
                         if (contact.is_official) {
                             officialBadge += ` <i class="fa-solid fa-circle-check" style="color: #2481cc; font-size:14px; margin-left: 4px;"></i>`;
                         }
                         
-                        // Если аднинистрация выдала пользователю кастомный тег через бота
-                        if (contact.custom_tag) {
-                            // Подставляем переданное админом название цвета (или HEX) прямо в стили CSS
+                        // Безопасно проверяем, чтобы тег прилетел строкой и не был пустым
+                        const hasCustomTag = contact.custom_tag && String(contact.custom_tag).trim() !== '' && String(contact.custom_tag) !== 'null';
+                        const activeTagText = hasCustomTag ? contact.custom_tag : (contact.is_official ? 'OFFICIAL' : null);
+                        
+                        if (activeTagText) {
                             const badgeColor = contact.custom_tag_color || '#2481cc';
                             officialBadge += `
                                 <span style="background: rgba(0, 0, 0, 0.2); color: ${badgeColor}; font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 700; margin-left: 6px; border: 1px solid ${badgeColor}; text-transform: uppercase; letter-spacing: 0.5px;">
-                                    ${contact.custom_tag}
+                                    ${activeTagText}
                                 </span>
                             `;
                         }
