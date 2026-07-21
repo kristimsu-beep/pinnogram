@@ -979,9 +979,8 @@
             checkActiveSession();
         });
 
-        // Проверка наличия активного токена авторизации в куках
+        // Проверка наличия активного токена авторизации в куках (ОБНОВЛЕНО: ЛОВУШКА БАНА 403)
         async function checkActiveSession() {
-            // Пытаемся сразу поставить ник из локальной памяти браузера, чтобы не висело слово "загрузка"
             const savedUser = localStorage.getItem('geraUsername');
             if (savedUser) {
                 myUsername = savedUser;
@@ -991,12 +990,21 @@
             }
             
             try {
-                // Стучимся на защищенный эндпоинт контактов
                 const res = await fetch('/api/geragram/contacts/list');
+                
+                // 🚨 1. ЛОВУШКА БАНА ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+                if (res.status === 403) {
+                    const errorData = await res.json();
+                    // Если бэкенд подтвердил, что структура ответа — это бан
+                    if (errorData.detail && errorData.detail.is_banned) {
+                        console.error("🚨 [БЛОКИРОВКА] Доступ к СУБД заблокирован бэкендом!");
+                        showRobloxBanWindow(errorData.detail.reason, errorData.detail.unban_timestamp);
+                        return; // Полностью останавливаем запуск, мессенджер не откроется!
+                    }
+                }
+
                 if (res.ok) {
                     const data = await res.json();
-                    
-                    // Если сервер вернул имя юзера — жестко фиксируем его
                     const serverUser = data.current_user || data.username;
                     if (serverUser) {
                         myUsername = serverUser;
@@ -1006,11 +1014,8 @@
                         const myDisplay = document.getElementById('myUsernameDisplay');
                         if (myDisplay) myDisplay.innerText = `@${serverUser}`;
                     }
-                    
-                    // Сессия валидна, запускаем мессенджер
                     initMessengerApp();
                 } else {
-                    // Если сервер выплюнул ошибку авторизации, но мы тестируем — все равно пускаем по локальному имени
                     if (savedUser) initMessengerApp(); else showAuthBox();
                 }
             } catch (err) {
@@ -1566,7 +1571,7 @@
             }
         }
 
-        // 🔄 1. СТАРЫЙ НАДЕЖНЫЙ ЗАПРОС ИСТОРИИ (БЕЗ КЭША)
+        // 🔄 СТАРЫЙ НАДЕЖНЫЙ ЗАПРОС ИСТОРИИ (С ИНТЕГРАЦИЕЙ ROBLOX-БАНА)
         async function loadChatHistory() {
             if (!activeChatUser) return;
             
@@ -1574,8 +1579,21 @@
             if (!container) return;
 
             try {
-                // Прямой запрос к серверу без лишних проверок в памяти
                 const res = await fetch(`/api/geragram/messages/history/${activeChatUser}`);
+                
+                // 🚨 ПЕРЕХВАТ БАНА НАМЕРТВО: Если сервер вернул 403 ошибку блокировки СУБД
+                if (res.status === 403) {
+                    const banData = await res.json();
+                    if (banData.detail && banData.detail.is_banned) {
+                        console.error("🚨 [БЛОКИРОВКА] Нарушитель обнаружен сетевым сканером истории!");
+                        showRobloxBanWindow(banData.detail.reason, banData.detail.unban_timestamp);
+                        
+                        // Сбрасываем таймер, чтобы забаненный юзер перестал спамить бэкенд запросами истории
+                        if (chatInterval) clearInterval(chatInterval);
+                        return;
+                    }
+                }
+
                 if (!res.ok) return;
                 const serverMessages = await res.json();
                 
@@ -2245,6 +2263,71 @@
 
         // Запускаем фоновый мониторинг скрытых комнат каждые 3 секунды
         setInterval(checkGlobalNotifications, 3000);
+        // =====================================================================
+        // 🔨 ROBLOX-STYLE КАРАТЕЛЬНЫЙ ДВИЖОК БОТА (ЧАСТЬ 1)
+        // =====================================================================
+        let banTimerInterval = null;
+
+        // Показ окна бана с запуском живого тикающего таймера обратного отсчёта
+        function showRobloxBanWindow(reason, unbanTimestamp) {
+            console.log("🔨 [КАРАТЕЛЬ] Активация блокировки аккаунта. Причина:", reason);
+            
+            const reasonDiv = document.getElementById('banReasonText');
+            if (reasonDiv) reasonDiv.innerText = reason;
+            
+            const overlay = document.getElementById('robloxBanOverlay');
+            if (overlay) overlay.style.display = 'flex';
+            
+            // Намертво размываем основной интерфейс мессенджера позади окна
+            const app = document.getElementById('messengerApp') || document.getElementById('messengerMainLayout');
+            if (app) app.style.filter = "blur(15px) grayscale(0.5)";
+
+            if (banTimerInterval) clearInterval(banTimerInterval);
+
+            // Обновление таймера каждую секунду
+            function updateBanTimer() {
+                const now = Math.floor(Date.now() / 1000);
+                const timeLeft = Math.floor(unbanTimestamp - now);
+
+                // Если время бана истекло — амнистируем без перезагрузок!
+                if (timeLeft <= 0) {
+                    clearInterval(banTimerInterval);
+                    hideRobloxBanWindow();
+                    location.reload(); // Перезапускаем страницу для чистой сессии
+                    return;
+                }
+
+                // Высчитываем дни, часы, минуты и секунды
+                const days = Math.floor(timeLeft / 86400);
+                const hours = Math.floor((timeLeft % 86400) / 3600);
+                const minutes = Math.floor((timeLeft % 3600) / 60);
+                const seconds = timeLeft % 60;
+
+                // Форматируем в красивую тикающую строку
+                let displayStr = "";
+                if (days > 0) displayStr += `${days}д `;
+                displayStr += `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                
+                const countdownDiv = document.getElementById('banTimerCountdown');
+                if (countdownDiv) countdownDiv.innerText = displayStr;
+            }
+
+            updateBanTimer();
+            banTimerInterval = setInterval(updateBanTimer, 1000);
+        }
+
+        // Моментальное снятие блокировки на лету (при команде /unban)
+        function hideRobloxBanWindow() {
+            if (banTimerInterval) clearInterval(banTimerInterval);
+            
+            const overlay = document.getElementById('robloxBanOverlay');
+            if (overlay) overlay.style.display = 'none';
+            
+            const app = document.getElementById('messengerApp') || document.getElementById('messengerMainLayout');
+            if (app) app.style.filter = "none";
+            
+            console.log("🔓 [КАРАТЕЛЬ] Блокировка успешно снята, мессенджер возвращен в сеть!");
+        }
     </script>
     <!-- 📱 КОНТЕКСТНОЕ МЕНЮ GERAGRAM -->
     <div class="context-menu" id="msgContextMenu">
@@ -2267,6 +2350,28 @@
 
             <button class="auth-btn" style="background: var(--tg-button); width: 100%; margin-bottom: 8px; font-weight: 600;" onclick="submitCreateGroupChat()">Создать группу</button>
             <button class="auth-btn" style="background: none; color: var(--tg-text-muted); width: 100%;" onclick="closeCreateGroupModal()">Отмена</button>
+        </div>
+    </div>
+    <!-- 🚨 ROBLOX-STYLE ОКНО БАНА (ИЗНАЧАЛЬНО СКРЫТО) -->
+    <div id="robloxBanOverlay" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); z-index: 999999; display: none; flex-direction: column; align-items: center; justify-content: center; color: white; font-family: 'Inter', sans-serif;">
+        <div style="background: #1c2834; border: 2px solid #ff3333; border-radius: 16px; padding: 40px; width: 90%; max-width: 500px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.7); animation: toastSlideDown 0.4s ease;">
+            <div style="width: 80px; height: 80px; background: #ff3333; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; box-shadow: 0 0 20px #ff3333;">
+                <i class="fa-solid fa-gavel" style="font-size: 38px; color: white;"></i>
+            </div>
+            <h2 style="font-size: 26px; font-weight: 700; margin-bottom: 10px; color: #ff5959;">Доступ ограничен</h2>
+            <p style="font-size: 15px; color: var(--tg-text-muted); margin-bottom: 20px;">Ваш аккаунт временно заблокирован администратором системы.</p>
+            
+            <div style="background: var(--tg-bg); padding: 16px; border-radius: 10px; text-align: left; margin-bottom: 20px; border: 1px solid var(--tg-border);">
+                <label style="font-size: 11px; color: #ff5959; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 4px;">Причина блокировки:</label>
+                <p id="banReasonText" style="font-size: 15px; font-weight: 500;">Нарушение правил общения.</p>
+            </div>
+
+            <div style="background: var(--tg-bg); padding: 16px; border-radius: 10px; text-align: left; margin-bottom: 25px; border: 1px solid var(--tg-border);">
+                <label style="font-size: 11px; color: #4cd964; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 4px;">До автоматического разбана осталось:</label>
+                <p id="banTimerCountdown" style="font-size: 22px; font-weight: 700; color: #4cd964; font-family: monospace;">00:00:00</p>
+            </div>
+
+            <p style="font-size: 12px; color: var(--tg-text-muted);">Если вы считаете, что бан выдан по ошибке, обратитесь к создателю сервера.</p>
         </div>
     </div>
 </body>
