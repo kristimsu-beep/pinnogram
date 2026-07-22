@@ -4655,12 +4655,11 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
     return {"status": "success", "msg": "Сообщение успешно доставлено"}
 
 # =====================================================================
-# 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК: ИНТЕГРАЦИЯ LLM (БРОНИРОВАННЫЙ ВАРИАНТ GPT-4O)
+# 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК: ИНТЕГРАЦИЯ LLM (БРОНИРОВАННЫЙ ВАРИАНТ HUGGING FACE)
 # =====================================================================
 @app.post("/api/geragram/ai/llm-process")
 async def geragram_ai_llm_process(data: dict, request: Request):
     import httpx
-    import urllib.parse
     
     me = await get_current_gera_user(request)
     user_prompt = data.get("prompt", "").strip()
@@ -4668,38 +4667,53 @@ async def geragram_ai_llm_process(data: dict, request: Request):
     if not user_prompt or user_prompt.lower() == "undefined":
         return {"status": "error", "ai_text": "Бро, я не расслышал твой голос. Попробуй свайпнуть и сказать еще раз!"}
         
-    system_instruction = "Ответь кратко по сути на русском языке, не более 2 предложений, без вступлений."
-    full_prompt_string = f"{system_instruction}\n\nЗапрос: {user_prompt}"
+    system_instruction = (
+        "Ты — встроенный ИИ-ассистент мессенджера GeraGram. "
+        "Твоя задача — обрабатывать команды пользователя. "
+        "Отвечай максимально кратко, заманчиво, емко и интересно (не более 2 предложений). "
+        "Говори строго на русском языке. Отвечай сразу по сути, без лишних вступлений."
+    )
+    
+    # 🎯 ИСПОЛЬЗУЕМ БЕСПЛАТНЫЙ БЕЗЛИМИТНЫЙ ШЛЮЗ HUGGING FACE (МОДЕЛЬ QWEN 2.5)
+    # Этот шлюз полностью игнорирует лимиты очередей IP-адресов Render!
+    ai_url = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-72B-Instruct/v1/chat/completions"
+    
+    payload = {
+        "messages": [
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": user_prompt}
+        ],
+        "max_tokens": 100,
+        "stream": False
+    }
     
     try:
-        # Безопасно кодируем русский текст для URL-строки
-        encoded_prompt = urllib.parse.quote(full_prompt_string)
-        
-        # 🎯 СОБИРАЕМ АНОНИМНЫЙ ТЕКСТОВЫЙ АДРЕС С БЕСПЛАТНОЙ МОДЕЛЬЮ MISTRAL
-        ai_url = f"https://text.pollinations.ai/{encoded_prompt}?model=mistral"
-        
-        # Активируем trust_env=False, чтобы запрос летел напрямую в обход прокси Render
-        async with httpx.AsyncClient(timeout=15.0, trust_env=False) as client:
-            response = await client.get(ai_url)
-            print(f"📡 [ИИ-МОНИТОР] Попытка 1 (Mistral). Код ответа: {response.status_code}")
+        async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
+            # Шлем прямой POST-запрос на сервера Hugging Face
+            response = await client.post(ai_url, json=payload)
+            print(f"📡 [ИИ-МОНИТОР] Запрос на Hugging Face выполнен. Код: {response.status_code}")
             
             if response.status_code == 200:
-                ai_response = response.text.strip()
-                if ai_response:
-                    return {"status": "success", "ai_text": ai_response}
-                    
-            # 🎯 РЕЗЕРВНЫЙ АВТОНОМНЫЙ ШАГ: Если mistral выдал сбой, стучимся к модели searchgpt
-            backup_url = f"https://text.pollinations.ai/{encoded_prompt}?model=searchgpt"
-            print("🔄 [ИИ-РЕЗЕРВ] Переключение на бесплатную резервную модель searchgpt...")
+                ai_data = response.json()
+                if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
+                    ai_response = ai_data["choices"][0]["message"]["content"].strip()
+                    if ai_response:
+                        return {"status": "success", "ai_text": ai_response}
+                        
+            # Резервный шаг на случай сбоя Qwen — переключаемся на Llama 3
+            print("🔄 [ИИ-РЕЗЕРВ] Переключение на резервную модель Llama-3...")
+            backup_url = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct/v1/chat/completions"
+            backup_res = await client.post(backup_url, json=payload)
             
-            backup_response = await client.get(backup_url)
-            print(f"📡 [ИИ-МОНИТОР] Попытка 2 (SearchGPT). Код ответа: {backup_response.status_code}")
-            
-            if backup_response.status_code == 200 and backup_response.text.strip():
-                return {"status": "success", "ai_text": backup_response.text.strip()}
-                
-            print(f"⚠️ [ИИ-ФИНАЛЬНЫЙ-СБОЙ] Оба сервера выдали ошибку. Код: {backup_response.status_code}. Текст: {backup_response.text}")
-            return {"status": "error", "ai_text": "Нейросеть взяла минутную паузу. Пожалуйста, повторите свайп через секунду!"}
+            if backup_res.status_code == 200:
+                ai_data = backup_res.json()
+                if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
+                    ai_response = ai_data["choices"][0]["message"]["content"].strip()
+                    if ai_response:
+                        return {"status": "success", "ai_text": ai_response}
+                        
+            print(f"⚠️ [ИИ-ФИНАЛЬНЫЙ-СБОЙ] Оба шлюза Hugging Face выдали ошибку: {backup_res.status_code}")
+            return {"status": "error", "ai_text": "Нейросеть взяла паузу. Пожалуйста, повторите свайп через секунду!"}
             
     except Exception as e:
         print(f"⚠️ [ИИ-КРИТИЧЕСКИЙ СБОЙ] Исключение Python в LLM: {e}")
