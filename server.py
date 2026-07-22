@@ -4655,6 +4655,44 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
     return {"status": "success", "msg": "Сообщение успешно доставлено"}
 
 # =====================================================================
+# 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК: ИНТЕГРАЦИЯ LLM (LLAMA 3 БЕЗ КЛЮЧЕЙ)
+# =====================================================================
+@app.post("/api/geragram/ai/llm-process")
+async def geragram_ai_llm_process(data: dict, request: Request):
+    from duckduckgo_search import DDGS
+    
+    me = await get_current_gera_user(request)
+    user_prompt = data.get("prompt", "").strip()
+    
+    if not user_prompt:
+        raise HTTPException(status_code=400, detail="Промпт для ИИ пуст")
+        
+    # Формируем жесткую системную инструкцию (Системный промпт), чтобы ЛЛМ понимала свою роль
+    system_instruction = (
+        "Ты — встроенный ИИ-ассистент премиального мессенджера GeraGram. "
+        "Твоя задача — обрабатывать команды пользователя (перефразировать, отвечать на вопросы, помогать писать друзьям). "
+        "Отвечай максимально кратко, заманчиво, емко и интересно (не более 2-3 предложений), "
+        "так как твой ответ будет озвучен голосом и отправлен в чат! Говори строго на русском языке."
+    )
+    
+    full_query = f"{system_instruction}\n\nЗапрос пользователя: {user_prompt}"
+    
+    try:
+        # Бесплатно и без токенов вызываем модель Llama 3 через DuckDuckGo AI
+        with DDGS() as ddgs:
+            ai_response = ""
+            results = ddgs.ai_chat(model="llama-3-70b", keywords=full_query)
+            if results:
+                ai_response = results.strip()
+            else:
+                ai_response = "Извините, не удалось сгенерировать ИИ-ответ."
+                
+        return {"status": "success", "ai_text": ai_response}
+    except Exception as e:
+        print(f"⚠️ [ИИ-СБОЙ] Ошибка генерации текста в LLM: {e}")
+        return {"status": "error", "ai_text": "Ошибка связи с ИИ-модулем. Попробуйте еще раз!"}
+        
+# =====================================================================
 # 🎮 DISCORD & ROBLOX СТИЛЬ: ДВИЖОК СВЯЗЕЙ И ИГРОВЫХ СТАТУСОВ
 # =====================================================================
 
