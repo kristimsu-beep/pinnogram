@@ -721,6 +721,38 @@
                 transform: translateY(0) scale(1); 
             }
         }
+        /* 🌌 ЭФФЕКТ СЕВЕРНОГО СИЯНИЯ GOOGLE-STYLE ДЛЯ СТРОКИ ВВОДА */
+        .aurora-glow-active {
+            position: relative;
+            z-index: 10;
+            box-shadow: 0 0 20px rgba(79, 172, 254, 0.4), 0 0 40px rgba(168, 0, 224, 0.3) !important;
+            transition: all 0.4s ease !important;
+        }
+
+        .aurora-glow-active::before {
+            content: '';
+            position: absolute;
+            top: -2px; left: -2px; right: -2px; bottom: -2px;
+            background: linear-gradient(90deg, #4facfe, #00f2fe, #a800e0, #4facfe);
+            background-size: 300% 300%;
+            border-radius: inherit;
+            z-index: -1;
+            animation: auroraGlowMovement 3s linear infinite;
+        }
+
+        @keyframes auroraGlowMovement {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* Плавный сдвиг футера влево при свайпе */
+        .chat-footer {
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
+        }
+        .footer-swiped-left {
+            transform: translateX(-40px);
+        }
     </style>
 </head>
 <body>
@@ -1124,6 +1156,10 @@
             if (typeof runAutomaticRobloxPresenceScanner === 'function') {
                 setInterval(runAutomaticRobloxPresenceScanner, 20000);
                 runAutomaticRobloxPresenceScanner(); // Мгновенный первый запуск при старте сессии
+            }
+            // 🎯 АКТИВИРУЕМ ДВИЖОК СВАЙПА И СЕВЕРНОГО СИЯНИЯ GOOGLE-STYLE ДЛЯ СТРОКИ ВВОДА
+            if (typeof setupFooterSwipeAndVoiceEngine === 'function') {
+                setupFooterSwipeAndVoiceEngine();
             }
         }
         
@@ -3131,7 +3167,108 @@
                 console.warn("ИИ-радар ожидает ответа бэкенда...", err);
             }
         }
-        
+        // =====================================================================
+        // 🌌 ИИ-ДВИЖОК СВАЙПА И УМНОГО ДИКТАФОНА С СЕВЕРНЫМ СИЯНИЕМ
+        // =====================================================================
+        let footerStartX = 0;
+        let isAuroraDictationActive = false;
+        let speechRecognitionEngine = null;
+
+        // Активируем чуткие датчики свайпа на футере чата
+        function setupFooterSwipeAndVoiceEngine() {
+            const footer = document.querySelector('.chat-footer');
+            if (!footer) return;
+
+            // 1. ОБРАБОТКА СВАЙПА ДЛЯ СМАРТФОНОВ (Touch)
+            footer.addEventListener('touchstart', (e) => {
+                footerStartX = e.touches[0].clientX;
+            }, { passive: true });
+
+            footer.addEventListener('touchend', (e) => {
+                const endX = e.changedTouches[0].clientX;
+                const swipeDistance = footerStartX - endX; // Расстояние свайпа влево
+
+                // Если свайпнули влево больше чем на 60 пикселей — запускаем ИИ-режим!
+                if (swipeDistance > 60 && !isAuroraDictationActive) {
+                    activateGoogleAuroraVoiceDictation();
+                }
+            });
+
+            // 2. ОБРАБОТКА МЫШКИ ДЛЯ ПК (Клик колесиком или правый свайп для тестов)
+            footer.addEventListener('mousedown', (e) => {
+                footerStartX = e.clientX;
+            });
+            footer.addEventListener('mouseup', (e) => {
+                const swipeDistance = footerStartX - e.clientX;
+                if (swipeDistance > 60 && !isAuroraDictationActive) {
+                    activateGoogleAuroraVoiceDictation();
+                }
+            });
+        }
+
+        // АКТИВАЦИЯ РЕЖИМА СЕВЕРНОГО СИЯНИЯ И ЗАПУСК СЛУХА
+        function activateGoogleAuroraVoiceDictation() {
+            const footer = document.querySelector('.chat-footer');
+            const input = document.getElementById('messageInputField');
+            if (!footer || !input) return;
+
+            // Включаем встроенный речевой движок браузера
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                alert("Бро, твой браузер или устройство не поддерживают распознавание речи SpeechRecognition.");
+                return;
+            }
+
+            isAuroraDictationActive = true;
+            
+            // Включаем сочный визуал: северное сияние и сдвиг влево
+            footer.classList.add('aurora-glow-active', 'footer-swiped-left');
+            input.placeholder = "🌌 Слушаю вашу речь... Говорите!";
+            input.value = ""; // Чистим поле
+
+            speechRecognitionEngine = new SpeechRecognition();
+            speechRecognitionEngine.lang = 'ru-RU'; // Ставим чистый русский язык
+            speechRecognitionEngine.interimResults = true; // На лету выводим слова в поле ввода
+            speechRecognitionEngine.continuous = false; // Важно: continuous=false заставит движок САМОМУ выключиться при паузе тишины!
+
+            // На лету пишем слова в поле ввода, чтобы юзер видел, что ИИ его понимает
+            speechRecognitionEngine.onresult = function(event) {
+                const resultText = event.results[0][0].transcript;
+                input.value = resultText;
+            };
+
+            // 🎯 МАГИЯ ТИШИНЫ: Как только наступила тишина, SpeechRecognition сам завершает работу
+            speechRecognitionEngine.onend = async function() {
+                const finalSpeechText = input.value.trim();
+                
+                // Выключаем сияние и возвращаем футер на место
+                footer.classList.remove('aurora-glow-active', 'footer-swiped-left');
+                input.placeholder = "Напишите сообщение...";
+
+                // Если юзер реально что-то наговорил — имитируем нажатие самолётика и шлём в чат!
+                if (finalSpeechText !== "" && activeChatUser) {
+                    console.log("🌌 [ИИ-СИЯНИЕ] Пауза тишины поймана! Автоматическая отправка текста:", finalSpeechText);
+                    
+                    // Вызываем твою стандартную рабочую функцию отправки сообщений мессенджера
+                    if (typeof sendMessage === 'function') {
+                        await sendMessage(); 
+                    }
+                }
+                
+                isAuroraDictationActive = false;
+            };
+
+            speechRecognitionEngine.onerror = function(err) {
+                console.error("Ошибка ИИ-диктовки:", err);
+                footer.classList.remove('aurora-glow-active', 'footer-swiped-left');
+                input.placeholder = "Напишите сообщение...";
+                isAuroraDictationActive = false;
+            };
+
+            // Запускаем микрофон в работу! (Браузер попросит доступ к микрофону — разрешай)
+            speechRecognitionEngine.start();
+        }
+
     </script>
     <!-- 📱 КОНТЕКСТНОЕ МЕНЮ GERAGRAM (ОБНОВЛЕНО: С ПАНЕЛЬЮ РЕАКЦИЙ TELEGRAM-STYLE) -->
     <div class="context-menu" id="msgContextMenu" style="position: fixed; background: var(--menu-bg); border: 1px solid var(--tg-border); border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,0.6); padding: 8px; z-index: 5000; display: none; min-width: 230px; animation: menuFadeIn 0.15s ease;">
