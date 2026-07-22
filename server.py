@@ -4695,36 +4695,63 @@ async def geragram_save_connections(data: dict, request: Request):
 
 
 @app.post("/api/geragram/profile/roblox-status")
-async def geragram_update_roblox_status(data: dict, request: Request):
-    """Автоматический фикс игрового статуса Rich Presence из сети Roblox"""
+async def geragram_auto_roblox_presence_backend_engine(request: Request):
+    """Бронированный бэкенд ИИ-радар: опрашивает Roblox в обход браузерного CORS"""
+    import httpx
+    
     me = await get_current_gera_user(request)
-    is_playing = data.get("is_playing", False)
+    my_username = me["username"].lower().strip()
     
-    # Считываем текущий засейвленный статус, чтобы не сбрасывать время старта игры
-    user_doc = await geragram_users.find_one({"username": me["username"].lower().strip()})
+    # 1. Вытаскиваем ID Roblox из профиля текущего пользователя
+    user_doc = await geragram_users.find_one({"username": my_username})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        
+    roblox_id = user_doc.get("connections", {}).get("roblox")
+    if not roblox_id or str(roblox_id).strip() == "":
+        return {"status": "skipped", "msg": "Roblox ID не привязан в настройках"}
+        
+    # 2. Стучимся на прокси Roblox напрямую из Python (Тут CORS не властен!)
+    is_playing = False
+    try:
+        roblox_api_url = "https://presence.roproxy.com/v1/presence/users"
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                roblox_api_url,
+                json={"userIds": [int(roblox_id)]}
+            )
+            if response.status_code == 200:
+                roblox_data = response.json()
+                if roblox_data and roblox_data.get("userPresences"):
+                    presences = roblox_data["userPresences"]
+                    if len(presences) > 0:
+                        # 2 означает "In Game" (Пользователь в игре)
+                        is_playing = (presences[0].get("userPresenceType") == 2)
+    except Exception as e:
+        print(f"⚠️ [БЭКЕНД РАДАР] Ошибка пинга сессии Roblox: {e}")
+        # Если прокси лежит — берём старый статус, чтобы не сбрасывать таймер
+        is_playing = user_doc.get("roblox_presence", {}).get("is_playing_roblox", False)
+
+    # 3. Фиксируем время старта игры в MongoDB Atlas
     current_presence = user_doc.get("roblox_presence", {})
-    
-    # Если юзер только что зашёл в игру — фиксируем новую метку времени старта сессии
     if is_playing and not current_presence.get("is_playing_roblox"):
         game_start_ts = datetime.utcnow().timestamp()
     elif is_playing:
-        # Если он уже играл при прошлом микро-запросе — сохраняем старое время старта, чтобы таймер не сбрасывался!
         game_start_ts = current_presence.get("roblox_game_start", datetime.utcnow().timestamp())
     else:
-        # Если вышел из игры — тушим таймер
         game_start_ts = None
-    
+        
     status_data = {
         "is_playing_roblox": is_playing,
         "roblox_game_start": game_start_ts
     }
     
     await geragram_users.update_one(
-        {"username": me["username"].lower().strip()},
+        {"username": my_username},
         {"$set": {"roblox_presence": status_data}}
     )
-    return {"status": "success", "is_playing": is_playing}
-       
+    return {"status": "success", "is_playing_roblox": is_playing, "roblox_id": roblox_id}
+      
 # =====================================================================
 # 📈 АДМИН-ФИШКА 1: ФИКС ПРОЧТЕНИЯ СООБЩЕНИЙ (ДВЕ ГАЛОЧКИ)
 # =====================================================================
