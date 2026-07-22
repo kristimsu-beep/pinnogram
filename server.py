@@ -4655,7 +4655,7 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
     return {"status": "success", "msg": "Сообщение успешно доставлено"}
 
 # =====================================================================
-# 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК: ИНТЕГРАЦИЯ LLM (БРОНИРОВАННЫЙ АВТОНОМНЫЙ ВАРИАНТ)
+# 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК: ИНТЕГРАЦИЯ LLM (БРОНИРОВАННЫЙ ВАРИАНТ GPT-4O)
 # =====================================================================
 @app.post("/api/geragram/ai/llm-process")
 async def geragram_ai_llm_process(data: dict, request: Request):
@@ -4675,35 +4675,39 @@ async def geragram_ai_llm_process(data: dict, request: Request):
         "Говори строго на русском языке. Отвечай сразу по сути, без лишних вступлений."
     )
     
-    # Используем бесплатное и сверхстабильное API Pollinations AI (модель OpenAI GPT-4o)
-    # Оно идеально работает на серверах Render в обход любых капч и блокировок IP!
-    ai_url = "https://text.pollinations.ai/"
+    # 🎯 ФИКС: Используем правильный OpenAI-совместимый эндпоинт Pollinations Text API!
+    ai_url = "https://text.pollinations.ai/v1/chat/completions"
     
     payload = {
         "messages": [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": user_prompt}
         ],
-        "model": "openai", # Продвинутая фри-модель уровня GPT-4o
-        "jsonMode": False
+        "model": "openai", # Продвинутая модель уровня GPT-4o-mini
+        "stream": False
     }
     
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
+            # Шлем структурированный POST-запрос на правильный шлюз
             response = await client.post(ai_url, json=payload)
             
             if response.status_code == 200:
-                ai_response = response.text.strip()
-                if ai_response:
-                    return {"status": "success", "ai_text": ai_response}
-                    
-            print(f"⚠️ [ИИ-СБОЙ] Сервер ИИ вернул статус-код: {response.status_code}")
-            return {"status": "error", "ai_text": "Сервер нейросети временно перегружен. Пожалуйста, повтори свайп!"}
+                ai_data = response.json()
+                # Вытаскиваем чистый сгенерированный текст из стандартного ответа OpenAI-схемы
+                if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
+                    ai_response = ai_data["choices"][0]["message"]["content"].strip()
+                    if ai_response:
+                        return {"status": "success", "ai_text": ai_response}
+                        
+            print(f"⚠️ [ИИ-СБОЙ] Код ответа сервера: {response.status_code}. Текст: {response.text}")
+            return {"status": "error", "ai_text": "Нейросеть взяла паузу. Пожалуйста, повторите свайп через секунду!"}
             
     except Exception as e:
         print(f"⚠️ [ИИ-КРИТИЧЕСКИЙ СБОЙ] Ошибка генерации текста в LLM: {e}")
         return {"status": "error", "ai_text": "Ошибка связи с ИИ-модулем. Попробуйте еще раз через секунду!"}
-        
+
+     
 # =====================================================================
 # 🎮 DISCORD & ROBLOX СТИЛЬ: ДВИЖОК СВЯЗЕЙ И ИГРОВЫХ СТАТУСОВ
 # =====================================================================
