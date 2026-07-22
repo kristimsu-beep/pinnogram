@@ -4675,7 +4675,7 @@ async def geragram_ai_llm_process(data: dict, request: Request):
         "Говори строго на русском языке. Отвечай сразу по сути, без лишних вступлений."
     )
     
-    # 🎯 ФИКС: Используем правильный OpenAI-совместимый эндпоинт Pollinations Text API!
+    # 🎯 ИСПОЛЬЗУЕМ СТАНДАРТНЫЙ OPENAI-СОВМЕСТИМЫЙ ШЛЮЗ API
     ai_url = "https://text.pollinations.ai/v1/chat/completions"
     
     payload = {
@@ -4683,7 +4683,7 @@ async def geragram_ai_llm_process(data: dict, request: Request):
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": user_prompt}
         ],
-        "model": "openai", # Продвинутая модель уровня GPT-4o-mini
+        "model": "openai", # 🔥 ФИКС: Указываем строгую валидную модель gpt-4o-mini
         "stream": False
     }
     
@@ -4706,7 +4706,6 @@ async def geragram_ai_llm_process(data: dict, request: Request):
     except Exception as e:
         print(f"⚠️ [ИИ-КРИТИЧЕСКИЙ СБОЙ] Ошибка генерации текста в LLM: {e}")
         return {"status": "error", "ai_text": "Ошибка связи с ИИ-модулем. Попробуйте еще раз через секунду!"}
-
      
 # =====================================================================
 # 🎮 DISCORD & ROBLOX СТИЛЬ: ДВИЖОК СВЯЗЕЙ И ИГРОВЫХ СТАТУСОВ
