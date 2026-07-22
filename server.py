@@ -4673,32 +4673,35 @@ async def geragram_ai_llm_process(data: dict, request: Request):
     
     try:
         # Безопасно кодируем русский текст для URL-строки
-        encoded_prompt = urllib.parse.quote(full_prompt_string)
-        
-        # 🎯 ФИКС: Используем GET-ссылку с БЕСПЛАТНОЙ моделью mistral (она обходит любые 402 лимиты на Render!)
-        ai_url = f"https://text.pollinations.ai/{encoded_prompt}?model=mistral"
+        encoded_prompt = urllib.parse.quote(f"{system_instruction}\nЗапрос: {user_prompt}")
         
         async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(ai_url)
-            print(f"📡 [ИИ-МОНИТОР] Попытка 1 (Mistral). Код ответа: {response.status_code}")
+            # 🎯 ШАГ 1: Пробуем модель QWEN (Она изолирована от лежащего дефолтного шлюза)
+            qwen_url = f"https://text.pollinations.ai/{encoded_prompt}?model=qwen"
+            print("🔄 [ИИ-МОНИТОР] Попытка 1: Стучимся на изолированную модель Qwen...")
             
-            if response.status_code == 200:
-                ai_response = response.text.strip()
-                if ai_response:
-                    return {"status": "success", "ai_text": ai_response}
-                    
-            # 🎯 РЕЗЕРВНЫЙ АВТОНОМНЫЙ ШАГ: Если mistral выдал сбой, стучимся к модели searchgpt
-            backup_url = f"https://text.pollinations.ai/{encoded_prompt}?model=searchgpt"
-            print("🔄 [ИИ-РЕЗЕРВ] Переключение на бесплатную резервную модель searchgpt...")
+            try:
+                res_qwen = await client.get(qwen_url)
+                if res_qwen.status_code == 200 and res_qwen.text.strip():
+                    return {"status": "success", "ai_text": res_qwen.text.strip()}
+                print(f"⚠️ [ИИ-СБОЙ] Qwen выдал код: {res_qwen.status_code}")
+            except Exception as e:
+                print(f"⚠️ [ИИ-ОБРЫВ] Ошибка Qwen: {e}")
+
+            # 🎯 ШАГ 2: Пробуем модель LLAMA (Вторая изолированная линия серверов)
+            llama_url = f"https://text.pollinations.ai/{encoded_prompt}?model=llama"
+            print("🔄 [ИИ-РЕЗЕРВ] Попытка 2: Переключение на резервную модель Llama...")
             
-            backup_response = await client.get(backup_url)
-            print(f"📡 [ИИ-МОНИТОР] Попытка 2 (SearchGPT). Код ответа: {backup_response.status_code}")
-            
-            if backup_response.status_code == 200 and backup_response.text.strip():
-                return {"status": "success", "ai_text": backup_response.text.strip()}
-                
-            print(f"⚠️ [ИИ-ФИНАЛЬНЫЙ-СБОЙ] Оба сервера выдали ошибку. Код: {backup_response.status_code}. Текст: {backup_response.text}")
-            return {"status": "error", "ai_text": "Нейросеть взяла минутную паузу. Пожалуйста, повторите свайп через секунду!"}
+            try:
+                res_llama = await client.get(llama_url)
+                if res_llama.status_code == 200 and res_llama.text.strip():
+                    return {"status": "success", "ai_text": res_llama.text.strip()}
+                print(f"⚠️ [ИИ-СБОЙ] Llama выдала код: {res_llama.status_code}")
+            except Exception as e:
+                print(f"⚠️ [ИИ-ОБРЫВ] Ошибка Llama: {e}")
+
+            # 🎯 ШАГ 3: Если вообще всё лежит — отдаем текстовую заглушку-засейв, чтобы фронт не упал
+            return {"status": "error", "ai_text": "Нейросеть GeraGram обновляет свои базы данных. Попробуйте свайпнуть через минуту!"}
             
     except Exception as e:
         print(f"⚠️ [ИИ-КРИТИЧЕСКИЙ СБОЙ] Исключение Python в LLM: {e}")
