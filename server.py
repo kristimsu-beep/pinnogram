@@ -4668,54 +4668,40 @@ async def geragram_ai_llm_process(data: dict, request: Request):
     if not user_prompt or user_prompt.lower() == "undefined":
         return {"status": "error", "ai_text": "Бро, я не расслышал твой голос. Попробуй свайпнуть и сказать еще раз!"}
         
-    # Формируем компактные и понятные инструкции для нейросети
     system_instruction = "Ответь кратко по сути на русском языке, не более 2 предложений, без вступлений."
     full_prompt_string = f"{system_instruction}\n\nЗапрос: {user_prompt}"
     
     try:
-        # Безопасно кодируем промпт для URL
-        encoded_prompt = urllib.parse.quote(f"{system_instruction}\nЗапрос: {user_prompt}")
+        # Безопасно кодируем русский текст для URL-строки
+        encoded_prompt = urllib.parse.quote(full_prompt_string)
         
-        # 🎯 ИСПОЛЬЗУЕМ КЛАССИЧЕСКИЙ OPENAI-СОВМЕСТИМЫЙ ШЛЮЗ API, НО С БЕСПЛАТНОЙ МОДЕЛЬЮ MISTRAL
-        ai_url = "https://text.pollinations.ai/v1/chat/completions"
-        
-        payload = {
-            "messages": [
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": user_prompt}
-            ],
-            "model": "mistral", # 🔥 MISTRAL АБСОЛЮТНО БЕСПЛАТНАЯ И ИМЕЕТ ДРУГИЕ ЛИМИТЫ НА RENDER
-            "stream": False
-        }
+        # 🎯 ФИКС: Используем GET-ссылку с БЕСПЛАТНОЙ моделью mistral (она обходит любые 402 лимиты на Render!)
+        ai_url = f"https://text.pollinations.ai/{encoded_prompt}?model=mistral"
         
         async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(ai_url, json=payload)
-            print(f"📡 [ИИ-МОНИТОР] Попытка через POST Mistral. Код ответа: {response.status_code}")
+            response = await client.get(ai_url)
+            print(f"📡 [ИИ-МОНИТОР] Попытка 1 (Mistral). Код ответа: {response.status_code}")
             
             if response.status_code == 200:
-                ai_data = response.json()
-                if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
-                    ai_response = ai_data["choices"][0]["message"]["content"].strip()
-                    if ai_response:
-                        return {"status": "success", "ai_text": ai_response}
-                        
-            # 🎯 РЕЗЕРВНЫЙ ВАРИАНТ 2: Если Mistral тоже выдал ошибку — используем фри-модель UNITY
-            print("🔄 [ИИ-РЕЗЕРВ] Переключение на резервную модель unity...")
-            payload["model"] = "unity"
-            backup_res = await client.post(ai_url, json=payload)
+                ai_response = response.text.strip()
+                if ai_response:
+                    return {"status": "success", "ai_text": ai_response}
+                    
+            # 🎯 РЕЗЕРВНЫЙ АВТОНОМНЫЙ ШАГ: Если mistral выдал сбой, стучимся к модели searchgpt
+            backup_url = f"https://text.pollinations.ai/{encoded_prompt}?model=searchgpt"
+            print("🔄 [ИИ-РЕЗЕРВ] Переключение на бесплатную резервную модель searchgpt...")
             
-            if backup_res.status_code == 200:
-                ai_data = backup_res.json()
-                if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
-                    ai_response = ai_data["choices"][0]["message"]["content"].strip()
-                    if ai_response:
-                        return {"status": "success", "ai_text": ai_response}
-                        
-            print(f"⚠️ [ИИ-ФИНАЛЬНЫЙ-СБОЙ] Резервный код: {backup_res.status_code}. Текст: {backup_res.text}")
-            return {"status": "error", "ai_text": "Нейросеть думает. Пожалуйста, повторите свайп через секунду!"}
+            backup_response = await client.get(backup_url)
+            print(f"📡 [ИИ-МОНИТОР] Попытка 2 (SearchGPT). Код ответа: {backup_response.status_code}")
+            
+            if backup_response.status_code == 200 and backup_response.text.strip():
+                return {"status": "success", "ai_text": backup_response.text.strip()}
+                
+            print(f"⚠️ [ИИ-ФИНАЛЬНЫЙ-СБОЙ] Оба сервера выдали ошибку. Код: {backup_response.status_code}. Текст: {backup_response.text}")
+            return {"status": "error", "ai_text": "Нейросеть взяла минутную паузу. Пожалуйста, повторите свайп через секунду!"}
             
     except Exception as e:
-        print(f"⚠️ [ИИ-КРИТИЧЕСКИЙ СБОЙ] Исключение Python: {e}")
+        print(f"⚠️ [ИИ-КРИТИЧЕСКИЙ СБОЙ] Исключение Python в LLM: {e}")
         return {"status": "error", "ai_text": "Ошибка связи с ИИ-модулем. Попробуйте еще раз через секунду!"}
      
 # =====================================================================
