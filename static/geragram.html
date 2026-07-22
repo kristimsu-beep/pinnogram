@@ -785,6 +785,55 @@
         .footer-swiped-left {
             transform: translateX(-40px);
         }
+        /* 🧠 КВАНТОВОЕ СИЯНИЕ ИИ-МОДУЛЯ ПО СВАЙПУ ВПРАВО */
+        .ai-aurora-glow-active {
+            position: relative;
+            z-index: 10;
+            box-shadow: 0 0 15px rgba(255, 0, 128, 0.4);
+            transition: all 0.4s ease !important;
+        }
+
+        .ai-aurora-glow-active::before {
+            content: '';
+            position: absolute;
+            top: -2px; left: -2px; right: -2px; bottom: -2px;
+            background: linear-gradient(90deg, #ff007f, #ffaa00, #9900ff, #ff007f);
+            background-size: 300% 300%;
+            border-radius: inherit;
+            z-index: -1;
+            animation: auroraGlowMovement 3s linear infinite;
+        }
+
+        /* Объемная бесформенная ИИ туманность снаружи */
+        .ai-nebula-backdrop-glow {
+            position: absolute;
+            top: -25px; left: -25px; right: -25px; bottom: -25px;
+            background: radial-gradient(circle, rgba(255, 0, 128, 0.6) 0%, rgba(245, 175, 25, 0.4) 45%, rgba(0,0,0,0) 70%);
+            filter: blur(20px);
+            -webkit-filter: blur(20px);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 1;
+            transform: scale(0.8) rotate(0deg);
+            transition: opacity 0.5s ease, transform 0.5s ease;
+            mix-blend-mode: screen;
+        }
+
+        .ai-nebula-active {
+            opacity: 1 !important;
+            transform: scale(1.1) rotate(-360deg) !important; /* Вращение в обратную сторону! */
+            animation: aiNebulaRotationLoop 7s linear infinite !important;
+        }
+
+        @keyframes aiNebulaRotationLoop {
+            from { transform: scale(1.1) rotate(0deg); }
+            to { transform: scale(1.1) rotate(-360deg); }
+        }
+
+        /* Сдвиг футера вправо */
+        .footer-swiped-right {
+            transform: translateX(40px);
+        }
     </style>
 </head>
 <body>
@@ -3200,42 +3249,160 @@
             }
         }
         // =====================================================================
-        // 🌌 ИИ-ДВИЖОК СВАЙПА И УМНОГО ДИКТАФОНА С СЕВЕРНЫМ СИЯНИЕМ
+        // 🧠 МЕЖГАЛАКТИЧЕСКИЙ ИИ-МОДУЛЬ: ДВУХСТОРОННИЙ СВАЙП, LLM И ОЗВУЧКА ГОЛОСОМ
         // =====================================================================
         let footerStartX = 0;
         let isAuroraDictationActive = false;
         let speechRecognitionEngine = null;
 
-        // Активируем чуткие датчики свайпа на футере чата
+        // 🎯 УМНЫЙ ДАТЧИК СВАЙПОВ В ОБЕ СТОРОНЫ
         function setupFooterSwipeAndVoiceEngine() {
             const footer = document.querySelector('.chat-footer');
             if (!footer) return;
 
-            // 1. ОБРАБОТКА СВАЙПА ДЛЯ СМАРТФОНОВ (Touch)
+            // Считывание тач-событий (Смартфоны)
             footer.addEventListener('touchstart', (e) => {
-                footerStartX = e.touches[0].clientX;
+                footerStartX = e.touches.clientX;
             }, { passive: true });
 
             footer.addEventListener('touchend', (e) => {
-                const endX = e.changedTouches[0].clientX;
-                const swipeDistance = footerStartX - endX; // Расстояние свайпа влево
+                const endX = e.changedTouches.clientX;
+                const swipeDistance = footerStartX - endX;
 
-                // Если свайпнули влево больше чем на 60 пикселей — запускаем ИИ-режим!
-                if (swipeDistance > 60 && !isAuroraDictationActive) {
+                if (isAuroraDictationActive) return;
+
+                // ⏪ Свайп влево (больше 60px) -> Обычная диктовка текста
+                if (swipeDistance > 60) {
                     activateGoogleAuroraVoiceDictation();
+                }
+                // ⏩ Свайп вправо (меньше -60px) -> Запрос в Нейросеть (LLM)
+                else if (swipeDistance < -60) {
+                    activateQuantumAIVoiceEngine();
                 }
             });
 
-            // 2. ОБРАБОТКА МЫШКИ ДЛЯ ПК (Клик колесиком или правый свайп для тестов)
-            footer.addEventListener('mousedown', (e) => {
-                footerStartX = e.clientX;
-            });
+            // Считывание мыши (ПК для тестов)
+            footer.addEventListener('mousedown', (e) => { footerStartX = e.clientX; });
             footer.addEventListener('mouseup', (e) => {
+                if (isAuroraDictationActive) return;
                 const swipeDistance = footerStartX - e.clientX;
-                if (swipeDistance > 60 && !isAuroraDictationActive) {
+                if (swipeDistance > 60) {
                     activateGoogleAuroraVoiceDictation();
+                } else if (swipeDistance < -60) {
+                    activateQuantumAIVoiceEngine();
                 }
             });
+        }
+
+        // 🧠 ЗАПУСК КВАНТОВОГО ИИ-РЕЖИМА (СВАЙП ВПРАВО)
+        function activateQuantumAIVoiceEngine() {
+            const footer = document.querySelector('.chat-footer');
+            const input = document.getElementById('messageInputField');
+            if (!footer || !input) return;
+
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                alert("Бро, твой браузер не поддерживает распознавание речи.");
+                return;
+            }
+
+            isAuroraDictationActive = true;
+            
+            // Динамически создаем подложку Quantum Nebula за футером
+            let aiNebula = document.getElementById('googleAIVoiceBackdropElement');
+            if (!aiNebula) {
+                aiNebula = document.createElement('div');
+                aiNebula.id = 'googleAIVoiceBackdropElement';
+                aiNebula.className = 'ai-nebula-backdrop-glow';
+                footer.parentNode.insertBefore(aiNebula, footer);
+            }
+
+            // Включаем визуал ИИ: Малиновый огонь и сдвиг вправо
+            footer.classList.add('ai-aurora-glow-active', 'footer-swiped-right');
+            aiNebula.classList.add('ai-nebula-active');
+            
+            input.placeholder = "🧠 ИИ Слушает ваш запрос... Говорите!";
+            input.value = ""; 
+
+            speechRecognitionEngine = new SpeechRecognition();
+            speechRecognitionEngine.lang = 'ru-RU'; 
+            speechRecognitionEngine.interimResults = true; 
+            speechRecognitionEngine.continuous = false; 
+
+            speechRecognitionEngine.onresult = function(event) {
+                const resultIndex = event.resultIndex;
+                input.value = event.results[resultIndex].transcript;
+            };
+
+            // 🎯 ОБРАБОТКА ТИШИНЫ: Стучимся в LLM Lama 3 на бэкенде
+            speechRecognitionEngine.onend = async function() {
+                const promptText = input.value.trim();
+                
+                // Гасим анимацию ИИ-неона
+                footer.classList.remove('ai-aurora-glow-active', 'footer-swiped-right');
+                if (aiNebula) aiNebula.classList.remove('ai-nebula-active');
+                input.placeholder = "Обработка нейросетью...";
+
+                if (promptText !== "" && activeChatUser) {
+                    console.log("🧠 [ИИ] Запрос отправлен в LLM:", promptText);
+                    
+                    try {
+                        const res = await fetch('/api/geragram/ai/llm-process', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ prompt: promptText })
+                        });
+                        
+                        if (res.ok) {
+                            const aiData = await res.json();
+                            const generatedText = aiData.ai_text;
+                            
+                            // Подставляем сгенерированный ИИ текст в инпут, чтобы функция sendMessage отправила именно его
+                            input.value = generatedText;
+
+                            // 🔊 ГУГЛ TEXT-TO-SPEECH ОЗВУЧКА ОТВЕТА ЖИВЫМ ГОЛОСОМ
+                            if ('speechSynthesis' in window) {
+                                // Прерываем старую озвучку, если она была
+                                window.speechSynthesis.cancel();
+                                
+                                const speechUtterance = new SpeechSynthesisUtterance(generatedText);
+                                speechUtterance.lang = 'ru-RU'; // Говорим строго на русском
+                                speechUtterance.rate = 1.0;     // Нормальная скорость речи
+                                speechUtterance.pitch = 1.0;    // Естественная тональность голоса
+
+                                // 🎯 ОТПРАВКА В ЧАТ СТРОГО ПОСЛЕ ОГЛАСКИ (Как ты просил!)
+                                speechUtterance.onend = async function() {
+                                    console.log("🔊 [ИИ] Огласка голосом завершена! Публикация в чат...");
+                                    if (typeof sendMessage === 'function') {
+                                        await sendMessage();
+                                    }
+                                };
+
+                                window.speechSynthesis.speak(speechUtterance);
+                            } else {
+                                // Если в браузере нет озвучки — шлём в чат сразу
+                                if (typeof sendMessage === 'function') await sendMessage();
+                            }
+                        }
+                    } catch (err) {
+                        console.error("Сбой ИИ-подключения:", err);
+                        input.placeholder = "Напишите сообщение...";
+                    }
+                } else {
+                    input.placeholder = "Напишите сообщение...";
+                }
+                isAuroraDictationActive = false;
+            };
+
+            speechRecognitionEngine.onerror = function(err) {
+                console.error("Ошибка ИИ-диктовки:", err);
+                footer.classList.remove('ai-aurora-glow-active', 'footer-swiped-right');
+                if (aiNebula) aiNebula.classList.remove('ai-nebula-active');
+                input.placeholder = "Напишите сообщение...";
+                isAuroraDictationActive = false;
+            };
+
+            speechRecognitionEngine.start();
         }
 
         // АКТИВАЦИЯ РЕЖИМА СЕВЕРНОГО СИЯНИЯ И ЗАПУСК СЛУХА (ИСПРАВЛЕНО: УБРАН UNDEFINED)
