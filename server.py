@@ -4696,13 +4696,27 @@ async def geragram_save_connections(data: dict, request: Request):
 
 @app.post("/api/geragram/profile/roblox-status")
 async def geragram_update_roblox_status(data: dict, request: Request):
-    """Имитация игрового статуса Rich Presence: В игре / Вышел из игры"""
+    """Автоматический фикс игрового статуса Rich Presence из сети Roblox"""
     me = await get_current_gera_user(request)
     is_playing = data.get("is_playing", False)
     
+    # Считываем текущий засейвленный статус, чтобы не сбрасывать время старта игры
+    user_doc = await geragram_users.find_one({"username": me["username"].lower().strip()})
+    current_presence = user_doc.get("roblox_presence", {})
+    
+    # Если юзер только что зашёл в игру — фиксируем новую метку времени старта сессии
+    if is_playing and not current_presence.get("is_playing_roblox"):
+        game_start_ts = datetime.utcnow().timestamp()
+    elif is_playing:
+        # Если он уже играл при прошлом микро-запросе — сохраняем старое время старта, чтобы таймер не сбрасывался!
+        game_start_ts = current_presence.get("roblox_game_start", datetime.utcnow().timestamp())
+    else:
+        # Если вышел из игры — тушим таймер
+        game_start_ts = None
+    
     status_data = {
         "is_playing_roblox": is_playing,
-        "roblox_game_start": datetime.utcnow().timestamp() if is_playing else None
+        "roblox_game_start": game_start_ts
     }
     
     await geragram_users.update_one(
@@ -4710,7 +4724,7 @@ async def geragram_update_roblox_status(data: dict, request: Request):
         {"$set": {"roblox_presence": status_data}}
     )
     return {"status": "success", "is_playing": is_playing}
-    
+       
 # =====================================================================
 # 📈 АДМИН-ФИШКА 1: ФИКС ПРОЧТЕНИЯ СООБЩЕНИЙ (ДВЕ ГАЛОЧКИ)
 # =====================================================================
