@@ -3238,7 +3238,7 @@
             });
         }
 
-        // АКТИВАЦИЯ РЕЖИМА СЕВЕРНОГО СИЯНИЯ И ЗАПУСК СЛУХА (ОБНОВЛЕНО: ДВОЙНОЙ ЭФФЕКТ GLOW + NEBULA)
+        // АКТИВАЦИЯ РЕЖИМА СЕВЕРНОГО СИЯНИЯ И ЗАПУСК СЛУХА (ИСПРАВЛЕНО: УБРАН UNDEFINED)
         function activateGoogleAuroraVoiceDictation() {
             const footer = document.querySelector('.chat-footer');
             const input = document.getElementById('messageInputField');
@@ -3273,8 +3273,10 @@
             speechRecognitionEngine.interimResults = true; 
             speechRecognitionEngine.continuous = false; 
 
+            // 🎯 ФИКС МАССИВА: Извлекаем слова через правильные индексы Web Speech API
             speechRecognitionEngine.onresult = function(event) {
-                const resultText = event.results.transcript;
+                const resultIndex = event.resultIndex;
+                const resultText = event.results[resultIndex][0].transcript;
                 input.value = resultText;
             };
 
