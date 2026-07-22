@@ -3337,9 +3337,13 @@
             speechRecognitionEngine.interimResults = true; 
             speechRecognitionEngine.continuous = false; 
 
+            // 🎯 БРОНИРОВАННЫЙ ПАРСЕР РЕЧИ: Заходим на нулевой индекс альтернативы фразы, убирая undefined!
             speechRecognitionEngine.onresult = function(event) {
                 const resultIndex = event.resultIndex;
-                input.value = event.results[resultIndex].transcript;
+                if (event.results && event.results[resultIndex] && event.results[resultIndex][0]) {
+                    const resultText = event.results[resultIndex][0].transcript;
+                    input.value = resultText;
+                }
             };
 
             // 🎯 ОБРАБОТКА ТИШИНЫ: Браузер сам напрямую шлёт запрос в ИИ-облако (В обход CORS и DNS Render!)
