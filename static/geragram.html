@@ -3111,48 +3111,24 @@
                 if (typeof loadContactsAndRequests === 'function') loadContactsAndRequests();
             } catch(e) { alert("Не удалось сохранить настройки профиля."); }
         }
-        // 🎮 АВТОМАТИЧЕСКИЙ ИИ-РАДАР СЕТИ ROBLOX (БЕЗ ТУМБЛЕРОВ И КНОПОК)
+        // 🎮 ОБНОВЛЕННЫЙ БРОНИРОВАННЫЙ ПИНГЕР БЭКЕНД-РАДАРА (ОБХОДИТ CORS)
         async function runAutomaticRobloxPresenceScanner() {
             const currentLoggedInUser = window.geraCurrentUser || window.myUsername || '';
             if (!currentLoggedInUser) return;
 
             try {
-                // 1. Узнаем, привязал ли вообще пользователь свой Roblox ID
-                const resProfile = await fetch(`/api/geragram/users/profile/${currentLoggedInUser}`);
-                if (!resProfile.ok) return;
-                const profile = await resProfile.json();
-                
-                const robloxId = profile.connections ? profile.connections.roblox : null;
-                if (!robloxId || robloxId.trim() === '') return; // Если ID нет — радар спит
-
-                // 2. Стучимся на официальный CORS-прокси Roblox API, чтобы узнать живой статус игрока
-                const robloxApiUrl = `https://presence.roproxy.com/v1/presence/users`;
-                const response = await fetch(robloxApiUrl, {
+                // Просто дёргаем наш собственный бэкенд на Render, он сделает всю грязную работу сам!
+                const res = await fetch('/api/geragram/profile/roblox-status', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userIds: [parseInt(robloxId)] })
+                    headers: { 'Content-Type': 'application/json' }
                 });
                 
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data && data.userPresences && data.userPresences.length > 0) {
-                        const userPresenceType = data.userPresences[0].userPresenceType;
-                        
-                        // По кодам Roblox API: 2 — означает "In Game" (Пользователь прямо сейчас играет!)
-                        const isCurrentlyInGame = (userPresenceType === 2);
-                        
-                        // 3. Автоматически шлём вердикт на наш бэкенд для обновления Rich Presence в MongoDB
-                        await fetch('/api/geragram/profile/roblox-status', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ is_playing: isCurrentlyInGame })
-                        });
-                        
-                        console.log(`🎮 [ИИ-РАДАР] Сканирование Roblox ID ${robloxId}: В игре = ${isCurrentlyInGame}`);
-                    }
+                if (res.ok) {
+                    const data = await res.json();
+                    console.log(`🎮 [ИИ-РАДАР] Сессионный скан выполнен. Статус игры в базе: ${data.is_playing_roblox}`);
                 }
             } catch (err) {
-                console.warn("ИИ-радар Roblox ожидает стабильное подключение к сети...", err);
+                console.warn("ИИ-радар ожидает ответа бэкенда...", err);
             }
         }
         
