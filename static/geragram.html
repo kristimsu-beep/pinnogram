@@ -3346,7 +3346,7 @@
                 }
             };
 
-            // 🎯 ОБРАБОТКА ТИШИНЫ: Браузер сам напрямую шлёт запрос в ИИ-облако (В обход CORS и DNS Render!)
+            // 🎯 ОБРАБОТКА ТИШИНЫ: Браузер сам напрямую шлёт запрос в ИИ-облако
             speechRecognitionEngine.onend = async function() {
                 const promptText = input.value.trim();
                 
@@ -3364,15 +3364,22 @@
                         const fullPrompt = `${systemInstruction}\nЗапрос: ${promptText}`;
                         const encodedPrompt = encodeURIComponent(fullPrompt);
                         
-                        // Браузер делает прямой анонимный запрос к фри-модели searchgpt
-                        const aiUrl = `https://text.pollinations.ai/${encodedPrompt}?model=searchgpt`;
-                        const aiResponse = await fetch(aiUrl);
+                        // 🎯 ОФИЦИАЛЬНАЯ РАБОЧАЯ ССЫЛКА ИЗ ДОКУМЕНТАЦИИ POLLINATIONS
+                        const aiUrl = `https://text.pollinations.ai/${encodedPrompt}?model=openai`;
+                        
+                        const aiResponse = await fetch(aiUrl, {
+                            method: 'GET',
+                            mode: 'cors', // Пробиваем браузерные политики
+                            headers: { 'Accept': 'text/plain' }
+                        });
                         
                         if (aiResponse.ok) {
+                            // Читаем как чистый текст, так как Pollinations возвращает голые строчки без JSON!
                             const generatedText = await aiResponse.text();
                             
                             // Записываем сгенерированный ИИ текст в поле ввода
                             input.value = generatedText.trim();
+                            console.log("🧠 [ИИ-ФРОНТЕНД] Ответ успешно получен:", input.value);
 
                             // 🔊 ГУГЛ TEXT-TO-SPEECH ОЗВУЧКА ОТВЕТА ЖИВЫМ ГОЛОСОМ
                             if ('speechSynthesis' in window) {
