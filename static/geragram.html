@@ -3255,40 +3255,48 @@
         let isAuroraDictationActive = false;
         let speechRecognitionEngine = null;
 
-        // 🎯 УМНЫЙ ДАТЧИК СВАЙПОВ В ОБЕ СТОРОНЫ
+        // 🎯 ИСПРАВЛЕННЫЙ ДВИЖОК СВАЙПОВ (УБИРАЕТ КОНФЛИКТЫ СТОРОН И ЗАМЕРЗАНИЕ)
         function setupFooterSwipeAndVoiceEngine() {
             const footer = document.querySelector('.chat-footer');
-            if (!footer) return;
+            const input = document.getElementById('messageInputField');
+            if (!footer || !input) return;
 
-            // Считывание тач-событий (Смартфоны)
-            footer.addEventListener('touchstart', (e) => {
-                footerStartX = e.touches.clientX;
+            // 1. БРОНИРОВАННЫЕ ДАТЧИКИ ДЛЯ ТЕЛЕФОНОВ (Touch)
+            input.addEventListener('touchstart', (e) => {
+                footerStartX = e.touches[0].clientX;
             }, { passive: true });
 
-            footer.addEventListener('touchend', (e) => {
-                const endX = e.changedTouches.clientX;
-                const swipeDistance = footerStartX - endX;
-
+            input.addEventListener('touchend', (e) => {
                 if (isAuroraDictationActive) return;
+                
+                const endX = e.changedTouches[0].clientX;
+                const deltaX = footerStartX - endX; // Считаем чистый сдвиг
 
-                // ⏪ Свайп влево (больше 60px) -> Обычная диктовка текста
-                if (swipeDistance > 60) {
+                // ⏪ Если сдвинули палец ВЛЕВО (deltaX положительный) -> Обычный текст
+                if (deltaX > 60) {
+                    console.log("🌌 [СВАЙП] Обнаружен жест влево — запуск обычной диктовки");
                     activateGoogleAuroraVoiceDictation();
                 }
-                // ⏩ Свайп вправо (меньше -60px) -> Запрос в Нейросеть (LLM)
-                else if (swipeDistance < -60) {
+                // ⏩ Если сдвинули палец ВПРАВО (deltaX отрицательный) -> Нейросеть LLM
+                else if (deltaX < -60) {
+                    console.log("🧠 [СВАЙП] Обнаружен жест вправо — запуск Квантового ИИ");
                     activateQuantumAIVoiceEngine();
                 }
             });
 
-            // Считывание мыши (ПК для тестов)
-            footer.addEventListener('mousedown', (e) => { footerStartX = e.clientX; });
-            footer.addEventListener('mouseup', (e) => {
+            // 2. БРОНИРОВАННЫЕ ДАТЧИКИ ДЛЯ ПК (Мышь)
+            input.addEventListener('mousedown', (e) => {
+                footerStartX = e.clientX;
+            });
+
+            input.addEventListener('mouseup', (e) => {
                 if (isAuroraDictationActive) return;
-                const swipeDistance = footerStartX - e.clientX;
-                if (swipeDistance > 60) {
+                
+                const deltaX = footerStartX - e.clientX;
+                
+                if (deltaX > 60) {
                     activateGoogleAuroraVoiceDictation();
-                } else if (swipeDistance < -60) {
+                } else if (deltaX < -60) {
                     activateQuantumAIVoiceEngine();
                 }
             });
