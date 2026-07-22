@@ -4676,27 +4676,43 @@ async def geragram_ai_llm_process(data: dict, request: Request):
         # Безопасно кодируем промпт для URL
         encoded_prompt = urllib.parse.quote(f"{system_instruction}\nЗапрос: {user_prompt}")
         
-        # 🎯 ШАГ 1: Стучимся на чистый анонимный текстовый Pollinations
-        ai_url = f"https://text.pollinations.ai/{encoded_prompt}"
+        # 🎯 ИСПОЛЬЗУЕМ КЛАССИЧЕСКИЙ OPENAI-СОВМЕСТИМЫЙ ШЛЮЗ API, НО С БЕСПЛАТНОЙ МОДЕЛЬЮ MISTRAL
+        ai_url = "https://text.pollinations.ai/v1/chat/completions"
+        
+        payload = {
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_prompt}
+            ],
+            "model": "mistral", # 🔥 MISTRAL АБСОЛЮТНО БЕСПЛАТНАЯ И ИМЕЕТ ДРУГИЕ ЛИМИТЫ НА RENDER
+            "stream": False
+        }
         
         async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(ai_url)
-            print(f"📡 [ИИ-МОНИТОР] Попытка 1 (Pollinations). Код: {response.status_code}")
+            response = await client.post(ai_url, json=payload)
+            print(f"📡 [ИИ-МОНИТОР] Попытка через POST Mistral. Код ответа: {response.status_code}")
             
-            if response.status_code == 200 and response.text.strip():
-                return {"status": "success", "ai_text": response.text.strip()}
-                
-            # 🎯 ШАГ 2: РЕЗЕРВНЫЙ АВТОНОМНЫЙ МАНЕВР (Если Pollinations выдал ошибку 402/400)
-            # Стучимся на зеркальный фри-шлюз Pollinations, который никогда не просит баланс!
-            backup_url = f"https://text.pollinations.ai/{encoded_prompt}?model=searchgpt"
-            print("🔄 [ИИ-РЕЗЕРВ] Переключение на бесплатную резервную модель searchgpt...")
+            if response.status_code == 200:
+                ai_data = response.json()
+                if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
+                    ai_response = ai_data["choices"][0]["message"]["content"].strip()
+                    if ai_response:
+                        return {"status": "success", "ai_text": ai_response}
+                        
+            # 🎯 РЕЗЕРВНЫЙ ВАРИАНТ 2: Если Mistral тоже выдал ошибку — используем фри-модель UNITY
+            print("🔄 [ИИ-РЕЗЕРВ] Переключение на резервную модель unity...")
+            payload["model"] = "unity"
+            backup_res = await client.post(ai_url, json=payload)
             
-            backup_response = await client.get(backup_url)
-            if backup_response.status_code == 200 and backup_response.text.strip():
-                return {"status": "success", "ai_text": backup_response.text.strip()}
-                
-            print(f"⚠️ [ИИ-ФИНАЛЬНЫЙ-СБОЙ] Оба сервера выдали ошибку. Резервный код: {backup_response.status_code}")
-            return {"status": "error", "ai_text": "Нейросеть взяла минутную паузу. Пожалуйста, повторите свайп через секунду!"}
+            if backup_res.status_code == 200:
+                ai_data = backup_res.json()
+                if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
+                    ai_response = ai_data["choices"][0]["message"]["content"].strip()
+                    if ai_response:
+                        return {"status": "success", "ai_text": ai_response}
+                        
+            print(f"⚠️ [ИИ-ФИНАЛЬНЫЙ-СБОЙ] Резервный код: {backup_res.status_code}. Текст: {backup_res.text}")
+            return {"status": "error", "ai_text": "Нейросеть думает. Пожалуйста, повторите свайп через секунду!"}
             
     except Exception as e:
         print(f"⚠️ [ИИ-КРИТИЧЕСКИЙ СБОЙ] Исключение Python: {e}")
