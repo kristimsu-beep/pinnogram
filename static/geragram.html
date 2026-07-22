@@ -1119,8 +1119,14 @@
             if (typeof setupEmojiLongPress === 'function') {
                 setupEmojiLongPress();
             }
-        }
 
+            // 🎯 ЗАПУСКАЕМ АВТОМАТИЧЕСКИЙ ИИ-РАДАР ROBLOX: Сканирует статус игры каждые 20 секунд!
+            if (typeof runAutomaticRobloxPresenceScanner === 'function') {
+                setInterval(runAutomaticRobloxPresenceScanner, 20000);
+                runAutomaticRobloxPresenceScanner(); // Мгновенный первый запуск при старте сессии
+            }
+        }
+        
         // Переключение режимов Вход / Регистрация (Анимация текста)
         function toggleAuthMode() {
             isRegisterMode = !isRegisterMode;
@@ -3029,7 +3035,7 @@
         // 🎮 DISCORD & ROBLOX STYLE: ДВИЖОК ИНТЕГРАЦИЙ И RICH PRESENCE
         // =====================================================================
         
-        // Открытие модального окна личных настроек профиля
+        // Открытие модального окна личных настроек профиля (ИСПРАВЛЕНО: БЕЗ ТУМБЛЕРОВ)
         async function openMyOwnProfileSettingsModal() {
             const currentLoggedInUser = window.geraCurrentUser || window.myUsername || '';
             if (!currentLoggedInUser) return;
@@ -3046,11 +3052,7 @@
                     document.getElementById('connWhatsappInput').value = conns.whatsapp || '';
                     document.getElementById('connRobloxInput').value = conns.roblox || '';
                     
-                    // Выставляем положение тумблера Roblox Presence
-                    const presence = profile.roblox_presence || { is_playing_roblox: false };
-                    document.getElementById('robloxPresenceToggle').checked = presence.is_playing_roblox;
-                    
-                    // Запоминаем текущий кастомный фон
+                    // Запоминаем текущий кастомный фон аватарки
                     document.getElementById('chosenPersonalAvatarBg').value = profile.custom_avatar_bg || '';
                 }
             } catch(e) { console.error("Ошибка предзагрузки профиля:", e); }
@@ -3108,6 +3110,50 @@
                 closeMyOwnProfileSettingsModal();
                 if (typeof loadContactsAndRequests === 'function') loadContactsAndRequests();
             } catch(e) { alert("Не удалось сохранить настройки профиля."); }
+        }
+        // 🎮 АВТОМАТИЧЕСКИЙ ИИ-РАДАР СЕТИ ROBLOX (БЕЗ ТУМБЛЕРОВ И КНОПОК)
+        async function runAutomaticRobloxPresenceScanner() {
+            const currentLoggedInUser = window.geraCurrentUser || window.myUsername || '';
+            if (!currentLoggedInUser) return;
+
+            try {
+                // 1. Узнаем, привязал ли вообще пользователь свой Roblox ID
+                const resProfile = await fetch(`/api/geragram/users/profile/${currentLoggedInUser}`);
+                if (!resProfile.ok) return;
+                const profile = await resProfile.json();
+                
+                const robloxId = profile.connections ? profile.connections.roblox : null;
+                if (!robloxId || robloxId.trim() === '') return; // Если ID нет — радар спит
+
+                // 2. Стучимся на официальный CORS-прокси Roblox API, чтобы узнать живой статус игрока
+                const robloxApiUrl = `https://presence.roproxy.com/v1/presence/users`;
+                const response = await fetch(robloxApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userIds: [parseInt(robloxId)] })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data && data.userPresences && data.userPresences.length > 0) {
+                        const userPresenceType = data.userPresences[0].userPresenceType;
+                        
+                        // По кодам Roblox API: 2 — означает "In Game" (Пользователь прямо сейчас играет!)
+                        const isCurrentlyInGame = (userPresenceType === 2);
+                        
+                        // 3. Автоматически шлём вердикт на наш бэкенд для обновления Rich Presence в MongoDB
+                        await fetch('/api/geragram/profile/roblox-status', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ is_playing: isCurrentlyInGame })
+                        });
+                        
+                        console.log(`🎮 [ИИ-РАДАР] Сканирование Roblox ID ${robloxId}: В игре = ${isCurrentlyInGame}`);
+                    }
+                }
+            } catch (err) {
+                console.warn("ИИ-радар Roblox ожидает стабильное подключение к сети...", err);
+            }
         }
         
     </script>
@@ -3203,21 +3249,16 @@
                 <input type="text" id="connRobloxInput" placeholder="ID профиля Roblox (пример: 12345678)" style="width: 100%; padding: 12px 12px 12px 42px; background: #101921; border: 1px solid var(--tg-border); border-radius: 10px; color: white; font-size: 14px;">
             </div>
 
-            <!-- 🎮 РАЗДЕЛ 3: Игровой статус Имитация Rich Presence -->
+            <!-- 🎮 РАЗДЕЛ 3: АВТОМАТИЧЕСКИЙ ИГРОВОЙ СТАТУС DISCORD-STYLE -->
             <h4 style="margin-bottom: 12px; font-size: 14px; font-weight: 700; color: #2481cc; text-transform: uppercase; letter-spacing: 0.5px;">Игровой статус Discord-Style</h4>
-            <div style="background: #101921; padding: 14px; border-radius: 10px; border: 1px solid var(--tg-border); display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <i class="fa-solid fa-cubes" style="color: #ff3333; font-size: 22px;"></i>
-                    <div>
-                        <div style="font-size: 14px; font-weight: 600;">Запустить Roblox</div>
-                        <div style="font-size: 11px; color: var(--tg-text-muted);">Включить статус "Playing Roblox"</div>
-                    </div>
+            <div style="background: #101921; padding: 14px; border-radius: 12px; border: 1px solid var(--tg-border); display: flex; align-items: center; gap: 14px; margin-bottom: 25px; box-shadow: inset 0 1px 4px rgba(0,0,0,0.2);">
+                <div style="width: 40px; height: 44px; background: rgba(255, 51, 51, 0.1); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="fa-solid fa-robot" style="color: #10b981; font-size: 20px;"></i>
                 </div>
-                <!-- Переключатель тумблер -->
-                <label style="position: relative; display: inline-block; width: 44px; height: 24px;">
-                    <input type="checkbox" id="robloxPresenceToggle" onchange="toggleMyRobloxGameStatusPresence(this.checked)" style="opacity: 0; width: 0; height: 0;">
-                    <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #313e4b; transition: .3s; border-radius: 24px;" id="sliderTrack"></span>
-                </label>
+                <div style="text-align: left;">
+                    <div style="font-size: 14px; font-weight: 600; color: #fff;">Rich Presence Авто-радар</div>
+                    <div style="font-size: 11px; color: var(--tg-text-muted); margin-top: 2px; line-height: 1.4;">Система GeraGram автоматически сканирует сервера Roblox. Статус игрока включится сам, как только вы зайдёте в игру!</div>
+                </div>
             </div>
 
             <div style="display: flex; gap: 10px;">
