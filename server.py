@@ -4655,7 +4655,7 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
     return {"status": "success", "msg": "Сообщение успешно доставлено"}
 
 # =====================================================================
-# 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК: ИНТЕГРАЦИЯ LLM (БРОНИРОВАННЫЙ ВАРИАНТ HUGGING FACE)
+# 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК: ИНТЕГРАЦИЯ LLM (ИДЕАЛЬНЫЙ HUGGING FACE ВАРИАНТ)
 # =====================================================================
 @app.post("/api/geragram/ai/llm-process")
 async def geragram_ai_llm_process(data: dict, request: Request):
@@ -4674,8 +4674,7 @@ async def geragram_ai_llm_process(data: dict, request: Request):
         "Говори строго на русском языке. Отвечай сразу по сути, без лишних вступлений."
     )
     
-    # 🎯 ИСПОЛЬЗУЕМ БЕСПЛАТНЫЙ БЕЗЛИМИТНЫЙ ШЛЮЗ HUGGING FACE (МОДЕЛЬ QWEN 2.5)
-    # Этот шлюз полностью игнорирует лимиты очередей IP-адресов Render!
+    # 🎯 НАШ ЛЮБИМЫЙ ТОЧНЫЙ АДРЕС ШЛЮЗА HUGGING FACE (МОДЕЛЬ QWEN 2.5)
     ai_url = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-72B-Instruct/v1/chat/completions"
     
     payload = {
@@ -4683,15 +4682,16 @@ async def geragram_ai_llm_process(data: dict, request: Request):
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": user_prompt}
         ],
-        "max_tokens": 100,
+        "max_tokens": 120,
         "stream": False
     }
     
     try:
-        async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
+        # 🎯 ФИКС: Убираем trust_env=False! Сеть и DNS хостинга Render полностью восстановлены!
+        async with httpx.AsyncClient(timeout=20.0) as client:
             # Шлем прямой POST-запрос на сервера Hugging Face
             response = await client.post(ai_url, json=payload)
-            print(f"📡 [ИИ-МОНИТОР] Запрос на Hugging Face выполнен. Код: {response.status_code}")
+            print(f"📡 [ИИ-МОНИТОР] Запрос на Hugging Face выполнен. Код ответа: {response.status_code}")
             
             if response.status_code == 200:
                 ai_data = response.json()
@@ -4700,7 +4700,7 @@ async def geragram_ai_llm_process(data: dict, request: Request):
                     if ai_response:
                         return {"status": "success", "ai_text": ai_response}
                         
-            # Резервный шаг на случай сбоя Qwen — переключаемся на Llama 3
+            # Резервный шаг на случай оверлоада Qwen — на лету прыгаем на Meta Llama 3
             print("🔄 [ИИ-РЕЗЕРВ] Переключение на резервную модель Llama-3...")
             backup_url = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct/v1/chat/completions"
             backup_res = await client.post(backup_url, json=payload)
@@ -4712,13 +4712,13 @@ async def geragram_ai_llm_process(data: dict, request: Request):
                     if ai_response:
                         return {"status": "success", "ai_text": ai_response}
                         
-            print(f"⚠️ [ИИ-ФИНАЛЬНЫЙ-СБОЙ] Оба шлюза Hugging Face выдали ошибку: {backup_res.status_code}")
-            return {"status": "error", "ai_text": "Нейросеть взяла паузу. Пожалуйста, повторите свайп через секунду!"}
+            print(f"⚠️ [ИИ-ФИНАЛЬНЫЙ-СБОЙ] Оба шлюза Hugging Face выдали ошибку: {backup_res.status_code}. Текст: {backup_res.text}")
+            return {"status": "error", "ai_text": "Нейросеть взяла минутную паузу. Пожалуйста, повторите свайп через секунду!"}
             
     except Exception as e:
         print(f"⚠️ [ИИ-КРИТИЧЕСКИЙ СБОЙ] Исключение Python в LLM: {e}")
         return {"status": "error", "ai_text": "Ошибка связи с ИИ-модулем. Попробуйте еще раз через секунду!"}
-     
+    
 # =====================================================================
 # 🎮 DISCORD & ROBLOX СТИЛЬ: ДВИЖОК СВЯЗЕЙ И ИГРОВЫХ СТАТУСОВ
 # =====================================================================
