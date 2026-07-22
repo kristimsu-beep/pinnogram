@@ -759,16 +759,22 @@
     <div class="messenger-wrapper" id="messengerApp">
         <div class="main-layout">
             
-            <!-- ЛЕВАЯ КОЛОНКА: СЕРВИСНАЯ ПАНЕЛЬ И КОНТАКТЫ -->
+            <!-- ЛЕВАЯ КОЛОНКА: СЕРВИСНАЯ ПАНЕЛЬ И КОНТАКТЫ (ОБНОВЛЕНО: ДОБАВЛЕНА КНОПКА ТРЁХ ТОЧЕК) -->
             <div class="sidebar">
-                <!-- 🎯 ФИКС: ПАНЕЛЬ ТВОЕГО ПРОФИЛЯ (СПАСАЕТ JS ОТ ПАДЕНИЯ) -->
-                <div style="padding: 16px 16px 4px 16px; display: flex; align-items: center; gap: 12px;">
-                    <div class="avatar-circle" style="width: 36px; height: 36px; background: var(--tg-button); font-size: 14px;">😎</div>
-                    <div style="display: flex; flex-direction: column; min-width: 0;">
-                        <span style="font-size: 11px; color: var(--tg-text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Вы вошли как</span>
-                        <!-- Тот самый критический ID, который искал скрипт -->
-                        <span id="myUsernameDisplay" class="sidebar-user-name" style="font-size: 14px; font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@загрузка...</span>
+                <!-- ПАНЕЛЬ ТВОЕГО ПРОФИЛЯ + КНОПКА НАСТРОЕК DISCORD-STYLE -->
+                <div style="padding: 16px 16px 4px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                    <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+                        <div class="avatar-circle" style="width: 36px; height: 36px; background: var(--tg-button); font-size: 14px;">😎</div>
+                        <div style="display: flex; flex-direction: column; min-width: 0;">
+                            <span style="font-size: 11px; color: var(--tg-text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Вы вошли как</span>
+                            <span id="myUsernameDisplay" class="sidebar-user-name" style="font-size: 14px; font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">@загрузка...</span>
+                        </div>
                     </div>
+                    
+                    <!-- 🎯 ТЕ САМЫЕ ТРИ ТОЧКИ ДЛЯ ВЫЗОВА ИНТЕГРАЦИЙ И ROBLOX PRESENCE -->
+                    <button class="footer-action-btn" style="color: var(--tg-text-muted); background: none; border: none; padding: 6px; cursor: pointer; font-size: 16px; transition: color 0.15s; flex-shrink: 0; margin-left: auto;" onclick="openMyOwnProfileSettingsModal()" onmouseover="this.style.color='white'" onmouseout="this.style.color='var(--tg-text-muted)'">
+                        <i class="fa-solid fa-ellipsis-vertical"></i>
+                    </button>
                 </div>
 
                 <div class="sidebar-header">
@@ -780,7 +786,6 @@
                     <!-- Выпадающий список найденных людей -->
                     <div class="search-results-dropdown" id="searchResults"></div>
                 </div>
-
                 
                 <!-- Список чатов / контактов -->
                 <div class="chats-list" id="chatsContainerList">
@@ -1575,12 +1580,14 @@
             // На всякий случай закрываем шторку профиля, если она была открыта
             closeUserProfileDrawer();
         }
-     
-        // Синхронизация данных профиля и прав приватности (ОБНОВЛЕНО: ЖИВОЙ ЦВЕТНОЙ ОНЛАЙН СТАТУС)
+          // Синхронизация данных профиля и прав приватности (ЧАСТЬ 1 — БЛОКПОСТЫ, ТЕГИ И ОНЛАЙН СТАТУС)
+        let robloxPresenceInterval = null; // Глобальный таймер для тиканья игрового статуса
+
         async function syncUserProfileAndPrivacy() {
             if (!activeChatUser) return;
             
             try {
+                if (robloxPresenceInterval) clearInterval(robloxPresenceInterval);
                 const res = await fetch(`/api/geragram/users/profile/${activeChatUser}`);
                 if (!res.ok) return;
                 const profile = await res.json();
@@ -1606,13 +1613,10 @@
                 
                 // 👑 🎯 ТЕЛЕГРАМ/РОБЛОКС СТИЛЬ: Собираем бейджи верификации и кастомных тегов
                 let officialBadge = '';
-                
-                // 1. Синяя галочка верификации
                 if (profile.is_official) {
                     officialBadge += ` <i class="fa-solid fa-circle-check" style="color: #2481cc; font-size:15px; margin-left: 4px;"></i>`;
                 }
                 
-                // 2. Логика текстовой цветной плашки (с авто-подстраховкой для стандартного OFFICIAL)
                 const hasProfileCustomTag = profile.custom_tag && String(profile.custom_tag).trim() !== '' && String(profile.custom_tag) !== 'null';
                 const profileActiveTagText = hasProfileCustomTag ? profile.custom_tag : (profile.is_official ? 'OFFICIAL' : null);
                 
@@ -1638,11 +1642,10 @@
                 document.getElementById('drawerUsername').innerText = `@${profile.username}`;
                 document.getElementById('drawerJoinedDate').innerText = profile.joined_date;
                 
-                // 🎯 ТЕЛЕГРАМ-ПОДДСВЕТКА СТАТУСА В ШТОРКЕ ПРОФИЛЯ
+                // ТЕЛЕГРАМ-ПОДДСВЕТКА СТАТУСА В ШТОРКЕ ПРОФИЛЯ
                 const drawerStatusText = document.getElementById('drawerStatus');
                 if (drawerStatusText) {
                     drawerStatusText.innerText = profile.status;
-                    // Если строка содержит "В сети" — красим в сочный зеленый
                     if (profile.status && profile.status.includes("В сети")) {
                         drawerStatusText.style.color = "#4cd964"; 
                     } else {
@@ -1650,11 +1653,11 @@
                     }
                 }
                 
-                // Отрендерим аватар в профиле
+                // 🎨 🎯 КАСЛИЧНЫЙ ФОН АВАТАРА ДЛЯ БУКВЕННЫХ ЮЗЕРОВ ИЗ БАЗЫ
                 let avContainer = document.getElementById('drawerAvatar');
                 if (profile.avatar_type === 'letter') {
                     avContainer.style.backgroundImage = 'none';
-                    avContainer.style.background = profile.avatar_data.gradient;
+                    avContainer.style.background = profile.custom_avatar_bg || profile.avatar_data.gradient;
                     avContainer.innerText = profile.avatar_data.letter;
                 } else {
                     avContainer.innerText = '';
@@ -1670,11 +1673,9 @@
                     headerTitle.innerHTML = `<span>${profile.display_name}</span>${officialBadge}`;
                 }
                 
-                // 🎯 ТЕЛЕГРАМ-ПОДДСВЕТКА СТАТУСА В ШАПКЕ ЧАТА СВЕРХУ
                 const chatStatusHeader = document.getElementById('currentChatStatus');
                 if (chatStatusHeader) {
                     chatStatusHeader.innerText = profile.status;
-                    // Если строка содержит "В сети" — красим в фирменный сине-голубой онлайн-цвет
                     if (profile.status && profile.status.includes("В сети")) {
                         chatStatusHeader.style.color = "#5288c1"; 
                     } else {
@@ -1685,14 +1686,95 @@
                 const headerAvatar = document.getElementById('currentChatAvatar');
                 if (profile.avatar_type === 'letter') {
                     headerAvatar.style.backgroundImage = 'none';
-                    headerAvatar.style.background = profile.avatar_data.gradient;
+                    headerAvatar.style.background = profile.custom_avatar_bg || profile.avatar_data.gradient;
                     headerAvatar.innerText = profile.avatar_data.letter;
                 } else {
                     headerAvatar.innerText = '';
                     headerAvatar.style.backgroundImage = `url('${profile.avatar_url}')`;
                 }
+                // =============================================================
+                // 🎯 ФИШКА 1: DISCORD-STYLE CONNECTIONS ПЛАШКИ В ПРОФИЛЕ (ЧАСТЬ 2)
+                // =============================================================
+                let connBlock = document.getElementById('drawerConnectionsLayoutContainer');
+                if (!connBlock) {
+                    connBlock = document.createElement('div');
+                    connBlock.id = 'drawerConnectionsLayoutContainer';
+                    connBlock.style = "width: 100%; display: flex; flex-direction: column; gap: 8px; margin-top: 15px; border-top: 1px solid var(--tg-border); padding-top: 14px;";
+                    
+                    const actionsList = document.querySelector('.profile-actions-list');
+                    if (actionsList) actionsList.parentNode.insertBefore(connBlock, actionsList);
+                }
+                connBlock.innerHTML = ''; // Чистим старые связи перед рендером
+                
+                const conns = profile.connections || { telegram: '', whatsapp: '', roblox: '' };
+                let hasAnyConnections = false;
 
-                // Меняем текст кнопок управления
+                const connTitle = document.createElement('div');
+                connTitle.style = "font-size: 11px; color: var(--tg-text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; text-align: left; margin-bottom: 4px;";
+                connTitle.innerText = "Связанные аккаунты";
+                connBlock.appendChild(connTitle);
+
+                if (conns.telegram) {
+                    hasAnyConnections = true;
+                    connBlock.innerHTML += `<a href="https://t.me/${conns.telegram}" target="_blank" style="text-decoration:none; background:#101921; border:1px solid #2481cc; border-radius:10px; padding:10px 14px; display:flex; align-items:center; gap:10px; color:white; font-size:13px; font-weight:600; transition: .2s;"><i class="fa-brands fa-telegram" style="color:#2481cc; font-size:16px;"></i> Telegram: @${conns.telegram}</a>`;
+                }
+                if (conns.whatsapp) {
+                    hasAnyConnections = true;
+                    connBlock.innerHTML += `<a href="https://wa.me/${conns.whatsapp}" target="_blank" style="text-decoration:none; background:#101921; border:1px solid #4cd964; border-radius:10px; padding:10px 14px; display:flex; align-items:center; gap:10px; color:white; font-size:13px; font-weight:600; transition: .2s;"><i class="fa-brands fa-whatsapp" style="color:#4cd964; font-size:16px;"></i> WhatsApp чат</a>`;
+                }
+                if (conns.roblox) {
+                    hasAnyConnections = true;
+                    connBlock.innerHTML += `<a href="https://www.roblox.com/users/${conns.roblox}/profile" target="_blank" style="text-decoration:none; background:#101921; border:1px solid #ff3333; border-radius:10px; padding:10px 14px; display:flex; align-items:center; gap:10px; color:white; font-size:13px; font-weight:600; transition: .2s;"><i class="fa-solid fa-gamepad" style="color:#ff3333; font-size:16px;"></i> Профиль Roblox</a>`;
+                }
+                
+                if (!hasAnyConnections) {
+                    connBlock.innerHTML += `<div style="font-size:12px; color:var(--tg-text-muted); text-align:left; font-style:italic; padding-left:2px;">Аккаунты не подключены</div>`;
+                }
+
+                // =============================================================
+                // 🎯 ФИШКА 2: RICH PRESENCE "PLAYING ROBLOX" ТТИКАТЬ СЧЁТЧИК
+                // =============================================================
+                let presenceBlock = document.getElementById('drawerRobloxPresenceBarWidget');
+                if (!presenceBlock) {
+                    presenceBlock = document.createElement('div');
+                    presenceBlock.id = 'drawerRobloxPresenceBarWidget';
+                    presenceBlock.style = "width:100%; display:none; flex-direction:column; background:rgba(255,51,51,0.08); border:1px solid rgba(255,51,51,0.3); padding:10px 14px; border-radius:12px; margin-top:12px; border-left: 4px solid #ff3333; text-align: left;";
+                    const drawerTitle = document.getElementById('drawerDisplayName');
+                    if (drawerTitle) drawerTitle.parentNode.insertBefore(presenceBlock, drawerTitle.nextSibling);
+                }
+
+                const pr = profile.roblox_presence || { is_playing_roblox: false, roblox_game_start: null };
+                
+                if (pr.is_playing_roblox && pr.roblox_game_start) {
+                    presenceBlock.style.display = 'flex';
+                    
+                    function tickRobloxPresenceTimer() {
+                        const nowTs = Math.floor(Date.now() / 1000);
+                        const durationSec = Math.max(0, nowTs - Math.floor(pr.roblox_game_start));
+                        
+                        const mins = Math.floor(durationSec / 60);
+                        const secs = durationSec % 60;
+                        
+                        presenceBlock.innerHTML = `
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <i class="fa-solid fa-cubes" style="color:#ff3333; font-size:15px; animation: emojiPop 0.4s infinite alternate;"></i>
+                                <span style="font-size:11px; color:#ff5959; font-weight:800; text-transform:uppercase; letter-spacing:0.5px;">Играет в Roblox</span>
+                            </div>
+                            <div style="font-size:13px; font-weight:600; color:white; margin-top:2px; font-family:monospace;">В игре: ${mins.toString().padStart(2, '0')} мин. ${secs.toString().padStart(2, '0')} сек.</div>
+                        `;
+                    }
+                    tickRobloxPresenceTimer();
+                    robloxPresenceInterval = setInterval(tickRobloxPresenceTimer, 1000); // Тикаем каждую секунду!
+                } else {
+                    presenceBlock.style.display = 'none';
+                }
+
+                // Включаем живую локальную погоду
+                if (typeof initProfileWeatherAndClock === 'function') {
+                    initProfileWeatherAndClock(profile);
+                }
+
+                // Меняем текст кнопок управления приватностью
                 document.getElementById('blockToggleBtn').innerHTML = profile.i_blocked_them 
                     ? '<i class="fa-solid fa-user-check"></i> Разблокировать' 
                     : '<i class="fa-solid fa-user-slash"></i> Заблокировать';
@@ -1701,20 +1783,13 @@
                     ? '<i class="fa-solid fa-bell"></i> Уведомления: Выкл' 
                     : '<i class="fa-solid fa-bell-slash"></i> Уведомления: Вкл';
 
-                // 🔥 ВНУТРЕННИЙ ФИКС: Вызываем групповой контроль ДО окончания блока try
                 toggleGroupHeaderControls(profile);
-
-                // 🎯 ВКЛЮЧАЕМ ЖИВУЮ ЛОКАЛЬНУЮ ПОГОДУ И CANVAS НА АВАТАРЕ
-                if (typeof initProfileWeatherAndClock === 'function') {
-                    initProfileWeatherAndClock(profile);
-                }
-
 
             } catch (err) {
                 console.error('Ошибка синхронизации профиля:', err);
             }
         }
-
+        
         // 🔄 СТАРЫЙ НАДЕЖНЫЙ ЗАПРОС ИСТОРИИ (С ИНТЕГРАЦИЕЙ ROBLOX-БАНА И АВТОПРОЧТЕНИЕМ)
         async function loadChatHistory() {
             if (!activeChatUser) return;
@@ -2950,6 +3025,90 @@
             if (weatherCanvasAnimationId) cancelAnimationFrame(weatherCanvasAnimationId);
             if (weatherCanvasCtx) weatherCanvasCtx.clearRect(0, 0, 110, 110);
         }
+        // =====================================================================
+        // 🎮 DISCORD & ROBLOX STYLE: ДВИЖОК ИНТЕГРАЦИЙ И RICH PRESENCE
+        // =====================================================================
+        
+        // Открытие модального окна личных настроек профиля
+        async function openMyOwnProfileSettingsModal() {
+            const currentLoggedInUser = window.geraCurrentUser || window.myUsername || '';
+            if (!currentLoggedInUser) return;
+
+            try {
+                // Сначала стягиваем свежие данные своего профиля с бэкенда
+                const res = await fetch(`/api/geragram/users/profile/${currentLoggedInUser}`);
+                if (res.ok) {
+                    const profile = await res.json();
+                    
+                    // Заполняем инпуты связей данными из MongoDB Atlas
+                    const conns = profile.connections || { telegram: '', whatsapp: '', roblox: '' };
+                    document.getElementById('connTelegramInput').value = conns.telegram || '';
+                    document.getElementById('connWhatsappInput').value = conns.whatsapp || '';
+                    document.getElementById('connRobloxInput').value = conns.roblox || '';
+                    
+                    // Выставляем положение тумблера Roblox Presence
+                    const presence = profile.roblox_presence || { is_playing_roblox: false };
+                    document.getElementById('robloxPresenceToggle').checked = presence.is_playing_roblox;
+                    
+                    // Запоминаем текущий кастомный фон
+                    document.getElementById('chosenPersonalAvatarBg').value = profile.custom_avatar_bg || '';
+                }
+            } catch(e) { console.error("Ошибка предзагрузки профиля:", e); }
+
+            const modal = document.getElementById('myProfileSettingsModal');
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function closeMyOwnProfileSettingsModal() {
+            const modal = document.getElementById('myProfileSettingsModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        // Клик по цветным квадратикам градиентов
+        function selectMyPersonalAvatarBg(gradientValue) {
+            document.getElementById('chosenPersonalAvatarBg').value = gradientValue;
+            alert("Цвет аватара выбран! Нажмите 'Сохранить изменения' для применения.");
+        }
+
+        // Переключение тумблера Roblox прямо во время сессии
+        async function toggleMyRobloxGameStatusPresence(isChecked) {
+            try {
+                await fetch('/api/geragram/profile/roblox-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_playing: isChecked })
+                });
+                console.log(`🎮 [PRESENCE] Статус игры в Roblox переключен: ${isChecked}`);
+            } catch(e) { console.error("Ошибка переключения статуса игры:", e); }
+        }
+
+        // Кнопка «Сохранить изменения»
+        async function saveMyProfileConnectionsAndSettings() {
+            const tg = document.getElementById('connTelegramInput').value.trim();
+            const wa = document.getElementById('connWhatsappInput').value.trim();
+            const rb = document.getElementById('connRobloxInput').value.trim();
+            const bg = document.getElementById('chosenPersonalAvatarBg').value;
+
+            try {
+                // 1. Шлем в СУБД связи аккаунтов
+                await fetch('/api/geragram/profile/connections', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telegram: tg, whatsapp: wa, roblox: rb })
+                });
+
+                // 2. Шлем в СУБД кастомный фон аватара
+                await fetch('/api/geragram/profile/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ avatar_bg: bg })
+                });
+
+                alert("🎉 Успех! Интеграции аккаунтов и кастомизация намертво засейвлены в MongoDB Atlas.");
+                closeMyOwnProfileSettingsModal();
+                if (typeof loadContactsAndRequests === 'function') loadContactsAndRequests();
+            } catch(e) { alert("Не удалось сохранить настройки профиля."); }
+        }
         
     </script>
     <!-- 📱 КОНТЕКСТНОЕ МЕНЮ GERAGRAM (ОБНОВЛЕНО: С ПАНЕЛЬЮ РЕАКЦИЙ TELEGRAM-STYLE) -->
@@ -3007,6 +3166,64 @@
             </div>
 
             <p style="font-size: 12px; color: var(--tg-text-muted);">Если вы считаете, что бан выдан по ошибке, обратитесь к создателю сервера.</p>
+        </div>
+    </div>
+    <!-- 🎮 МОДАЛЬНОЕ ОКНО НАСТРОЕК ЛИЧНОГО ПРОФИЛЯ DISCORD-STYLE (ИЗНАЧАЛЬНО СКРЫТО) -->
+    <div class="modal-overlay" id="myProfileSettingsModal" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 60000; display: none; align-items: center; justify-content: center; color: white; font-family: 'Inter', sans-serif;">
+        <div class="modal-content" style="background: #17212b; border: 1px solid var(--tg-border); border-radius: 16px; padding: 25px; width: 90%; max-width: 440px; box-shadow: 0 16px 40px rgba(0,0,0,0.5); max-height: 85vh; overflow-y: auto;">
+            <h3 style="margin-bottom: 6px; font-weight: 700; font-size: 20px;">Настройки профиля</h3>
+            <p style="font-size: 13px; color: var(--tg-text-muted); margin-bottom: 20px;">Настройте интеграции аккаунтов и внешний вид своей карточки.</p>
+            
+            <!-- 🎨 РАЗДЕЛ 1: Личный фон аватарки -->
+            <h4 style="margin-bottom: 10px; font-size: 14px; font-weight: 700; color: #2481cc; text-transform: uppercase; letter-spacing: 0.5px;">Личный кастомизатор</h4>
+            <p style="font-size: 13px; color: var(--tg-text-muted); margin-bottom: 8px;">Выберите фоновый градиент для круга вашей аватарки:</p>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px;">
+                <div style="height: 36px; border-radius: 8px; cursor: pointer; background: linear-gradient(135deg, #ff9966, #ff5e62);" onclick="selectMyPersonalAvatarBg('linear-gradient(135deg, #ff9966, #ff5e62)')"></div>
+                <div style="height: 36px; border-radius: 8px; cursor: pointer; background: linear-gradient(135deg, #00f2fe, #4facfe);" onclick="selectMyPersonalAvatarBg('linear-gradient(135deg, #00f2fe, #4facfe)')"></div>
+                <div style="height: 36px; border-radius: 8px; cursor: pointer; background: linear-gradient(135deg, #b92b27, #1565c0);" onclick="selectMyPersonalAvatarBg('linear-gradient(135deg, #b92b27, #1565c0)')"></div>
+                <div style="height: 36px; border-radius: 8px; cursor: pointer; background: linear-gradient(135deg, #f12711, #f5af19);" onclick="selectMyPersonalAvatarBg('linear-gradient(135deg, #f12711, #f5af19)')"></div>
+            </div>
+            <input type="hidden" id="chosenPersonalAvatarBg" value="">
+
+            <!-- ⛓️ РАЗДЕЛ 2: Интеграции Connections -->
+            <h4 style="margin-bottom: 12px; font-size: 14px; font-weight: 700; color: #2481cc; text-transform: uppercase; letter-spacing: 0.5px;">Связи аккаунтов (Connections)</h4>
+            
+            <div class="input-group" style="margin-bottom: 12px; position: relative;">
+                <i class="fa-brands fa-telegram" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #2481cc; font-size: 16px;"></i>
+                <input type="text" id="connTelegramInput" placeholder="Никнейм (без @, пример: gera067)" style="width: 100%; padding: 12px 12px 12px 42px; background: #101921; border: 1px solid var(--tg-border); border-radius: 10px; color: white; font-size: 14px;">
+            </div>
+
+            <div class="input-group" style="margin-bottom: 12px; position: relative;">
+                <i class="fa-brands fa-whatsapp" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #4cd964; font-size: 16px;"></i>
+                <input type="text" id="connWhatsappInput" placeholder="Номер телефона (пример: 79991234567)" style="width: 100%; padding: 12px 12px 12px 42px; background: #101921; border: 1px solid var(--tg-border); border-radius: 10px; color: white; font-size: 14px;">
+            </div>
+
+            <div class="input-group" style="margin-bottom: 20px; position: relative;">
+                <i class="fa-solid fa-gamepad" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #ff3333; font-size: 16px;"></i>
+                <input type="text" id="connRobloxInput" placeholder="ID профиля Roblox (пример: 12345678)" style="width: 100%; padding: 12px 12px 12px 42px; background: #101921; border: 1px solid var(--tg-border); border-radius: 10px; color: white; font-size: 14px;">
+            </div>
+
+            <!-- 🎮 РАЗДЕЛ 3: Игровой статус Имитация Rich Presence -->
+            <h4 style="margin-bottom: 12px; font-size: 14px; font-weight: 700; color: #2481cc; text-transform: uppercase; letter-spacing: 0.5px;">Игровой статус Discord-Style</h4>
+            <div style="background: #101921; padding: 14px; border-radius: 10px; border: 1px solid var(--tg-border); display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <i class="fa-solid fa-cubes" style="color: #ff3333; font-size: 22px;"></i>
+                    <div>
+                        <div style="font-size: 14px; font-weight: 600;">Запустить Roblox</div>
+                        <div style="font-size: 11px; color: var(--tg-text-muted);">Включить статус "Playing Roblox"</div>
+                    </div>
+                </div>
+                <!-- Переключатель тумблер -->
+                <label style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                    <input type="checkbox" id="robloxPresenceToggle" onchange="toggleMyRobloxGameStatusPresence(this.checked)" style="opacity: 0; width: 0; height: 0;">
+                    <span style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #313e4b; transition: .3s; border-radius: 24px;" id="sliderTrack"></span>
+                </label>
+            </div>
+
+            <div style="display: flex; gap: 10px;">
+                <button class="auth-btn" style="background: #10b981; font-weight: 600;" onclick="saveMyProfileConnectionsAndSettings()">Сохранить изменения</button>
+                <button class="auth-btn" style="background: none; color: var(--tg-text-muted);" onclick="closeMyOwnProfileSettingsModal()">Отмена</button>
+            </div>
         </div>
     </div>
 </body>
