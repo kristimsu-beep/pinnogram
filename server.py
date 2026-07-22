@@ -4200,7 +4200,7 @@ async def geragram_get_profile(target_username: str, request: Request):
     is_user_online = target_user["username"] in active_connections if 'active_connections' in globals() else False
     status_text = "В сети" if is_user_online else "Не в сети"
 
-    # 🎯 ФИКС ПРОФИЛЯ: Отдаем живой статус, теги, цвета и гео-метки в выплывающую шторку и шапку!
+    # 🎯 ФИКС ПРОФИЛЯ: Отдаем живой статус, теги, цвета, гео-метки, связи и игровой статус Roblox!
     return {
         "is_blocked_by_them": False,
         "username": target_user["username"],
@@ -4220,7 +4220,11 @@ async def geragram_get_profile(target_username: str, request: Request):
         # 🔥 НАШИ НОВЫЕ ГЕО-МАРКЕРЫ ДЛЯ СИНХРОНИЗАЦИИ ПОГОДЫ МЕЖДУ ЮЗЕРАМИ:
         "geo_lat": target_user.get("geo_lat"),
         "geo_lon": target_user.get("geo_lon"),
-        "geo_tz_offset": target_user.get("geo_tz_offset", 0)
+        "geo_tz_offset": target_user.get("geo_tz_offset", 0),
+        # 🔥 НАШИ НОВЫЕ СЕТЕВЫЕ КЛЮЧИ ИНТЕГРАЦИЙ И RICH PRESENCE ДЛЯ СУБД ATLAS:
+        "custom_avatar_bg": target_user.get("custom_avatar_bg", ""),
+        "connections": target_user.get("connections", {"telegram": "", "whatsapp": "", "roblox": ""}),
+        "roblox_presence": target_user.get("roblox_presence", {"is_playing_roblox": False, "roblox_game_start": None})
     }
 
 # =====================================================================
@@ -4650,6 +4654,63 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
 
     return {"status": "success", "msg": "Сообщение успешно доставлено"}
 
+# =====================================================================
+# 🎮 DISCORD & ROBLOX СТИЛЬ: ДВИЖОК СВЯЗЕЙ И ИГРОВЫХ СТАТУСОВ
+# =====================================================================
+
+@app.post("/api/geragram/profile/update")
+async def geragram_update_profile_settings(data: dict, request: Request):
+    """Обновление личных настроек визуала (градиенты, фоны аватарок)"""
+    me = await get_current_gera_user(request)
+    avatar_bg = data.get("avatar_bg", "").strip()
+    
+    update_data = {}
+    if avatar_bg:
+        update_data["custom_avatar_bg"] = avatar_bg
+
+    if update_data:
+        await geragram_users.update_one(
+            {"username": me["username"].lower().strip()},
+            {"$set": update_data}
+        )
+    return {"status": "success", "msg": "Настройки профиля сохранены в MongoDB Atlas"}
+
+
+@app.post("/api/geragram/profile/connections")
+async def geragram_save_connections(data: dict, request: Request):
+    """Сохранение интеграций Discord-style (Telegram, WhatsApp, Roblox)"""
+    me = await get_current_gera_user(request)
+    
+    connections = {
+        "telegram": data.get("telegram", "").strip(),
+        "whatsapp": data.get("whatsapp", "").strip(),
+        "roblox": data.get("roblox", "").strip()
+    }
+    
+    await geragram_users.update_one(
+        {"username": me["username"].lower().strip()},
+        {"$set": {"connections": connections}}
+    )
+    return {"status": "success", "msg": "Внешние связи аккаунтов успешно синхронизированы"}
+
+
+@app.post("/api/geragram/profile/roblox-status")
+async def geragram_update_roblox_status(data: dict, request: Request):
+    """Имитация игрового статуса Rich Presence: В игре / Вышел из игры"""
+    me = await get_current_gera_user(request)
+    is_playing = data.get("is_playing", False)
+    
+    status_data = {
+        "is_playing_roblox": is_playing,
+        "roblox_game_start": datetime.utcnow().timestamp() if is_playing else None
+    }
+    
+    await geragram_users.update_one(
+        {"username": me["username"].lower().strip()},
+        {"$set": {"roblox_presence": status_data}}
+    )
+    return {"status": "success", "is_playing": is_playing}
+    
 # =====================================================================
 # 📈 АДМИН-ФИШКА 1: ФИКС ПРОЧТЕНИЯ СООБЩЕНИЙ (ДВЕ ГАЛОЧКИ)
 # =====================================================================
