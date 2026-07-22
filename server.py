@@ -4660,6 +4660,7 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
 @app.post("/api/geragram/ai/llm-process")
 async def geragram_ai_llm_process(data: dict, request: Request):
     import httpx
+    import urllib.parse
     
     me = await get_current_gera_user(request)
     user_prompt = data.get("prompt", "").strip()
@@ -4667,44 +4668,34 @@ async def geragram_ai_llm_process(data: dict, request: Request):
     if not user_prompt or user_prompt.lower() == "undefined":
         return {"status": "error", "ai_text": "Бро, я не расслышал твой голос. Попробуй свайпнуть и сказать еще раз!"}
         
-    # Формируем жесткие системные инструкции для ЛЛМ
-    system_instruction = (
-        "Ты — встроенный ИИ-ассистент мессенджера GeraGram. "
-        "Твоя задача — обрабатывать команды пользователя. "
-        "Отвечай максимально кратко, заманчиво, емко и интересно (не более 2 предложений). "
-        "Говори строго на русском языке. Отвечай сразу по сути, без лишних вступлений."
-    )
-    
-    # 🎯 ИСПОЛЬЗУЕМ СТАНДАРТНЫЙ OPENAI-СОВМЕСТИМЫЙ ШЛЮЗ API
-    ai_url = "https://text.pollinations.ai/v1/chat/completions"
-    
-    payload = {
-        "messages": [
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": user_prompt}
-        ],
-        "model": "openai", # 🔥 ФИКС: Указываем строгую валидную модель gpt-4o-mini
-        "stream": False
-    }
+    # Формируем компактные и понятные инструкции для нейросети
+    system_instruction = "Ответь кратко по сути на русском языке, не более 2 предложений, без вступлений."
+    full_prompt_string = f"{system_instruction}\n\nЗапрос: {user_prompt}"
     
     try:
+        # ХАКЕРСКИЙ МАНЕВР: Безопасно кодируем промпт для URL-строки (чтобы пробелы не ломали ссылку)
+        encoded_prompt = urllib.parse.quote(full_prompt_string)
+        
+        # 🎯 СОБИРАЕМ ИДЕАЛЬНЫЙ ВЕЧНЫЙ АДРЕС ДЛЯ GET-ЗАПРОСА С СИСТЕМНОЙ МОДЕЛЬЮ OPENAI
+        ai_url = f"https://text.pollinations.ai/{encoded_prompt}?model=openai"
+        
         async with httpx.AsyncClient(timeout=15.0) as client:
-            # Шлем структурированный POST-запрос на правильный шлюз
-            response = await client.post(ai_url, json=payload)
+            # Шлем быстрый GET-запрос — он пробивает любые прокси и защиты Render!
+            response = await client.get(ai_url)
+            
+            # Логируем статус-код прямо в консоль Render наружу, чтобы ты всё видел
+            print(f"📡 [ИИ-МОНИТОР] Пинг выполнен. Статус ИИ-сервера: {response.status_code}")
             
             if response.status_code == 200:
-                ai_data = response.json()
-                # Вытаскиваем чистый сгенерированный текст из стандартного ответа OpenAI-схемы
-                if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
-                    ai_response = ai_data["choices"][0]["message"]["content"].strip()
-                    if ai_response:
-                        return {"status": "success", "ai_text": ai_response}
-                        
-            print(f"⚠️ [ИИ-СБОЙ] Код ответа сервера: {response.status_code}. Текст: {response.text}")
-            return {"status": "error", "ai_text": "Нейросеть взяла паузу. Пожалуйста, повторите свайп через секунду!"}
+                ai_response = response.text.strip()
+                if ai_response:
+                    return {"status": "success", "ai_text": ai_response}
+                    
+            print(f"⚠️ [ИИ-СБОЙ] Сервер ИИ вернул ошибку: {response.status_code}. Текст ответа: {response.text}")
+            return {"status": "error", "ai_text": "Нейросеть думает. Пожалуйста, повторите свайп через секунду!"}
             
     except Exception as e:
-        print(f"⚠️ [ИИ-КРИТИЧЕСКИЙ СБОЙ] Ошибка генерации текста в LLM: {e}")
+        print(f"⚠️ [ИИ-КРИТИЧЕСКИЙ СБОЙ] Исключение Python в LLM: {e}")
         return {"status": "error", "ai_text": "Ошибка связи с ИИ-модулем. Попробуйте еще раз через секунду!"}
      
 # =====================================================================
