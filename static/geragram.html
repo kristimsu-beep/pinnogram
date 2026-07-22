@@ -3302,7 +3302,7 @@
             });
         }
 
-        // 🧠 ЗАПУСК КВАНТОВОГО ИИ-РЕЖИМА (СВАЙП ВПРАВО)
+        // 🧠 ЗАПУСК КВАНТОВОГО ИИ-РЕЖИМА (ИСПРАВЛЕНО: УБРАН UNDEFINED И ОШИБКИ СВЯЗИ)
         function activateQuantumAIVoiceEngine() {
             const footer = document.querySelector('.chat-footer');
             const input = document.getElementById('messageInputField');
@@ -3310,7 +3310,7 @@
 
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
-                alert("Бро, твой браузер не поддерживает распознавание речи.");
+                alert("Бро, твой browser не поддерживает распознавание речи.");
                 return;
             }
 
@@ -3337,12 +3337,14 @@
             speechRecognitionEngine.interimResults = true; 
             speechRecognitionEngine.continuous = false; 
 
+            // 🎯 ТОЧНЫЙ ПАРСИНГ РЕЧИ: Заходим на нулевой индекс альтернативы фразы, убирая undefined!
             speechRecognitionEngine.onresult = function(event) {
                 const resultIndex = event.resultIndex;
-                input.value = event.results[resultIndex].transcript;
+                const resultText = event.results[resultIndex][0].transcript;
+                input.value = resultText;
             };
 
-            // 🎯 ОБРАБОТКА ТИШИНЫ: Стучимся в LLM Lama 3 на бэкенде
+            // 🎯 ОБРАБОТКА ТИШИНЫ: Стучимся к стабильной GPT-4o-mini на бэкенде
             speechRecognitionEngine.onend = async function() {
                 const promptText = input.value.trim();
                 
@@ -3351,7 +3353,7 @@
                 if (aiNebula) aiNebula.classList.remove('ai-nebula-active');
                 input.placeholder = "Обработка нейросетью...";
 
-                if (promptText !== "" && activeChatUser) {
+                if (promptText !== "" && promptText.toLowerCase() !== "undefined" && activeChatUser) {
                     console.log("🧠 [ИИ] Запрос отправлен в LLM:", promptText);
                     
                     try {
@@ -3365,20 +3367,19 @@
                             const aiData = await res.json();
                             const generatedText = aiData.ai_text;
                             
-                            // Подставляем сгенерированный ИИ текст в инпут, чтобы функция sendMessage отправила именно его
+                            // Подставляем сгенерированный ИИ текст в инпут
                             input.value = generatedText;
 
                             // 🔊 ГУГЛ TEXT-TO-SPEECH ОЗВУЧКА ОТВЕТА ЖИВЫМ ГОЛОСОМ
                             if ('speechSynthesis' in window) {
-                                // Прерываем старую озвучку, если она была
-                                window.speechSynthesis.cancel();
+                                window.speechSynthesis.cancel(); // Прерываем старую озвучку
                                 
                                 const speechUtterance = new SpeechSynthesisUtterance(generatedText);
                                 speechUtterance.lang = 'ru-RU'; // Говорим строго на русском
                                 speechUtterance.rate = 1.0;     // Нормальная скорость речи
                                 speechUtterance.pitch = 1.0;    // Естественная тональность голоса
 
-                                // 🎯 ОТПРАВКА В ЧАТ СТРОГО ПОСЛЕ ОГЛАСКИ (Как ты просил!)
+                                // 🎯 ОТПРАВКА В ЧАТ СТРОГО ПОСЛЕ ОГЛАСКИ
                                 speechUtterance.onend = async function() {
                                     console.log("🔊 [ИИ] Огласка голосом завершена! Публикация в чат...");
                                     if (typeof sendMessage === 'function') {
@@ -3388,9 +3389,11 @@
 
                                 window.speechSynthesis.speak(speechUtterance);
                             } else {
-                                // Если в браузере нет озвучки — шлём в чат сразу
                                 if (typeof sendMessage === 'function') await sendMessage();
                             }
+                        } else {
+                            input.placeholder = "ИИ временно недоступен...";
+                            setTimeout(() => { input.placeholder = "Напишите сообщение..."; }, 2000);
                         }
                     } catch (err) {
                         console.error("Сбой ИИ-подключения:", err);
