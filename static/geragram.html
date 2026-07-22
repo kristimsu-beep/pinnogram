@@ -721,37 +721,62 @@
                 transform: translateY(0) scale(1); 
             }
         }
-        /* 🌌 ГАЛАКТИКА NEBULA GOOGLE-STYLE (ОБНОВЛЕНО: ВРАЩЕНИЕ И ОБЪЕМНОЕ РАЗМЫТИЕ) */
+        /* 1. 🌌 ПЛОТНОЕ АНИМИРОВАННОЕ СИЯНИЕ ПРЯМО НА ГРАНИЦАХ ФУТЕНА */
+        .aurora-glow-active {
+            position: relative;
+            z-index: 10;
+            box-shadow: 0 0 15px rgba(79, 172, 254, 0.4);
+            transition: all 0.4s ease !important;
+        }
+
+        .aurora-glow-active::before {
+            content: '';
+            position: absolute;
+            top: -2px; left: -2px; right: -2px; bottom: -2px;
+            background: linear-gradient(90deg, #4facfe, #00f2fe, #a800e0, #4facfe);
+            background-size: 300% 300%;
+            border-radius: inherit;
+            z-index: -1;
+            animation: auroraGlowMovement 3s linear infinite;
+        }
+
+        @keyframes auroraGlowMovement {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* 2. 🌀 ОБЪЕМНАЯ ВРАЩАЮЩАЯСЯ КОСМИЧЕСКАЯ ТУМАННОСТЬ NEBULA СНАРУЖИ */
         .nebula-backdrop-glow {
             position: absolute;
-            top: -15px;
-            left: -15px;
-            right: -15px;
-            bottom: -15px;
-            background: radial-gradient(circle, rgba(79, 172, 254, 0.8) 0%, rgba(168, 0, 224, 0.6) 40%, rgba(0, 242, 254, 0) 70%);
-            filter: blur(25px);
-            -webkit-filter: blur(25px);
+            top: -25px;
+            left: -25px;
+            right: -25px;
+            bottom: -25px;
+            background: radial-gradient(circle, rgba(79, 172, 254, 0.7) 0%, rgba(168, 0, 224, 0.5) 45%, rgba(0, 242, 254, 0) 70%);
+            filter: blur(20px);
+            -webkit-filter: blur(20px);
             opacity: 0;
             pointer-events: none;
             z-index: 1;
             transform: scale(0.8) rotate(0deg);
             transition: opacity 0.5s ease, transform 0.5s ease;
-            mix-blend-mode: screen; /* Смешивает цвета градиента с фоном чата для неонового свечения */
+            mix-blend-mode: screen;
         }
 
-        /* Класс активации вращения космической туманности */
+        /* Активация внешнего вращения Nebula */
         .nebula-active {
             opacity: 1 !important;
-            transform: scale(1.15) rotate(360deg) !important;
-            animation: nebulaRotationLoop 6s linear infinite !important;
+            transform: scale(1.1) rotate(360deg) !important;
+            animation: nebulaRotationLoop 7s linear infinite !important;
         }
 
         @keyframes nebulaRotationLoop {
-            from { transform: scale(1.15) rotate(0deg); }
-            to { transform: scale(1.15) rotate(360deg); }
+            from { transform: scale(1.1) rotate(0deg); }
+            to { transform: scale(1.1) rotate(360deg); }
         }
 
-        /* Ограничиваем позиционирование родителя для правильного наложения слоев */
+        /* Плавные сдвиги футера чата */
         .chat-footer {
             position: relative;
             z-index: 5;
@@ -759,7 +784,6 @@
         }
         .footer-swiped-left {
             transform: translateX(-40px);
-            background: rgba(23, 33, 43, 0.9) !important; /* Делаем футер чуть прозрачнее во время диктовки */
         }
     </style>
 </head>
@@ -3214,7 +3238,7 @@
             });
         }
 
-        // АКТИВАЦИЯ РЕЖИМА СЕВЕРНОГО СИЯНИЯ И ЗАПУСК СЛУХА (ОБНОВЛЕНО: КОСМИЧЕСКАЯ ТУМАННОСТЬ NEBULA)
+        // АКТИВАЦИЯ РЕЖИМА СЕВЕРНОГО СИЯНИЯ И ЗАПУСК СЛУХА (ОБНОВЛЕНО: ДВОЙНОЙ ЭФФЕКТ GLOW + NEBULA)
         function activateGoogleAuroraVoiceDictation() {
             const footer = document.querySelector('.chat-footer');
             const input = document.getElementById('messageInputField');
@@ -3228,17 +3252,17 @@
 
             isAuroraDictationActive = true;
             
-            // 🎯 Динамически создаем скрытую вращающуюся подложку Nebula за футером, если её ещё нет
+            // 🎯 Создаем внешнюю подложку Nebula за футером, если её ещё нет
             let nebulaBackdrop = document.getElementById('googleNebulaVoiceBackdropElement');
             if (!nebulaBackdrop) {
                 nebulaBackdrop = document.createElement('div');
                 nebulaBackdrop.id = 'googleNebulaVoiceBackdropElement';
                 nebulaBackdrop.className = 'nebula-backdrop-glow';
-                footer.parentNode.insertBefore(nebulaBackdrop, footer); // Подселяем строго ЗА футер
+                footer.parentNode.insertBefore(nebulaBackdrop, footer); // Подселяем ЗА футер
             }
 
-            // 🌌 Включаем сочный визуал: сдвиг футера влево и вращение размытой туманности Nebula снаружи!
-            footer.classList.add('footer-swiped-left');
+            // 🌌 ЗАЖИГАЕМ ДВОЙНУЮ МАГИЮ: Сияние на рамке + Вращение бесформенной Nebula вокруг!
+            footer.classList.add('aurora-glow-active', 'footer-swiped-left');
             nebulaBackdrop.classList.add('nebula-active');
             
             input.placeholder = "🌌 Слушаю вашу речь... Говорите!";
@@ -3250,20 +3274,20 @@
             speechRecognitionEngine.continuous = false; 
 
             speechRecognitionEngine.onresult = function(event) {
-                const resultText = event.results[0][0].transcript;
+                const resultText = event.results.transcript;
                 input.value = resultText;
             };
 
             speechRecognitionEngine.onend = async function() {
                 const finalSpeechText = input.value.trim();
                 
-                // 🌌 Выключаем сияние Nebula и возвращаем футер на исходную позицию
-                footer.classList.remove('footer-swiped-left');
+                // Тушим обе анимации и возвращаем строку на место
+                footer.classList.remove('aurora-glow-active', 'footer-swiped-left');
                 if (nebulaBackdrop) nebulaBackdrop.classList.remove('nebula-active');
                 input.placeholder = "Напишите сообщение...";
 
                 if (finalSpeechText !== "" && activeChatUser) {
-                    console.log("🌌 [ИИ-СИЯНИЕ] Автоматическая отправка надиктованного текста:", finalSpeechText);
+                    console.log("🌌 [ИИ-СИЯНИЕ] Текст автоматически отправлен:", finalSpeechText);
                     if (typeof sendMessage === 'function') {
                         await sendMessage(); 
                     }
@@ -3273,7 +3297,7 @@
 
             speechRecognitionEngine.onerror = function(err) {
                 console.error("Ошибка ИИ-диктовки:", err);
-                footer.classList.remove('footer-swiped-left');
+                footer.classList.remove('aurora-glow-active', 'footer-swiped-left');
                 if (nebulaBackdrop) nebulaBackdrop.classList.remove('nebula-active');
                 input.placeholder = "Напишите сообщение...";
                 isAuroraDictationActive = false;
