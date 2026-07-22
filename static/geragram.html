@@ -3302,7 +3302,7 @@
             });
         }
 
-        // 🧠 ЗАПУСК КВАНТОВОГО ИИ-РЕЖИМА (ИСПРАВЛЕНО: УБРАН UNDEFINED И ОШИБКИ СВЯЗИ)
+        // 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК GERAGRAM (ФРОНТЕНД-МОНОЛИТ: СВЕРХБЫСТРЫЙ И НЕУБИВАЕМЫЙ)
         function activateQuantumAIVoiceEngine() {
             const footer = document.querySelector('.chat-footer');
             const input = document.getElementById('messageInputField');
@@ -3310,7 +3310,7 @@
 
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) {
-                alert("Бро, твой browser не поддерживает распознавание речи.");
+                alert("Бро, твой браузер не поддерживает распознавание речи.");
                 return;
             }
 
@@ -3337,47 +3337,47 @@
             speechRecognitionEngine.interimResults = true; 
             speechRecognitionEngine.continuous = false; 
 
-            // 🎯 ТОЧНЫЙ ПАРСИНГ РЕЧИ: Заходим на нулевой индекс альтернативы фразы, убирая undefined!
             speechRecognitionEngine.onresult = function(event) {
                 const resultIndex = event.resultIndex;
-                const resultText = event.results[resultIndex][0].transcript;
-                input.value = resultText;
+                input.value = event.results[resultIndex].transcript;
             };
 
-            // 🎯 ОБРАБОТКА ТИШИНЫ: Стучимся к стабильной GPT-4o-mini на бэкенде
+            // 🎯 ОБРАБОТКА ТИШИНЫ: Браузер сам напрямую шлёт запрос в ИИ-облако (В обход CORS и DNS Render!)
             speechRecognitionEngine.onend = async function() {
                 const promptText = input.value.trim();
                 
                 // Гасим анимацию ИИ-неона
                 footer.classList.remove('ai-aurora-glow-active', 'footer-swiped-right');
                 if (aiNebula) aiNebula.classList.remove('ai-nebula-active');
-                input.placeholder = "Обработка нейросетью...";
+                input.placeholder = "Нейросеть генерирует ответ...";
 
                 if (promptText !== "" && promptText.toLowerCase() !== "undefined" && activeChatUser) {
-                    console.log("🧠 [ИИ] Запрос отправлен в LLM:", promptText);
+                    console.log("🧠 [ИИ-ФРОНТЕНД] Прямой запрос к ИИ-кластеру:", promptText);
                     
                     try {
-                        const res = await fetch('/api/geragram/ai/llm-process', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ prompt: promptText })
-                        });
+                        // Формируем четкую инструкцию для бесплатного текстового шлюза Pollinations
+                        const systemInstruction = "Ответь кратко по сути на русском языке, не более 2 предложений, без вступлений.";
+                        const fullPrompt = `${systemInstruction}\nЗапрос: ${promptText}`;
+                        const encodedPrompt = encodeURIComponent(fullPrompt);
                         
-                        if (res.ok) {
-                            const aiData = await res.json();
-                            const generatedText = aiData.ai_text;
+                        // Браузер делает прямой анонимный запрос к фри-модели searchgpt
+                        const aiUrl = `https://text.pollinations.ai/${encodedPrompt}?model=searchgpt`;
+                        const aiResponse = await fetch(aiUrl);
+                        
+                        if (aiResponse.ok) {
+                            const generatedText = await aiResponse.text();
                             
-                            // Подставляем сгенерированный ИИ текст в инпут
-                            input.value = generatedText;
+                            // Записываем сгенерированный ИИ текст в поле ввода
+                            input.value = generatedText.trim();
 
                             // 🔊 ГУГЛ TEXT-TO-SPEECH ОЗВУЧКА ОТВЕТА ЖИВЫМ ГОЛОСОМ
                             if ('speechSynthesis' in window) {
                                 window.speechSynthesis.cancel(); // Прерываем старую озвучку
                                 
-                                const speechUtterance = new SpeechSynthesisUtterance(generatedText);
-                                speechUtterance.lang = 'ru-RU'; // Говорим строго на русском
-                                speechUtterance.rate = 1.0;     // Нормальная скорость речи
-                                speechUtterance.pitch = 1.0;    // Естественная тональность голоса
+                                const speechUtterance = new SpeechSynthesisUtterance(input.value);
+                                speechUtterance.lang = 'ru-RU'; // Говорим на русском
+                                speechUtterance.rate = 1.0;     // Скорость речи
+                                speechUtterance.pitch = 1.0;    // Тональность
 
                                 // 🎯 ОТПРАВКА В ЧАТ СТРОГО ПОСЛЕ ОГЛАСКИ
                                 speechUtterance.onend = async function() {
@@ -3392,11 +3392,11 @@
                                 if (typeof sendMessage === 'function') await sendMessage();
                             }
                         } else {
-                            input.placeholder = "ИИ временно недоступен...";
+                            input.placeholder = "ИИ временно занят, повторите свайп...";
                             setTimeout(() => { input.placeholder = "Напишите сообщение..."; }, 2000);
                         }
                     } catch (err) {
-                        console.error("Сбой ИИ-подключения:", err);
+                        console.error("Сбой ИИ-подключения на фронтенде:", err);
                         input.placeholder = "Напишите сообщение...";
                     }
                 } else {
