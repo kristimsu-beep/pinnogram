@@ -4677,7 +4677,7 @@ async def geragram_ai_llm_process(data: dict, request: Request):
         encoded_prompt = urllib.parse.quote(full_prompt_string)
         
         # 🎯 СОБИРАЕМ ИДЕАЛЬНЫЙ ВЕЧНЫЙ АДРЕС ДЛЯ GET-ЗАПРОСА С СИСТЕМНОЙ МОДЕЛЬЮ OPENAI
-        ai_url = f"https://text.pollinations.ai/{encoded_prompt}?model=openai"
+        ai_url = f"https://text.pollinations.ai/{encoded_prompt}"
         
         async with httpx.AsyncClient(timeout=15.0) as client:
             # Шлем быстрый GET-запрос — он пробивает любые прокси и защиты Render!
