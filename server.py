@@ -4655,40 +4655,54 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
     return {"status": "success", "msg": "Сообщение успешно доставлено"}
 
 # =====================================================================
-# =====================================================================
-# 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК: ИНТЕГРАЦИЯ LLM (БРОНИРОВАННЫЙ ВАРИАНТ GPT)
+# 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК: ИНТЕГРАЦИЯ LLM (БРОНИРОВАННЫЙ АВТОНОМНЫЙ ВАРИАНТ)
 # =====================================================================
 @app.post("/api/geragram/ai/llm-process")
 async def geragram_ai_llm_process(data: dict, request: Request):
-    from duckduckgo_search import DDGS
+    import httpx
     
     me = await get_current_gera_user(request)
     user_prompt = data.get("prompt", "").strip()
     
-    # Защита от входящего undefined с фронтенда
     if not user_prompt or user_prompt.lower() == "undefined":
         return {"status": "error", "ai_text": "Бро, я не расслышал твой голос. Попробуй свайпнуть и сказать еще раз!"}
         
+    # Формируем жесткие системные инструкции для ЛЛМ
     system_instruction = (
         "Ты — встроенный ИИ-ассистент мессенджера GeraGram. "
         "Твоя задача — обрабатывать команды пользователя. "
         "Отвечай максимально кратко, заманчиво, емко и интересно (не более 2 предложений). "
-        "Говори строго на русском языке."
+        "Говори строго на русском языке. Отвечай сразу по сути, без лишних вступлений."
     )
     
+    # Используем бесплатное и сверхстабильное API Pollinations AI (модель OpenAI GPT-4o)
+    # Оно идеально работает на серверах Render в обход любых капч и блокировок IP!
+    ai_url = "https://text.pollinations.ai/"
+    
+    payload = {
+        "messages": [
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": user_prompt}
+        ],
+        "model": "openai", # Продвинутая фри-модель уровня GPT-4o
+        "jsonMode": False
+    }
+    
     try:
-        # Используем gpt-4o-mini — она в разы стабильнее через DDGS API
-        with DDGS() as ddgs:
-            results = ddgs.ai_chat(model="gpt-4o-mini", keywords=f"{system_instruction}\n\nЗапрос: {user_prompt}")
-            if results:
-                ai_response = results.strip()
-            else:
-                ai_response = "Извините, нейросеть вернула пустой ответ. Попробуйте снова."
-                
-        return {"status": "success", "ai_text": ai_response}
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(ai_url, json=payload)
+            
+            if response.status_code == 200:
+                ai_response = response.text.strip()
+                if ai_response:
+                    return {"status": "success", "ai_text": ai_response}
+                    
+            print(f"⚠️ [ИИ-СБОЙ] Сервер ИИ вернул статус-код: {response.status_code}")
+            return {"status": "error", "ai_text": "Сервер нейросети временно перегружен. Пожалуйста, повтори свайп!"}
+            
     except Exception as e:
-        print(f"⚠️ [ИИ-СБОЙ] Ошибка генерации текста в LLM: {e}")
-        return {"status": "error", "ai_text": "Сервер ИИ перегружен запросами. Пожалуйста, повторите пинг через секунду!"}
+        print(f"⚠️ [ИИ-КРИТИЧЕСКИЙ СБОЙ] Ошибка генерации текста в LLM: {e}")
+        return {"status": "error", "ai_text": "Ошибка связи с ИИ-модулем. Попробуйте еще раз через секунду!"}
         
 # =====================================================================
 # 🎮 DISCORD & ROBLOX СТИЛЬ: ДВИЖОК СВЯЗЕЙ И ИГРОВЫХ СТАТУСОВ
