@@ -4673,29 +4673,33 @@ async def geragram_ai_llm_process(data: dict, request: Request):
     full_prompt_string = f"{system_instruction}\n\nЗапрос: {user_prompt}"
     
     try:
-        # ХАКЕРСКИЙ МАНЕВР: Безопасно кодируем промпт для URL-строки (чтобы пробелы не ломали ссылку)
-        encoded_prompt = urllib.parse.quote(full_prompt_string)
+        # Безопасно кодируем промпт для URL
+        encoded_prompt = urllib.parse.quote(f"{system_instruction}\nЗапрос: {user_prompt}")
         
-        # 🎯 СОБИРАЕМ ИДЕАЛЬНЫЙ ВЕЧНЫЙ АДРЕС ДЛЯ GET-ЗАПРОСА С СИСТЕМНОЙ МОДЕЛЬЮ OPENAI
+        # 🎯 ШАГ 1: Стучимся на чистый анонимный текстовый Pollinations
         ai_url = f"https://text.pollinations.ai/{encoded_prompt}"
         
         async with httpx.AsyncClient(timeout=15.0) as client:
-            # Шлем быстрый GET-запрос — он пробивает любые прокси и защиты Render!
             response = await client.get(ai_url)
+            print(f"📡 [ИИ-МОНИТОР] Попытка 1 (Pollinations). Код: {response.status_code}")
             
-            # Логируем статус-код прямо в консоль Render наружу, чтобы ты всё видел
-            print(f"📡 [ИИ-МОНИТОР] Пинг выполнен. Статус ИИ-сервера: {response.status_code}")
+            if response.status_code == 200 and response.text.strip():
+                return {"status": "success", "ai_text": response.text.strip()}
+                
+            # 🎯 ШАГ 2: РЕЗЕРВНЫЙ АВТОНОМНЫЙ МАНЕВР (Если Pollinations выдал ошибку 402/400)
+            # Стучимся на зеркальный фри-шлюз Pollinations, который никогда не просит баланс!
+            backup_url = f"https://text.pollinations.ai/{encoded_prompt}?model=searchgpt"
+            print("🔄 [ИИ-РЕЗЕРВ] Переключение на бесплатную резервную модель searchgpt...")
             
-            if response.status_code == 200:
-                ai_response = response.text.strip()
-                if ai_response:
-                    return {"status": "success", "ai_text": ai_response}
-                    
-            print(f"⚠️ [ИИ-СБОЙ] Сервер ИИ вернул ошибку: {response.status_code}. Текст ответа: {response.text}")
-            return {"status": "error", "ai_text": "Нейросеть думает. Пожалуйста, повторите свайп через секунду!"}
+            backup_response = await client.get(backup_url)
+            if backup_response.status_code == 200 and backup_response.text.strip():
+                return {"status": "success", "ai_text": backup_response.text.strip()}
+                
+            print(f"⚠️ [ИИ-ФИНАЛЬНЫЙ-СБОЙ] Оба сервера выдали ошибку. Резервный код: {backup_response.status_code}")
+            return {"status": "error", "ai_text": "Нейросеть взяла минутную паузу. Пожалуйста, повторите свайп через секунду!"}
             
     except Exception as e:
-        print(f"⚠️ [ИИ-КРИТИЧЕСКИЙ СБОЙ] Исключение Python в LLM: {e}")
+        print(f"⚠️ [ИИ-КРИТИЧЕСКИЙ СБОЙ] Исключение Python: {e}")
         return {"status": "error", "ai_text": "Ошибка связи с ИИ-модулем. Попробуйте еще раз через секунду!"}
      
 # =====================================================================
