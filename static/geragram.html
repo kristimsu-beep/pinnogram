@@ -3668,47 +3668,53 @@
             currentTargetForwardMessageId = null;
         }
 
-        // 🎯 СБОРКА И СОРТИРОВКА КОНТАКТОВ (ИСКЛЮЧАЯ ТЕКУЩИЙ ЧАТ)
+        // 🎯 СБОРКА И СОРТИРОВКА КОНТАКТОВ (УНИВЕРСАЛЬНЫЙ СБОРЩИК ИЗ САЙДБАРА)
         function renderForwardContactsDataList() {
             const container = document.getElementById('forwardModalContactsContainer');
             if (!container) return;
 
             container.innerHTML = "";
 
-            // 🔍 Извлекаем текущего открытого пользователя комнаты, чтобы спрятать его из списка!
-            // (Подставь сюда имя своей глобальной переменной, например window.activeChatUser)
-            const currentChatUserObj = window.activeChatUser || window.currentChatUser || null;
-            const currentChatUserId = currentChatUserObj ? String(currentChatUserObj.id) : null;
+            // 🔍 ХАКЕРСКИЙ ХОД: Ищем карточки контактов прямо в твоём левом сайдбаре на экране!
+            // (Замени '.chat-item', если у тебя карточки чатов называются по-другому, например '.user-card')
+            const sidebarChatItems = document.querySelectorAll('.chat-item, .user-item, .contact-item');
+            
+            // Получаем ID или имя текущего открытого собеседника, чтобы спрятать его из списка
+            const currentChatUserObj = window.activeChatUser || window.currentChatUser || window.activeChat || null;
+            const currentChatUserId = currentChatUserObj ? String(currentChatUserObj.id || currentChatUserObj.username || "") : "";
 
-            // Берем массив ВСЕХ контактов пользователя (подставь свой глобальный массив друзей/диалогов)
-            const allMyContactsArray = window.allUsersList || window.allContactsList || window.usersList || [];
-
-            if (allMyContactsArray.length === 0) {
-                container.innerHTML = `<div style="color:#888; text-align:center; padding:20px; font-size:14px;">У вас пока нет контактов</div>`;
+            if (sidebarChatItems.length === 0) {
+                container.innerHTML = `<div style="color:#888; text-align:center; padding:20px; font-size:14px;">У вас пока нет активных контактов</div>`;
                 return;
             }
 
             let renderedCount = 0;
+            const processedIds = new Set(); // Чтобы контакты не дублировались
 
-            allMyContactsArray.forEach(user => {
-                // Жесткая проверка: не выводим в список самого себя и текущего собеседника чата!
-                const isMe = window.currentUser && String(user.id) === String(window.currentUser.id);
-                const isCurrentRoomPartner = currentChatUserId && String(user.id) === currentChatUserId;
+            sidebarChatItems.forEach(item => {
+                // Вытягиваем ID целевого пользователя из дата-атрибутов твоих карточек чата
+                const targetId = item.dataset.id || item.getAttribute('data-id') || item.dataset.userId || "";
+                if (!targetId || processedIds.has(targetId)) return;
 
-                if (isMe || isCurrentRoomPartner) return;
+                // Жесткая проверка: прячем текущего собеседника из списка пересылки!
+                if (currentChatUserId && targetId === currentChatUserId) return;
 
-                renderedCount++;
+                // Вытягиваем имя и аватарку прямо из текста элементов сайдбара
+                const nameElement = item.querySelector('.chat-name, .user-name, h4, span');
+                const username = nameElement ? nameElement.textContent.trim() : "Пользователь";
                 
-                const avatarUrl = user.avatar || user.avatar_url || '/static/img/default-avatar.png';
-                const username = user.username || user.name || "Пользователь";
-                const statusText = user.is_online ? "🟢 в сети" : "был(а) недавно";
+                const imgElement = item.querySelector('img');
+                const avatarUrl = imgElement ? imgElement.src : '/static/img/default-avatar.png';
+
+                processedIds.add(targetId);
+                renderedCount++;
 
                 const cardHtml = `
-                    <div class="forward-contact-card-item" data-name="${username.toLowerCase()}" onclick="executeForwardMessageAction('${user.id}')">
+                    <div class="forward-contact-card-item" data-name="${username.toLowerCase()}" onclick="executeForwardMessageAction('${targetId}')">
                         <img src="${avatarUrl}" class="forward-contact-avatar" alt="avatar">
                         <div class="forward-contact-info-block">
                             <span class="forward-contact-name-label">${username}</span>
-                            <span class="forward-contact-status-label">${statusText}</span>
+                            <span class="forward-contact-status-label">🟢 доступен</span>
                         </div>
                     </div>
                 `;
