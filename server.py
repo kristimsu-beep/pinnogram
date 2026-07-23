@@ -4654,53 +4654,46 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
 
     return {"status": "success", "msg": "Сообщение успешно доставлено"}
 # =====================================================================
-# 🧠 КВАНТОВЫЙ ИИ-ПЕРЕНАПРАВИТЕЛЬ: ОБХОД БРАУЗЕРНОГО CORS НА 100%
+# 🧠 КВАНТОВЫЙ ИИ-ПЕРЕНАПРАВИТЕЛЬ: АВТОНОМНЫЙ ДВИЖОК G4F (ВЕЧНЫЙ ФИКС)
 # =====================================================================
 @app.post("/api/geragram/ai/front-proxy")
 async def geragram_ai_frontend_proxy_bypass(data: dict, request: Request):
-    import httpx
-    import urllib.parse
+    import g4f
     
-    await get_current_gera_user(request) # Проверяем, что юзер авторизован
+    me = await get_current_gera_user(request) # Проверяем авторизацию
     user_prompt = data.get("prompt", "").strip()
     
     if not user_prompt:
         return {"status": "error", "ai_text": "Промпт пуст"}
         
-    system_instruction = "Ответь кратко по сути на русском языке, не более 2 предложений, без вступлений."
-    full_prompt_string = f"{system_instruction}\n\nЗапрос: {user_prompt}"
+    system_instruction = (
+        "Ты — встроенный ИИ-ассистент мессенджера GeraGram. "
+        "Отвечай максимально кратко, заманчиво и интересно (не более 2 предложений). "
+        "Говори строго на русском языке, сразу по сути, без лишних вступлений."
+    )
     
     try:
-        encoded_prompt = urllib.parse.quote(full_prompt_string)
+        print(f"📡 [ИИ-ДВИЖОК G4F] Промпт принят: {user_prompt}")
         
-        # 🎯 ШАГ 1: Попытка через ультра-стабильную бесплатную модель mistral
-        ai_url = f"https://text.pollinations.ai/{encoded_prompt}?model=mistral"
+        # Вызываем автономный движок, который сам выберет лучший живой шлюз в мире (GPT-4o/Gemini)
+        response = await g4f.ChatCompletion.create_async(
+            model=g4f.models.default, # Автоматический выбор лучшей рабочей модели
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_prompt}
+            ]
+        )
         
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(ai_url)
-            print(f"📡 [ИИ-ШЛЮЗ] Шаг 1 (mistral). Код ответа: {response.status_code}")
+        ai_response = str(response).strip()
+        if ai_response:
+            print(f"✅ [ИИ-ДВИЖОК G4F] Ответ успешно сгенерирован: {ai_response}")
+            return {"status": "success", "ai_text": ai_response}
             
-            if response.status_code == 200:
-                ai_text_raw = response.text.strip() if response.text else ""
-                if ai_text_raw:
-                    return {"status": "success", "ai_text": ai_text_raw}
-                
-            # 🎯 ШАГ 2: ИСПРАВЛЕН СИНТАКСИС! Переключение на резервную модель qwen без ломающих скобок .text!
-            backup_url = f"https://text.pollinations.ai/{encoded_prompt}?model=qwen"
-            print("🔄 [ИИ-ШЛЮЗ] Шаг 1 не удался. Прыгаем на резервную модель qwen...")
-            
-            backup_response = await client.get(backup_url)
-            print(f"📡 [ИИ-ШЛЮЗ] Шаг 2 (qwen). Код ответа: {backup_response.status_code}")
-            
-            if backup_response.status_code == 200:
-                backup_text_raw = backup_response.text.strip() if backup_response.text else ""
-                if backup_text_raw:
-                    return {"status": "success", "ai_text": backup_text_raw}
-                
-        return {"status": "error", "ai_text": "Нейросеть взяла минутную паузу. Пожалуйста, повторите свайп!"}
+        return {"status": "error", "ai_text": "Нейросеть взяла минутную паузу. Повторите свайп!"}
+        
     except Exception as e:
-        print(f"⚠️ [ИИ-ШЛЮЗ-КРИТ-СБОЙ] Исключение Python: {e}")
-        return {"status": "error", "ai_text": "Ошибка связи с ИИ-кластером. Попробуйте еще раз через секунду!"}
+        print(f"⚠️ [ИИ-КРИТИЧЕСКИЙ-СБОЙ G4F] Исключение Python: {e}")
+        return {"status": "error", "ai_text": "Ошибка связи с ИИ-кластером. Попробуйте еще раз!"}
     
 # =====================================================================
 # 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК: ИНТЕГРАЦИЯ LLM (ИДЕАЛЬНЫЙ HUGGING FACE ВАРИАНТ)
