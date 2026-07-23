@@ -4653,7 +4653,44 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
             await geragram_chats.insert_one(bot_msg)
 
     return {"status": "success", "msg": "Сообщение успешно доставлено"}
-
+# =====================================================================
+# 🧠 КВАНТОВЫЙ ИИ-ПЕРЕНАПРАВИТЕЛЬ: ОБХОД БРАУЗЕРНОГО CORS НА 100%
+# =====================================================================
+@app.post("/api/geragram/ai/front-proxy")
+async def geragram_ai_frontend_proxy_bypass(data: dict, request: Request):
+    import httpx
+    import urllib.parse
+    
+    await get_current_gera_user(request) # Проверяем, что юзер авторизован
+    user_prompt = data.get("prompt", "").strip()
+    
+    if not user_prompt:
+        return {"status": "error", "ai_text": "Промпт пуст"}
+        
+    system_instruction = "Ответь кратко по сути на русском языке, не более 2 предложений, без вступлений."
+    full_prompt_string = f"{system_instruction}\n\nЗапрос: {user_prompt}"
+    
+    try:
+        encoded_prompt = urllib.parse.quote(full_prompt_string)
+        # Сервер на Python делает GET-запрос к Pollinations (Ему плевать на CORS браузеров!)
+        ai_url = f"https://text.pollinations.ai/{encoded_prompt}?model=openai"
+        
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(ai_url)
+            if response.status_code == 200 and response.text.strip():
+                return {"status": "success", "ai_text": response.text.strip()}
+                
+            # Резерв на случай лимитов — модель searchgpt
+            backup_url = f"https://text.pollinations.ai/{encoded_prompt}?model=searchgpt"
+            backup_response = await client.get(backup_url)
+            if backup_response.status_code == 200 and backup_response.text.strip():
+                return {"status": "success", "ai_text": backup_response.text.strip()}
+                
+        return {"status": "error", "ai_text": "Нейросеть взяла минутную паузу. Повторите свайп!"}
+    except Exception as e:
+        print(f"⚠️ [ИИ-ШЛЮЗ-СБОЙ] Исключение: {e}")
+        return {"status": "error", "ai_text": "Ошибка связи с ИИ. Попробуйте еще раз!"}
+    
 # =====================================================================
 # 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК: ИНТЕГРАЦИЯ LLM (ИДЕАЛЬНЫЙ HUGGING FACE ВАРИАНТ)
 # =====================================================================
