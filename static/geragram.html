@@ -3302,7 +3302,7 @@
             });
         }
 
-        // 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК GERAGRAM (ФРОНТЕНД-МОНОЛИТ: ИСПРАВЛЕНЫ ЗАМЕРЗАНИЯ ЧАТА)
+        // 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК GERAGRAM (ФРОНТЕНД-МОНОЛИТ: БРОНИРОВАННЫЙ ФИНАЛ)
         function activateQuantumAIVoiceEngine() {
             const footer = document.querySelector('.chat-footer');
             const input = document.getElementById('messageInputField');
@@ -3316,7 +3316,6 @@
 
             isAuroraDictationActive = true;
             
-            // Динамически создаем подложку Quantum Nebula за футером
             let aiNebula = document.getElementById('googleAIVoiceBackdropElement');
             if (!aiNebula) {
                 aiNebula = document.createElement('div');
@@ -3325,7 +3324,6 @@
                 footer.parentNode.insertBefore(aiNebula, footer);
             }
 
-            // Включаем визуал ИИ: Малиновый огонь и сдвиг вправо
             footer.classList.add('ai-aurora-glow-active', 'footer-swiped-right');
             aiNebula.classList.add('ai-nebula-active');
             
@@ -3345,17 +3343,16 @@
                 }
             };
 
-            // 🎯 ОБРАБОТКА ТИШИНЫ: Прямой запрос к ИИ с фиксом замерзания
+            // 🎯 ОБРАБОТКА ТИШИНЫ: Автономная генерация и мгновенная отправка
             speechRecognitionEngine.onend = async function() {
                 const promptText = input.value.trim();
                 
-                // Гасим анимацию ИИ-неона
                 footer.classList.remove('ai-aurora-glow-active', 'footer-swiped-right');
                 if (aiNebula) aiNebula.classList.remove('ai-nebula-active');
                 input.placeholder = "Нейросеть генерирует ответ...";
 
                 if (promptText !== "" && promptText.toLowerCase() !== "undefined" && activeChatUser) {
-                    console.log("🧠 [ИИ-ФРОНТЕНД] Запрос к Pollinations:", promptText);
+                    console.log("🧠 [ИИ] Запрос отправлен:", promptText);
                     
                     try {
                         const systemInstruction = "Ответь кратко по сути на русском языке, не более 2 предложений, без вступлений.";
@@ -3369,38 +3366,52 @@
                             let generatedText = await aiResponse.text();
                             generatedText = generatedText.trim();
                             
-                            // 🎯 ЖЕСТКИЙ ФИКС: Принудительно пингуем инпут, чтобы мессенджер увидел текст
+                            // 🎯 Намертво вшиваем текст в инпут и триггерим события мессенджера
                             input.value = generatedText;
+                            input.placeholder = "Напишите сообщение...";
                             input.dispatchEvent(new Event('input', { bubbles: true }));
                             input.dispatchEvent(new Event('change', { bubbles: true }));
 
-                            // 🔊 ГУГЛ TEXT-TO-SPEECH ОЗВУЧКА ОТВЕТА ЖИВЫМ ГОЛОСОМ
-                            if ('speechSynthesis' in window) {
-                                window.speechSynthesis.cancel(); // Прерываем старую озвучку
-                                
-                                const speechUtterance = new SpeechSynthesisUtterance(generatedText);
-                                speechUtterance.lang = 'ru-RU'; 
-                                speechUtterance.rate = 1.0;     
-                                speechUtterance.pitch = 1.0;    
+                            // 🔊 ПЕРЕСТРАХОВКА ОЗВУЧКИ: Заворачиваем в try/catch, чтобы блокировки звука в браузере не ломали отправку!
+                            let textWasSpoken = false;
+                            try {
+                                if ('speechSynthesis' in window) {
+                                    window.speechSynthesis.cancel();
+                                    const speechUtterance = new SpeechSynthesisUtterance(generatedText);
+                                    speechUtterance.lang = 'ru-RU';
+                                    speechUtterance.rate = 1.0;
+                                    speechUtterance.pitch = 1.0;
 
-                                // 🎯 ОТПРАВКА В ЧАТ СТРОГО ПОСЛЕ ОГЛАСКИ
-                                speechUtterance.onend = async function() {
-                                    console.log("🔊 [ИИ] Огласка завершена! Отправка...");
-                                    if (typeof sendMessage === 'function') {
-                                        await sendMessage();
-                                    }
-                                };
+                                    speechUtterance.onend = async function() {
+                                        console.log("🔊 Огласка завершена, отправляем текст.");
+                                        if (typeof sendMessage === 'function') await sendMessage();
+                                    };
+                                    
+                                    window.speechSynthesis.speak(speechUtterance);
+                                    textWasSpoken = true;
+                                    
+                                    // Резервный таймер отправки: если браузер заблокировал onend у голоса, шлём через 3 секунды принудительно!
+                                    setTimeout(async () => {
+                                        if (input.value === generatedText && typeof sendMessage === 'function') {
+                                            console.log("⏱️ Сработал резервный таймер отправки.");
+                                            await sendMessage();
+                                        }
+                                    }, 4000);
+                                }
+                            } catch (speechErr) {
+                                console.warn("Браузер ограничил аудио-синтез:", speechErr);
+                            }
 
-                                window.speechSynthesis.speak(speechUtterance);
-                            } else {
-                                if (typeof sendMessage === 'function') await sendMessage();
+                            // 🎯 Если озвучка не поддерживается или упала — шлём текст в ту же секунду!
+                            if (!textWasSpoken && typeof sendMessage === 'function') {
+                                await sendMessage();
                             }
                         } else {
                             input.placeholder = "ИИ временно занят, повторите свайп...";
                             setTimeout(() => { input.placeholder = "Напишите сообщение..."; }, 2000);
                         }
                     } catch (err) {
-                        console.error("Сбой ИИ-подключения на фронтенде:", err);
+                        console.error("Сбой ИИ-подключения:", err);
                         input.placeholder = "Напишите сообщение...";
                     }
                 } else {
@@ -3413,7 +3424,7 @@
                 console.error("Ошибка ИИ-диктовки:", err);
                 footer.classList.remove('ai-aurora-glow-active', 'footer-swiped-right');
                 if (aiNebula) aiNebula.classList.remove('ai-nebula-active');
-                input.placeholder = "Напишите message...";
+                input.placeholder = "Напишите сообщение...";
                 isAuroraDictationActive = false;
             };
 
