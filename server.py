@@ -4389,6 +4389,68 @@ class MessageSendModel(BaseModel):
     msg_type: str = "text"
     reply_to_text: str = None  # 🎯 ДОБАВИТЬ ЭТУ СТРОКУ (по умолчанию None, если это обычное сообщение)
 
+# =====================================================================
+# 🔄 МОДУЛЬ ПЕРЕСЫЛКИ СООБЩЕНИЙ: TELEGRAM-STYLE ENGINE
+# =====================================================================
+@app.post("/api/geragram/messages/forward")
+async def geragram_messages_forward_action(data: dict, request: Request):
+    me = await get_current_gera_user(request) # Проверяем, кто отправляет
+    
+    message_id = data.get("message_id") # ID исходного сообщения
+    target_user_id = data.get("target_user_id") # Кому пересылаем (ID друга)
+    
+    if not message_id or not target_user_id:
+        raise HTTPException(status_code=400, detail="Неполные данные для пересылки")
+        
+    try:
+        # 1. Ищем исходное сообщение в базе/памяти, чтобы забрать его текст
+        # (Подставь сюда свою логику поиска сообщения по message_id, ниже пример для глобального массива)
+        source_msg = None
+        for msg in all_geragram_messages_list: # Твой массив или запрос к БД
+            if str(msg.get("id")) == str(message_id):
+                source_msg = msg
+                break
+                
+        if not source_msg:
+            raise HTTPException(status_code=44, detail="Исходное сообщение не найдено")
+            
+        forwarded_text = source_msg.get("text", "").strip()
+        
+        # 2. Генерируем новую запись сообщения для целевой комнаты
+        import uuid
+        import datetime
+        
+        new_message_id = str(uuid.uuid4())
+        timestamp = datetime.datetime.now().isoformat()
+        
+        new_forwarded_message = {
+            "id": new_message_id,
+            "sender_id": me["id"],
+            "receiver_id": target_user_id,
+            "text": forwarded_text,
+            "timestamp": timestamp,
+            "is_read": False,
+            "is_forwarded": True # 🎯 ГЛАВНЫЙ МАРКЕР: Страж стрелочки "Переслано"!
+        }
+        
+        # 3. Сохраняем в твой массив сообщений или базу данных
+        all_geragram_messages_list.append(new_forwarded_message)
+        
+        # 4. Триггерим WebSocket-оповещение, чтобы у получателя сообщение всплыло в реальном времени
+        # (Если у тебя работает менеджер подключений, отправь событие "new_message" получателю)
+        if typeof_websocket_manager_active:
+            await websocket_manager.send_to_user(target_user_id, {
+                "type": "new_message",
+                "message": new_forwarded_message
+            })
+            
+        print(f"🔄 [ПЕРЕСЫЛКА] Юзер {me['username']} переслал сообщение {message_id} юзеру {target_user_id}")
+        return {"status": "success", "message": new_forwarded_message}
+        
+    except Exception as e:
+        print(f"⚠️ [ПЕРЕСЫЛКА-СБОЙ] Критическая ошибка Python: {e}")
+        raise HTTPException(status_code=500, detail="Внутренний сбой модуля пересылки")
+
 import re
 
 # 1. Отправить сообщение (ОБНОВЛЕНО: ЧАСТЬ 1 — БАЗОВЫЕ ПРОВЕРКИ И СОХРАНЕНИЕ)
