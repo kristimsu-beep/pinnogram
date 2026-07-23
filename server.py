@@ -4672,24 +4672,35 @@ async def geragram_ai_frontend_proxy_bypass(data: dict, request: Request):
     
     try:
         encoded_prompt = urllib.parse.quote(full_prompt_string)
-        # Сервер на Python делает GET-запрос к Pollinations (Ему плевать на CORS браузеров!)
-        ai_url = f"https://text.pollinations.ai/{encoded_prompt}?model=openai"
+        
+        # 🎯 ШАГ 1: Попытка через ультра-стабильную бесплатную модель mistral
+        ai_url = f"https://text.pollinations.ai/{encoded_prompt}?model=mistral"
         
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(ai_url)
-            if response.status_code == 200 and response.text.strip():
-                return {"status": "success", "ai_text": response.text.strip()}
+            print(f"📡 [ИИ-ШЛЮЗ] Шаг 1 (mistral). Код ответа: {response.status_code}")
+            
+            if response.status_code == 200:
+                ai_text_raw = response.text.strip() if response.text else ""
+                if ai_text_raw:
+                    return {"status": "success", "ai_text": ai_text_raw}
                 
-            # Резерв на случай лимитов — модель searchgpt
-            backup_url = f"https://text.pollinations.ai/{encoded_prompt}?model=searchgpt"
+            # 🎯 ШАГ 2: ИСПРАВЛЕН СИНТАКСИС! Переключение на резервную модель qwen без ломающих скобок .text!
+            backup_url = f"https://text.pollinations.ai/{encoded_prompt}?model=qwen"
+            print("🔄 [ИИ-ШЛЮЗ] Шаг 1 не удался. Прыгаем на резервную модель qwen...")
+            
             backup_response = await client.get(backup_url)
-            if backup_response.status_code == 200 and backup_response.text.strip():
-                return {"status": "success", "ai_text": backup_response.text.strip()}
+            print(f"📡 [ИИ-ШЛЮЗ] Шаг 2 (qwen). Код ответа: {backup_response.status_code}")
+            
+            if backup_response.status_code == 200:
+                backup_text_raw = backup_response.text.strip() if backup_response.text else ""
+                if backup_text_raw:
+                    return {"status": "success", "ai_text": backup_text_raw}
                 
-        return {"status": "error", "ai_text": "Нейросеть взяла минутную паузу. Повторите свайп!"}
+        return {"status": "error", "ai_text": "Нейросеть взяла минутную паузу. Пожалуйста, повторите свайп!"}
     except Exception as e:
-        print(f"⚠️ [ИИ-ШЛЮЗ-СБОЙ] Исключение: {e}")
-        return {"status": "error", "ai_text": "Ошибка связи с ИИ. Попробуйте еще раз!"}
+        print(f"⚠️ [ИИ-ШЛЮЗ-КРИТ-СБОЙ] Исключение Python: {e}")
+        return {"status": "error", "ai_text": "Ошибка связи с ИИ-кластером. Попробуйте еще раз через секунду!"}
     
 # =====================================================================
 # 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК: ИНТЕГРАЦИЯ LLM (ИДЕАЛЬНЫЙ HUGGING FACE ВАРИАНТ)
