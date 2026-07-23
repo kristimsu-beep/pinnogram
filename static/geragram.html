@@ -3771,7 +3771,49 @@
                 alert("Ошибка связи с сервером при пересылке.");
             }
         }
-        
+        // 🎯 СВЯЗУЮЩИЙ ТРИГГЕР ДЛЯ ЗАПУСКА МОДАЛКИ ПЕРЕСЫЛКИ СООБЩЕНИЯ
+        function triggerForwardAction() {
+            // Пытаемся автоматически подхватить ID зажатого сообщения из твоего меню.
+            // Мы проверяем все возможные варианты имен глобальных переменных!
+            let targetMsgId = window.currentMessageId || window.selectedMessageId || window.contextMessageId || window.selectedMsgId || null;
+            
+            // ХАКЕРСКИЙ ХОД: Если глобальная переменная пуста, вытаскиваем ID напрямую из пузыря на экране!
+            if (!targetMsgId) {
+                const activeMenu = document.getElementById('msgContextMenu');
+                if (activeMenu) {
+                    const allBubbles = document.querySelectorAll('.msg-bubble');
+                    let closestBubble = null;
+                    let minDistance = 99999;
+
+                    const menuTop = parseFloat(activeMenu.style.top || 0);
+                    allBubbles.forEach(b => {
+                        const rect = b.getBoundingClientRect();
+                        const distance = Math.abs(rect.top + window.scrollY - menuTop);
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                            closestBubble = b;
+                        }
+                    });
+
+                    if (closestBubble) {
+                        targetMsgId = closestBubble.dataset.id || closestBubble.getAttribute('data-id');
+                        console.log("🎯 [ПЕРЕСЫЛКА-ХАК] ID успешно вытянут из дата-атрибута пузыря:", targetMsgId);
+                    }
+                }
+            }
+            
+            // Если ID захвачен — прячем меню и распахиваем модалку контактов
+            if (targetMsgId) {
+                const menu = document.getElementById('msgContextMenu');
+                if (menu) menu.style.display = 'none'; // Закрываем контекстное меню
+                
+                openGeragramForwardModal(targetMsgId); // Открываем модальное окно пересылки
+            } else {
+                console.error("⚠️ [ПЕРЕСЫЛКА-КРИТ] Не удалось определить ID сообщения ни из переменных, ни из верстки пузыря!");
+                alert("Бро, не удалось захватить это сообщение. Попробуй зажать его ещё раз!");
+            }
+        }
+
     </script>
     <!-- 📱 КОНТЕКСТНОЕ МЕНЮ GERAGRAM (ОБНОВЛЕНО: С ПАНЕЛЬЮ РЕАКЦИЙ TELEGRAM-STYLE) -->
     <div class="context-menu" id="msgContextMenu" style="position: fixed; background: var(--menu-bg); border: 1px solid var(--tg-border); border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,0.6); padding: 8px; z-index: 5000; display: none; min-width: 230px; animation: menuFadeIn 0.15s ease;">
