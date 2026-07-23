@@ -3302,7 +3302,7 @@
             });
         }
 
-        // 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК GERAGRAM (ФРОНТЕНД-МОНОЛИТ: БРОНИРОВАННЫЙ ФИНАЛ)
+        // 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК GERAGRAM (ФРОНТЕНД + БЭКЕНД СИНЕРГИЯ ДЛЯ ОБХОДА CORS)
         function activateQuantumAIVoiceEngine() {
             const footer = document.querySelector('.chat-footer');
             const input = document.getElementById('messageInputField');
@@ -3337,13 +3337,12 @@
 
             speechRecognitionEngine.onresult = function(event) {
                 const resultIndex = event.resultIndex;
-                if (event.results && event.results[resultIndex] && event.results[resultIndex][0]) {
-                    const resultText = event.results[resultIndex][0].transcript;
-                    input.value = resultText;
+                if (event.results && event.results[resultIndex] && event.results[resultIndex]) {
+                    input.value = event.results[resultIndex].transcript;
                 }
             };
 
-            // 🎯 ОБРАБОТКА ТИШИНЫ: Автономная генерация и мгновенная отправка
+            // 🎯 ОБРАБОТКА ТИШИНЫ: Стучимся на свой родной бэкенд, полностью уничтожая CORS!
             speechRecognitionEngine.onend = async function() {
                 const promptText = input.value.trim();
                 
@@ -3352,27 +3351,27 @@
                 input.placeholder = "Нейросеть генерирует ответ...";
 
                 if (promptText !== "" && promptText.toLowerCase() !== "undefined" && activeChatUser) {
-                    console.log("🧠 [ИИ] Запрос отправлен:", promptText);
+                    console.log("🧠 [ИИ] Запрос отправлен через локальный CORS-шлюз:", promptText);
                     
                     try {
-                        const systemInstruction = "Ответь кратко по сути на русском языке, не более 2 предложений, без вступлений.";
-                        const fullPrompt = `${systemInstruction}\nЗапрос: ${promptText}`;
-                        const encodedPrompt = encodeURIComponent(fullPrompt);
+                        // Стучимся на свой собственный сервер Render
+                        const res = await fetch('/api/geragram/ai/front-proxy', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ prompt: promptText })
+                        });
                         
-                        const aiUrl = `https://text.pollinations.ai/${encodedPrompt}?model=openai`;
-                        const aiResponse = await fetch(aiUrl, { method: 'GET', mode: 'cors' });
-                        
-                        if (aiResponse.ok) {
-                            let generatedText = await aiResponse.text();
-                            generatedText = generatedText.trim();
+                        if (res.ok) {
+                            const data = await res.json();
+                            const generatedText = data.ai_text;
                             
-                            // 🎯 Намертво вшиваем текст в инпут и триггерим события мессенджера
+                            // Жестко фиксируем текст в инпуте и будим мессенджер
                             input.value = generatedText;
                             input.placeholder = "Напишите сообщение...";
                             input.dispatchEvent(new Event('input', { bubbles: true }));
                             input.dispatchEvent(new Event('change', { bubbles: true }));
 
-                            // 🔊 ПЕРЕСТРАХОВКА ОЗВУЧКИ: Заворачиваем в try/catch, чтобы блокировки звука в браузере не ломали отправку!
+                            // 🔊 ПЕРЕСТРАХОВКА ОЗВУЧКИ С РЕЗЕРВНЫМ ТАЙМЕРОМ ОПРАВКИ
                             let textWasSpoken = false;
                             try {
                                 if ('speechSynthesis' in window) {
@@ -3383,35 +3382,33 @@
                                     speechUtterance.pitch = 1.0;
 
                                     speechUtterance.onend = async function() {
-                                        console.log("🔊 Огласка завершена, отправляем текст.");
                                         if (typeof sendMessage === 'function') await sendMessage();
                                     };
                                     
                                     window.speechSynthesis.speak(speechUtterance);
                                     textWasSpoken = true;
                                     
-                                    // Резервный таймер отправки: если браузер заблокировал onend у голоса, шлём через 3 секунды принудительно!
+                                    // Резервный таймер отправки: если браузер смартфона заблокировал звук, шлём принудительно через 3.5 секунды!
                                     setTimeout(async () => {
                                         if (input.value === generatedText && typeof sendMessage === 'function') {
-                                            console.log("⏱️ Сработал резервный таймер отправки.");
                                             await sendMessage();
                                         }
-                                    }, 4000);
+                                    }, 3500);
                                 }
                             } catch (speechErr) {
-                                console.warn("Браузер ограничил аудио-синтез:", speechErr);
+                                console.warn("Синтез речи ограничен:", speechErr);
                             }
 
-                            // 🎯 Если озвучка не поддерживается или упала — шлём текст в ту же секунду!
+                            // Если звук упал или заблокирован — шлём текст моментально
                             if (!textWasSpoken && typeof sendMessage === 'function') {
                                 await sendMessage();
                             }
                         } else {
-                            input.placeholder = "ИИ временно занят, повторите свайп...";
+                            input.placeholder = "ИИ временно недоступен...";
                             setTimeout(() => { input.placeholder = "Напишите сообщение..."; }, 2000);
                         }
                     } catch (err) {
-                        console.error("Сбой ИИ-подключения:", err);
+                        console.error("Сбой ИИ-шлюза:", err);
                         input.placeholder = "Напишите сообщение...";
                     }
                 } else {
@@ -3430,6 +3427,7 @@
 
             speechRecognitionEngine.start();
         }
+
 
         // АКТИВАЦИЯ РЕЖИМА СЕВЕРНОГО СИЯНИЯ И ЗАПУСК СЛУХА (ИСПРАВЛЕНО: УБРАН UNDEFINED)
         function activateGoogleAuroraVoiceDictation() {
