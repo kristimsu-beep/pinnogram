@@ -3302,7 +3302,9 @@
             });
         }
 
-        // 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК GERAGRAM (ФРОНТЕНД + БЭКЕНД СИНЕРГИЯ ДЛЯ ОБХОДА CORS)
+        // 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК GERAGRAM (ФРОНТЕНД + БЭКЕНД: ПРИОРИТЕТ СЕТИ И ОБХОД ОШИБОК)
+        let quantumSilenceTimerWatcher = null;
+
         function activateQuantumAIVoiceEngine() {
             const footer = document.querySelector('.chat-footer');
             const input = document.getElementById('messageInputField');
@@ -3333,31 +3335,38 @@
             speechRecognitionEngine = new SpeechRecognition();
             speechRecognitionEngine.lang = 'ru-RU'; 
             speechRecognitionEngine.interimResults = true; 
-            speechRecognitionEngine.continuous = false; 
+            speechRecognitionEngine.continuous = true; 
 
             speechRecognitionEngine.onresult = function(event) {
                 const resultIndex = event.resultIndex;
                 if (event.results && event.results[resultIndex] && event.results[resultIndex]) {
                     input.value = event.results[resultIndex].transcript;
                 }
+
+                // Сторожевой таймер тишины на 1.5 секунды
+                clearTimeout(quantumSilenceTimerWatcher);
+                quantumSilenceTimerWatcher = setTimeout(() => {
+                    console.log("⏱️ [ИИ-ТАЙМЕР] Зафиксировано 1.5 секунды тишины!");
+                    if (speechRecognitionEngine) {
+                        speechRecognitionEngine.stop(); 
+                    }
+                }, 1500);
             };
 
-            // 🎯 ОБРАБОТКА ЗАВЕРШЕНИЯ: Стучимся на свой родной бэкенд (БРОНИРОВАННЫЙ ВАРИАНТ)
+            // 🎯 ОБРАБОТКА ЗАВЕРШЕНИЯ: СНАЧАЛА СЕТЬ, ПОТОМ ОЗВУЧКА!
             speechRecognitionEngine.onend = async function() {
-                clearTimeout(quantumSilenceTimerWatcher); // Чистим сторож
+                clearTimeout(quantumSilenceTimerWatcher);
                 const promptText = input.value.trim();
                 
                 footer.classList.remove('ai-aurora-glow-active', 'footer-swiped-right');
                 if (aiNebula) aiNebula.classList.remove('ai-nebula-active');
                 input.placeholder = "Нейросеть генерирует ответ...";
 
-                // 🎯 ФИКС ПРОВЕРКИ: Убираем жесткую привязку к activeChatUser, делаем проверку гибкой
-                const hasActiveChat = window.activeChatUser || window.currentChatUser || window.activeChat || window.activeRoomId || true;
-
-                if (promptText !== "" && promptText.toLowerCase() !== "undefined" && hasActiveChat) {
-                    console.log("🧠 [ИИ] Проверка пройдена! Отправка на бэкенд:", promptText);
+                if (promptText !== "" && promptText.toLowerCase() !== "undefined") {
+                    console.log("🧠 [ИИ] Запускаем сетевой запрос к бэкенду:", promptText);
                     
                     try {
+                        // 1. СНАЧАЛА ЖЕСТКО ДЕЛАЕМ СЕТЕВОЙ ЗАПРОС ЧТОБЫ ОБЕЗОПАСИТЬ ЦЕПОЧКУ
                         const res = await fetch('/api/geragram/ai/front-proxy', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -3368,40 +3377,46 @@
                             const data = await res.json();
                             const generatedText = data.ai_text;
                             
-                            // Жестко фиксируем текст в инпуте и будим мессенджер
+                            // Жестко фиксируем текст ответа в поле ввода чата
                             input.value = generatedText;
                             input.placeholder = "Напишите сообщение...";
                             input.dispatchEvent(new Event('input', { bubbles: true }));
                             input.dispatchEvent(new Event('change', { bubbles: true }));
 
-                            // 🔊 ПЕРЕСТРАХОВКА ОЗВУЧКИ С РЕЗЕРВНЫМ ТАЙМЕРОМ ОПРАВКИ
+                            // 2. ЗАПУСКАЕМ ИЗОЛИРОВАННУЮ ОЗВУЧКУ (Она больше не может заблокировать код!)
                             let textWasSpoken = false;
                             try {
-                                if ('speechSynthesis' in window) {
-                                    window.speechSynthesis.cancel();
+                                const SpeechSynthesis = window.speechSynthesis || window.webkitSpeechSynthesis;
+                                const SpeechSynthesisUtterance = window.SpeechSynthesisUtterance || window.webkitSpeechSynthesisUtterance;
+                                
+                                if (SpeechSynthesis && SpeechSynthesisUtterance) {
+                                    SpeechSynthesis.cancel();
                                     const speechUtterance = new SpeechSynthesisUtterance(generatedText);
                                     speechUtterance.lang = 'ru-RU';
                                     speechUtterance.rate = 1.0;
                                     speechUtterance.pitch = 1.0;
 
                                     speechUtterance.onend = async function() {
+                                        console.log("🔊 Огласка завершена. Публикация...");
                                         if (typeof sendMessage === 'function') await sendMessage();
                                     };
                                     
-                                    window.speechSynthesis.speak(speechUtterance);
+                                    SpeechSynthesis.speak(speechUtterance);
                                     textWasSpoken = true;
                                     
-                                    // Резервный таймер отправки: если мобилка заглушила звук, шлём через 3.5 сек
+                                    // Резервный таймер отправки на случай если onend у голоса заблокирован телефоном
                                     setTimeout(async () => {
                                         if (input.value === generatedText && typeof sendMessage === 'function') {
+                                            console.log("⏱️ Сработал таймер автоотправки.");
                                             await sendMessage();
                                         }
                                     }, 3500);
                                 }
                             } catch (speechErr) {
-                                console.warn("Синтез речи ограничен:", speechErr);
+                                console.warn("Браузер ограничил аудио-синтез:", speechErr);
                             }
 
+                            // Если озвучка упала или не поддерживается устройством — шлём в ту же секунду!
                             if (!textWasSpoken && typeof sendMessage === 'function') {
                                 await sendMessage();
                             }
@@ -3410,11 +3425,10 @@
                             setTimeout(() => { input.placeholder = "Напишите сообщение..."; }, 2000);
                         }
                     } catch (err) {
-                        console.error("Сбой ИИ-шлюза:", err);
+                        console.error("Сбой ИИ-подключения на фронтенде:", err);
                         input.placeholder = "Напишите сообщение...";
                     }
                 } else {
-                    console.warn("⚠️ [ИИ-ОТКЛОНЕНО] Пустой текст или не найден активный чат.");
                     input.placeholder = "Напишите сообщение...";
                 }
                 isAuroraDictationActive = false;
@@ -3430,7 +3444,6 @@
 
             speechRecognitionEngine.start();
         }
-
 
         // АКТИВАЦИЯ РЕЖИМА СЕВЕРНОГО СИЯНИЯ И ЗАПУСК СЛУХА (ИСПРАВЛЕНО: УБРАН UNDEFINED)
         function activateGoogleAuroraVoiceDictation() {
