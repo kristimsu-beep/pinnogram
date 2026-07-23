@@ -834,6 +834,125 @@
         .footer-swiped-right {
             transform: translateX(40px);
         }
+        /* 🔄 СТИЛИ ДЛЯ ПЕРЕСЛАННЫХ СООБЩЕНИЙ TELEGRAM-STYLE */
+        .message-forwarded-meta {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.6);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 3px;
+            font-style: italic;
+            font-weight: 500;
+            user-select: none;
+        }
+        
+        /* Если сообщение входящее (серое), меняем цвет текста надписи */
+        .message-bubble.incoming .message-forwarded-meta {
+            color: rgba(0, 0, 0, 0.5);
+        }
+
+        /* Небольшой внутренний сдвиг для красоты контента внутри пузыря */
+        .message-bubble-content-wrapper {
+            display: flex;
+            flex-direction: column;
+        }
+        /* 🔄 КВАНТОВЫЕ СТИЛИ МОДАЛЬНОГО ОКНА ПЕРЕСЫЛКИ */
+        .forward-modal-backdrop {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .forward-modal-backdrop.active {
+            opacity: 1 !important;
+            pointer-events: auto !important;
+        }
+
+        .forward-modal-content {
+            background: #181824;
+            border: 1px solid rgba(255, 0, 128, 0.3);
+            box-shadow: 0 0 25px rgba(255, 0, 128, 0.2);
+            border-radius: 20px;
+            width: 90%;
+            max-width: 400px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            transform: scale(0.8);
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            overflow: hidden;
+        }
+
+        .forward-modal-backdrop.active .forward-modal-content {
+            transform: scale(1) !important;
+        }
+
+        .forward-modal-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .forward-modal-header h3 {
+            margin: 0; font-size: 18px; color: #fff; font-weight: 600;
+        }
+
+        .forward-modal-close-btn {
+            background: none; border: none; color: #aaa; font-size: 24px;
+            cursor: pointer; padding: 0; line-height: 1; transition: color 0.2s;
+        }
+
+        .forward-modal-close-btn:hover { color: #ff007f; }
+
+        .forward-modal-search-wrapper { padding: 12px 20px; }
+
+        #forwardModalSearchField {
+            width: 100%; padding: 10px 14px; background: #0f0f18;
+            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;
+            color: #fff; font-size: 14px; outline: none; transition: border 0.2s;
+        }
+
+        #forwardModalSearchField:focus { border-color: #ff007f; }
+
+        .forward-modal-contacts-list {
+            padding: 10px 20px 20px; overflow-y: auto; flex: 1;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+
+        .forward-contact-card-item {
+            display: flex; align-items: center; gap: 14px; padding: 10px;
+            background: rgba(255, 255, 255, 0.02); border-radius: 12px;
+            cursor: pointer; transition: all 0.2s ease; border: 1px solid transparent;
+        }
+
+        .forward-contact-card-item:hover {
+            background: rgba(255, 0, 128, 0.08);
+            border-color: rgba(255, 0, 128, 0.3);
+            transform: translateX(5px);
+        }
+
+        .forward-contact-avatar {
+            width: 40px; height: 40px; border-radius: 50%;
+            object-fit: cover; background: #252538;
+        }
+
+        .forward-contact-info-block { display: flex; flex-direction: column; gap: 2px; }
+
+        .forward-contact-name-label { color: #fff; font-size: 14px; font-weight: 500; }
+        
+        .forward-contact-status-label { color: #888; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -1955,7 +2074,7 @@
             }
         }
 
-        // 🎨 2.БАЗОВЫЙ РЕНДЕРЕР (ОБНОВЛЕНО: ГАЛОЧКИ ПРОЧТЕНИЯ И СУММИРОВАНИЕ РЕАКЦИЙ)
+        // 🎨 2.БАЗОВЫЙ РЕНДЕРЕР (ОБНОВЛЕНО: ГАЛОЧКИ ПРОЧТЕНИЯ, РЕАКЦИИ И TELEGRAM-STYLE ПЕРЕСЫЛКА)
         function renderMessagesFromData(messagesArray) {
             const container = document.getElementById('messagesContainer');
             if (!container) return;
@@ -1976,6 +2095,12 @@
                 
                 let quoteContent = '';
                 let mainMediaContent = '';
+                let forwardedBadgeHtml = "";
+                
+                // 🎯 МАРКЕР ПЕРЕСЫЛКИ: Включаем плашку, если сообщение переслано!
+                if (msg.is_forwarded) {
+                    forwardedBadgeHtml = `<div class="message-forwarded-meta">↪️ Переслано</div>`;
+                }
                 
                 // Цитата ответа
                 if (msg.reply_to_text) {
@@ -1996,7 +2121,7 @@
                             <span class="voice-duration">0:05</span>
                         </div>
                     `;
-                } 
+                }
                 else if (msg.msg_type === 'image') {
                     mainMediaContent = `<img src="${msg.content}" style="width: 100%; max-width: 280px; border-radius: 8px; display: block; margin-top: 4px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2);" onclick="window.open('${msg.content}', '_blank')">`;
                 }
@@ -2026,7 +2151,6 @@
                 // 🎯 ФИШКА 1: ОПРЕДЕЛЯЕМ ГАЛОЧКИ ДЛЯ СВОИХ СООБЩЕНИЙ
                 let checkmarksHtml = '';
                 if (isMyOwnMessage) {
-                    // Если сообщение прочитано — две галочки, если нет — одна
                     const isRead = msg.read === true;
                     checkmarksHtml = `<span style="margin-left: 4px; font-weight: bold; color: ${isRead ? '#4cd964' : 'rgba(255,255,255,0.4)'};">${isRead ? '✓✓' : '✓'}</span>`;
                 }
@@ -2035,7 +2159,6 @@
                 let reactionsHtml = '';
                 const rawReactions = msg.reactions || [];
                 if (rawReactions.length > 0) {
-                    // Подсчитываем, сколько раз встретилось каждое эмодзи
                     const emojiCounts = {};
                     rawReactions.forEach(r => {
                         if (r.emoji) {
@@ -2043,15 +2166,13 @@
                         }
                     });
 
-                    // Собираем HTML-строку для блока реакций
                     reactionsHtml = `<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; justify-content: ${isMyOwnMessage ? 'flex-end' : 'flex-start'};">`;
                     
                     for (const [emoji, count] of Object.entries(emojiCounts)) {
-                        // Если смайлик один — цифру не пишем, если больше одного — выводим сумму цифрой
                         const countDisplay = count > 1 ? ` <span style="font-size: 11px; font-weight: 700; margin-left: 2px; opacity: 0.9;">${count}</span>` : '';
                         
                         reactionsHtml += `
-                            <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid var(--tg-border); padding: 3px 8px; border-radius: 8px; display: flex; align-items: center; cursor: pointer; user-select: none; animation: emojiPop 0.2s ease;" onclick="selectedMsgId='${msg.id || msg._id}'; addMessageReactionDirectly('${emoji}');">
+                            <div style="background: rgba(0, 0, 0, 0.25); border: 1px solid var(--tg-border); padding: 3px 8px; border-radius: 8px; display: flex; align-items: center; cursor: pointer; user-select: none; animation: emojiPop 0.2s ease;" onclick="window.currentMessageId='${msg.id || msg._id}'; addMessageReactionDirectly('${emoji}');">
                                 <span style="font-size: 14px; line-height: 1;">${emoji}</span>${countDisplay}
                             </div>
                         `;
@@ -2059,7 +2180,9 @@
                     reactionsHtml += `</div>`;
                 }
                 
+                // 🎯 СБОРКА ШАБЛОНА ПУЗЫРЯ: Метка пересылки выводится на самый верх контента!
                 bubble.innerHTML = `
+                    ${forwardedBadgeHtml}
                     ${quoteContent}
                     ${mainMediaContent}
                     <div style="text-align: right; margin-top: 4px; display: block; font-size: 11px;">
@@ -2078,7 +2201,6 @@
                 scrollWrapper.scrollTop = scrollWrapper.scrollHeight;
             }
         }
-
 
         // 🔥 УМНЫЙ ДВИЖОК ОТПРАВКИ: РЕДАКТИРОВАНИЕ И НАСТОЯЩИЕ ЦИТАТЫ
         async function sendMessage() {
@@ -3516,7 +3638,140 @@
 
             speechRecognitionEngine.start();
         }
+        // =====================================================================
+        // 🔄 JS-ДВИЖОК ПЕРЕСЫЛКИ СООБЩЕНИЙ TELEGRAM-STYLE
+        // =====================================================================
+        let currentTargetForwardMessageId = null; // Хранилище ID зажатого сообщения
 
+        // 🎯 ОТКРЫТИЕ МОДАЛКИ ПЕРЕСЫЛКИ
+        function openGeragramForwardModal(messageId) {
+            currentTargetForwardMessageId = messageId;
+            
+            // Если у тебя открыто контекстное меню — закрываем его, чтобы не мешало
+            const contextMenu = document.getElementById('contextMenu');
+            if (contextMenu) contextMenu.classList.remove('active');
+
+            const modal = document.getElementById('geragramForwardModalElement');
+            if (!modal) return;
+
+            modal.classList.add('active');
+            document.getElementById('forwardModalSearchField').value = ""; // Чистим поиск
+
+            // Вызываем рендер списка контактов
+            renderForwardContactsDataList();
+        }
+
+        // 🎯 ЗАКРЫТИЕ МОДАЛКИ
+        function closeGeragramForwardModal() {
+            const modal = document.getElementById('geragramForwardModalElement');
+            if (modal) modal.classList.remove('active');
+            currentTargetForwardMessageId = null;
+        }
+
+        // 🎯 СБОРКА И СОРТИРОВКА КОНТАКТОВ (ИСКЛЮЧАЯ ТЕКУЩИЙ ЧАТ)
+        function renderForwardContactsDataList() {
+            const container = document.getElementById('forwardModalContactsContainer');
+            if (!container) return;
+
+            container.innerHTML = "";
+
+            // 🔍 Извлекаем текущего открытого пользователя комнаты, чтобы спрятать его из списка!
+            // (Подставь сюда имя своей глобальной переменной, например window.activeChatUser)
+            const currentChatUserObj = window.activeChatUser || window.currentChatUser || null;
+            const currentChatUserId = currentChatUserObj ? String(currentChatUserObj.id) : null;
+
+            // Берем массив ВСЕХ контактов пользователя (подставь свой глобальный массив друзей/диалогов)
+            const allMyContactsArray = window.allUsersList || window.allContactsList || window.usersList || [];
+
+            if (allMyContactsArray.length === 0) {
+                container.innerHTML = `<div style="color:#888; text-align:center; padding:20px; font-size:14px;">У вас пока нет контактов</div>`;
+                return;
+            }
+
+            let renderedCount = 0;
+
+            allMyContactsArray.forEach(user => {
+                // Жесткая проверка: не выводим в список самого себя и текущего собеседника чата!
+                const isMe = window.currentUser && String(user.id) === String(window.currentUser.id);
+                const isCurrentRoomPartner = currentChatUserId && String(user.id) === currentChatUserId;
+
+                if (isMe || isCurrentRoomPartner) return;
+
+                renderedCount++;
+                
+                const avatarUrl = user.avatar || user.avatar_url || '/static/img/default-avatar.png';
+                const username = user.username || user.name || "Пользователь";
+                const statusText = user.is_online ? "🟢 в сети" : "был(а) недавно";
+
+                const cardHtml = `
+                    <div class="forward-contact-card-item" data-name="${username.toLowerCase()}" onclick="executeForwardMessageAction('${user.id}')">
+                        <img src="${avatarUrl}" class="forward-contact-avatar" alt="avatar">
+                        <div class="forward-contact-info-block">
+                            <span class="forward-contact-name-label">${username}</span>
+                            <span class="forward-contact-status-label">${statusText}</span>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', cardHtml);
+            });
+
+            if (renderedCount === 0) {
+                container.innerHTML = `<div style="color:#888; text-align:center; padding:20px; font-size:14px;">Нет доступных контактов для пересылки</div>`;
+            }
+        }
+
+        // 🎯 ФИЛЬТР КОНТАКТОВ НА ЛЕТУ ПО ВВОДУ СЛОВА
+        function filterForwardContactsList() {
+            const query = document.getElementById('forwardModalSearchField').value.toLowerCase().trim();
+            const cards = document.querySelectorAll('.forward-contact-card-item');
+
+            cards.forEach(card => {
+                const name = card.getAttribute('data-name') || "";
+                if (name.includes(query)) {
+                    card.style.display = "flex";
+                } else {
+                    card.style.display = "none";
+                }
+            });
+        }
+
+        // 🎯 КЛИК ПО КОНТАКТУ: СТУЧИМСЯ НА БЭКЕНД И ПУБЛИКУЕМ В ДРУГОЙ ЧАТ
+        async function executeForwardMessageAction(targetUserId) {
+            if (!currentTargetForwardMessageId) return;
+
+            console.log(`🔄 [ПЕРЕСЫЛКА] Отправка сообщения ${currentTargetForwardMessageId} пользователю ${targetUserId}`);
+
+            try {
+                const response = await fetch('/api/geragram/messages/forward', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message_id: currentTargetForwardMessageId,
+                        target_user_id: targetUserId
+                    })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log("✅ [ПЕРЕСЫЛКА] Успешно завершено:", result);
+                    
+                    // Показываем красивое системное уведомление на фронте
+                    if (typeof showGeraToast === 'function') {
+                        showGeraToast("🚀 Сообщение успешно переслано!");
+                    } else {
+                        alert("🚀 Сообщение успешно переслано!");
+                    }
+                    
+                    closeGeragramForwardModal(); // Прячем модалку
+                } else {
+                    alert("⚠️ Не удалось переслать сообщение. Сервер вернул ошибку.");
+                }
+            } catch (err) {
+                console.error("Критический сбой отправки пересылки:", err);
+                alert("Ошибка связи с сервером при пересылке.");
+            }
+        }
+        
     </script>
     <!-- 📱 КОНТЕКСТНОЕ МЕНЮ GERAGRAM (ОБНОВЛЕНО: С ПАНЕЛЬЮ РЕАКЦИЙ TELEGRAM-STYLE) -->
     <div class="context-menu" id="msgContextMenu" style="position: fixed; background: var(--menu-bg); border: 1px solid var(--tg-border); border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,0.6); padding: 8px; z-index: 5000; display: none; min-width: 230px; animation: menuFadeIn 0.15s ease;">
@@ -3532,6 +3787,7 @@
         </div>
 
         <!-- Сохраненные оригинальные пункты твоего меню -->
+        <div class="context-menu-item" id="ctxForward" onclick="triggerForwardAction()"><i class="fa-solid fa-share"></i> Переслать</div>
         <div class="context-menu-item" id="ctxReply" onclick="triggerReplyAction()"><i class="fa-solid fa-reply"></i> Ответить</div>
         <div class="context-menu-item" id="ctxCopy" onclick="triggerCopyAction()"><i class="fa-solid fa-copy"></i> Копировать</div>
         <div class="context-menu-item" id="ctxPin" onclick="triggerPinAction()"><i class="fa-solid fa-thumbtack"></i> Закрепить</div>
@@ -3628,6 +3884,21 @@
             </div>
         </div>
     </div>
+    <!-- 🔄 ПРЕМИАЛЬНОЕ МОДАЛЬНОЕ ОКНО ПЕРЕСЫЛКИ TELEGRAM-STYLE -->
+    <div id="geragramForwardModalElement" class="forward-modal-backdrop" onclick="closeGeragramForwardModal()">
+        <div class="forward-modal-content" onclick="event.stopPropagation()">
+            <div class="forward-modal-header">
+                <h3>↪️ Переслать сообщение</h3>
+                <button class="forward-modal-close-btn" onclick="closeGeragramForwardModal()">×</button>
+            </div>
+            <div class="forward-modal-search-wrapper">
+                <input type="text" id="forwardModalSearchField" placeholder="Поиск контакта..." oninput="filterForwardContactsList()">
+            </div>
+            <div id="forwardModalContactsContainer" class="forward-modal-contacts-list">
+                <!-- Сюда JS динамически забросит твоих друзей -->
+            </div>
+        </div>
+    </div>    
 </body>
 </html>
 
