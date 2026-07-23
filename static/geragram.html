@@ -3302,7 +3302,8 @@
             });
         }
 
-        // 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК GERAGRAM (ФРОНТЕНД + БЭКЕНД: ПРИОРИТЕТ СЕТИ И ОБХОД ОШИБОК)
+
+        // 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК GERAGRAM (ФРОНТЕНД + БЭКЕНД: АБСОЛЮТНАЯ СЕТЕВАЯ ПРОБИВКА)
         let quantumSilenceTimerWatcher = null;
 
         function activateQuantumAIVoiceEngine() {
@@ -3343,30 +3344,32 @@
                     input.value = event.results[resultIndex].transcript;
                 }
 
-                // Сторожевой таймер тишины на 1.5 секунды
+                // Таймер тишины на 1.5 секунды
                 clearTimeout(quantumSilenceTimerWatcher);
                 quantumSilenceTimerWatcher = setTimeout(() => {
-                    console.log("⏱️ [ИИ-ТАЙМЕР] Зафиксировано 1.5 секунды тишины!");
                     if (speechRecognitionEngine) {
                         speechRecognitionEngine.stop(); 
                     }
                 }, 1500);
             };
 
-            // 🎯 ОБРАБОТКА ЗАВЕРШЕНИЯ: СНАЧАЛА СЕТЬ, ПОТОМ ОЗВУЧКА!
+            // 🎯 ОБРАБОТКА ЗАВЕРШЕНИЯ: СВЕРХЛЕГКАЯ ПРОВЕРКА И ПУЛЯ В СЕТЬ
             speechRecognitionEngine.onend = async function() {
                 clearTimeout(quantumSilenceTimerWatcher);
-                const promptText = input.value.trim();
+                
+                // Извлекаем чистую строку и убираем опасный toLowerCase()
+                const promptText = (input.value || "").trim();
                 
                 footer.classList.remove('ai-aurora-glow-active', 'footer-swiped-right');
                 if (aiNebula) aiNebula.classList.remove('ai-nebula-active');
                 input.placeholder = "Нейросеть генерирует ответ...";
 
-                if (promptText !== "" && promptText.toLowerCase() !== "undefined") {
-                    console.log("🧠 [ИИ] Запускаем сетевой запрос к бэкенду:", promptText);
+                // Бронированное всеядное условие
+                if (promptText.length > 0 && !promptText.includes("undefined")) {
+                    console.log("🧠 [ИИ] Жесткий старт fetch к прокси...");
                     
                     try {
-                        // 1. СНАЧАЛА ЖЕСТКО ДЕЛАЕМ СЕТЕВОЙ ЗАПРОС ЧТОБЫ ОБЕЗОПАСИТЬ ЦЕПОЧКУ
+                        // Бьем прямо в бэкенд прокси!
                         const res = await fetch('/api/geragram/ai/front-proxy', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -3377,13 +3380,13 @@
                             const data = await res.json();
                             const generatedText = data.ai_text;
                             
-                            // Жестко фиксируем текст ответа в поле ввода чата
+                            // Записываем ответ ИИ
                             input.value = generatedText;
                             input.placeholder = "Напишите сообщение...";
                             input.dispatchEvent(new Event('input', { bubbles: true }));
                             input.dispatchEvent(new Event('change', { bubbles: true }));
 
-                            // 2. ЗАПУСКАЕМ ИЗОЛИРОВАННУЮ ОЗВУЧКУ (Она больше не может заблокировать код!)
+                            // Изолированная озвучка через перестраховку
                             let textWasSpoken = false;
                             try {
                                 const SpeechSynthesis = window.speechSynthesis || window.webkitSpeechSynthesis;
@@ -3397,26 +3400,24 @@
                                     speechUtterance.pitch = 1.0;
 
                                     speechUtterance.onend = async function() {
-                                        console.log("🔊 Огласка завершена. Публикация...");
                                         if (typeof sendMessage === 'function') await sendMessage();
                                     };
                                     
                                     SpeechSynthesis.speak(speechUtterance);
                                     textWasSpoken = true;
                                     
-                                    // Резервный таймер отправки на случай если onend у голоса заблокирован телефоном
+                                    // Резервный таймер автоотправки (3.5 секунды)
                                     setTimeout(async () => {
                                         if (input.value === generatedText && typeof sendMessage === 'function') {
-                                            console.log("⏱️ Сработал таймер автоотправки.");
                                             await sendMessage();
                                         }
                                     }, 3500);
                                 }
                             } catch (speechErr) {
-                                console.warn("Браузер ограничил аудио-синтез:", speechErr);
+                                console.warn("Синтез речи ограничен:", speechErr);
                             }
 
-                            // Если озвучка упала или не поддерживается устройством — шлём в ту же секунду!
+                            // Если озвучка заблокирована устройством — сразу отправляем текст
                             if (!textWasSpoken && typeof sendMessage === 'function') {
                                 await sendMessage();
                             }
@@ -3425,7 +3426,7 @@
                             setTimeout(() => { input.placeholder = "Напишите сообщение..."; }, 2000);
                         }
                     } catch (err) {
-                        console.error("Сбой ИИ-подключения на фронтенде:", err);
+                        console.error("Критический сбой fetch:", err);
                         input.placeholder = "Напишите сообщение...";
                     }
                 } else {
