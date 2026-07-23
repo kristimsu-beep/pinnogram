@@ -3301,9 +3301,8 @@
                 }
             });
         }
-
-
-        // 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК GERAGRAM (ФРОНТЕНД + БЭКЕНД: АБСОЛЮТНАЯ СЕТЕВАЯ ПРОБИВКА)
+                               
+        // 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК GERAGRAM (ФРОНТЕНД + БЭКЕНД: ИСПРАВЛЕН ИНДЕКС И ОБХОД CORS)
         let quantumSilenceTimerWatcher = null;
 
         function activateQuantumAIVoiceEngine() {
@@ -3338,38 +3337,38 @@
             speechRecognitionEngine.interimResults = true; 
             speechRecognitionEngine.continuous = true; 
 
+            // 🎯 ЖЕЛЕЗОБЕТОННЫЙ ПАРСЕР МАССИВОВ: Заходим внутрь нулевой альтернативы, убирая undefined намертво!
             speechRecognitionEngine.onresult = function(event) {
                 const resultIndex = event.resultIndex;
-                if (event.results && event.results[resultIndex] && event.results[resultIndex]) {
-                    input.value = event.results[resultIndex].transcript;
+                if (event.results && event.results[resultIndex] && event.results[resultIndex][0]) {
+                    const resultText = event.results[resultIndex][0].transcript;
+                    input.value = resultText;
                 }
 
-                // Таймер тишины на 1.5 секунды
+                // Сбрасываем и взводим таймер тишины на 1.5 секунды
                 clearTimeout(quantumSilenceTimerWatcher);
                 quantumSilenceTimerWatcher = setTimeout(() => {
                     if (speechRecognitionEngine) {
+                        console.log("⏱️ [ИИ-ТАЙМЕР] Поймано 1.5 сек тишины. Принудительный стоп микрофона...");
                         speechRecognitionEngine.stop(); 
                     }
                 }, 1500);
             };
 
-            // 🎯 ОБРАБОТКА ЗАВЕРШЕНИЯ: СВЕРХЛЕГКАЯ ПРОВЕРКА И ПУЛЯ В СЕТЬ
+            // 🎯 ОБРАБОТКА ЗАВЕРШЕНИЯ ТИШИНЫ: Пуля в сеть на локальный прокси
             speechRecognitionEngine.onend = async function() {
                 clearTimeout(quantumSilenceTimerWatcher);
                 
-                // Извлекаем чистую строку и убираем опасный toLowerCase()
                 const promptText = (input.value || "").trim();
                 
                 footer.classList.remove('ai-aurora-glow-active', 'footer-swiped-right');
                 if (aiNebula) aiNebula.classList.remove('ai-nebula-active');
                 input.placeholder = "Нейросеть генерирует ответ...";
 
-                // Бронированное всеядное условие
                 if (promptText.length > 0 && !promptText.includes("undefined")) {
-                    console.log("🧠 [ИИ] Жесткий старт fetch к прокси...");
+                    console.log("🧠 [ИИ-СЕТЬ] Отправка запроса на бэкенд прокси:", promptText);
                     
                     try {
-                        // Бьем прямо в бэкенд прокси!
                         const res = await fetch('/api/geragram/ai/front-proxy', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -3380,7 +3379,7 @@
                             const data = await res.json();
                             const generatedText = data.ai_text;
                             
-                            // Записываем ответ ИИ
+                            // Записываем ответ ИИ и уведомляем мессенджер
                             input.value = generatedText;
                             input.placeholder = "Напишите сообщение...";
                             input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -3400,24 +3399,26 @@
                                     speechUtterance.pitch = 1.0;
 
                                     speechUtterance.onend = async function() {
+                                        console.log("🔊 Огласка завершена. Автоотправка в чат...");
                                         if (typeof sendMessage === 'function') await sendMessage();
                                     };
                                     
                                     SpeechSynthesis.speak(speechUtterance);
                                     textWasSpoken = true;
                                     
-                                    // Резервный таймер автоотправки (3.5 секунды)
+                                    // Резервный таймер отправки: если мобилка заглушила звук, шлём принудительно через 3.5 сек!
                                     setTimeout(async () => {
                                         if (input.value === generatedText && typeof sendMessage === 'function') {
+                                            console.log("⏱️ Сработал резервный таймер автоотправки.");
                                             await sendMessage();
                                         }
                                     }, 3500);
                                 }
                             } catch (speechErr) {
-                                console.warn("Синтез речи ограничен:", speechErr);
+                                console.warn("Синтез речи ограничен браузером:", speechErr);
                             }
 
-                            // Если озвучка заблокирована устройством — сразу отправляем текст
+                            // Если озвучка не сработала — сразу выстреливаем текст в чат
                             if (!textWasSpoken && typeof sendMessage === 'function') {
                                 await sendMessage();
                             }
@@ -3426,8 +3427,8 @@
                             setTimeout(() => { input.placeholder = "Напишите сообщение..."; }, 2000);
                         }
                     } catch (err) {
-                        console.error("Критический сбой fetch:", err);
-                        input.placeholder = "Напишите сообщение...";
+                        console.error("Критический сбой fetch к ИИ-прокси:", err);
+                        input.placeholder = "Напишите message...";
                     }
                 } else {
                     input.placeholder = "Напишите сообщение...";
