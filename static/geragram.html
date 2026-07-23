@@ -3668,60 +3668,93 @@
             currentTargetForwardMessageId = null;
         }
 
-        // 🎯 СБОРКА И СОРТИРОВКА КОНТАКТОВ (УНИВЕРСАЛЬНЫЙ СБОРЩИК ИЗ САЙДБАРА)
+        // 🎯 СБОРКА И СОРТИРОВКА КОНТАКТОВ (ЖЕЛЕЗОБЕТОННЫЙ СКАНИРОВЩИК ТВОЕГО КОНТЕЙНЕРА ЧАТОВ)
         function renderForwardContactsDataList() {
             const container = document.getElementById('forwardModalContactsContainer');
             if (!container) return;
 
             container.innerHTML = "";
 
-            // 🔍 ХАКЕРСКИЙ ХОД: Ищем карточки контактов прямо в твоём левом сайдбаре на экране!
-            // (Замени '.chat-item', если у тебя карточки чатов называются по-другому, например '.user-card')
-            const sidebarChatItems = document.querySelectorAll('.chat-item, .user-item, .contact-item');
+            // 🔍 НАШ ГЛАВНЫЙ ЦЕЛЕВОЙ КОНТЕЙНЕР С ТВОЕГО СКРИНШОТА!
+            const chatsListWrapper = document.getElementById('chatsContainerList');
             
-            // Получаем ID или имя текущего открытого собеседника, чтобы спрятать его из списка
-            const currentChatUserObj = window.activeChatUser || window.currentChatUser || window.activeChat || null;
+            // Вытаскиваем текущего открытого пользователя комнаты, чтобы спрятать его из списка пересылки
+            const currentChatUserObj = window.activeChatUser || window.currentChatUser || window.activeChat || window.activeRoom || null;
             const currentChatUserId = currentChatUserObj ? String(currentChatUserObj.id || currentChatUserObj.username || "") : "";
 
-            if (sidebarChatItems.length === 0) {
-                container.innerHTML = `<div style="color:#888; text-align:center; padding:20px; font-size:14px;">У вас пока нет активных контактов</div>`;
-                return;
+            // 🎯 ШАГ 1: Если на экране есть отрендеренные чаты в твоем контейнере, забираем их!
+            if (chatsListWrapper && chatsListWrapper.children.length > 0) {
+                let renderedCount = 0;
+                const processedIds = new Set();
+
+                // Перебираем всех прямых потомков (карточки чатов) внутри твоего списка диалогов
+                Array.from(chatsListWrapper.children).forEach(item => {
+                    // Вытягиваем ID или юзернейм из любых возможных дата-атрибутов твоей карточки
+                    const targetId = item.dataset.id || item.getAttribute('data-id') || item.dataset.userId || item.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || "";
+                    if (!targetId || processedIds.has(targetId)) return;
+
+                    // Жесткая проверка: прячем текущего собеседника из списка пересылки!
+                    if (currentChatUserId && targetId === currentChatUserId) return;
+
+                    // Ищем имя друга внутри карточки (берем первый попавшийся текстовый элемент: span, h4, div)
+                    const nameElement = item.querySelector('.chat-name, .user-name, .name, h4, span, p') || item;
+                    let username = nameElement ? nameElement.textContent.trim() : "Пользователь";
+                    
+                    // Отрезаем счетчики нечитанных сообщений или время, если они склеились с именем
+                    if (username.includes('\n')) username = username.split('\n')[0].trim();
+
+                    // Ищем аватарку внутри карточки чата
+                    const imgElement = item.querySelector('img');
+                    const avatarUrl = imgElement ? imgElement.src : '/static/img/default-avatar.png';
+
+                    processedIds.add(targetId);
+                    renderedCount++;
+
+                    const cardHtml = `
+                        <div class="forward-contact-card-item" data-name="${username.toLowerCase()}" onclick="executeForwardMessageAction('${targetId}')">
+                            <img src="${avatarUrl}" class="forward-contact-avatar" alt="avatar">
+                            <div class="forward-contact-info-block">
+                                <span class="forward-contact-name-label">${username}</span>
+                                <span class="forward-contact-status-label">🟢 активный диалог</span>
+                            </div>
+                        </div>
+                    `;
+                    container.insertAdjacentHTML('beforeend', cardHtml);
+                });
+
+                if (renderedCount > 0) return; // Успешно вывели все активные диалоги с твоего экрана!
             }
 
-            let renderedCount = 0;
-            const processedIds = new Set(); // Чтобы контакты не дублировались
+            // 🎯 ШАГ 2: РЕЗЕРВНЫЙ ПЛАН (Если в момент клика контейнер на экране перерисовался, берем из базовых массивов)
+            const backupArray = window.chats || window.chatsList || window.dialogs || window.allUsersList || window.usersList || [];
+            let backupRenderedCount = 0;
 
-            sidebarChatItems.forEach(item => {
-                // Вытягиваем ID целевого пользователя из дата-атрибутов твоих карточек чата
-                const targetId = item.dataset.id || item.getAttribute('data-id') || item.dataset.userId || "";
-                if (!targetId || processedIds.has(targetId)) return;
+            if (backupArray.length > 0) {
+                backupArray.forEach(user => {
+                    const targetId = String(user.id || user._id || user.username || "");
+                    if (!targetId) return;
 
-                // Жесткая проверка: прячем текущего собеседника из списка пересылки!
-                if (currentChatUserId && targetId === currentChatUserId) return;
+                    const isMe = window.currentUser && String(user.id || user.username) === String(window.currentUser.id || window.currentUser.username);
+                    if (isMe || (currentChatUserId && targetId === currentChatUserId)) return;
 
-                // Вытягиваем имя и аватарку прямо из текста элементов сайдбара
-                const nameElement = item.querySelector('.chat-name, .user-name, h4, span');
-                const username = nameElement ? nameElement.textContent.trim() : "Пользователь";
-                
-                const imgElement = item.querySelector('img');
-                const avatarUrl = imgElement ? imgElement.src : '/static/img/default-avatar.png';
+                    backupRenderedCount++;
+                    const avatarUrl = user.avatar || user.avatar_url || '/static/img/default-avatar.png';
+                    const username = user.username || user.name || "Пользователь";
 
-                processedIds.add(targetId);
-                renderedCount++;
-
-                const cardHtml = `
-                    <div class="forward-contact-card-item" data-name="${username.toLowerCase()}" onclick="executeForwardMessageAction('${targetId}')">
-                        <img src="${avatarUrl}" class="forward-contact-avatar" alt="avatar">
-                        <div class="forward-contact-info-block">
-                            <span class="forward-contact-name-label">${username}</span>
-                            <span class="forward-contact-status-label">🟢 доступен</span>
+                    const cardHtml = `
+                        <div class="forward-contact-card-item" data-name="${username.toLowerCase()}" onclick="executeForwardMessageAction('${targetId}')">
+                            <img src="${avatarUrl}" class="forward-contact-avatar" alt="avatar">
+                            <div class="forward-contact-info-block">
+                                <span class="forward-contact-name-label">${username}</span>
+                                <span class="forward-contact-status-label">🟢 доступен</span>
+                            </div>
                         </div>
-                    </div>
-                `;
-                container.insertAdjacentHTML('beforeend', cardHtml);
-            });
+                    `;
+                    container.insertAdjacentHTML('beforeend', cardHtml);
+                });
+            }
 
-            if (renderedCount === 0) {
+            if (backupRenderedCount === 0) {
                 container.innerHTML = `<div style="color:#888; text-align:center; padding:20px; font-size:14px;">Нет доступных контактов для пересылки</div>`;
             }
         }
