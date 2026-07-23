@@ -3342,19 +3342,22 @@
                 }
             };
 
-            // 🎯 ОБРАБОТКА ТИШИНЫ: Стучимся на свой родной бэкенд, полностью уничтожая CORS!
+            // 🎯 ОБРАБОТКА ЗАВЕРШЕНИЯ: Стучимся на свой родной бэкенд (БРОНИРОВАННЫЙ ВАРИАНТ)
             speechRecognitionEngine.onend = async function() {
+                clearTimeout(quantumSilenceTimerWatcher); // Чистим сторож
                 const promptText = input.value.trim();
                 
                 footer.classList.remove('ai-aurora-glow-active', 'footer-swiped-right');
                 if (aiNebula) aiNebula.classList.remove('ai-nebula-active');
                 input.placeholder = "Нейросеть генерирует ответ...";
 
-                if (promptText !== "" && promptText.toLowerCase() !== "undefined" && activeChatUser) {
-                    console.log("🧠 [ИИ] Запрос отправлен через локальный CORS-шлюз:", promptText);
+                // 🎯 ФИКС ПРОВЕРКИ: Убираем жесткую привязку к activeChatUser, делаем проверку гибкой
+                const hasActiveChat = window.activeChatUser || window.currentChatUser || window.activeChat || window.activeRoomId || true;
+
+                if (promptText !== "" && promptText.toLowerCase() !== "undefined" && hasActiveChat) {
+                    console.log("🧠 [ИИ] Проверка пройдена! Отправка на бэкенд:", promptText);
                     
                     try {
-                        // Стучимся на свой собственный сервер Render
                         const res = await fetch('/api/geragram/ai/front-proxy', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -3388,7 +3391,7 @@
                                     window.speechSynthesis.speak(speechUtterance);
                                     textWasSpoken = true;
                                     
-                                    // Резервный таймер отправки: если браузер смартфона заблокировал звук, шлём принудительно через 3.5 секунды!
+                                    // Резервный таймер отправки: если мобилка заглушила звук, шлём через 3.5 сек
                                     setTimeout(async () => {
                                         if (input.value === generatedText && typeof sendMessage === 'function') {
                                             await sendMessage();
@@ -3399,7 +3402,6 @@
                                 console.warn("Синтез речи ограничен:", speechErr);
                             }
 
-                            // Если звук упал или заблокирован — шлём текст моментально
                             if (!textWasSpoken && typeof sendMessage === 'function') {
                                 await sendMessage();
                             }
@@ -3412,6 +3414,7 @@
                         input.placeholder = "Напишите сообщение...";
                     }
                 } else {
+                    console.warn("⚠️ [ИИ-ОТКЛОНЕНО] Пустой текст или не найден активный чат.");
                     input.placeholder = "Напишите сообщение...";
                 }
                 isAuroraDictationActive = false;
