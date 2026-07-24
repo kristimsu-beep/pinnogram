@@ -3675,39 +3675,47 @@
 
             container.innerHTML = "";
 
-            // 🔍 НАШ ГЛАВНЫЙ ЦЕЛЕВОЙ КОНТЕЙНЕР С ТВОЕГО СКРИНШОТА!
+            // 🔍 НАШ ГЛАВНЫЙ ЦЕЛЕВОЙ КОНТЕЙНЕР
             const chatsListWrapper = document.getElementById('chatsContainerList');
             
             // Вытаскиваем текущего открытого пользователя комнаты, чтобы спрятать его из списка пересылки
             const currentChatUserObj = window.activeChatUser || window.currentChatUser || window.activeChat || window.activeRoom || null;
             const currentChatUserId = currentChatUserObj ? String(currentChatUserObj.id || currentChatUserObj.username || "") : "";
 
-            // 🎯 ШАГ 1: Если на экране есть отрендеренные чаты в твоем контейнере, забираем их!
+            // 🎯 ШАГ 1: Залазим внутрь живого HTML-контейнера чатов с твоего скриншота!
             if (chatsListWrapper && chatsListWrapper.children.length > 0) {
                 let renderedCount = 0;
-                const processedIds = new Set();
+                const processedNames = new Set(); // Фильтр дубликатов по именам
 
                 // Перебираем всех прямых потомков (карточки чатов) внутри твоего списка диалогов
                 Array.from(chatsListWrapper.children).forEach(item => {
-                    // Вытягиваем ID или юзернейм из любых возможных дата-атрибутов твоей карточки
-                    const targetId = item.dataset.id || item.getAttribute('data-id') || item.dataset.userId || item.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || "";
-                    if (!targetId || processedIds.has(targetId)) return;
-
-                    // Жесткая проверка: прячем текущего собеседника из списка пересылки!
-                    if (currentChatUserId && targetId === currentChatUserId) return;
-
                     // Ищем имя друга внутри карточки (берем первый попавшийся текстовый элемент: span, h4, div)
                     const nameElement = item.querySelector('.chat-name, .user-name, .name, h4, span, p') || item;
-                    let username = nameElement ? nameElement.textContent.trim() : "Пользователь";
+                    let username = nameElement ? nameElement.textContent.trim() : "";
                     
-                    // Отрезаем счетчики нечитанных сообщений или время, если они склеились с именем
+                    // Отрезаем счетчики нечитанных сообщений или время, если они склеились с именем внутри тега
                     if (username.includes('\n')) username = username.split('\n')[0].trim();
+                    if (!username || username === "Поиск..." || processedNames.has(username)) return;
+
+                    // 🎯 БРОНИРОВАННЫЙ ХАК: Вытягиваем ID из любого места! 
+                    // Из дата-атрибутов, из текста, из onclick-вызовов или берем само ИМЯ как ID диалога!
+                    let targetId = item.dataset.id || item.getAttribute('data-id') || item.dataset.userId || "";
+                    
+                    // Если атрибутов нет, сканируем строчку onclick (например, openChat('123') -> вытащит 123)
+                    if (!targetId) {
+                        const onclickStr = item.getAttribute('onclick') || "";
+                        const match = onclickStr.match(/'([^']+)'/) || onclickStr.match(/"([^"]+)"/);
+                        targetId = match ? match[1] : username; // Если ID вообще нет — имя становится ID!
+                    }
+
+                    // Жесткая проверка: прячем текущего собеседника из списка пересылки!
+                    if (currentChatUserId && (targetId === currentChatUserId || username === currentChatUserId)) return;
 
                     // Ищем аватарку внутри карточки чата
                     const imgElement = item.querySelector('img');
                     const avatarUrl = imgElement ? imgElement.src : '/static/img/default-avatar.png';
 
-                    processedIds.add(targetId);
+                    processedNames.add(username);
                     renderedCount++;
 
                     const cardHtml = `
@@ -3722,10 +3730,10 @@
                     container.insertAdjacentHTML('beforeend', cardHtml);
                 });
 
-                if (renderedCount > 0) return; // Успешно вывели все активные диалоги с твоего экрана!
+                if (renderedCount > 0) return; // Успешно вывели все активные диалоги!
             }
 
-            // 🎯 ШАГ 2: РЕЗЕРВНЫЙ ПЛАН (Если в момент клика контейнер на экране перерисовался, берем из базовых массивов)
+            // 🎯 ШАГ 2: РЕЗЕРВНЫЙ ПЛАН (Если контейнер пуст, берем из базовых глобальных массивов)
             const backupArray = window.chats || window.chatsList || window.dialogs || window.allUsersList || window.usersList || [];
             let backupRenderedCount = 0;
 
