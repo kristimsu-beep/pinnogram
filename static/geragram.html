@@ -3668,7 +3668,7 @@
             currentTargetForwardMessageId = null;
         }
 
-        // 🎯 СБОРКА И СОРТИРОВКА КОНТАКТОВ (ЖЕЛЕЗОБЕТОННЫЙ СЕТЕВОЙ ШЛЮЗ ДЛЯ БАЗЫ MONGODB)
+        // 🎯 СБОРКА И СОРТИРОВКА КОНТАКТОВ (УЛЬТИМАТИВНЫЙ ОБХОД КЭША И БОЙ С ПУСТОТОЙ)
         async function renderForwardContactsDataList() {
             const container = document.getElementById('forwardModalContactsContainer');
             if (!container) return;
@@ -3676,17 +3676,14 @@
             // Включаем красивый неоновый лоадер
             container.innerHTML = `<div style="color:#ff007f; text-align:center; padding:20px; font-size:14px; animation: pulse 1.5s infinite;">🧠 Синхронизация с базой GeraGram...</div>`;
 
-            // Вытаскиваем текущего открытого пользователя комнаты
-            const currentChatUserObj = window.activeChatUser || window.currentChatUser || window.activeChat || window.activeRoom || null;
-            const currentChatUserId = currentChatUserObj ? String(currentChatUserObj.id || currentChatUserObj.username || "") : "";
-
             try {
-                // Стучимся на твой официальный эндпоинт контактов
-                const response = await fetch('/api/geragram/contacts/list', { method: 'GET' });
+                // 🎯 ХАКЕРСКИЙ МАНЕВР ?v= СНОСИТ ЛЮБОЙ КЭШ БРАУЗЕРА НА СМАРТФОНЕ НАМЕРТВО!
+                const cacheBusterUrl = `/api/geragram/contacts/list?v=${new Date().getTime()}`;
+                const response = await fetch(cacheBusterUrl, { method: 'GET' });
                 
                 if (response.ok) {
                     const serverResponseResult = await response.json();
-                    console.log("📡 [ИИ-ОТЛАДКА-КОНСОЛЬ] Полный JSON от сервера:", serverResponseResult);
+                    console.log("📡 [ИИ-ФРОНТЕНД] Свежий JSON из MongoDB Atlas получен:", serverResponseResult);
 
                     // Извлекаем массив из твоего ключа "contacts"
                     let usersDataArray = [];
@@ -3695,8 +3692,6 @@
                     } else if (Array.isArray(serverResponseResult)) {
                         usersDataArray = serverResponseResult;
                     }
-
-                    console.log("📡 [ИИ-ОТЛАДКА-КОНСОЛЬ] Извлеченный массив контактов:", usersDataArray);
 
                     if (usersDataArray.length > 0) {
                         container.innerHTML = ""; // Очищаем лоадер
@@ -3709,9 +3704,9 @@
                             const targetId = String(user.username || "");
                             if (!targetId || processedIds.has(targetId)) return;
 
-                            // 🎯 СМЯГЧАЕМ ФИЛЬТР ДЛЯ ТЕСТОВ: Убираем блокировку текущей комнаты бота, чтобы список ТОЧНО не был пустым!
+                            // 🎯 Полностью отключаем любые фильтры комнат для теста! Должны отобразиться ВСЕ, кто есть в базе!
                             const isMe = window.currentUser && String(user.username).toLowerCase() === String(window.currentUser.username || "").toLowerCase();
-                            if (isMe) return; // Себе пересылать нельзя, отсекаем
+                            if (isMe) return; // Себе пересылать нельзя
 
                             renderedCount++;
                             processedIds.add(targetId);
@@ -3719,7 +3714,7 @@
                             const displayName = user.display_name || user.username || "Пользователь";
                             const statusText = user.status || "доступен";
                             
-                            // Генерируем премиальную буквенную аватарку из твоих стилей MongoDB Atlas
+                            // Рендерим премиальные буквенные аватарки-градиенты из твоего server.py
                             let avatarHtml = "";
                             if (user.avatar_type === "letter" && user.avatar_data) {
                                 const gradient = user.avatar_data.gradient || "linear-gradient(135deg, #3a6073, #3a6073)";
@@ -3748,15 +3743,15 @@
                             container.insertAdjacentHTML('beforeend', cardHtml);
                         });
 
-                        if (renderedCount > 0) return; // Успешно отрендерили!
+                        if (renderedCount > 0) return; // Успешно победили пустоту!
                     }
                 }
             } catch (netErr) {
                 console.error("⚠️ [ИИ-КРИТ-СБОЙ] Сбой парсинга контактов:", netErr);
             }
 
-            // Финальная заглушка
-            container.innerHTML = `<div style="color:#888; text-align:center; padding:20px; font-size:14px;">Нет доступных контактов для пересылки</div>`;
+            // Если кэш пробит, но база вернула полный ноль
+            container.innerHTML = `<div style="color:#888; text-align:center; padding:20px; font-size:14px;">Контакты обновляются. Сделайте свайп заново!</div>`;
         }
 
         // 🎯 ФИЛЬТР КОНТАКТОВ НА ЛЕТУ ПО ВВОДУ СЛОВА
