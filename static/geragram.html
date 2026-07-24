@@ -3668,77 +3668,81 @@
             currentTargetForwardMessageId = null;
         }
 
-        // 🎯 СБОРКА И СОРТИРОВКА КОНТАКТОВ (УЛЬТИМАТИВНЫЙ ВСЕЯДНЫЙ СЕТЕВОЙ ПАРСЕР JSON)
+        // 🎯 СБОРКА И СОРТИРОВКА КОНТАКТОВ (ЖЕЛЕЗОБЕТОННЫЙ СЕТЕВОЙ ШЛЮЗ ДЛЯ БАЗЫ MONGODB)
         async function renderForwardContactsDataList() {
             const container = document.getElementById('forwardModalContactsContainer');
             if (!container) return;
 
             // Включаем красивый неоновый лоадер
-            container.innerHTML = `<div style="color:#ff007f; text-align:center; padding:20px; font-size:14px; animation: pulse 1.5s infinite;">🧠 Загрузка контактов из базы...</div>`;
+            container.innerHTML = `<div style="color:#ff007f; text-align:center; padding:20px; font-size:14px; animation: pulse 1.5s infinite;">🧠 Синхронизация с базой GeraGram...</div>`;
 
             // Вытаскиваем текущего открытого пользователя комнаты, чтобы спрятать его из списка пересылки
             const currentChatUserObj = window.activeChatUser || window.currentChatUser || window.activeChat || window.activeRoom || null;
             const currentChatUserId = currentChatUserObj ? String(currentChatUserObj.id || currentChatUserObj.username || "") : "";
 
             try {
-                // 🎯 Стучимся на твой официальный эндпоинт контактов
+                // Стучимся на твой официальный эндпоинт контактов
                 const response = await fetch('/api/geragram/contacts/list', { method: 'GET' });
                 
                 if (response.ok) {
-                    const rawJsonData = await response.json();
-                    console.log("📡 [ПЕРЕСЫЛКА-ОТЛАДКА] Сырой JSON от бэкенда:", rawJsonData);
+                    const serverResponseResult = await response.json();
+                    console.log("📡 [ПЕРЕСЫЛКА-ОТЛАДКА] Ответ из MongoDB получен:", serverResponseResult);
 
+                    // 🎯 ЖЕСТКИЙ ФИКС: Вытаскиваем массив строго из твоего ключа "contacts"!
                     let usersDataArray = [];
-
-                    // ИИ-МАНЕВР: Если прилетел чистый массив, забираем его
-                    if (Array.isArray(rawJsonData)) {
-                        usersDataArray = rawJsonData;
-                    } else if (rawJsonData && typeof rawJsonData === 'object') {
-                        // Если прилетел сложный объект/словарь, автоматически сканируем все его ключи в поиске массивов!
-                        for (const key in rawJsonData) {
-                            if (Array.isArray(rawJsonData[key])) {
-                                usersDataArray = usersDataArray.concat(rawJsonData[key]);
-                            }
-                        }
-                        // Если вложенных массивов не нашли, но сам объект содержит поля юзера (например, одиночный диалог)
-                        if (usersDataArray.length === 0 && (rawJsonData.username || rawJsonData.id)) {
-                            usersDataArray.push(rawJsonData);
-                        }
+                    if (serverResponseResult && serverResponseResult.contacts && Array.isArray(serverResponseResult.contacts)) {
+                        usersDataArray = serverResponseResult.contacts;
+                    } else if (Array.isArray(serverResponseResult)) {
+                        usersDataArray = serverResponseResult;
                     }
 
                     if (usersDataArray.length > 0) {
-                        container.innerHTML = ""; // Очищаем неоновый лоадер
+                        container.innerHTML = ""; // Очищаем лоадер
                         let renderedCount = 0;
-                        const processedIds = new Set(); // Чтобы контакты не дублировались, если массивы склеились
+                        const processedIds = new Set();
 
                         usersDataArray.forEach(user => {
                             if (!user) return;
                             
-                            // Извлекаем ID или юзернейм из любых возможных полей объекта
-                            const targetId = String(user.id || user._id || user.username || user.room_id || user.chat_id || "");
+                            // У тебя ID пользователя или группы лежит в поле 'username'
+                            const targetId = String(user.username || "");
                             if (!targetId || processedIds.has(targetId)) return;
 
                             // Жесткая проверка: не выводим в список самого себя и текущего собеседника чата!
-                            const isMe = window.currentUser && String(user.id || user.username) === String(window.currentUser.id || window.currentUser.username);
-                            const isCurrentRoomPartner = currentChatUserId && (targetId === currentChatUserId || String(user.username) === currentChatUserId || String(user.chat_name) === currentChatUserId);
+                            const isMe = window.currentUser && String(user.username).toLowerCase() === String(window.currentUser.username || "").toLowerCase();
+                            const isCurrentRoomPartner = currentChatUserId && (targetId.toLowerCase() === currentChatUserId.toLowerCase());
 
                             if (isMe || isCurrentRoomPartner) return;
 
-                            // Извлекаем юзернейм из возможных полей (поддерживаем группы и контакты)
-                            const username = user.username || user.name || user.chat_name || user.title || "Пользователь";
-                            if (username === "Поиск...") return; // Фильтруем мусор
-
-                            const avatarUrl = user.avatar || user.avatar_url || user.img || '/static/img/default-avatar.png';
-                            const statusText = user.is_online ? "🟢 в сети" : "доступен";
-
-                            processedIds.add(targetId);
                             renderedCount++;
+                            processedIds.add(targetId);
+                            
+                            const displayName = user.display_name || user.username || "Пользователь";
+                            const statusText = user.status || "доступен";
+                            
+                            // 🎨 ГЕНЕРИРУЕМ TELEGRAM-STYLE АВАТАРКУ НА ОСНОВЕ ТВОИХ ДАННЫХ ИЗ БАЗЫ
+                            let avatarHtml = "";
+                            if (user.avatar_type === "letter" && user.avatar_data) {
+                                const gradient = user.avatar_data.gradient || "linear-gradient(135deg, #3a6073, #3a6073)";
+                                const letter = user.avatar_data.letter || "U";
+                                avatarHtml = `
+                                    <div class="forward-contact-avatar" style="background: ${gradient}; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: bold; font-size: 16px; user-select: none;">
+                                        ${letter}
+                                    </div>
+                                `;
+                            } else {
+                                const imgUrl = user.avatar_url || user.avatar || '/static/img/default-avatar.png';
+                                avatarHtml = `<img src="${imgUrl}" class="forward-contact-avatar" alt="avatar">`;
+                            }
+
+                            // Обработка значка официального верифицированного аккаунта (Бот или Премиум)
+                            const officialBadge = user.is_official ? `<span style="color: #2481cc; margin-left: 4px; font-size: 13px;">⚡</span>` : "";
 
                             const cardHtml = `
-                                <div class="forward-contact-card-item" data-name="${username.toLowerCase()}" onclick="executeForwardMessageAction('${targetId}')">
-                                    <img src="${avatarUrl}" class="forward-contact-avatar" alt="avatar">
+                                <div class="forward-contact-card-item" data-name="${displayName.toLowerCase()}" onclick="executeForwardMessageAction('${targetId}')">
+                                    ${avatarHtml}
                                     <div class="forward-contact-info-block">
-                                        <span class="forward-contact-name-label">${username}</span>
+                                        <span class="forward-contact-name-label" style="display: flex; align-items: center;">${displayName}${officialBadge}</span>
                                         <span class="forward-contact-status-label">${statusText}</span>
                                     </div>
                                 </div>
@@ -3746,14 +3750,14 @@
                             container.insertAdjacentHTML('beforeend', cardHtml);
                         });
 
-                        if (renderedCount > 0) return; // Успешно вывели всё из базы!
+                        if (renderedCount > 0) return; // Успешно вывели контакты!
                     }
                 }
             } catch (netErr) {
-                console.error("⚠️ [ИИ-СЕТЕВОЙ-ПЕРЕХВАТ] Ошибка запроса к списку контактов:", netErr);
+                console.error("⚠️ [ИИ-СЕТЕВОЙ-ПЕРЕХВАТ] Критический сбой парсинга контактов:", netErr);
             }
 
-            // Абсолютная заглушка на случай, если база вернула пустые массивы
+            // Заглушка, если список реально пуст
             container.innerHTML = `<div style="color:#888; text-align:center; padding:20px; font-size:14px;">Нет доступных контактов для пересылки</div>`;
         }
 
