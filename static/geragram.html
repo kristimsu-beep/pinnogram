@@ -3668,12 +3668,12 @@
             currentTargetForwardMessageId = null;
         }
 
-        // 🎯 СБОРКА И СОРТИРОВКА КОНТАКТОВ (ЖЕЛЕЗОБЕТОННЫЙ СЕТЕВОЙ ШЛЮЗ НАПРЯМУЮ К ТВОЕМУ БЭКЕНДУ)
+        // 🎯 СБОРКА И СОРТИРОВКА КОНТАКТОВ (УЛЬТИМАТИВНЫЙ ВСЕЯДНЫЙ СЕТЕВОЙ ПАРСЕР JSON)
         async function renderForwardContactsDataList() {
             const container = document.getElementById('forwardModalContactsContainer');
             if (!container) return;
 
-            // Включаем красивый неоновый лоадер, пока летят данные
+            // Включаем красивый неоновый лоадер
             container.innerHTML = `<div style="color:#ff007f; text-align:center; padding:20px; font-size:14px; animation: pulse 1.5s infinite;">🧠 Загрузка контактов из базы...</div>`;
 
             // Вытаскиваем текущего открытого пользователя комнаты, чтобы спрятать его из списка пересылки
@@ -3681,35 +3681,58 @@
             const currentChatUserId = currentChatUserObj ? String(currentChatUserObj.id || currentChatUserObj.username || "") : "";
 
             try {
-                // 🎯 УКАЗЫВАЕМ ТВОЙ ТОЧНЫЙ ОФИЦИАЛЬНЫЙ РОУТ ДЛЯ СБОРА КОНТАКТОВ GERAGRAM!
+                // 🎯 Стучимся на твой официальный эндпоинт контактов
                 const response = await fetch('/api/geragram/contacts/list', { method: 'GET' });
                 
                 if (response.ok) {
-                    let usersDataArray = await response.json();
+                    const rawJsonData = await response.json();
+                    console.log("📡 [ПЕРЕСЫЛКА-ОТЛАДКА] Сырой JSON от бэкенда:", rawJsonData);
 
-                    // Проверяем, если бэк завернул массив в объект (например, {"status": "success", "contacts": [...]})
-                    if (usersDataArray && !Array.isArray(usersDataArray)) {
-                        usersDataArray = usersDataArray.contacts || usersDataArray.users || usersDataArray.data || [];
+                    let usersDataArray = [];
+
+                    // ИИ-МАНЕВР: Если прилетел чистый массив, забираем его
+                    if (Array.isArray(rawJsonData)) {
+                        usersDataArray = rawJsonData;
+                    } else if (rawJsonData && typeof rawJsonData === 'object') {
+                        // Если прилетел сложный объект/словарь, автоматически сканируем все его ключи в поиске массивов!
+                        for (const key in rawJsonData) {
+                            if (Array.isArray(rawJsonData[key])) {
+                                usersDataArray = usersDataArray.concat(rawJsonData[key]);
+                            }
+                        }
+                        // Если вложенных массивов не нашли, но сам объект содержит поля юзера (например, одиночный диалог)
+                        if (usersDataArray.length === 0 && (rawJsonData.username || rawJsonData.id)) {
+                            usersDataArray.push(rawJsonData);
+                        }
                     }
 
-                    if (Array.isArray(usersDataArray) && usersDataArray.length > 0) {
+                    if (usersDataArray.length > 0) {
                         container.innerHTML = ""; // Очищаем неоновый лоадер
                         let renderedCount = 0;
+                        const processedIds = new Set(); // Чтобы контакты не дублировались, если массивы склеились
 
                         usersDataArray.forEach(user => {
-                            const targetId = String(user.id || user._id || user.username || "");
-                            if (!targetId) return;
+                            if (!user) return;
+                            
+                            // Извлекаем ID или юзернейм из любых возможных полей объекта
+                            const targetId = String(user.id || user._id || user.username || user.room_id || user.chat_id || "");
+                            if (!targetId || processedIds.has(targetId)) return;
 
                             // Жесткая проверка: не выводим в список самого себя и текущего собеседника чата!
                             const isMe = window.currentUser && String(user.id || user.username) === String(window.currentUser.id || window.currentUser.username);
-                            const isCurrentRoomPartner = currentChatUserId && (targetId === currentChatUserId || String(user.username) === currentChatUserId);
+                            const isCurrentRoomPartner = currentChatUserId && (targetId === currentChatUserId || String(user.username) === currentChatUserId || String(user.chat_name) === currentChatUserId);
 
                             if (isMe || isCurrentRoomPartner) return;
 
+                            // Извлекаем юзернейм из возможных полей (поддерживаем группы и контакты)
+                            const username = user.username || user.name || user.chat_name || user.title || "Пользователь";
+                            if (username === "Поиск...") return; // Фильтруем мусор
+
+                            const avatarUrl = user.avatar || user.avatar_url || user.img || '/static/img/default-avatar.png';
+                            const statusText = user.is_online ? "🟢 в сети" : "доступен";
+
+                            processedIds.add(targetId);
                             renderedCount++;
-                            const avatarUrl = user.avatar || user.avatar_url || '/static/img/default-avatar.png';
-                            const username = user.username || user.name || "Пользователь";
-                            const statusText = user.is_online ? "🟢 в сети" : "был(а) недавно";
 
                             const cardHtml = `
                                 <div class="forward-contact-card-item" data-name="${username.toLowerCase()}" onclick="executeForwardMessageAction('${targetId}')">
@@ -3723,47 +3746,15 @@
                             container.insertAdjacentHTML('beforeend', cardHtml);
                         });
 
-                        if (renderedCount > 0) return; // Успешно вывели из базы!
+                        if (renderedCount > 0) return; // Успешно вывели всё из базы!
                     }
                 }
             } catch (netErr) {
                 console.error("⚠️ [ИИ-СЕТЕВОЙ-ПЕРЕХВАТ] Ошибка запроса к списку контактов:", netErr);
             }
 
-            // АБСОЛЮТНЫЙ РЕЗЕРВНЫЙ ВАРИАНТ (Если база пуста, сканируем текст на экране)
-            container.innerHTML = "";
-            const allLinksAndSpans = document.querySelectorAll('.chat-name, .user-name, span, h4');
-            const uniqueNamesFound = new Set();
-            let fallbackCount = 0;
-
-            allLinksAndSpans.forEach(el => {
-                const text = el.textContent.trim();
-                if (text.length > 2 && text.length < 20 && !text.includes('✓') && !text.includes(':') && 
-                    text !== "Поиск..." && text !== "Ответить" && text !== "Переслать" && text !== "Копировать" && 
-                    text !== "Удалить" && text !== "Редактировать" && text !== "Закрепить" && !uniqueNamesFound.has(text)) {
-                    
-                    if (currentChatUserObj && (text === currentChatUserObj.username || text === currentChatUserObj.name)) return;
-                    if (window.currentUser && (text === window.currentUser.username || text === window.currentUser.name)) return;
-
-                    uniqueNamesFound.add(text);
-                    fallbackCount++;
-
-                    const cardHtml = `
-                        <div class="forward-contact-card-item" data-name="${text.toLowerCase()}" onclick="executeForwardMessageAction('${text}')">
-                            <img src="/static/img/default-avatar.png" class="forward-contact-avatar" alt="avatar">
-                            <div class="forward-contact-info-block">
-                                <span class="forward-contact-name-label">${text}</span>
-                                <span class="forward-contact-status-label">🟢 доступен</span>
-                            </div>
-                        </div>
-                    `;
-                    container.insertAdjacentHTML('beforeend', cardHtml);
-                }
-            });
-
-            if (fallbackCount === 0) {
-                container.innerHTML = `<div style="color:#888; text-align:center; padding:20px; font-size:14px;">Нет доступных контактов для пересылки</div>`;
-            }
+            // Абсолютная заглушка на случай, если база вернула пустые массивы
+            container.innerHTML = `<div style="color:#888; text-align:center; padding:20px; font-size:14px;">Нет доступных контактов для пересылки</div>`;
         }
 
         // 🎯 ФИЛЬТР КОНТАКТОВ НА ЛЕТУ ПО ВВОДУ СЛОВА
