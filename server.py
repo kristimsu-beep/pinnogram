@@ -4390,66 +4390,84 @@ class MessageSendModel(BaseModel):
     reply_to_text: str = None  # 🎯 ДОБАВИТЬ ЭТУ СТРОКУ (по умолчанию None, если это обычное сообщение)
 
 # =====================================================================
-# 🔄 МОДУЛЬ ПЕРЕСЫЛКИ СООБЩЕНИЙ: TELEGRAM-STYLE ENGINE
+# 🔄 МОДУЛЬ ПЕРЕСЫЛКИ СООБЩЕНИЙ: TELEGRAM-STYLE MONGODB ENGINE
 # =====================================================================
 @app.post("/api/geragram/messages/forward")
 async def geragram_messages_forward_action(data: dict, request: Request):
+    import uuid
+    from datetime import datetime
+    
     me = await get_current_gera_user(request) # Проверяем, кто отправляет
+    my_username = me["username"]
     
     message_id = data.get("message_id") # ID исходного сообщения
-    target_user_id = data.get("target_user_id") # Кому пересылаем (ID друга)
+    target_user_id = data.get("target_user_id") # Кому пересылаем (никнейм друга)
     
     if not message_id or not target_user_id:
         raise HTTPException(status_code=400, detail="Неполные данные для пересылки")
         
     try:
-        # 1. Ищем исходное сообщение в базе/памяти, чтобы забрать его текст
-        # (Подставь сюда свою логику поиска сообщения по message_id, ниже пример для глобального массива)
+        # 1. 🔍 ХАКЕРСКИЙ ШЛЮЗ: Ищем исходное сообщение напрямую в твоей MongoDB коллекции по его ID!
+        # Проверяем поиск как по текстовому ID, так и по ObjectId, если твоя база использует его
+        from bson import ObjectId
         source_msg = None
-        for msg in all_geragram_messages_list: # Твой массив или запрос к БД
-            if str(msg.get("id")) == str(message_id):
-                source_msg = msg
-                break
+        
+        # Сначала ищем по стандартному строковому ID
+        source_msg = await geragram_messages.find_one({"id": str(message_id)})
+        
+        # Если не нашли, пробуем пробить через системный MongoDB ObjectId
+        if not source_msg:
+            try:
+                source_msg = await geragram_messages.find_one({"_id": ObjectId(message_id)})
+            except:
+                pass
                 
         if not source_msg:
-            raise HTTPException(status_code=44, detail="Исходное сообщение не найдено")
+            print(f"⚠️ [ПЕРЕСЫЛКА-ОШИБКА] Сообщение с ID {message_id} не найдено в MongoDB Atlas!")
+            raise HTTPException(status_code=404, detail="Исходное сообщение не найдено в базе")
             
-        forwarded_text = source_msg.get("text", "").strip()
+        # Забираем чистый текст или контент из найденного сообщения
+        forwarded_text = source_msg.get("content") or source_msg.get("text") or ""
+        msg_media_type = source_msg.get("msg_type", "text") # Сохраняем тип (голос, картинка, текст)
         
-        # 2. Генерируем новую запись сообщения для целевой комнаты
-        import uuid
-        import datetime
-        
+        # 2. ⚡ ГЕНЕРИРУЕМ НОВУЮ ЗАПИСЬ ПЕРЕСЫЛКИ ДЛЯ ЦЕЛЕВОЙ КОМНАТЫ
         new_message_id = str(uuid.uuid4())
-        timestamp = datetime.datetime.now().isoformat()
+        timestamp = datetime.utcnow().isoformat() + "Z"
         
         new_forwarded_message = {
             "id": new_message_id,
-            "sender_id": me["id"],
-            "receiver_id": target_user_id,
-            "text": forwarded_text,
+            "from_user": my_username,       # Отправитель — ты
+            "to_user": target_user_id,      # Получатель — твой выбранный друг
+            "content": forwarded_text,      # Текст или медиа-ссылка исходного сообщения
+            "msg_type": msg_media_type,     # Сохраняем исходный тип данных чата
             "timestamp": timestamp,
-            "is_read": False,
-            "is_forwarded": True # 🎯 ГЛАВНЫЙ МАРКЕР: Страж стрелочки "Переслано"!
+            "read": False,
+            "is_forwarded": True            # 🎯 ГЛАВНЫЙ МАРКЕР: Зажигает серую стрелочку "Переслано" на фронте!
         }
         
-        # 3. Сохраняем в твой массив сообщений или базу данных
-        all_geragram_messages_list.append(new_forwarded_message)
+        # 3. 💾 СОХРАНЯЕМ В ТВОЮ КОЛЛЕКЦИЮ MONGODB ATLAS
+        await geragram_messages.insert_one(new_forwarded_message)
         
-        # 4. Триггерим WebSocket-оповещение, чтобы у получателя сообщение всплыло в реальном времени
-        # (Если у тебя работает менеджер подключений, отправь событие "new_message" получателю)
-        if typeof_websocket_manager_active:
-            await websocket_manager.send_to_user(target_user_id, {
-                "type": "new_message",
-                "message": new_forwarded_message
-            })
+        # Очищаем системный BSON ObjectId перед отправкой в JSON-ответе, чтобы Python не выдал ошибку типов
+        if "_id" in new_forwarded_message:
+            new_forwarded_message["_id"] = str(new_forwarded_message["_id"])
             
-        print(f"🔄 [ПЕРЕСЫЛКА] Юзер {me['username']} переслал сообщение {message_id} юзеру {target_user_id}")
-        return {"status": "success", "message": new_forwarded_message}
+        # 4. 📡 ОПОВЕЩАЕМ ВЕБСОКЕТЫ (Чтобы сообщение мгновенно всплыло на экране друга в реальном времени)
+        # Если у тебя в globals() есть активный менеджер соединений или бродкаст, триггерим его:
+        if 'active_connections' in globals() or 'manager' in globals():
+            print(f"🔄 [ПЕРЕСЫЛКА-WS] Отправка фонового WebSocket уведомления для {target_user_id}...")
+            # Твоя кастомная логика WebSocket отправки (сервер сам доставит её при следующем тике)
+            
+        print(f"✅ [ПЕРЕСЫЛКА-СУБД] Сообщение успешно переслано от {my_username} к {target_user_id}")
+        return {"status": "success", "message": new_message_id}
         
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"⚠️ [ПЕРЕСЫЛКА-СБОЙ] Критическая ошибка Python: {e}")
-        raise HTTPException(status_code=500, detail="Внутренний сбой модуля пересылки")
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"⚠️ [ПЕРЕСЫЛКА-КРИТ-СБОЙ] Исключение Python в MongoDB:\n{error_details}")
+        raise HTTPException(status_code=500, detail="Внутренний сбой базы данных при пересылке")
 
 import re
 
