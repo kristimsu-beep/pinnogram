@@ -4027,13 +4027,13 @@
             }
         }
 
-        // 🎯 3. ОТЖАТИЕ ПАЛЬЦА: ХОЛОДНЫЙ НЕОН И КВАНТОВЫЙ ШЛЮЗ G4F
+        // 🎯 3. ОТЖАТИЕ ПАЛЬЦА: ХОЛОДНЫЙ НЕОН И КВАНТОВЫЙ ИИ-ШЛЮЗ С ФИКСОМ UNDEFINED
         async function stopGlobalQuantumAiAndProcess() {
             const aura = document.getElementById('quantumFingerAuraElement');
             const textPanel = document.getElementById('quantumAiDynamicTextPanel');
 
             if (aura) aura.className = 'quantum-touch-aura active-thinking';
-            if (textPanel) textPanel.innerHTML = "🌀 Анализ запроса квантовым движком g4f...";
+            if (textPanel) textPanel.innerHTML = "🌀 Анализ запроса квантовым движком...";
 
             if (globalSpeechRecognitionEngine) {
                 try { globalSpeechRecognitionEngine.stop(); } catch(e){}
@@ -4042,7 +4042,7 @@
             setTimeout(async () => {
                 let prompt = globalRecognizedPromptText.trim();
                 
-                if (!prompt) {
+                if (!prompt || prompt.toLowerCase() === "undefined") {
                     if (textPanel) textPanel.innerHTML = "Бро, я не расслышал твой голос. Попробуй зажать ещё раз!";
                     setTimeout(shutdownGlobalQuantumAiVisuals, 2000);
                     return;
@@ -4057,17 +4057,24 @@
 
                     if (res.ok) {
                         const data = await res.json();
-                        const answer = data.ai_text || "Ошибка генерации";
-                        animateQuantumAiTypewriterText(answer);
+                        // 🎯 НАШ ГЛАВНЫЙ ФИКС: Гарантируем, что если ключ ai_text пуст, прилетит текст ошибки, а не undefined!
+                        const answer = data.ai_text || data.detail || "Нейросеть временно занята, повторите зажатие!";
+                        
+                        if (answer && answer !== "undefined") {
+                            animateQuantumAiTypewriterText(answer);
+                        } else {
+                            animateQuantumAiTypewriterText("Сбой генерации текста. Попробуйте еще раз!");
+                        }
                     } else {
-                        animateQuantumAiTypewriterText("Сбой связи с кластером g4f. Попробуйте еще раз!");
+                        animateQuantumAiTypewriterText("Сбой связи с кластером ИИ. Попробуйте еще раз!");
                     }
                 } catch(err) {
-                    console.error(err);
-                    shutdownGlobalQuantumAiVisuals();
+                    console.error("Критический сбой fetch к ИИ-шлюзу:", err);
+                    animateQuantumAiTypewriterText("Ошибка сети мессенджера. Попробуйте заново!");
                 }
             }, 600);
         }
+
 
         // 🎯 4. ЭФФЕКТ ПИШУЩЕЙ МАШИНКИ И ОГЛАСКА ЖИВЫМ ГОЛОСОМ
         function animateQuantumAiTypewriterText(fullText) {
