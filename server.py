@@ -4717,11 +4717,11 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
 
     return {"status": "success", "msg": "Сообщение успешно доставлено"}
 # =====================================================================
-# 🧠 КВАНТОВЫЙ ИИ-ПЕРЕНАПРАВИТЕЛЬ: ОБХОД БРАУЗЕРНОГО CORS НА 100% (MISTRAL POST)
+# 🧠 КВАНТОВЫЙ ИИ-ПЕРЕНАПРАВИТЕЛЬ: АВТОНОМНЫЙ МНОГОЯДЕРНЫЙ ДВИЖОК G4F
 # =====================================================================
 @app.post("/api/geragram/ai/front-proxy")
 async def geragram_ai_frontend_proxy_bypass(data: dict, request: Request):
-    import httpx
+    import g4f
     
     await get_current_gera_user(request) # Проверяем авторизацию
     user_prompt = data.get("prompt", "").strip()
@@ -4735,50 +4735,60 @@ async def geragram_ai_frontend_proxy_bypass(data: dict, request: Request):
         "Говори строго на понятном русском языке, сразу по сути, без лишних вступлений."
     )
     
-    # 🎯 ИСПОЛЬЗУЕМ ОФИЦИАЛЬНЫЙ СТАБИЛЬНЫЙ POST-ШЛЮЗ POLLINATIONS AI
-    ai_url = "https://pollinations.ai"
-    
-    payload = {
-        "messages": [
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": user_prompt}
-        ],
-        "model": "mistral", # 🔥 Абсолютно безлимитная и стабильная модель
-        "stream": False
-    }
-    
+    # 🎯 ШАГ 1: Попытка через премиальную GPT-4o (Провайдер Blackbox)
     try:
-        print(f"📡 [ИИ-ШЛЮЗ] Прямой POST к Pollinations. Промпт: {user_prompt}")
-        
-        # trust_env=False намертво обходит внутренние прокси Render, отправляя запрос напрямую в ИИ-облако!
-        async with httpx.AsyncClient(timeout=20.0, trust_env=False) as client:
-            response = await client.post(ai_url, json=payload)
-            print(f"📡 [ИИ-ШЛЮЗ] Код ответа ИИ-сервера: {response.status_code}")
-            
-            if response.status_code == 200:
-                ai_data = response.json()
-                if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
-                    ai_response = ai_data["choices"]["message"]["content"].strip()
-                    if ai_response:
-                        return {"status": "success", "ai_text": ai_response}
-                        
-            # Резервный прыжок на модель openai, если mistral перегружен
-            print("🔄 [ИИ-ШЛЮЗ] Mistral занят. Прыгаем на резервную модель openai...")
-            payload["model"] = "openai"
-            backup_res = await client.post(ai_url, json=payload)
-            
-            if backup_res.status_code == 200:
-                ai_data = backup_res.json()
-                if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
-                    ai_response = ai_data["choices"]["message"]["content"].strip()
-                    if ai_response:
-                        return {"status": "success", "ai_text": ai_response}
-                        
-        return {"status": "error", "ai_text": "Нейросеть взяла минутную паузу. Пожалуйста, повторите зажатие!"}
+        print(f"📡 [ИИ-G4F-ЯДРО] Шаг 1: Запрос к GPT-4o (Blackbox) -> Промпт: {user_prompt}")
+        response = await g4f.ChatCompletion.create_async(
+            model=g4f.models.gpt_4o,
+            provider=g4f.Provider.Blackbox,
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_prompt}
+            ]
+        )
+        ai_response = str(response).strip()
+        if ai_response and len(ai_response) > 4 and "error" not in ai_response.lower():
+            print(f"✅ [ИИ-G4F-ЯДРО] Шаг 1 успешен! Ответ получен.")
+            return {"status": "success", "ai_text": ai_response}
     except Exception as e:
-        import traceback
-        print(f"⚠️ [ИИ-ШЛЮЗ-КРИТ-СБОЙ] Исключение Python в MongoDB:\n{traceback.format_exc()}")
-        return {"status": "error", "ai_text": "Ошибка связи с ИИ-модулем. Попробуйте еще раз через секунду!"}
+        print(f"🔄 [ИИ-G4F-ЯДРО] Шаг 1 не удался ({e}). Переключаемся на Шаг 2...")
+
+    # 🎯 ШАГ 2: Резервное ядро через Google Gemini / Meta (Провайдер HuggingChat)
+    try:
+        print("📡 [ИИ-G4F-ЯДРО] Шаг 2: Запрос к HuggingChat (Llama/Gemini кластер)...")
+        response = await g4f.ChatCompletion.create_async(
+            model=g4f.models.default,
+            provider=g4f.Provider.HuggingChat,
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_prompt}
+            ]
+        )
+        ai_response = str(response).strip()
+        if ai_response and len(ai_response) > 4:
+            print(f"✅ [ИИ-G4F-ЯДРО] Шаг 2 успешен! Ответ получен.")
+            return {"status": "success", "ai_text": ai_response}
+    except Exception as e:
+        print(f"🔄 [ИИ-G4F-ЯДРО] Шаг 2 не удался ({e}). Переключаемся на Шаг 3...")
+
+    # 🎯 ШАГ 3: Тотальный автоматический перебор ЛЮБОЙ живой модели в мире
+    try:
+        print("📡 [ИИ-G4F-ЯДРО] Шаг 3: Тотальный автовыбор лучшего провайдера g4f...")
+        response = await g4f.ChatCompletion.create_async(
+            model=g4f.models.default,
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_prompt}
+            ]
+        )
+        ai_response = str(response).strip()
+        if ai_response and len(ai_response) > 4:
+            print(f"✅ [ИИ-G4F-ЯДРО] Шаг 3 успешен! Ответ получен.")
+            return {"status": "success", "ai_text": ai_response}
+    except Exception as e:
+        print(f"⚠️ [ИИ-G4F-ЯДРО-КРИТ] Все три шага g4f упали: {e}")
+
+    return {"status": "error", "ai_text": "Нейросеть взяла минутную паузу. Пожалуйста, повторите зажатие!"}
     
 # =====================================================================
 # 🧠 КВАНТОВЫЙ ИИ-ДВИЖОК: ИНТЕГРАЦИЯ LLM (ИДЕАЛЬНЫЙ HUGGING FACE ВАРИАНТ)
