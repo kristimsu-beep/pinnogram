@@ -954,7 +954,7 @@
         
         .forward-contact-status-label { color: #888; font-size: 12px; }
 
-        /* 🧠 КВАНТОВЫЕ СТИЛИ ГЛОБАЛЬНОГО ИИ-МОДУЛЯ GERAGRAM */
+        /* 🧠 КВАНТОВЫЕ СТИЛИ ГЛОБАЛЬНОГО ИИ-МОДУЛЯ GERAGRAM (ОБНОВЛЕНО: 5-СЕК ХОЛД) */
         .quantum-touch-aura {
             position: fixed;
             width: 150px;
@@ -986,20 +986,20 @@
         }
 
         @keyframes quantumThinkingGlow {
-            0% { filter: blur(20px); opacity: 0.9; background: radial-gradient(circle, rgba(0, 242, 254, 0.5) 0%, rgba(79, 172, 254, 0.1) 50%, transparent 70%); }
+            0% { filter: blur(20px); opacity: 0.9; }
             100% { filter: blur(15px); opacity: 1; background: radial-gradient(circle, rgba(73, 235, 235, 0.6) 0%, rgba(46, 131, 235, 0.2) 50%, transparent 70%); }
         }
 
-        /* Полноэкранный оверлей для текста и общего сияния */
+        /* Оверлей текста теперь полностью прозрачен для тапов, чтобы не фиксировать камеру и скролл */
         .quantum-ai-fullscreen-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.4);
+            background: rgba(0, 0, 0, 0.25);
             backdrop-filter: blur(0px);
             -webkit-backdrop-filter: blur(0px);
             z-index: 99998;
             opacity: 0;
-            pointer-events: none;
+            pointer-events: none; /* 🎯 ХАК: Клики летят насквозь, нет фиксации */
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1009,7 +1009,6 @@
 
         .quantum-ai-fullscreen-overlay.visible {
             opacity: 1 !important;
-            pointer-events: auto !important;
             backdrop-filter: blur(12px) !important;
             -webkit-backdrop-filter: blur(12px) !important;
         }
@@ -3924,79 +3923,63 @@
             }
         }
         // =====================================================================
-        // 🧠 ГЛОБАЛЬНЫЙ JS-КОНТРОЛЛЕР ИИ ПО ДВОЙНОМУ СВАЙПУ И УДЕРЖАНИЮ
+        // 🧠 ГЛОБАЛЬНЫЙ JS-КОНТРОЛЛЕР ИИ ПО ХОЛДУ В 5 СЕКУНД (БЕЗ ФИКСАЦИИ КАМЕРЫ)
         // =====================================================================
-        let globalSwipeLeftCount = 0;
-        let globalSwipeTimerWatcher = null;
         let globalTouchHoldTimerWatcher = null;
         let isGlobalQuantumAiActive = false;
         let globalSpeechRecognitionEngine = null;
         let globalRecognizedPromptText = "";
 
-        // 🎯 1. СЧЕТЧИК СВАЙПОВ И УДЕРЖАНИЯ (РАБОТАЕТ ПО ВСЕМУ ЭКРАНУ)
-        let touchStartClientX = 0;
-        let touchStartClientY = 0;
-
         window.addEventListener('touchstart', function(e) {
+            // Если ИИ уже запущен — повторно таймер не взводим
             if (isGlobalQuantumAiActive) return;
             
             const touch = e.touches[0];
-            touchStartClientX = touch.clientX;
-            touchStartClientY = touch.clientY;
+            const startX = touch.clientX;
+            const startY = touch.clientY;
 
-            // Если это потенциальное удержание после свайпов, запускаем таймер лонгтапа
-            if (globalSwipeLeftCount >= 2) {
-                clearTimeout(globalTouchHoldTimerWatcher);
-                globalTouchHoldTimerWatcher = setTimeout(() => {
-                    console.log("🔥 [ИИ-ЖЕСТ] Жест активирован! Двойной свайп + удержание зафиксировано!");
-                    triggerGlobalQuantumAiEngine(touch.clientX, touch.clientY);
-                }, 150); // Удерживаем палец 150мс после свайпов
-            }
+            // Сбрасываем старые таймеры, чтобы избежать накладок
+            clearTimeout(globalTouchHoldTimerWatcher);
+            
+            // 🎯 ЗАПУСКАЕМ СТРАЖА ЗАЖАТИЯ НА СТРОГИЕ 5 СЕКУНД (5000 мс)
+            globalTouchHoldTimerWatcher = setTimeout(() => {
+                console.log("🔥 [ИИ-ЖЕСТ] Зафиксировано долгое удержание в 5 секунд! Запуск Квантового ИИ...");
+                triggerGlobalQuantumAiEngine(startX, startY);
+            }, 5000);
         }, { passive: true });
 
         window.addEventListener('touchmove', function(e) {
-            if (!isGlobalQuantumAiActive) return;
-            // Двигаем неоновую ауру вслед за пальцем в реальном времени!
             const touch = e.touches[0];
-            const aura = document.getElementById('quantumFingerAuraElement');
-            if (aura) {
-                aura.style.left = touch.clientX + 'px';
-                aura.style.top = touch.clientY + 'px';
+            
+            // 🎯 Если 5 секунд ещё не прошло, но палец сильно сдвинулся (скролл) — отменяем таймер удержания!
+            if (!isGlobalQuantumAiActive) {
+                // Если это обычный жесткий скролл чата, сбрасываем 5-секундный холд
+                clearTimeout(globalTouchHoldTimerWatcher);
+            }
+
+            // Если ИИ уже активен и слушает — плавно перемещаем неон за пальцем без фиксации камеры
+            if (isGlobalQuantumAiActive) {
+                const aura = document.getElementById('quantumFingerAuraElement');
+                if (aura) {
+                    aura.style.left = touch.clientX + 'px';
+                    aura.style.top = touch.clientY + 'px';
+                }
             }
         }, { passive: true });
 
         window.addEventListener('touchend', function(e) {
+            // Если палец отпустили раньше 5 секунд — сбрасываем сторожевой таймер
             clearTimeout(globalTouchHoldTimerWatcher);
             
-            // Если ИИ слушал и мы отпустили палец — завершаем запись и шлем в g4f!
+            // 🎯 Если ИИ слушал, и ты отпустил палец — останавливаем микрофон и отправляем в g4f!
             if (isGlobalQuantumAiActive) {
                 stopGlobalQuantumAiAndProcess();
-                return;
-            }
-
-            // Логика подсчета свайпов влево
-            if (e.changedTouches && e.changedTouches[0]) {
-                const touch = e.changedTouches[0];
-                const deltaX = touchStartClientX - touch.clientX;
-                const deltaY = Math.abs(touchStartClientY - touch.clientY);
-
-                // Если сдвиг влево больше 50px и почти ровный по вертикали
-                if (deltaX > 50 && deltaY < 40) {
-                    globalSwipeLeftCount++;
-                    console.log(`🎯 [ИИ-ЖЕСТ] Свайп влево зафиксирован. Всего: ${globalSwipeLeftCount}`);
-                    
-                    clearTimeout(globalSwipeTimerWatcher);
-                    globalSwipeTimerWatcher = setTimeout(() => {
-                        globalSwipeLeftCount = 0; // Сбрасываем счетчик, если пауза между свайпами большая
-                    }, 800);
-                }
             }
         });
 
-        // 🎯 2. АКТИВАЦИЯ ДИКТОФОНА И СИЯНИЯ ВОКРУГ ПАЛЬЦА
+        // 🎯 2. ВКЛЮЧЕНИЕ ДИКТОФОНА И МАЛИНОВОГО НЕОНА ВОКРУГ ПАЛЬЦА
         function triggerGlobalQuantumAiEngine(startX, startY) {
             isGlobalQuantumAiActive = true;
-            globalSwipeLeftCount = 0;
             globalRecognizedPromptText = "";
 
             const aura = document.getElementById('quantumFingerAuraElement');
@@ -4011,7 +3994,7 @@
             if (overlay) overlay.classList.add('visible');
             if (textPanel) textPanel.innerHTML = "🧠 Квантовый ИИ слушает... Говорите!";
 
-            // Включаем микрофон браузера
+            // Активируем микрофон
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (SpeechRecognition) {
                 globalSpeechRecognitionEngine = new SpeechRecognition();
@@ -4023,7 +4006,7 @@
                     let finalTranscript = "";
                     for (let i = event.resultIndex; i < event.results.length; ++i) {
                         if (event.results[i].isFinal) {
-                            finalTranscript += event.results[i][0].transcript;
+                            finalTranscript += event.results[i].transcript;
                         }
                     }
                     if (finalTranscript) globalRecognizedPromptText = finalTranscript;
@@ -4033,19 +4016,19 @@
             }
         }
 
-        // 🎯 3. ОТЖАТИЕ ПАЛЬЦА: ОБРАБОТКА СЕТИ ЧЕРЕЗ ТВОЙ G4F БЭКЕНД И ХОЛОДНОЕ СВЕЧЕНИЕ
+        // 🎯 3. ОТЖАТИЕ ПАЛЬЦА: ХОЛОДНЫЙ НЕОН И КВАНТОВЫЙ ШЛЮЗ G4F
         async function stopGlobalQuantumAiAndProcess() {
             const aura = document.getElementById('quantumFingerAuraElement');
             const textPanel = document.getElementById('quantumAiDynamicTextPanel');
 
-            if (aura) aura.className = 'quantum-touch-aura active-thinking'; // Переключаем на холодный неон
+            if (aura) aura.className = 'quantum-touch-aura active-thinking'; // Холодное свечение
             if (textPanel) textPanel.innerHTML = "🌀 Анализ запроса квантовым движком...";
 
             if (globalSpeechRecognitionEngine) {
                 try { globalSpeechRecognitionEngine.stop(); } catch(e){}
             }
 
-            // Небольшая задержка, чтобы Web Speech успел дописать последнее слово
+            // Небольшая пауза, чтобы Web Speech зафиксировал финальные слова
             setTimeout(async () => {
                 const prompt = globalRecognizedPromptText.trim();
                 if (!prompt) {
@@ -4053,10 +4036,9 @@
                     return;
                 }
 
-                console.log("📡 [ИИ-ГЛОБАЛ] Отправка промпта на g4f-шлюз:", prompt);
+                console.log("📡 [ИИ-ГЛОБАЛ] Промпт отправлен на g4f:", prompt);
 
                 try {
-                    // Стучимся на твой работающий CORS-шлюз, подключенный к g4f!
                     const res = await fetch('/api/geragram/ai/front-proxy', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -4067,19 +4049,19 @@
                         const data = await res.json();
                         const answer = data.ai_text || "Ошибка генерации";
                         
-                        // Запускаем эффект пишущей машинки для ответа ЛЛМ
+                        // Запускаем динамическое высвечивание букв и озвучку
                         animateQuantumAiTypewriterText(answer);
                     } else {
-                        animateQuantumAiTypewriterText("Сбой связи с кластером g4f. Попробуйте еще раз!");
+                        animateQuantumAiTypewriterText("Сбой связи с кластером g4f. Попробуйте заново!");
                     }
                 } catch(err) {
                     console.error(err);
                     shutdownGlobalQuantumAiVisuals();
                 }
-            }, 4000);
+            }, 800);
         }
 
-        // 🎯 4. ДИНАМИЧЕСКИЙ ЭФФЕКТ ВЫСВЕЧИВАНИЯ БУКВ И ОГЛАСКА ГОЛОСОМ
+        // 🎯 4. ЭФФЕКТ ПИШУЩЕЙ МАШИНКИ И ОГЛАСКА ЖИВЫМ ГОЛОСОМ
         function animateQuantumAiTypewriterText(fullText) {
             const textPanel = document.getElementById('quantumAiDynamicTextPanel');
             if (!textPanel) return;
@@ -4087,7 +4069,6 @@
             textPanel.innerHTML = "";
             let index = 0;
             
-            // Запускаем озвучку Google TTS
             let voiceStarted = false;
             try {
                 if ('speechSynthesis' in window) {
@@ -4095,11 +4076,11 @@
                     const utterance = new SpeechSynthesisUtterance(fullText);
                     utterance.lang = 'ru-RU';
                     utterance.rate = 1.0;
-                    utterance.pitch = 1.1; // Чуть футуристичный тон
+                    utterance.pitch = 1.1;
 
-                    // Как только огласка завершится — тушим все эффекты и закрываем оверлей!
+                    // Когда робот договорит — полностью тушим эффекты и закрываем оверлей
                     utterance.onend = function() {
-                        console.log("🔊 [ИИ-ГЛОБАЛ] Огласка завершена. Гасим квантовое поле.");
+                        console.log("🔊 [ИИ-ГЛОБАЛ] Огласка завершена.");
                         setTimeout(shutdownGlobalQuantumAiVisuals, 800);
                     };
                     window.speechSynthesis.speak(utterance);
@@ -4107,14 +4088,13 @@
                 }
             } catch(e) { console.warn(e); }
 
-            // Эффект плавного появления букв
+            // Посимвольное плавное появление текста
             function typeLetter() {
                 if (index < fullText.length) {
                     textPanel.innerHTML += fullText.charAt(index);
                     index++;
-                    setTimeout(typeLetter, 30); // Скорость печати букв (30мс)
+                    setTimeout(typeLetter, 30);
                 } else {
-                    // Подстраховка: если браузер заблокировал звук, закрываем оверлей через 5 секунд автоматически
                     if (!voiceStarted) {
                         setTimeout(shutdownGlobalQuantumAiVisuals, 5000);
                     }
@@ -4123,16 +4103,18 @@
             typeLetter();
         }
 
-        // 🎯 5. ЗАКРЫТИЕ И ПОЛНОЕ ОБНУЛЕНИЕ ЭФФЕКТОВ
+        // 🎯 5. ПОЛНОЕ ОБНУЛЕНИЕ И ЗАКРЫТИЕ ПОЛЯ
         function shutdownGlobalQuantumAiVisuals() {
             const aura = document.getElementById('quantumFingerAuraElement');
             const overlay = document.getElementById('quantumAiFullscreenOverlay');
             
-            if (aura) aura.className = 'quantum-touch-aura';
+            if (aura) {
+                aura.className = 'quantum-touch-aura';
+                aura.style.transform = 'translate(-50%, -50%) scale(0)';
+            }
             if (overlay) overlay.classList.remove('visible');
             
             isGlobalQuantumAiActive = false;
-            globalSwipeLeftCount = 0;
             globalRecognizedPromptText = "";
             if (globalSpeechRecognitionEngine) globalSpeechRecognitionEngine = null;
         }
