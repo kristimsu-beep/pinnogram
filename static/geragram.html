@@ -4076,10 +4076,16 @@
         }
 
 
-        // 🎯 4. ЭФФЕКТ ПИШУЩЕЙ МАШИНКИ И ОГЛАСКА ЖИВЫМ ГОЛОСОМ
+        // 🎯 4. ЭФФЕКТ ПИШУЩЕЙ МАШИНКИ И ОГЛАСКА ЖИВЫМ ГОЛОСОМ (ФИКС UNDEFINED КЛАССА)
         function animateQuantumAiTypewriterText(fullText) {
             const textPanel = document.getElementById('quantumAiDynamicTextPanel');
             if (!textPanel) return;
+
+            // 🎯 СУПЕР-ЗАЩИТА: Если на вход прилетел undefined в любом виде, принудительно меняем текст на ошибку!
+            let validatedText = String(fullText || "").trim();
+            if (!validatedText || validatedText.toLowerCase() === "undefined" || validatedText === "[object object]") {
+                validatedText = "Бро, произошел временный сбой генерации текста. Пожалуйста, повторите удержание через секунду!";
+            }
 
             textPanel.innerHTML = "";
             let index = 0;
@@ -4088,7 +4094,9 @@
             try {
                 if ('speechSynthesis' in window) {
                     window.speechSynthesis.cancel();
-                    const utterance = new SpeechSynthesisUtterance(fullText);
+                    
+                    // Передаем строго очищенный, проверенный валидный текст для озвучки роботом!
+                    const utterance = new SpeechSynthesisUtterance(validatedText);
                     utterance.lang = 'ru-RU';
                     utterance.rate = 1.0;
                     utterance.pitch = 1.1;
@@ -4099,11 +4107,14 @@
                     window.speechSynthesis.speak(utterance);
                     voiceStarted = true;
                 }
-            } catch(e) { console.warn(e); }
+            } catch(e) { 
+                console.warn("Синтез речи заблокирован браузером:", e); 
+            }
 
+            // Посимвольное плавное появление текста на экране
             function typeLetter() {
-                if (index < fullText.length) {
-                    textPanel.innerHTML += fullText.charAt(index);
+                if (index < validatedText.length) {
+                    textPanel.innerHTML += validatedText.charAt(index);
                     index++;
                     setTimeout(typeLetter, 30);
                 } else {
