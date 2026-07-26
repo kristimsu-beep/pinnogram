@@ -4075,15 +4075,30 @@
             }, 600);
         }
 
-
-        // 🎯 4. ЭФФЕКТ ПИШУЩЕЙ МАШИНКИ И ОГЛАСКА ЖИВЫМ ГОЛОСОМ (ФИКС UNDEFINED КЛАССА)
+        // 🎯 4. ЭФФЕКТ ПИШУЩЕЙ МАШИНКИ И ОГЛАСКА ЖИВЫМ ГОЛОСОМ (ФИНАЛЬНЫЙ СУПЕР-БЛОКИРАТОР)
         function animateQuantumAiTypewriterText(fullText) {
             const textPanel = document.getElementById('quantumAiDynamicTextPanel');
             if (!textPanel) return;
 
-            // 🎯 СУПЕР-ЗАЩИТА: Если на вход прилетел undefined в любом виде, принудительно меняем текст на ошибку!
+            // 🛑 ПРИНУДИТЕЛЬНОЕ УНИЧТОЖЕНИЕ ЛЕВОГО ЗВУКА: Гасим абсолютно всё, что пытается говорить в браузере!
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+
+            // Переводим входные данные в жесткую строковую форму для тотальной проверки
+            let checkText = String(fullText || "").trim().toLowerCase();
             let validatedText = String(fullText || "").trim();
-            if (!validatedText || validatedText.toLowerCase() === "undefined" || validatedText === "[object object]") {
+
+            // 🎯 СУПЕР-ФИЛЬТР: Ловим любые проявления мусора, объектов и технических ошибок
+            if (!validatedText || 
+                checkText === "undefined" || 
+                checkText.includes("undefined") || 
+                checkText === "[object object]" || 
+                checkText.includes("object object") ||
+                checkText.includes("error") ||
+                checkText.length < 2) {
+                
+                // Если прилетел мусор — жестко подменяем его на чистую русскую фразу!
                 validatedText = "Бро, произошел временный сбой генерации текста. Пожалуйста, повторите удержание через секунду!";
             }
 
@@ -4093,25 +4108,29 @@
             let voiceStarted = false;
             try {
                 if ('speechSynthesis' in window) {
+                    // Еще раз сбрасываем буфер перед стартом нашей официальной фразы
                     window.speechSynthesis.cancel();
                     
-                    // Передаем строго очищенный, проверенный валидный текст для озвучки роботом!
                     const utterance = new SpeechSynthesisUtterance(validatedText);
                     utterance.lang = 'ru-RU';
                     utterance.rate = 1.0;
                     utterance.pitch = 1.1;
 
+                    // Как только наш официальный проверенный текст договорит — закрываем оверлей
                     utterance.onend = function() {
+                        console.log("🔊 [ИИ-ГЛОБАЛ] Официальная огласка завершена.");
                         setTimeout(shutdownGlobalQuantumAiVisuals, 800);
                     };
+                    
+                    // Стреляем проверенным текстом в динамики
                     window.speechSynthesis.speak(utterance);
                     voiceStarted = true;
                 }
             } catch(e) { 
-                console.warn("Синтез речи заблокирован браузером:", e); 
+                console.warn("Синтез речи заблокирован:", e); 
             }
 
-            // Посимвольное плавное появление текста на экране
+            // Посимвольное плавное появление проверенного текста на экране
             function typeLetter() {
                 if (index < validatedText.length) {
                     textPanel.innerHTML += validatedText.charAt(index);
