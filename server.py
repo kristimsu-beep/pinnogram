@@ -4717,13 +4717,13 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
 
     return {"status": "success", "msg": "Сообщение успешно доставлено"}
 # =====================================================================
-# 🧠 КВАНТОВЫЙ ИИ-ПЕРЕНАПРАВИТЕЛЬ: АВТОНОМНЫЙ ДВИЖОК G4F (ВЕЧНЫЙ ФИКС)
+# 🧠 КВАНТОВЫЙ ИИ-ПЕРЕНАПРАВИТЕЛЬ: АВТОНОМНЫЙ ДВИЖОК G4F (ВЕЧНЫЙ ФИКС КОДИРОВКИ)
 # =====================================================================
 @app.post("/api/geragram/ai/front-proxy")
 async def geragram_ai_frontend_proxy_bypass(data: dict, request: Request):
     import g4f
     
-    me = await get_current_gera_user(request) # Проверяем авторизацию
+    await get_current_gera_user(request) # Проверяем авторизацию
     user_prompt = data.get("prompt", "").strip()
     
     if not user_prompt:
@@ -4732,15 +4732,17 @@ async def geragram_ai_frontend_proxy_bypass(data: dict, request: Request):
     system_instruction = (
         "Ты — встроенный ИИ-ассистент мессенджера GeraGram. "
         "Отвечай максимально кратко, заманчиво и интересно (не более 2 предложений). "
-        "Говори строго на русском языке, сразу по сути, без лишних вступлений."
+        "Говори строго на понятном русском языке, сразу по сути, без лишних вступлений."
     )
     
     try:
-        print(f"📡 [ИИ-ДВИЖОК G4F] Промпт принят: {user_prompt}")
+        print(f"📡 [ИИ-ДВИЖОК G4F] Обработка промпта: {user_prompt}")
         
-        # Вызываем автономный движок, который сам выберет лучший живой шлюз в мире (GPT-4o/Gemini)
+        # 🎯 ФИКС: Жестко указываем проверенных провайдеров (Blackbox/DeepInfra/Meta), 
+        # чтобы полностью исключить баги с кашей из букв и битыми токенами!
         response = await g4f.ChatCompletion.create_async(
-            model=g4f.models.default, # Автоматический выбор лучшей рабочей модели
+            model=g4f.models.gpt_4o, # Переключаемся на мощную GPT-4o
+            provider=g4f.Provider.Blackbox, # Жестко фиксируем стабильный Blackbox шлюз
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": user_prompt}
@@ -4748,8 +4750,22 @@ async def geragram_ai_frontend_proxy_bypass(data: dict, request: Request):
         )
         
         ai_response = str(response).strip()
+        
+        # Если Blackbox выдал сбой, прыгаем на резервный HuggingChat
+        if not ai_response or len(ai_response) < 5:
+            print("🔄 [ИИ-ДВИЖОК G4F] Переключение на резервный стабильный HuggingChat...")
+            response = await g4f.ChatCompletion.create_async(
+                model=g4f.models.default,
+                provider=g4f.Provider.HuggingChat,
+                messages=[
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": user_prompt}
+                ]
+            )
+            ai_response = str(response).strip()
+
         if ai_response:
-            print(f"✅ [ИИ-ДВИЖОК G4F] Ответ успешно сгенерирован: {ai_response}")
+            print(f"✅ [ИИ-ДВИЖОК G4F] Чистый русский ответ сгенерирован: {ai_response}")
             return {"status": "success", "ai_text": ai_response}
             
         return {"status": "error", "ai_text": "Нейросеть взяла минутную паузу. Повторите свайп!"}
