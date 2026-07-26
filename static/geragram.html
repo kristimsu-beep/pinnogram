@@ -954,7 +954,7 @@
         
         .forward-contact-status-label { color: #888; font-size: 12px; }
 
-        /* 🧠 КВАНТОВЫЕ СТИЛИ ГЛОБАЛЬНОГО ИИ-МОДУЛЯ GERAGRAM (ОБНОВЛЕНО: 5-СЕК ХОЛД) */
+        /* 🧠 КВАНТОВЫЕ СТИЛИ ГЛОБАЛЬНОГО ИИ-МОДУЛЯ (ОБНОВЛЕНО: 3-СЕК ХОЛД БЕЗ БЛОКИРОВОК) */
         .quantum-touch-aura {
             position: fixed;
             width: 150px;
@@ -990,7 +990,6 @@
             100% { filter: blur(15px); opacity: 1; background: radial-gradient(circle, rgba(73, 235, 235, 0.6) 0%, rgba(46, 131, 235, 0.2) 50%, transparent 70%); }
         }
 
-        /* Оверлей текста теперь полностью прозрачен для тапов, чтобы не фиксировать камеру и скролл */
         .quantum-ai-fullscreen-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -999,11 +998,13 @@
             -webkit-backdrop-filter: blur(0px);
             z-index: 99998;
             opacity: 0;
-            pointer-events: none; /* 🎯 ХАК: Клики летят насквозь, нет фиксации */
+            pointer-events: none;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 40px;
+            user-select: none; /* 🎯 БЛОКИРУЕМ СИСТЕМНОЕ ВЫДЕЛЕНИЕ БРАУЗЕРА */
+            -webkit-user-select: none;
             transition: all 0.4s ease;
         }
 
@@ -3923,61 +3924,68 @@
             }
         }
         // =====================================================================
-        // 🧠 ГЛОБАЛЬНЫЙ JS-КОНТРОЛЛЕР ИИ ПО ХОЛДУ В 5 СЕКУНД (БЕЗ ФИКСАЦИИ КАМЕРЫ)
+        // 🧠 ГЛОБАЛЬНЫЙ JS-КОНТРОЛЛЕР ИИ ПО ХОЛДУ В 3 СЕКУНДЫ (БРОНИРОВАННЫЙ ВАРИАНТ)
         // =====================================================================
         let globalTouchHoldTimerWatcher = null;
         let isGlobalQuantumAiActive = false;
         let globalSpeechRecognitionEngine = null;
         let globalRecognizedPromptText = "";
+        
+        let touchStartGlobalX = 0;
+        let touchStartGlobalY = 0;
 
         window.addEventListener('touchstart', function(e) {
-            // Если ИИ уже запущен — повторно таймер не взводим
             if (isGlobalQuantumAiActive) return;
             
             const touch = e.touches[0];
-            const startX = touch.clientX;
-            const startY = touch.clientY;
+            touchStartGlobalX = touch.clientX;
+            touchStartGlobalY = touch.clientY;
 
-            // Сбрасываем старые таймеры, чтобы избежать накладок
             clearTimeout(globalTouchHoldTimerWatcher);
             
-            // 🎯 ЗАПУСКАЕМ СТРАЖА ЗАЖАТИЯ НА СТРОГИЕ 5 СЕКУНД (5000 мс)
+            // 🎯 ЗАПУСКАЕМ ТАЙМЕР НА СТРОГИЕ 3 СЕКУНДЫ (3000 мс)
             globalTouchHoldTimerWatcher = setTimeout(() => {
-                console.log("🔥 [ИИ-ЖЕСТ] Зафиксировано долгое удержание в 5 секунд! Запуск Квантового ИИ...");
-                triggerGlobalQuantumAiEngine(startX, startY);
-            }, 5000);
-        }, { passive: true });
+                // Если пользователь осознанно держит палец на месте — отменяем системные заклинивания
+                if (e.cancelable) e.preventDefault();
+                console.log("🔥 [ИИ-ЖЕСТ] Удержание в 3 секунды зафиксировано! Запуск...");
+                triggerGlobalQuantumAiEngine(touch.clientX, touch.clientY);
+            }, 3000);
+        }, { passive: false }); // Ставим passive: false, чтобы работал preventDefault()
 
         window.addEventListener('touchmove', function(e) {
             const touch = e.touches[0];
             
-            // 🎯 Если 5 секунд ещё не прошло, но палец сильно сдвинулся (скролл) — отменяем таймер удержания!
+            // 🎯 Скролл-детектор: если палец сдвинулся больше чем на 15px до истечения 3 секунд,
+            // значит пользователь просто скроллит чат вниз к футеру — отменяем запуск ИИ!
             if (!isGlobalQuantumAiActive) {
-                // Если это обычный жесткий скролл чата, сбрасываем 5-секундный холд
-                clearTimeout(globalTouchHoldTimerWatcher);
+                const moveDistX = Math.abs(touch.clientX - touchStartGlobalX);
+                const moveDistY = Math.abs(touch.clientY - touchStartGlobalY);
+                if (moveDistX > 15 || moveDistY > 15) {
+                    clearTimeout(globalTouchHoldTimerWatcher); // Свободный скролл чата открыт!
+                }
             }
 
-            // Если ИИ уже активен и слушает — плавно перемещаем неон за пальцем без фиксации камеры
+            // Если ИИ активен — плавно водим ауру за пальцем без тормозов сцены
             if (isGlobalQuantumAiActive) {
+                if (e.cancelable) e.preventDefault();
                 const aura = document.getElementById('quantumFingerAuraElement');
                 if (aura) {
                     aura.style.left = touch.clientX + 'px';
                     aura.style.top = touch.clientY + 'px';
                 }
             }
-        }, { passive: true });
+        }, { passive: false });
 
         window.addEventListener('touchend', function(e) {
-            // Если палец отпустили раньше 5 секунд — сбрасываем сторожевой таймер
             clearTimeout(globalTouchHoldTimerWatcher);
             
-            // 🎯 Если ИИ слушал, и ты отпустил палец — останавливаем микрофон и отправляем в g4f!
+            // Если ИИ слушал и ты отпустил руку — обрабатываем речь
             if (isGlobalQuantumAiActive) {
                 stopGlobalQuantumAiAndProcess();
             }
         });
 
-        // 🎯 2. ВКЛЮЧЕНИЕ ДИКТОФОНА И МАЛИНОВОГО НЕОНА ВОКРУГ ПАЛЬЦА
+        // 🎯 2. ВКЛЮЧЕНИЕ НЕПРЕРЫВНОГО ДИКТОФОНА И МАЛИНОВОГО НЕОНА
         function triggerGlobalQuantumAiEngine(startX, startY) {
             isGlobalQuantumAiActive = true;
             globalRecognizedPromptText = "";
@@ -3994,49 +4002,57 @@
             if (overlay) overlay.classList.add('visible');
             if (textPanel) textPanel.innerHTML = "🧠 Квантовый ИИ слушает... Говорите!";
 
-            // Активируем микрофон
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (SpeechRecognition) {
                 globalSpeechRecognitionEngine = new SpeechRecognition();
                 globalSpeechRecognitionEngine.lang = 'ru-RU';
-                globalSpeechRecognitionEngine.interimResults = true;
+                globalSpeechRecognitionEngine.interimResults = true; // 🎯 Ловим слова на лету
                 globalSpeechRecognitionEngine.continuous = true;
 
                 globalSpeechRecognitionEngine.onresult = function(event) {
-                    let finalTranscript = "";
-                    for (let i = event.resultIndex; i < event.results.length; ++i) {
-                        if (event.results[i].isFinal) {
-                            finalTranscript += event.results[i].transcript;
-                        }
+                    let liveTranscript = "";
+                    for (let i = 0; i < event.results.length; ++i) {
+                        liveTranscript += event.results[i][0].transcript;
                     }
-                    if (finalTranscript) globalRecognizedPromptText = finalTranscript;
+                    // Жестко фиксируем наговоренный текст, убирая "Промпт пуст" намертво!
+                    if (liveTranscript.trim()) {
+                        globalRecognizedPromptText = liveTranscript;
+                        if (textPanel) textPanel.innerHTML = `🎙️ Слышу: <span style="color:#00f2fe;">"${liveTranscript}"</span>`;
+                    }
+                };
+
+                globalSpeechRecognitionEngine.onerror = function(err) {
+                    console.error("Ошибка глобального ИИ-микрофона:", err);
                 };
 
                 globalSpeechRecognitionEngine.start();
             }
         }
 
-        // 🎯 3. ОТЖАТИЕ ПАЛЬЦА: ХОЛОДНЫЙ НЕОН И КВАНТОВЫЙ ШЛЮЗ G4F
+        // 🎯 3. ОТЖАТИЕ ПАЛЬЦА: ХОЛОДНЫЙ НЕОН И ОТПРАВКА НА G4F БЭКЕНД
         async function stopGlobalQuantumAiAndProcess() {
             const aura = document.getElementById('quantumFingerAuraElement');
             const textPanel = document.getElementById('quantumAiDynamicTextPanel');
 
-            if (aura) aura.className = 'quantum-touch-aura active-thinking'; // Холодное свечение
-            if (textPanel) textPanel.innerHTML = "🌀 Анализ запроса квантовым движком...";
+            if (aura) aura.className = 'quantum-touch-aura active-thinking'; // Переключаем на холодный неон
+            if (textPanel) textPanel.innerHTML = "🌀 Анализ запроса квантовым движком g4f...";
 
             if (globalSpeechRecognitionEngine) {
                 try { globalSpeechRecognitionEngine.stop(); } catch(e){}
             }
 
-            // Небольшая пауза, чтобы Web Speech зафиксировал финальные слова
+            // Микро-пауза для финальной склейки буфера
             setTimeout(async () => {
                 const prompt = globalRecognizedPromptText.trim();
-                if (!prompt) {
-                    shutdownGlobalQuantumAiVisuals();
+                
+                // Если текста совсем нет — мягко гасим и пишем подсказку
+                if (!prompt || prompt.toLowerCase() === "undefined") {
+                    if (textPanel) textPanel.innerHTML = "Бро, я не расслышал твой голос. Попробуй зажать ещё раз!";
+                    setTimeout(shutdownGlobalQuantumAiVisuals, 2000);
                     return;
                 }
 
-                console.log("📡 [ИИ-ГЛОБАЛ] Промпт отправлен на g4f:", prompt);
+                console.log("📡 [ИИ-ГЛОБАЛ] Отправка промпта на g4f-шлюз:", prompt);
 
                 try {
                     const res = await fetch('/api/geragram/ai/front-proxy', {
@@ -4049,16 +4065,16 @@
                         const data = await res.json();
                         const answer = data.ai_text || "Ошибка генерации";
                         
-                        // Запускаем динамическое высвечивание букв и озвучку
+                        // Эффект пишущей машинки и озвучка
                         animateQuantumAiTypewriterText(answer);
                     } else {
-                        animateQuantumAiTypewriterText("Сбой связи с кластером g4f. Попробуйте заново!");
+                        animateQuantumAiTypewriterText("Сбой связи с кластером g4f. Попробуйте еще раз!");
                     }
                 } catch(err) {
                     console.error(err);
                     shutdownGlobalQuantumAiVisuals();
                 }
-            }, 800);
+            }, 500);
         }
 
         // 🎯 4. ЭФФЕКТ ПИШУЩЕЙ МАШИНКИ И ОГЛАСКА ЖИВЫМ ГОЛОСОМ
@@ -4078,7 +4094,6 @@
                     utterance.rate = 1.0;
                     utterance.pitch = 1.1;
 
-                    // Когда робот договорит — полностью тушим эффекты и закрываем оверлей
                     utterance.onend = function() {
                         console.log("🔊 [ИИ-ГЛОБАЛ] Огласка завершена.");
                         setTimeout(shutdownGlobalQuantumAiVisuals, 800);
@@ -4088,7 +4103,6 @@
                 }
             } catch(e) { console.warn(e); }
 
-            // Посимвольное плавное появление текста
             function typeLetter() {
                 if (index < fullText.length) {
                     textPanel.innerHTML += fullText.charAt(index);
