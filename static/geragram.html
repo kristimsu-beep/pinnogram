@@ -3805,13 +3805,12 @@
                 alert("Ошибка связи с сервером при пересылке.");
             }
         }
-        // 🎯 СВЯЗУЮЩИЙ ТРИГГЕР ДЛЯ ЗАПУСКА МОДАЛКИ ПЕРЕСЫЛКИ СООБЩЕНИЯ
+        // 🎯 СВЯЗУЮЩИЙ ТРИГГЕР ДЛЯ ЗАПУСКА МОДАЛКИ ПЕРЕСЫЛКИ СООБЩЕНИЯ (ИСПРАВЛЕН ПОД _ID MONGODB)
         function triggerForwardAction() {
-            // Пытаемся автоматически подхватить ID зажатого сообщения из твоего меню.
-            // Мы проверяем все возможные варианты имен глобальных переменных!
+            // Считываем все варианты глобальных переменных меню
             let targetMsgId = window.currentMessageId || window.selectedMessageId || window.contextMessageId || window.selectedMsgId || null;
             
-            // ХАКЕРСКИЙ ХОД: Если глобальная переменная пуста, вытаскиваем ID напрямую из пузыря на экране!
+            // ФИКС: Вытаскиваем ID напрямую из разметки пузыря, ориентируясь на твою структуру _id
             if (!targetMsgId) {
                 const activeMenu = document.getElementById('msgContextMenu');
                 if (activeMenu) {
@@ -3830,21 +3829,21 @@
                     });
 
                     if (closestBubble) {
-                        targetMsgId = closestBubble.dataset.id || closestBubble.getAttribute('data-id');
-                        console.log("🎯 [ПЕРЕСЫЛКА-ХАК] ID успешно вытянут из дата-атрибута пузыря:", targetMsgId);
+                        // 🎯 ЧИТАЕМ СТРОГО ИЗ СИСТЕМНОГО ДАТА-АТРИБУТА ТВОЕГО БАЗОВОГО РЕНДЕРЕРА!
+                        targetMsgId = closestBubble.dataset.id || closestBubble.getAttribute('data-id') || closestBubble.dataset._id;
+                        console.log("🎯 [ПЕРЕСЫЛКА-ХАК] Системный MongoDB ID успешно захвачен:", targetMsgId);
                     }
                 }
             }
             
-            // Если ID захвачен — прячем меню и распахиваем модалку контактов
             if (targetMsgId) {
                 const menu = document.getElementById('msgContextMenu');
-                if (menu) menu.style.display = 'none'; // Закрываем контекстное меню
+                if (menu) menu.style.display = 'none'; // Гасим контекстное меню
                 
-                openGeragramForwardModal(targetMsgId); // Открываем модальное окно пересылки
+                openGeragramForwardModal(targetMsgId); // Открываем модалку контактов
             } else {
-                console.error("⚠️ [ПЕРЕСЫЛКА-КРИТ] Не удалось определить ID сообщения ни из переменных, ни из верстки пузыря!");
-                alert("Бро, не удалось захватить это сообщение. Попробуй зажать его ещё раз!");
+                console.error("⚠️ [ПЕРЕСЫЛКА-КРИТ] Не удалось определить ID сообщения.");
+                alert("Бро, не удалось захватить сообщение. Попробуйте зажать его ещё раз!");
             }
         }
 
