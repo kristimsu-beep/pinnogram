@@ -998,18 +998,19 @@
             -webkit-backdrop-filter: blur(0px);
             z-index: 99998;
             opacity: 0;
-            pointer-events: none;
+            pointer-events: none; /* 🎯 ГЛАВНЫЙ ФИКС: Оверлей полностью прозрачен для скролла чата по умолчанию! */
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 40px;
-            user-select: none; /* 🎯 БЛОКИРУЕМ СИСТЕМНОЕ ВЫДЕЛЕНИЕ БРАУЗЕРА */
+            user-select: none;
             -webkit-user-select: none;
             transition: all 0.4s ease;
         }
 
         .quantum-ai-fullscreen-overlay.visible {
             opacity: 1 !important;
+            pointer-events: auto !important; /* 🎯 Включаем блокировку кликов только когда ИИ активен! */
             backdrop-filter: blur(12px) !important;
             -webkit-backdrop-filter: blur(12px) !important;
         }
