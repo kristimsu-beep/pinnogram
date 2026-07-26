@@ -3982,7 +3982,7 @@
             }
         });
 
-        // 🎯 2. ВКЛЮЧЕНИЕ ДИКТОФОНА И МАЛИНОВОГО НЕОНА
+        // 🎯 2. ВКЛЮЧЕНИЕ ДИКТОФОНА И МАЛИНОВОГО НЕОНА (С ТОТАЛЬНЫМ ВЫЖИГАНИЕМ UNDEFINED ИЗ МИКРОФОНА)
         function triggerGlobalQuantumAiEngine(startX, startY) {
             isGlobalQuantumAiActive = true;
             globalRecognizedPromptText = "";
@@ -3998,7 +3998,7 @@
             }
             if (overlay) {
                 overlay.classList.add('visible');
-                overlay.style.pointerEvents = "auto"; // Включаем блокировку кликов только СЕЙЧАС!
+                overlay.style.pointerEvents = "auto";
             }
             if (textPanel) textPanel.innerHTML = "🧠 Квантовый ИИ слушает... Говорите!";
 
@@ -4006,21 +4006,37 @@
             if (SpeechRecognition) {
                 globalSpeechRecognitionEngine = new SpeechRecognition();
                 globalSpeechRecognitionEngine.lang = 'ru-RU';
-                globalSpeechRecognitionEngine.interimResults = false; // 🎯 ФИКС: Отключаем дубли букв в буфере!
+                globalSpeechRecognitionEngine.interimResults = true; // Возвращаем true, чтобы ловить слова мгновенно
                 globalSpeechRecognitionEngine.continuous = true;
 
                 globalSpeechRecognitionEngine.onresult = function(event) {
                     let finalTranscript = "";
+                    
+                    // Перебираем результаты распознавания речи с жесткой проверкой типов данных
                     for (let i = event.resultIndex; i < event.results.length; ++i) {
-                        if (event.results[i].isFinal) {
-                            finalTranscript += event.results[i].transcript;
+                        if (event.results[i] && event.results[i][0]) {
+                            let textSnippet = event.results[i][0].transcript;
+                            
+                            // 🎯 НАШ ГЛАВНЫЙ СПАСИТЕЛЬНЫЙ ФИЛЬТР: Выжигаем системный undefined прямо на лету из микрофона!
+                            if (textSnippet && 
+                                typeof textSnippet === 'string' && 
+                                textSnippet.trim().toLowerCase() !== "undefined" && 
+                                !textSnippet.includes("undefined")) {
+                                finalTranscript += textSnippet;
+                            }
                         }
                     }
-                    // 🎯 Намертво фиксируем чистые отфильтрованные слова без каши
-                    if (finalTranscript.trim()) {
-                        globalRecognizedPromptText = finalTranscript.trim();
-                        if (textPanel) textPanel.innerHTML = `🎙️ Слышу: <span style="color:#00f2fe;">"${globalRecognizedPromptText}"</span>`;
+                    
+                    // Жестко фиксируем наговоренный текст на экране, ТОЛЬКО если это реальные слова!
+                    let cleanPrompt = finalTranscript.trim();
+                    if (cleanPrompt && cleanPrompt.toLowerCase() !== "undefined" && cleanPrompt.length > 0) {
+                        globalRecognizedPromptText = cleanPrompt;
+                        if (textPanel) textPanel.innerHTML = `🎙️ Слышу: <span style="color:#00f2fe;">"${cleanPrompt}"</span>`;
                     }
+                };
+
+                globalSpeechRecognitionEngine.onerror = function(err) {
+                    console.error("Ошибка глобального ИИ-микрофона:", err);
                 };
 
                 globalSpeechRecognitionEngine.start();
