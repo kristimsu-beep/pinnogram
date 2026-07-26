@@ -5114,7 +5114,8 @@ async def geragram_get_history(target_username: str, request: Request):
             "reply_to_text": msg.get("reply_to_text", None),
             # 🔥 НАШИ НОВЫЕ СЕТЕВЫЕ КЛЮЧИ ДЛЯ ГАЛОЧЕК И ЭМОДЗИ ИЗ MONGODB:
             "read": msg.get("read", False),               # Статус прочтения (True/False)
-            "reactions": msg.get("reactions", [])         # Массив реакций юзеров
+            "reactions": msg.get("reactions", []),        # Массив реакций юзеров
+            "is_forwarded": msg.get("is_forwarded", False) # 🎯 ФИКС: Прокидываем флаг стрелочки на фронтенд!
         })
     return history
 
