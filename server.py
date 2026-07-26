@@ -4396,70 +4396,61 @@ class MessageSendModel(BaseModel):
 async def geragram_messages_forward_action(data: dict, request: Request):
     import uuid
     from datetime import datetime
+    from bson import ObjectId
     
     me = await get_current_gera_user(request) # Проверяем, кто отправляет
     my_username = me["username"]
     
     message_id = data.get("message_id") # ID исходного сообщения
-    target_user_id = data.get("target_user_id") # Никнейм целевого друга
+    target_user_id = data.get("target_user_id") # Кому пересылаем
     
     if not message_id or not target_user_id:
         raise HTTPException(status_code=400, detail="Неполные данные для пересылки")
         
     try:
-        from bson import ObjectId
+        # 1. 🔍 ШЛЮЗ ПОИСКА: Ищем исходное сообщение в ТВОЕЙ коллекции geragram_chats по ObjectId
         source_msg = None
-        
-        # 1. 🔍 ШЛЮЗ ПОИСКА: Ищем исходное сообщение в MongoDB Atlas по строковому ID
-        source_msg = await geragram_messages.find_one({"id": str(message_id)})
-        
-        # Если не нашли по строке, пробуем пробить через системный MongoDB ObjectId
+        try:
+            source_msg = await geragram_chats.find_one({"_id": ObjectId(str(message_id))})
+        except Exception as e:
+            print(f"⚠️ [ПЕРЕСЫЛКА-ObjectId-СБОЙ] Ошибка конвертации ID: {e}")
+            
+        # Подстраховка: если ID в базе вдруг лежит как обычная строка, ищем по текстовому полю
         if not source_msg:
-            try:
-                source_msg = await geragram_messages.find_one({"_id": ObjectId(message_id)})
-            except:
-                pass
-                
+            source_msg = await geragram_chats.find_one({"_id": str(message_id)})
+            
         if not source_msg:
-            print(f"⚠️ [П ПЕРЕСЫЛКА-ОШИБКА] Сообщение с ID {message_id} не найдено в базе MongoDB!")
+            print(f"⚠️ [ПЕРЕСЫЛКА-ОШИБКА] Сообщение с ID {message_id} не найдено в коллекции geragram_chats!")
             raise HTTPException(status_code=404, detail="Исходное сообщение не найдено в базе")
             
-        # 2. ⚡ ВСЕЯДНЫЙ КВАНТОВЫЙ КОПИРОВЩИК: Копируем все ключи и поля старого сообщения, 
-        # чтобы гарантированно сохранить текст, ссылки на картинки, видео или голосовые файлы!
-        new_message_id = str(uuid.uuid4())
+        # 2. ⚡ ВСЕЯДНЫЙ КВАНТОВЫЙ КОПИРОВЩИК: Дублируем текст, картинки или аудио
         timestamp = datetime.utcnow().isoformat() + "Z"
         
         new_forwarded_message = {}
         for key, value in source_msg.items():
-            if key not in ["_id", "id", "from_user", "to_user", "timestamp", "read"]:
+            if key not in ["_id", "from_user", "to_user", "timestamp", "read", "reactions"]:
                 new_forwarded_message[key] = value
                 
-        # Намертво вшиваем новые заголовки маршрутизации чата
-        new_forwarded_message["id"] = new_message_id
+        # Вшиваем новые заголовки маршрутизации чата под твою структуру!
         new_forwarded_message["from_user"] = my_username
-        new_forwarded_message["to_user"] = target_user_id
+        new_forwarded_message["to_user"] = str(target_user_id).strip().lower() # Приводим к нижнему регистру как в истории
         new_forwarded_message["timestamp"] = timestamp
         new_forwarded_message["read"] = False
         new_forwarded_message["is_forwarded"] = True # Включаем серую стрелочку "Переслано" на фронте!
         
-        # 🎯 Проверка на случай, если поле контента не определилось — подстраховываемся базовым текстом
-        if "content" not in new_forwarded_message and "text" in source_msg:
-            new_forwarded_message["content"] = source_msg["text"]
-            
-        # 3. 💾 ИНЖЕКЦИЯ В MONGODB ATLAS
-        await geragram_messages.insert_one(new_forwarded_message)
-        print(f"✅ [П ПЕРЕСЫЛКА-СУБД] Сообщение успешно пересло от {my_username} к {target_user_id}")
+        # 3. 💾 ИНЖЕКЦИЯ В КОЛЛЕКЦИЮ GERAGRAM_CHATS
+        await geragram_chats.insert_one(new_forwarded_message)
+        print(f"✅ [ПЕРЕСЫЛКА-СУБД] Сообщение успешно переслано от {my_username} к {target_user_id}")
         
-        return {"status": "success", "message": new_message_id}
+        return {"status": "success", "message": str(new_forwarded_message["_id"])}
         
     except HTTPException:
         raise
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        print(f"⚠️ [П ПЕРЕСЫЛКА-КРИТ-СБОЙ] Исключение Python в MongoDB:\n{error_details}")
+        print(f"⚠️ [ПЕРЕСЫЛКА-КРИТ-СБОЙ] Исключение Python в MongoDB:\n{error_details}")
         raise HTTPException(status_code=500, detail="Внутренний сбой базы данных при пересылке")
-
 
 import re
 
