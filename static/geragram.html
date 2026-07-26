@@ -59,29 +59,26 @@
         html, body {
             background-color: #080c10;
             color: var(--tg-text);
-            height: 100vh !important;
+            height: 100dvh !important; /* 🎯 ФИКС: Динамическая высота идеально подстраивается под панели телефона! */
             width: 100vw !important;
             margin: 0 !important;
             padding: 0 !important;
             display: flex;
             justify-content: center;
             align-items: center;
-            overflow: hidden !important; /* Намертво запирает прокрутку страницы вниз */
-            
-            /* 🎯 ИСПРАВЛЕНО: Заменили none на auto, чтобы вернулся зум пальцами! */
-            touch-action: auto !important; 
+            overflow: hidden; 
+            touch-action: auto !important; /* Заменили none на auto, чтобы вернулся зум пальцами! */
         }
 
-
-        /* 1. Главный экран мессенджера (Жестко запираем в границы окна браузера) */
+        /* 🎯 1. Главный экран мессенджера (Жестко запираем в границы окна браузера) */
         .messenger-wrapper {
             width: 100vw !important;
-            height: 100vh !important; /* Намертво привязываем к высоте экрана */
+            height: 100dvh !important; /* 🎯 ФИКС: Мессенджер сжимается ровно до начала панели навигации телефона */
             background: var(--tg-bg);
             position: relative;
-            overflow: hidden !important;
+            overflow: hidden; 
         }
-        
+       
         /* --- ЭКРАН АВТОРИЗАЦИИ / РЕГИСТРАЦИИ --- */
         .auth-container {
             background: var(--tg-sidebar);
