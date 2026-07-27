@@ -2632,10 +2632,10 @@ def inject_dynamic_ram_route_into_fastapi(route_path: str):
     app.add_api_route(clean_route, dynamic_ram_html_endpoint, methods=["GET"], name=f"dynamic_ram_{route_path}")
     print(f"🌌 [FastAPI-RAM-ИНЖЕКТОР] Живой роут {clean_route} успешно открыт напрямую из памяти!")
 
-# 🚀 СЛЭШ-КОМАНДА АВТОНОМНОЙ ГЕНЕРАЦИИ ИГР НА ЛЕТУ ЧЕРЕЗ G4F
+# 🚀 СЛЭШ-КОМАНДА АВТОНОМНОЙ ГЕНЕРАЦИИ ИГР НА ЛЕТУ ЧЕРЕЗ ОФИЦИАЛЬНЫЙ HUGGING FACE INFERENCE API
 @discord_bot_client.tree.command(
     name="create", 
-    description="Сгенерировать HTML/JS игру через ИИ и развернуть её на роуте GeraGram прямо из RAM"
+    description="Сгенерировать HTML/JS игру через официальный Hugging Face API и развернуть её из RAM"
 )
 @app_commands.describe(
     prompt="Описание того, что создать (например: игра кликер, клон geometry dash)",
@@ -2646,12 +2646,21 @@ async def geragram_ai_factory_create(
     prompt: str,
     route: str
 ):
+    import httpx
+    
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("⚠️ Бро, создавать новые кибер-страницы на сервере могут только Администраторы!", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=False)
     
+    # 🎯 СЧИТЫВАЕМ ТОКЕН ПО ТВОЕМУ НОВОМУ УЛЬТРА-СЕКРЕТНОМУ ИМЕНИ ПЕРЕМЕННОЙ ОКРУЖЕНИЯ!
+    hf_token = os.getenv("GeraApp_QuantumMatrix")
+    if not hf_token:
+        print("🚨 [ИИ-ФАБРИКА-КРИТ] Переменная GeraApp_QuantumMatrix пуста в панели управления Render!")
+        await interaction.followup.send("⚠️ Критическая ошибка бэкенда: Токен ИИ-модуля не настроен на сервере.")
+        return
+
     clean_route = route.strip().lstrip("/").replace(" ", "_").lower()
 
     system_instruction = (
@@ -2663,66 +2672,83 @@ async def geragram_ai_factory_create(
         "маркдаун-оберток вроде ```html ... ```. Твой ответ должен начинаться прямо с <!DOCTYPE html> и заканчиваться </html>."
     )
 
+    # Флагманская модель Qwen 2.5 72B — кодит сложнейшие скрипты без единой запинки
+    ai_url = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-72B-Instruct/v1/chat/completions"
+    
+    headers = {
+        "Authorization": f"Bearer {hf_token}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "messages": [
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": f"Создай игра: {prompt}"}
+        ],
+        "max_tokens": 3000, # Даём огромный лимит токенов, чтобы ИИ успел дописать игру до конца
+        "stream": False
+    }
+
     ai_response = ""
     
-    # 🧠 МНОГОУРОВНЕВЫЙ ШТУРМ КЛАСТЕРОВ G4F
     try:
-        print(f"📡 [ИИ-ФАБРИКА] Попытка через GPT-4o (Blackbox) для кода игры...")
-        response = await g4f.ChatCompletion.create_async(
-            model=g4f.models.gpt_4o,
-            provider=g4f.Provider.Blackbox,
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": f"Создай игру: {prompt}"}
-            ]
-        )
-        ai_response = str(response).strip()
+        print(f"📡 [ИИ-ФАБРИКА] Отправка авторизованного POST к Hugging Face (Qwen). Промпт: {prompt}")
+        
+        # trust_env=False намертво сносит сетевые прокси Render. DNS Hugging Face разрешится мгновенно!
+        async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
+            response = await client.post(ai_url, json=payload, headers=headers)
+            print(f"📡 [ИИ-ФАБРИКА] Код ответа Hugging Face: {response.status_code}")
+            
+            if response.status_code == 200:
+                ai_data = response.json()
+                if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
+                    ai_response = ai_data["choices"]["message"]["content"].strip()
+                    
+            # Резервный прыжок на модель Meta Llama 3, если Qwen перегружен
+            if not ai_response or len(ai_response) < 100:
+                print("🔄 [ИИ-ФАБРИКА] Qwen занят. Прыгаем на резервное ядро Meta Llama 3...")
+                backup_url = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct/v1/chat/completions"
+                backup_res = await client.post(backup_url, json=payload, headers=headers)
+                if backup_res.status_code == 200:
+                    ai_data = backup_res.json()
+                    if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
+                        ai_response = ai_data["choices"]["message"]["content"].strip()
+                        
     except Exception as e:
-        print(f"🔄 [ИИ-ФАБРИКА] Первое ядро занято ({e}). Переключаемся на резерв...")
-
-    if not ai_response or len(ai_response) < 100 or "<html" not in ai_response.lower():
-        try:
-            print("📡 [ИИ-ФАБРИКА] Попытка через HuggingChat кластер...")
-            response = await g4f.ChatCompletion.create_async(
-                model=g4f.models.default,
-                provider=g4f.Provider.HuggingChat,
-                messages=[
-                    {"role": "system", "content": system_instruction},
-                    {"role": "user", "content": f"Создай игру: {prompt}"}
-                ]
-            )
-            ai_response = str(response).strip()
-        except Exception as e:
-            print(f"⚠️ [ИИ-ФАБРИКА-КРИТ] Все ИИ-кластеры g4f перегружены: {e}")
+        import traceback
+        print(f"⚠️ [ИИ-ФАБРИКА-КРИТ-СБОЙ] Исключение Python в Hugging Face API:\n{traceback.format_exc()}")
 
     # Если код успешно получен
     if ai_response and len(ai_response) > 100:
+        # Хакерская зачистка маркдаун-оберток ```html
         if ai_response.startswith("```html"):
             ai_response = ai_response[7:]
+        elif ai_response.startswith("```"):
+            ai_response = ai_response[3:]
         if ai_response.endswith("```"):
             ai_response = ai_response[:-3]
         ai_response = ai_response.strip()
 
-        # 💾 ХАКЕРСКИЙ ШЛЮЗ: Записываем код игры прямо в кэш оперативной памяти (RAM)
+        # 💾 Записываем код игры прямо в кэш оперативной памяти (RAM)
         DYNAMIC_RAM_PAGES[clean_route] = ai_response
-        print(f"💾 [ИИ-ФАБРИКА] Код игры успешно закеширован в оперативной памяти под ключом: {clean_route}")
+        print(f"💾 [ИИ-ФАБРИКА] Код игры закеширован в RAM под ключом: {clean_route}")
 
         # ⚡ ВРЕЗАЕМ ЖИВОЙ РОУТ В FastAPI НА ЛЕТУ
         inject_dynamic_ram_route_into_fastapi(clean_route)
 
-        # Выкатываем красивый Embed-отчет в чат Discord
+        # Выдаем красивый Embed-отчет в чат Discord
         embed = discord.Embed(
             title="🌌 Квантовая ИИ-Фабрика Модулей GeraGram",
-            description="Новое веб-приложение успешно сгенерировано и развернуто напрямую из RAM!",
+            description="Новое веб-приложение успешно сгенерировано официальным API и развернуто из RAM!",
             color=discord.Color.from_rgb(0, 242, 254)
         )
         embed.add_field(name="🎯 Промпт запроса", value=f"*{prompt}*", inline=False)
-        embed.add_field(name="🔗 Живая ссылка в интернете", value=f"**[ОТКРЫТЬ ИГРУ НА РОУТЕ /{clean_route}](https://{interaction.guild.name.lower().replace(' ', '-')}://{clean_route})**", inline=False)
-        embed.set_footer(text="Экосистема GeraGram Messenger • Скоростной ИИ-Нейросинтез в RAM")
+        embed.add_field(name="🔗 Живая ссылка в интернете", value=f"**[ОТКРЫТЬ ИГРУ НА РОУТЕ /{clean_route}](https://onrender.com{clean_route})**", inline=False)
+        embed.set_footer(text="Экосистема GeraGram Messenger • Авторизованный Нейросинтез HF")
         
         await interaction.followup.send(embed=embed)
     else:
-        await interaction.followup.send("⚠️ Бро, ИИ-кластеры g4f сейчас перегружены кодом. Попробуй повторить команду через минуту!")
+        await interaction.followup.send("⚠️ Бро, Hugging Face API отклонил тяжелый промпт или превышен лимит токенов. Попробуй упростить запрос!")
 
 # 🎯 АСИНХРОННЫЙ ЗАПУСК КЛИЕНТА БОТА
 @discord_bot_client.event
