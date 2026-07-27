@@ -2587,148 +2587,157 @@ async def startup():
                 print("🦊 [KONATA] Фоновый процесс бота успешно инициализирован в СУБД!")
             except Exception as e:
                 print(f"🛑 [KONATA START ERROR] Ошибка запуска бота: {e}")
+
 # =====================================================================
-# 🪐 СИНХРОНИЗАТОР GERAGRAM: DISCORD BOT GRADIENT BYPASS (ВЕЧНЫЙ ХАК)
+# 🪐 СИНХРОНИЗАТОР GERAGRAM: DISCORD AI RAM ROUTE INJECTOR (G4F ENGINE)
 # =====================================================================
 import discord
 from discord import app_commands
 import asyncio
 import os
+import g4f
+from fastapi.responses import HTMLResponse
 
-# Включаем жесткие права доступа к ролям и никнеймам на сервере Discord
 intents = discord.Intents.default()
 intents.members = True 
 intents.guilds = True
 
-class GeraGramGradientBypassBot(discord.Client):
+# 🧠 КВАНТОВОЕ ХРАНИЛИЩЕ В ОПЕРАТИВНОЙ ПАМЯТИ (RAM)
+# Структура: {"gd": "<!DOCTYPE html>..."}
+DYNAMIC_RAM_PAGES = {}
+
+class GeraGramAiFactoryBot(discord.Client):
     def __init__(self):
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self):
-        # Синхронизируем слэш-команды во вселенной Discord при старте
         await self.tree.sync()
-        print("📡 [DISCORD-ЯДРО] Дерево слэш-команд успешно синхронизировано!")
+        print("📡 [ИИ-ФАБРИКА] Дерево слэш-команд в оперативной памяти синхронизировано!")
 
-discord_bot_client = GeraGramGradientBypassBot()
+discord_bot_client = GeraGramAiFactoryBot()
 
-# 🎯 СЛЭШ-КОМАНДА ИНЖЕКЦИИ БЕСПЛАТНОГО ГРАДИЕНТА В НИКНЕЙМ И ТЕГ
+# 🎯 ФУНКЦИЯ ДИНАМИЧЕСКОЙ СБОРКИ РОУТА ИЗ ОПЕРАТИВНОЙ ПАМЯТИ СЕРВЕРА
+def inject_dynamic_ram_route_into_fastapi(route_path: str):
+    clean_route = "/" + route_path.strip().lstrip("/")
+    
+    # Контроллер вытягивает код игры прямо из кэша RAM-памяти со скоростью пули!
+    async def dynamic_ram_html_endpoint():
+        html_code_from_ram = DYNAMIC_RAM_PAGES.get(route_path)
+        if html_code_from_ram:
+            return HTMLResponse(content=html_code_from_ram, status_code=200)
+        return HTMLResponse(content="<h1>Бро, роут пуст или игра еще не сгенерирована в RAM!</h1>", status_code=404)
+        
+    # Врезаем роут в живое ядро FastAPI
+    app.add_api_route(clean_route, dynamic_ram_html_endpoint, methods=["GET"], name=f"dynamic_ram_{route_path}")
+    print(f"🌌 [FastAPI-RAM-ИНЖЕКТОР] Живой роут {clean_route} успешно открыт напрямую из памяти!")
+
+# 🚀 СЛЭШ-КОМАНДА АВТОНОМНОЙ ГЕНЕРАЦИИ ИГР НА ЛЕТУ ЧЕРЕЗ G4F
 @discord_bot_client.tree.command(
-    name="tag", 
-    description="Окрасить никнейм и тег пользователя в бесплатный неоновый градиент"
+    name="create", 
+    description="Сгенерировать HTML/JS игру через ИИ и развернуть её на роуте GeraGram прямо из RAM"
 )
 @app_commands.describe(
-    member="Пользователь, которого красим в градиент",
-    tag_text="Текст тега (например: ОЛД, АДМИН, VIP)",
-    gradient_preset="Выбери стиль градиента мессенджера"
+    prompt="Описание того, что создать (например: игра кликер, клон geometry dash)",
+    route="Желаемый адрес ссылки (например: gd, clicker, matrix)"
 )
-@app_commands.choices(gradient_preset=[
-    app_commands.Choice(name="🌌 Quantum Nebula (Малиново-Синий)", value="nebula"),
-    app_commands.Choice(name="🔥 Cyber Pink (Розово-Фиолетовый)", value="pink"),
-    app_commands.Choice(name="🟢 Neon Aurora (Зелено-Бирюзовый)", value="aurora")
-])
-async def geragram_discord_gradient_tag_inject(
+async def geragram_ai_factory_create(
     interaction: discord.Interaction, 
-    member: discord.Member, 
-    tag_text: str,
-    gradient_preset: str
+    prompt: str,
+    route: str
 ):
-    # Проверяем права администратора/модератора на управление сервером
-    if not interaction.user.guild_permissions.manage_roles or not interaction.user.guild_permissions.manage_nicknames:
-        await interaction.response.send_message(
-            "⚠️ Бро, у тебя нет прав `Управление ролям/никнеймами` для инжекции градиента!", 
-            ephemeral=True
-        )
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("⚠️ Бро, создавать новые кибер-страницы на сервере могут только Администраторы!", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=False)
-    guild = interaction.guild
-
-    # 🎨 РАСКЛАДКА НЕОНОВЫХ ЦВЕТОВ ДЛЯ ПРИНУДИТЕЛЬНОГО СМЕШИВАНИЯ ШРИФТОВ В DISCORD
-    color_presets = {
-        "nebula": [discord.Color.from_rgb(255, 0, 127), discord.Color.from_rgb(142, 68, 173), discord.Color.from_rgb(41, 128, 185)],
-        "pink": [discord.Color.from_rgb(241, 148, 180), discord.Color.from_rgb(187, 143, 206), discord.Color.from_rgb(115, 198, 182)],
-        "aurora": [discord.Color.from_rgb(46, 204, 113), discord.Color.from_rgb(22, 160, 133), discord.Color.from_rgb(52, 152, 219)]
-    }
     
-    selected_colors = color_presets.get(gradient_preset, color_presets["nebula"])
+    clean_route = route.strip().lstrip("/").replace(" ", "_").lower()
 
+    system_instruction = (
+        "Ты — гениальный Senior Frontend разработчик и геймдизайнер. "
+        "Твоя задача — написать полноценную, красивую, залипательную и полностью рабочую мини-игру "
+        "на чистом HTML, CSS и JavaScript (внутри тега <script>) на основе промпта пользователя. "
+        "Игра должна быть современной, адаптивной под телефоны и ПК, с сочным неоновым киберпанк-дизайном. "
+        "ВАЖНО: Выдавай СТРОГО чистый HTML-код страницы. Не пиши никаких вступлений, пояснений или "
+        "маркдаун-оберток вроде ```html ... ```. Твой ответ должен начинаться прямо с <!DOCTYPE html> и заканчиваться </html>."
+    )
+
+    ai_response = ""
+    
+    # 🧠 МНОГОУРОВНЕВЫЙ ШТУРМ КЛАСТЕРОВ G4F
     try:
-        # ШАГ 1: Меняем никнейм, пририсовывая текстовый тег в красивых хакерских рамках
-        clean_tag_text = tag_text.strip().upper()
-        base_name = member.display_name
-        if "⦗" in base_name:
-            base_name = base_name.split("⦗")[0].strip()
-            
-        final_nickname = f"{base_name} ⦗ {clean_tag_text} ⦘"
-        await member.edit(nick=final_nickname, reason="Градиентный тег GeraGram")
-
-        # ШАГ 2: СУПЕР-МАНЕВР — выжигаем старые невидимые роли-теги этого юзера, если они были
-        for role in list(member.roles):
-            if role.name == "\u200b":
-                try: 
-                    await role.delete(reason="Очистка старого градиента")
-                except: 
-                    pass
-
-        # ⚡ ШАГ 3: Создаем каскад невидимых ролей для принудительного смешивания градиента!
-        print(f"🚀 [ГРАДИЕНТ-ЯДРО] Запуск инжекции 3-уровневого цвета для {member.name}...")
-        
-        created_gradient_roles = []
-        for i, color_node in enumerate(selected_colors):
-            # Имя роли — чистый невидимый пробел нулевой ширины, чтобы не засорять профиль! 
-            invisible_role_name = "\u200b" 
-            
-            new_role = await guild.create_role(
-                name=invisible_role_name,
-                color=color_node,
-                hoist=False, 
-                reason=f"Градиентный узел {i+1} GeraGram"
-            )
-            created_gradient_roles.append(new_role)
-
-        # Развешиваем все три цветные невидимые роли на пользователя одновременно
-        for role in created_gradient_roles:
-            await member.add_roles(role)
-
-        # Выдаем роскошный Embed-отчет в чат Discord
-        embed = discord.Embed(
-            title="🪐 Квантовый Градиент-Синхронизатор GeraGram",
-            description=f"Система успешно обошла ограничения интерфейса Discord!",
-            color=selected_colors[0]
+        print(f"📡 [ИИ-ФАБРИКА] Попытка через GPT-4o (Blackbox) для кода игры...")
+        response = await g4f.ChatCompletion.create_async(
+            model=g4f.models.gpt_4o,
+            provider=g4f.Provider.Blackbox,
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": f"Создай игру: {prompt}"}
+            ]
         )
-        embed.add_field(name="🧬 Клон никнейма в чате:", value=f"**`{final_nickname}`**", inline=True)
-        embed.add_field(name="🎨 Эффект градиента", value=f" Активирован 3-уровневый неон", inline=True)
-        embed.set_thumbnail(url=member.display_avatar.url)
-        embed.set_footer(text="Экосистема GeraGram Messenger • Хакерский обход бустов завершен")
-
-        await interaction.followup.send(embed=embed)
-        print(f"✅ [ГРАДИЕНТ-ЯДРО] Полный градиент успешно инжектирован для {member.name}!")
-
-    except discord.Forbidden:
-        await interaction.interaction.followup.send(
-            "⚠️ Ошибка прав! Перетащи роль бота GeraGram на самый верх в настройках сервера Discord, чтобы он мог управлять другими ролями!"
-        )
+        ai_response = str(response).strip()
     except Exception as e:
-        print(f"⚠️ [ГРАДИЕНТ-ЯДРО-СБОЙ] Исключение: {e}")
-        await interaction.followup.send("⚠️ Не удалось применить градиент к профилю пользователя.")
+        print(f"🔄 [ИИ-ФАБРИКА] Первое ядро занято ({e}). Переключаемся на резерв...")
 
+    if not ai_response or len(ai_response) < 100 or "<html" not in ai_response.lower():
+        try:
+            print("📡 [ИИ-ФАБРИКА] Попытка через HuggingChat кластер...")
+            response = await g4f.ChatCompletion.create_async(
+                model=g4f.models.default,
+                provider=g4f.Provider.HuggingChat,
+                messages=[
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": f"Создай игру: {prompt}"}
+                ]
+            )
+            ai_response = str(response).strip()
+        except Exception as e:
+            print(f"⚠️ [ИИ-ФАБРИКА-КРИТ] Все ИИ-кластеры g4f перегружены: {e}")
+
+    # Если код успешно получен
+    if ai_response and len(ai_response) > 100:
+        if ai_response.startswith("```html"):
+            ai_response = ai_response[7:]
+        if ai_response.endswith("```"):
+            ai_response = ai_response[:-3]
+        ai_response = ai_response.strip()
+
+        # 💾 ХАКЕРСКИЙ ШЛЮЗ: Записываем код игры прямо в кэш оперативной памяти (RAM)
+        DYNAMIC_RAM_PAGES[clean_route] = ai_response
+        print(f"💾 [ИИ-ФАБРИКА] Код игры успешно закеширован в оперативной памяти под ключом: {clean_route}")
+
+        # ⚡ ВРЕЗАЕМ ЖИВОЙ РОУТ В FastAPI НА ЛЕТУ
+        inject_dynamic_ram_route_into_fastapi(clean_route)
+
+        # Выкатываем красивый Embed-отчет в чат Discord
+        embed = discord.Embed(
+            title="🌌 Квантовая ИИ-Фабрика Модулей GeraGram",
+            description="Новое веб-приложение успешно сгенерировано и развернуто напрямую из RAM!",
+            color=discord.Color.from_rgb(0, 242, 254)
+        )
+        embed.add_field(name="🎯 Промпт запроса", value=f"*{prompt}*", inline=False)
+        embed.add_field(name="🔗 Живая ссылка в интернете", value=f"**[ОТКРЫТЬ ИГРУ НА РОУТЕ /{clean_route}](https://{interaction.guild.name.lower().replace(' ', '-')}://{clean_route})**", inline=False)
+        embed.set_footer(text="Экосистема GeraGram Messenger • Скоростной ИИ-Нейросинтез в RAM")
+        
+        await interaction.followup.send(embed=embed)
+    else:
+        await interaction.followup.send("⚠️ Бро, ИИ-кластеры g4f сейчас перегружены кодом. Попробуй повторить команду через минуту!")
+
+# 🎯 АСИНХРОННЫЙ ЗАПУСК КЛИЕНТА БОТА
 @discord_bot_client.event
 async def on_ready():
-    print(f"👑 [ВЕЧНЫЙ-БОТ] Хакерский Дискорд-движок успешно запущен: {discord_bot_client.user}")
+    print(f"👑 [ИИ-ФАБРИКА-БОТ] Бот-Конструктор RAM в сети под именем: {discord_bot_client.user}")
 
-# Фоновый асинхронный запуск, чтобы бот не блокировал работу основного сайта FastAPI!
 async def start_discord_bot_background_task():
-    # 🎯 Извлекаем скрытый токен напрямую по твоему новому имени Gerabot_Token из панели Render!
     DISCORD_BOT_TOKEN = os.getenv("Gerabot_Token")
-    
     if DISCORD_BOT_TOKEN:
         try:
             await discord_bot_client.start(DISCORD_BOT_TOKEN)
         except Exception as e:
-            print(f"⚠️ [DISCORD-БОТ-ОШИБКА] Не удалось запустить клиента: {e}")
+            print(f"⚠️ [DISCORD-БОТ-ОШИБКА] Не удалось запустить: {e}")
     else:
-        print("🚨 [ДИСКОРД-ПРЕДУПРЕЖДЕНИЕ] Переменная Gerabot_Token пуста. Проверь настройки в панели Render!")    
+        print("🚨 [ДИСКОРД-ПРЕДУПРЕЖДЕНИЕ] Переменная Gerabot_Token пуста!")    
 # ==========================================================
 # 🎖️ ОНЛАЙН-ДВИЖЕК СТРАТЕГИИ "CONQUER THE WORLD ONLINE" (CTW)
 # ==========================================================
