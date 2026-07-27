@@ -2694,25 +2694,37 @@ async def geragram_ai_factory_create(
     try:
         print(f"📡 [ИИ-ФАБРИКА] Отправка авторизованного POST к Hugging Face (Qwen). Промпт: {prompt}")
         
-        # trust_env=False намертво сносит сетевые прокси Render. DNS Hugging Face разрешится мгновенно!
         async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
             response = await client.post(ai_url, json=payload, headers=headers)
-            print(f"📡 [ИИ-ФАБРИКА] Код ответа Hugging Face: {response.status_code}")
+            print(f"📡 [ИИ-ФАБРИКА] Код ответа Hugging Face (Qwen): {response.status_code}")
+            
+            # 🎯 ХАКЕРСКИЙ МАНЕВР: Сначала читаем чистый сырой текст, чтобы избежать краша json()!
+            raw_text_response = response.text
             
             if response.status_code == 200:
-                ai_data = response.json()
-                if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
-                    ai_response = ai_data["choices"]["message"]["content"].strip()
-                    
-            # Резервный прыжок на модель Meta Llama 3, если Qwen перегружен
-            if not ai_response or len(ai_response) < 100:
-                print("🔄 [ИИ-ФАБРИКА] Qwen занят. Прыгаем на резервное ядро Meta Llama 3...")
-                backup_url = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct/v1/chat/completions"
-                backup_res = await client.post(backup_url, json=payload, headers=headers)
-                if backup_res.status_code == 200:
-                    ai_data = backup_res.json()
+                try:
+                    ai_data = response.json()
                     if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
                         ai_response = ai_data["choices"]["message"]["content"].strip()
+                except Exception as json_err:
+                    print(f"🔄 [ИИ-ФАБРИКА] Ошибка парсинга JSON Qwen: {json_err}. Сырой ответ: {raw_text_response}")
+
+            # 🎯 ШАГ 2: Резервный прыжок на модель Meta Llama 3, если Qwen спит, выдал ошибку или загружается в кэш
+            if not ai_response or len(ai_response) < 100 or "loading" in raw_text_response.lower() or "error" in raw_text_response.lower():
+                print("🔄 [ИИ-ФАБРИКА] Ядро Qwen занято или загружается. Мгновенный прыжок на резервное ядро Meta Llama 3...")
+                backup_url = "https://huggingface.co"
+                
+                backup_res = await client.post(backup_url, json=payload, headers=headers)
+                print(f"📡 [ИИ-ФАБРИКА] Код ответа резервного ядра Llama 3: {backup_res.status_code}")
+                
+                raw_backup_text = backup_res.text
+                if backup_res.status_code == 200:
+                    try:
+                        ai_data = backup_res.json()
+                        if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
+                            ai_response = ai_data["choices"]["message"]["content"].strip()
+                    except Exception as json_backup_err:
+                        print(f"🔄 [ИИ-ФАБРИКА] Ошибка парсинга JSON Llama: {json_backup_err}. Сырой ответ: {raw_backup_text}")
                         
     except Exception as e:
         import traceback
