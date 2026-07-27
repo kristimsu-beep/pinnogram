@@ -2575,7 +2575,9 @@ async def startup():
         asyncio.create_task(init_sochi_stock_exchange_tables())
         asyncio.create_task(sochi_market_ticker_simulation_loop())
         asyncio.create_task(start_global_economic_loop())
-
+        # 🎯 ПОДСАЖИВАЕМ ЗАПУСК ДИСКОРД-БОТА В ТВОЙ ЖИВОЙ STARTUP-БЛОК!
+        asyncio.create_task(start_discord_bot_background_task())
+    
         print("🚀 Pinnogram Engine: База готова, бот-будильник запущен!")
         TOKEN = os.getenv("KONATA_BOT_TOKEN", "").strip()
         
@@ -2585,6 +2587,148 @@ async def startup():
                 print("🦊 [KONATA] Фоновый процесс бота успешно инициализирован в СУБД!")
             except Exception as e:
                 print(f"🛑 [KONATA START ERROR] Ошибка запуска бота: {e}")
+# =====================================================================
+# 🪐 СИНХРОНИЗАТОР GERAGRAM: DISCORD BOT GRADIENT BYPASS (ВЕЧНЫЙ ХАК)
+# =====================================================================
+import discord
+from discord import app_commands
+import asyncio
+import os
+
+# Включаем жесткие права доступа к ролям и никнеймам на сервере Discord
+intents = discord.Intents.default()
+intents.members = True 
+intents.guilds = True
+
+class GeraGramGradientBypassBot(discord.Client):
+    def __init__(self):
+        super().__init__(intents=intents)
+        self.tree = app_commands.CommandTree(self)
+
+    async def setup_hook(self):
+        # Синхронизируем слэш-команды во вселенной Discord при старте
+        await self.tree.sync()
+        print("📡 [DISCORD-ЯДРО] Дерево слэш-команд успешно синхронизировано!")
+
+discord_bot_client = GeraGramGradientBypassBot()
+
+# 🎯 СЛЭШ-КОМАНДА ИНЖЕКЦИИ БЕСПЛАТНОГО ГРАДИЕНТА В НИКНЕЙМ И ТЕГ
+@discord_bot_client.tree.command(
+    name="tag", 
+    description="Окрасить никнейм и тег пользователя в бесплатный неоновый градиент"
+)
+@app_commands.describe(
+    member="Пользователь, которого красим в градиент",
+    tag_text="Текст тега (например: ОЛД, АДМИН, VIP)",
+    gradient_preset="Выбери стиль градиента мессенджера"
+)
+@app_commands.choices(gradient_preset=[
+    app_commands.Choice(name="🌌 Quantum Nebula (Малиново-Синий)", value="nebula"),
+    app_commands.Choice(name="🔥 Cyber Pink (Розово-Фиолетовый)", value="pink"),
+    app_commands.Choice(name="🟢 Neon Aurora (Зелено-Бирюзовый)", value="aurora")
+])
+async def geragram_discord_gradient_tag_inject(
+    interaction: discord.Interaction, 
+    member: discord.Member, 
+    tag_text: str,
+    gradient_preset: str
+):
+    # Проверяем права администратора/модератора на управление сервером
+    if not interaction.user.guild_permissions.manage_roles or not interaction.user.guild_permissions.manage_nicknames:
+        await interaction.response.send_message(
+            "⚠️ Бро, у тебя нет прав `Управление ролям/никнеймами` для инжекции градиента!", 
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.defer(ephemeral=False)
+    guild = interaction.guild
+
+    # 🎨 РАСКЛАДКА НЕОНОВЫХ ЦВЕТОВ ДЛЯ ПРИНУДИТЕЛЬНОГО СМЕШИВАНИЯ ШРИФТОВ В DISCORD
+    color_presets = {
+        "nebula": [discord.Color.from_rgb(255, 0, 127), discord.Color.from_rgb(142, 68, 173), discord.Color.from_rgb(41, 128, 185)],
+        "pink": [discord.Color.from_rgb(241, 148, 180), discord.Color.from_rgb(187, 143, 206), discord.Color.from_rgb(115, 198, 182)],
+        "aurora": [discord.Color.from_rgb(46, 204, 113), discord.Color.from_rgb(22, 160, 133), discord.Color.from_rgb(52, 152, 219)]
+    }
+    
+    selected_colors = color_presets.get(gradient_preset, color_presets["nebula"])
+
+    try:
+        # ШАГ 1: Меняем никнейм, пририсовывая текстовый тег в красивых хакерских рамках
+        clean_tag_text = tag_text.strip().upper()
+        base_name = member.display_name
+        if "⦗" in base_name:
+            base_name = base_name.split("⦗")[0].strip()
+            
+        final_nickname = f"{base_name} ⦗ {clean_tag_text} ⦘"
+        await member.edit(nick=final_nickname, reason="Градиентный тег GeraGram")
+
+        # ШАГ 2: СУПЕР-МАНЕВР — выжигаем старые невидимые роли-теги этого юзера, если они были
+        for role in list(member.roles):
+            if role.name == "\u200b":
+                try: 
+                    await role.delete(reason="Очистка старого градиента")
+                except: 
+                    pass
+
+        # ⚡ ШАГ 3: Создаем каскад невидимых ролей для принудительного смешивания градиента!
+        print(f"🚀 [ГРАДИЕНТ-ЯДРО] Запуск инжекции 3-уровневого цвета для {member.name}...")
+        
+        created_gradient_roles = []
+        for i, color_node in enumerate(selected_colors):
+            # Имя роли — чистый невидимый пробел нулевой ширины, чтобы не засорять профиль! 
+            invisible_role_name = "\u200b" 
+            
+            new_role = await guild.create_role(
+                name=invisible_role_name,
+                color=color_node,
+                hoist=False, 
+                reason=f"Градиентный узел {i+1} GeraGram"
+            )
+            created_gradient_roles.append(new_role)
+
+        # Развешиваем все три цветные невидимые роли на пользователя одновременно
+        for role in created_gradient_roles:
+            await member.add_roles(role)
+
+        # Выдаем роскошный Embed-отчет в чат Discord
+        embed = discord.Embed(
+            title="🪐 Квантовый Градиент-Синхронизатор GeraGram",
+            description=f"Система успешно обошла ограничения интерфейса Discord!",
+            color=selected_colors[0]
+        )
+        embed.add_field(name="🧬 Клон никнейма в чате:", value=f"**`{final_nickname}`**", inline=True)
+        embed.add_field(name="🎨 Эффект градиента", value=f" Активирован 3-уровневый неон", inline=True)
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.set_footer(text="Экосистема GeraGram Messenger • Хакерский обход бустов завершен")
+
+        await interaction.followup.send(embed=embed)
+        print(f"✅ [ГРАДИЕНТ-ЯДРО] Полный градиент успешно инжектирован для {member.name}!")
+
+    except discord.Forbidden:
+        await interaction.interaction.followup.send(
+            "⚠️ Ошибка прав! Перетащи роль бота GeraGram на самый верх в настройках сервера Discord, чтобы он мог управлять другими ролями!"
+        )
+    except Exception as e:
+        print(f"⚠️ [ГРАДИЕНТ-ЯДРО-СБОЙ] Исключение: {e}")
+        await interaction.followup.send("⚠️ Не удалось применить градиент к профилю пользователя.")
+
+@discord_bot_client.event
+async def on_ready():
+    print(f"👑 [ВЕЧНЫЙ-БОТ] Хакерский Дискорд-движок успешно запущен: {discord_bot_client.user}")
+
+# Фоновый асинхронный запуск, чтобы бот не блокировал работу основного сайта FastAPI!
+async def start_discord_bot_background_task():
+    # 🎯 Извлекаем скрытый токен напрямую по твоему новому имени Gerabot_Token из панели Render!
+    DISCORD_BOT_TOKEN = os.getenv("Gerabot_Token")
+    
+    if DISCORD_BOT_TOKEN:
+        try:
+            await discord_bot_client.start(DISCORD_BOT_TOKEN)
+        except Exception as e:
+            print(f"⚠️ [DISCORD-БОТ-ОШИБКА] Не удалось запустить клиента: {e}")
+    else:
+        print("🚨 [ДИСКОРД-ПРЕДУПРЕЖДЕНИЕ] Переменная Gerabot_Token пуста. Проверь настройки в панели Render!")    
 # ==========================================================
 # 🎖️ ОНЛАЙН-ДВИЖЕК СТРАТЕГИИ "CONQUER THE WORLD ONLINE" (CTW)
 # ==========================================================
