@@ -398,7 +398,7 @@
                 botPlayerProtected = true;
                 endBotTurn();
             }
-            // 🎯 ФИКС: Заменили решётку на правильные JS-слэши! Модалка Единички откроется пулей!
+            // 🎯 ФИКС: Комментарий через правильные JS-слэши! Модалка Единички откроется пулей!
             else if (cardVal === 1) {
                 if (botOpponentProtected) { 
                     logEvent("У соперника иммунитет Четвёрки! Эффект Единички сгорел.");
@@ -416,7 +416,7 @@
             }
             else if (cardVal === 3) {
                 if (botOpponentProtected) { endBotTurn(); } else {
-                    // 🎯 Сравниваем чистые значения карт из нулевого индекса массива руки
+                    // Сравниваем чистые значения карт из нулевого индекса массива руки
                     let p_c = botPlayerHand[0]; let o_c = botOpponentHand[0];
                     if ((p_c === 0 && o_c === 10) || (p_c > o_c && !(p_c === 10 && o_c === 0))) { botPlayerTokens++; initBotRound(); }
                     else if ((o_c === 0 && p_c === 10) || (o_c > p_c && !(o_c === 10 && p_c === 0))) { botOpponentTokens++; initBotRound(); }
