@@ -502,7 +502,7 @@
 
                 if (botPlaysCard === 1 && !botPlayerProtected) {
                     // Хитрый Бот наугад называет случайное число от 0 до 10 (кроме 1)
-                    let validGuesses =;
+                    let validGuesses = [0, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                     let botGuess = validGuesses[Math.floor(Math.random() * validGuesses.length)];
                     logEvent(`🤖 Бот угадывает число твоей карты и называет: [${botGuess}]`);
                     
