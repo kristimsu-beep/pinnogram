@@ -2673,7 +2673,7 @@ async def geragram_ai_factory_create(
     )
 
     # 🎯 ГЛАВНЫЙ ФИКС DNS: Переводим запрос на корневой шлюз, который Render разрешит со 1000% гарантией!
-    ai_url = "https://huggingface.co/api/models/Qwen/Qwen2.5-72B-Instruct/v1/chat/completions"
+    ai_url = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-72B-Instruct/v1/chat/completions"
     
     headers = {
         "Authorization": f"Bearer {hf_token}",
@@ -2714,7 +2714,7 @@ async def geragram_ai_factory_create(
             # Резервный шаг на Meta Llama 3 через стабильный корневой URL
             if not ai_response or len(ai_response) < 100 or "loading" in raw_text_response.lower() or "error" in raw_text_response.lower():
                 print("🔄 [ИИ-ФАБРИКА] Ядро Qwen занято. Мгновенный прыжок на резервное ядро Meta Llama 3...")
-                backup_url = "https://huggingface.co"
+                backup_url = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct/v1/chat/completions"
                 payload["model"] = "meta-llama/Meta-Llama-3-8B-Instruct"
                 
                 backup_res = await client.post(backup_url, json=payload, headers=headers)
