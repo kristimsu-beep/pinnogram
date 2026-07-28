@@ -96,15 +96,21 @@
             text-transform: uppercase; letter-spacing: 1px;
         }
         .btn-neon:hover { background: var(--neon-blue); color: #000; box-shadow: 0 0 15px var(--neon-blue); }
+        .btn-neon.bot-mode-btn:hover { background: var(--neon-pink); color: #000; box-shadow: 0 0 15px var(--neon-pink); }
     </style>
 </head>
 <body>
 
-    <!-- ЭКРАН ПОИСКА ИГРОКОВ -->
+    <!-- ЭКРАН ВЫБОРА РЕЖИМА И ПОИСКА -->
     <div class="matchmaker-screen" id="matchmakerScreen">
         <h2>🐾 ROYAL FIGHT 🐾</h2>
         <p style="color: #aaa; font-size: 13px;">Онлайн королевская битва питомцев до 7 побед</p>
-        <button class="btn-neon" id="findMatchBtn" onclick="connectToMatchmaker()">Найти соперника</button>
+        
+        <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 25px;">
+            <button class="btn-neon" id="findMatchBtn" onclick="connectToMatchmaker()">Найти соперника</button>
+            <button class="btn-neon" id="playWithBotBtn" style="border-color: var(--neon-pink); color: var(--neon-pink);" onclick="startSingleplayerWithBot()">Игра с ботом</button>
+        </div>
+        
         <div class="spinner" id="searchSpinner"></div>
         <p id="matchmakerStatus" style="margin-top: 15px; color: var(--neon-blue); font-size: 13px;"></p>
     </div>
@@ -179,26 +185,39 @@
             </div>
         </div>
     </div>
-
-    <!-- Место для ЧАСТИ 3 (JavaScript и WebSockets) -->
     <script>
         let ws = null;
-        let myId = "";
+        let myId = "p1"; 
         let isMyTurn = false;
         let card2Cache = null;
+        let isBotMode = false; // Флаг: играем ли мы с ботом
 
+        // ЛОКАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ РЕЖИМА С БОТОМ
+        let botDeck = [];
+        let botPlayerHand = [];
+        let botOpponentHand = []; // Карта в руке бота
+        let botSecretCard = null;
+        let botOpenCards = [];
+        let botPlayerTokens = 0;
+        let botOpponentTokens = 0;
+        let botPlayerProtected = false;
+        let botOpponentProtected = false;
+
+        // =====================================================================
+        // 🌐 БЛОК МУЛЬТИПЛЕЕРА (ПО СЕТИ ЧЕРЕЗ WEBSOCKET)
+        // =====================================================================
         function connectToMatchmaker() {
+            isBotMode = false;
             document.getElementById('findMatchBtn').style.display = 'none';
+            document.getElementById('playWithBotBtn').style.display = 'none';
             document.getElementById('searchSpinner').style.display = 'block';
             document.getElementById('matchmakerStatus').innerText = "Входим в квантовую очередь поиска...";
 
-            // Намертво состыковываем протоколы для работы на локалке и на Render
             const wsProtocol = window.location.protocol === "https:" ? "wss://" : "ws://";
             ws = new WebSocket(`${wsProtocol}${window.location.host}/ws/royal_fight`);
 
             ws.onmessage = function(event) {
                 const msg = JSON.parse(event.data);
-
                 if (msg.type === "MATCHMAKING_WAITING") {
                     document.getElementById('matchmakerStatus').innerText = "Ищем свободного питомца на арену...";
                 }
@@ -207,9 +226,7 @@
                     document.getElementById('gameTable').style.display = 'flex';
                     renderTable(msg);
                 }
-                else if (msg.type === "TRIGGER_CARD_1") {
-                    openCard1Modal();
-                }
+                else if (msg.type === "TRIGGER_CARD_1") { openCard1Modal(); }
                 else if (msg.type === "TRIGGER_CARD_2") {
                     card2Cache = msg.card;
                     document.getElementById('scriedCardView').style.backgroundImage = `url('/games_assets/card_${msg.card}.png')`;
@@ -219,9 +236,7 @@
                     document.getElementById('secretCardView').style.backgroundImage = `url('/games_assets/card_${msg.secret}.png')`;
                     document.getElementById('modalCard6').style.display = 'flex';
                 }
-                else if (msg.type === "LOG") {
-                    logEvent(msg.text);
-                }
+                else if (msg.type === "LOG") { logEvent(msg.text); }
                 else if (msg.type === "GAME_OVER") {
                     alert(`🏆 ТУРНИР ЗАВЕРШЕН! Абсолютный победитель: ${msg.winner}`);
                     window.location.reload();
@@ -229,10 +244,68 @@
             };
         }
 
-        function renderTable(state) {
-            myId = state.your_id;
-            isMyTurn = (state.current_turn === myId);
+        // =====================================================================
+        // 🤖 БЛОК ОДИНОЧНОЙ ИГРЫ (МЕХАНИКА ИСКУССТВЕННОГО ИНТЕЛЛЕКТА БОТА)
+        // =====================================================================
+        function startSingleplayerWithBot() {
+            isBotMode = true;
+            myId = "p1";
+            botPlayerTokens = 0;
+            botOpponentTokens = 0;
             
+            document.getElementById('matchmakerScreen').style.display = 'none';
+            document.getElementById('gameTable').style.display = 'flex';
+            
+            initBotRound();
+        }
+
+        function generateBotDeck() {
+            let cards =;
+            for(let i=0; i<5; i++) cards.push(1);
+            for(let i=0; i<3; i++) cards.push(2);
+            for(let i=0; i<3; i++) cards.push(3);
+            for(let i=0; i<2; i++) cards.push(4);
+            for(let i=0; i<2; i++) cards.push(5);
+            cards.push(6); cards.push(7); cards.push(8); cards.push(9); cards.push(10);
+            return cards.sort(() => Math.random() - 0.5);
+        }
+
+        function initBotRound() {
+            botDeck = generateBotDeck();
+            botSecretCard = botDeck.pop();
+            botOpenCards = [botDeck.pop(), botDeck.pop()];
+            
+            botPlayerProtected = false;
+            botOpponentProtected = false;
+            
+            botPlayerHand = [botDeck.pop()];
+            botOpponentHand = [botDeck.pop()];
+            
+            botPlayerHand.push(botDeck.pop());
+            isMyTurn = true;
+            
+            logEvent("Соло-матч начался! Свайпни карту вперед для атаки на Бота.");
+            syncBotUI();
+        }
+
+        function syncBotUI() {
+            const stateMock = {
+                your_id: "p1",
+                current_turn: isMyTurn ? "p1" : "p2",
+                deck_count: botDeck.length,
+                your_tokens: botPlayerTokens,
+                opp_tokens: botOpponentTokens,
+                opp_protected: botOpponentProtected,
+                opp_card_count: botOpponentHand.length,
+                open_cards: botOpenCards,
+                your_hand: botPlayerHand
+            };
+            renderTable(stateMock);
+        }
+        // =====================================================================
+        // 🎮 ОБЩИЙ РЕНДЕР И СВАЙП-МЕХАНИКА ТАБЛИЦЫ СТОЛА
+        // =====================================================================
+        function renderTable(state) {
             document.getElementById('deckCountVal').innerText = state.deck_count;
             document.getElementById('yourTokensVal').innerText = state.your_tokens;
             document.getElementById('oppTokensVal').innerText = state.opp_tokens;
@@ -240,7 +313,6 @@
             document.getElementById('oppShieldIndicator').innerText = state.opp_protected ? "🛡️ ИММУНИТЕТ ЧЕТВЁРКИ" : "";
             document.getElementById('oppHandState').innerText = `В руке врага: ${state.opp_card_count} 🎴`;
 
-            // Отрисовка двух открытых карт на столе
             if (state.open_cards.length >= 2) {
                 const o1 = document.getElementById('openCard1');
                 const o2 = document.getElementById('openCard2');
@@ -249,7 +321,6 @@
                 o1.style.visibility = 'visible'; o2.style.visibility = 'visible';
             }
 
-            // Отрисовка карт в руке
             const handZone = document.getElementById('playerHandZone');
             handZone.innerHTML = '';
             state.your_hand.forEach((cardValue) => {
@@ -263,10 +334,8 @@
             });
         }
 
-        // КИНЕТИЧЕСКИЙ ДВИЖОК СВАЙПА КАРТЫ С ТЕЛЕФОНА
         function initSwipeMechanics(el) {
             let startY = 0; let currentY = 0;
-            
             el.addEventListener('touchstart', (e) => { startY = e.touches.clientY; }, {passive: true});
             el.addEventListener('touchmove', (e) => {
                 currentY = e.touches.clientY;
@@ -278,45 +347,157 @@
                 let diffY = currentY - startY;
                 if (diffY < -65) {
                     el.style.transform = 'translateY(-350px) scale(0)'; el.style.opacity = '0';
-                    logEvent(`Ты разыгрываешь карту...`);
-                    ws.send(JSON.stringify({"type": "PLAY_CARD", "card_value": el.dataset.value}));
-                } else {
-                    el.style.transform = 'translateY(0) scale(1) rotate(0deg)';
-                }
+                    let playedVal = parseInt(el.dataset.value);
+                    
+                    if (isBotMode) {
+                        executeLocalBotCardPlay(playedVal);
+                    } else {
+                        ws.send(JSON.stringify({"type": "PLAY_CARD", "card_value": playedVal}));
+                    }
+                } else { el.style.transform = 'translateY(0) scale(1) rotate(0deg)'; }
                 startY = 0; currentY = 0;
             });
         }
 
-        function openCard1Modal() {
-            const grid = document.getElementById('card1Grid'); grid.innerHTML = '';
-            // Генерируем выбор чисел до 10 (кроме 1) и добавляем Ноль
-            for(let i=0; i<=10; i++) {
-                if(i === 1) continue;
-                grid.innerHTML += `<button class="num-btn" onclick="submitCard1(${i})">${i}</button>`;
+        // =====================================================================
+        // 🧠 СИМУЛЯЦИЯ ХОДОВ И ТАКТИКИ СВОЙСТВ КАРТ ДЛЯ ОДИНОЧНОГО РЕЖИМА
+        // =====================================================================
+        function executeLocalBotCardPlay(cardVal) {
+            botPlayerHand.splice(botPlayerHand.indexOf(cardVal), 1);
+            logEvent(`Ты сыграл карту [${cardVal}]`);
+
+            if (cardVal === 4) {
+                botPlayerProtected = true;
+                endBotTurn();
             }
-            document.getElementById('modalCard1').style.display = 'flex';
+            else if (cardVal === 1) {
+                if (botOpponentProtected) { endBotTurn(); } else { openCard1Modal(); }
+            }
+            else if (cardVal === 2) {
+                if (botDeck.length > 0) {
+                    card2Cache = botDeck.pop();
+                    document.getElementById('scriedCardView').style.backgroundImage = `url('/games_assets/card_${card2Cache}.png')`;
+                    document.getElementById('modalCard2').style.display = 'flex';
+                } else { endBotTurn(); }
+            }
+            else if (cardVal === 3) {
+                if (botOpponentProtected) { endBotTurn(); } else {
+                    let p_c = botPlayerHand[0]; let o_c = botOpponentHand[0];
+                    if ((p_c === 0 && o_c === 10) || (p_c > o_c && !(p_c === 10 && o_c === 0))) { botPlayerTokens++; initBotRound(); }
+                    else if ((o_c === 0 && p_c === 10) || (o_c > p_c && !(o_c === 10 && p_c === 0))) { botOpponentTokens++; initBotRound(); }
+                    else { endBotTurn(); }
+                }
+            }
+            else if (cardVal === 5 && !botOpponentProtected) {
+                let discarded = botOpponentHand.pop(); botOpenCards.push(discarded);
+                if (botDeck.length > 0) botOpponentHand.push(botDeck.pop());
+                endBotTurn();
+            }
+            else if (cardVal === 6) {
+                document.getElementById('secretCardView').style.backgroundImage = `url('/games_assets/card_${botSecretCard}.png')`;
+                document.getElementById('modalCard6').style.display = 'flex';
+            }
+            else if (cardVal === 7 && !botOpponentProtected) {
+                if(botPlayerHand[0] !== undefined) botDeck.push(botPlayerHand.pop());
+                if(botOpponentHand[0] !== undefined) botDeck.push(botOpponentHand.pop());
+                botDeck.sort(() => Math.random() - 0.5);
+                botPlayerHand = [botDeck.pop()]; botOpponentHand = [botDeck.pop()];
+                botPlayerHand.push(botDeck.pop());
+                syncBotUI();
+            }
+            else if (cardVal === 8 && !botOpponentProtected) {
+                let temp = botPlayerHand; botPlayerHand = botOpponentHand; botOpponentHand = temp;
+                endBotTurn();
+            }
+            else if (cardVal === 9 && !botOpponentProtected) {
+                if (botOpponentHand[0] === 10) { botPlayerHand.push(10); botOpponentHand = [botPlayerHand.shift()]; }
+                endBotTurn();
+            }
+            else if (cardVal === 10) {
+                botOpponentTokens++; initBotRound();
+            } else { endBotTurn(); }
         }
 
+        // КЛИКИ В МОДАЛКАХ ДЛЯ РЕЖИМА С БОТОМ
         function submitCard1(guess) {
             document.getElementById('modalCard1').style.display = 'none';
-            ws.send(JSON.stringify({"type": "RESOLVE_CARD_1", "guess": guess}));
+            if (isBotMode) {
+                if (botOpponentHand[0] === guess) { botPlayerTokens++; initBotRound(); } else { endBotTurn(); }
+            } else { ws.send(JSON.stringify({"type": "RESOLVE_CARD_1", "guess": guess})); }
         }
 
         function submitCard2(position) {
             document.getElementById('modalCard2').style.display = 'none';
-            ws.send(JSON.stringify({"type": "RESOLVE_CARD_2", "position": position, "card": card2Cache}));
+            if (isBotMode) {
+                if (position === 'top') botDeck.push(card2Cache);
+                else if (position === 'bottom') botDeck.unshift(card2Cache);
+                else botDeck.splice(Math.floor(botDeck.length / 2), 0, card2Cache);
+                endBotTurn();
+            } else { ws.send(JSON.stringify({"type": "RESOLVE_CARD_2", "position": position, "card": card2Cache})); }
         }
 
         function submitCard6(swapFlag) {
             document.getElementById('modalCard6').style.display = 'none';
-            ws.send(JSON.stringify({"type": "RESOLVE_CARD_6", "swap": swapFlag}));
+            if (isBotMode) {
+                if (swapFlag) { let temp = botPlayerHand[0]; botPlayerHand = [botSecretCard]; botSecretCard = temp; }
+                endBotTurn();
+            } else { ws.send(JSON.stringify({"type": "RESOLVE_CARD_6", "swap": swapFlag})); }
         }
 
+        // =====================================================================
+        // 🧠 ТАКТИЧЕСКИЙ ИИ РОБОТА-СОПЕРНИКА (ХОД БОТА)
+        // =====================================================================
+        function endBotTurn() {
+            isMyTurn = false;
+            syncBotUI();
+
+            if (botDeck.length === 0) { checkLocalBotFinalVictory(); return; }
+
+            setTimeout(() => {
+                botOpponentHand.push(botDeck.pop()); 
+                botPlayerProtected = false; 
+                
+                botOpponentHand.sort((a, b) => a - b);
+                let botPlaysCard = botOpponentHand.shift(); 
+                
+                logEvent(`🤖 Бот-питомец свайпнул карту и разыграл: [${botPlaysCard}]`);
+
+                if (botPlaysCard === 1 && !botPlayerProtected) {
+                    let botGuess = Math.floor(Math.random() * 7) + 2;
+                    logEvent(`🤖 Бот угадывает число твоей карты и называет: [${botGuess}]`);
+                    if (botPlayerHand[0] === botGuess) { botOpponentTokens++; initBotRound(); return; }
+                }
+                else if (botPlaysCard === 4) { botOpponentProtected = true; }
+                else if (botPlaysCard === 10) { botPlayerTokens++; initBotRound(); return; }
+
+                if (botDeck.length > 0) {
+                    botPlayerHand.push(botDeck.pop());
+                    isMyTurn = true;
+                } else { checkLocalBotFinalVictory(); return; }
+
+                syncBotUI();
+            }, 1800);
+        }
+
+        function checkLocalBotFinalVictory() {
+            let p_c = botPlayerHand[0]; let o_c = botOpponentHand[0];
+            logEvent(`🏁 Финал раунда! Твоя карта: [${p_c}], Бот: [${o_c}]`);
+            if (p_c === 0 && o_c === 10) botPlayerTokens++;
+            else if (o_c === 0 && p_c === 10) botOpponentTokens++;
+            else if (p_c > o_c) botPlayerTokens++;
+            else if (o_c > p_c) botOpponentTokens++;
+
+            if (botPlayerTokens >= 7 || botOpponentTokens >= 7) {
+                let winner = botPlayerTokens >= 7 ? "Ты одержал тотальную победу!" : "Бот-питомец победил!";
+                alert(`🏆 ТУРНИР ЗАВЕРШЕН! ${winner}`);
+                window.location.reload();
+                return;
+            }
+            initBotRound();
+        }
         function logEvent(text) {
-            const logPanel = document.getElementById('gameLog');
-            logPanel.innerHTML = `<div>• ${text}</div>`;
+            document.getElementById('gameLog').innerHTML = `<div>• ${text}</div>`;
         }
     </script>
-  
 </body>
 </html>
