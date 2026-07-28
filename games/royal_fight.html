@@ -340,43 +340,58 @@
         }
 
         function initSwipeMechanics(el) {
-            let startY = 0; let currentY = 0;
+            let startY = 0;
+            let moveY = 0;
+            let isDragging = false;
             
             el.addEventListener('touchstart', function(e) { 
-                startY = e.touches.clientY; currentY = startY;
+                startY = e.touches[0].clientY;
+                moveY = startY;
+                isDragging = true;
+                el.style.transition = 'none'; // Отключаем плавность во время драга, чтобы карта шла за пальцем без задержек
             }, {passive: true});
             
             el.addEventListener('touchmove', function(e) {
-                currentY = e.touches.clientY;
-                let diffY = currentY - startY;
-                if (diffY < 0) {
+                if (!isDragging) return;
+                moveY = e.touches[0].clientY;
+                let diffY = moveY - startY;
+                
+                if (diffY < 0) { // Свайп вверх
                     if (e.cancelable) e.preventDefault(); 
-                    el.style.transform = `translateY(${diffY}px) scale(1.04) rotate(1deg)`;
+                    el.style.transform = `translateY(${diffY}px) scale(1.04) rotate(${diffY * 0.05}deg)`;
                 }
             }, {passive: false});
             
             el.addEventListener('touchend', function() {
-                let diffY = currentY - startY;
-                if (diffY < -65) {
-                    el.style.transform = 'translateY(-350px) scale(0)'; el.style.opacity = '0';
+                if (!isDragging) return;
+                isDragging = false;
+                
+                let diffY = moveY - startY;
+                el.style.transition = 'transform 0.2s ease, opacity 0.2s ease'; // Возвращаем плавность для финала
+                
+                if (diffY < -60) { // Снизили порог до 60px для максимальной отзывчивости
+                    el.style.transform = 'translateY(-400px) scale(0)'; 
+                    el.style.opacity = '0';
+                    logEvent(`Ты разыгрываешь карту...`);
+                    
                     let playedVal = parseInt(el.dataset.value);
                     
-                    // 🎯 ИДЕАЛЬНЫЙ СЕТЕВОЙ РАЗВЕТВИТЕЛЬ:
+                    // Жесткий разветвитель режима
                     if (isBotMode) {
-                        // Если играем с ботом — запускаем локальный движок правил
                         executeLocalBotCardPlay(playedVal);
                     } else {
-                        // Если играем по сети — шлём пакет на FastAPI WebSocket сервера
                         if (ws && ws.readyState === WebSocket.OPEN) {
                             ws.send(JSON.stringify({"type": "PLAY_CARD", "card_value": playedVal}));
                         } else {
                             logEvent("🚨 Ошибка: Сетевое соединение потеряно!");
+                            el.style.transform = 'translateY(0) scale(1)';
+                            el.style.opacity = '1';
                         }
                     }
                 } else {
-                    el.style.transform = 'translateY(0) scale(1) rotate(0deg)';
+                    // Если свайп слабый — мягко возвращаем на место
+                    el.style.transform = 'translateY(0) scale(1)';
                 }
-                startY = 0; currentY = 0;
             });
         }
         // =====================================================================
