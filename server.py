@@ -2663,7 +2663,52 @@ async def geragram_ai_factory_create(
 
     clean_route = route.strip().lstrip("/").replace(" ", "_").lower()
 
-    # 🎯 СОБИРАЕМ ВЕЧНЫЙ ПРОМПТ ДЛЯ ПРЯМОЙ ГЕНЕРАЦИИ КОДА ИГРЫ ОДНОЙ СТРОКОЙ
+    # 🎯 СЧИТЫВАЕМ ТОКЕН ИЗ ПАНЕЛИ УПРАВЛЕНИЯ RENDER
+    hf_token = os.getenv("GeraApp_QuantumMatrix")
+    if not hf_token:
+        print("🚨 [ИИ-ФАБРИКА-КРИТ] Переменная GeraApp_QuantumMatrix пуста в панели управления Render!")
+        await interaction.followup.send("⚠️ Критическая ошибка бэкенда: Токен GeraApp_QuantumMatrix отсутствует в настройках Render.")
+        return
+
+    headers = {
+        "Authorization": f"Bearer {hf_token}",
+        "Content-Type": "application/json"
+    }
+
+    # =====================================================================
+    # 🧬 ШАГ 0: КВАНТОВЫЙ РАДАР ВАЛИДАЦИИ API-КЛЮЧА HUGGING FACE
+    # =====================================================================
+    try:
+        print("📡 [РАДАР-ВАЛИДАЦИИ] Проверка подлинности токена GeraApp_QuantumMatrix...")
+        # Стучимся на официальный шлюз проверки профиля токена Hugging Face
+        whoami_url = "https://huggingface.co/api/whoami"
+        
+        async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
+            test_auth_res = await client.get(whoami_url, headers=headers)
+            print(f"📡 [РАДАР-ВАЛИДАЦИИ] Код ответа сервера авторизации: {test_auth_res.status_code}")
+            
+            if test_auth_res.status_code != 200:
+                print(f"🚨 [РАДАР-ВАЛИДАЦИИ-ОШИБКА] Битый токен! Ответ сервера: {test_auth_res.text}")
+                await interaction.followup.send(
+                    f"🚨 **Критический сбой авторизации ИИ!**\n"
+                    f"Твой токен `GeraApp_QuantumMatrix` на Render не прошёл проверку подлинности.\n"
+                    f"Сервер Hugging Face вернул ошибку: `{test_auth_res.status_code} {test_auth_res.reason_phrase}`.\n"
+                    f"Пожалуйста, перевыпусти токен в настройках HF (с правами READ) и обнови его на Render!"
+                )
+                return
+            else:
+                auth_data = test_auth_res.json()
+                print(f"✅ [РАДАР-ВАЛИДАЦИИ-УСПЕХ] Токен валиден! Пользователь: {auth_data.get('name', 'GeraUser')}")
+                
+    except Exception as auth_err:
+        import traceback
+        print(f"⚠️ [РАДАР-ВАЛИДАЦИИ-КРАШ] Сетевой сбой проверки ключа:\n{traceback.format_exc()}")
+        await interaction.followup.send("⚠️ Не удалось достучаться до сервера валидации Hugging Face. Проверь сеть хостинга.")
+        return
+
+    # =====================================================================
+    # 🌌 ШАГ 1: ГЕНЕРАЦИЯ КОДА ИГРЫ И ИНЖЕКЦИЯ РОУТА В ОПЕРАТИВНУЮ ПАМЯТЬ
+    # =====================================================================
     full_generation_prompt = (
         f"Напиши полноценную, красивую, адаптивную под телефоны и ПК мини-игру "
         f"на чистом HTML, CSS и JavaScript на тему: {prompt}. "
@@ -2672,19 +2717,13 @@ async def geragram_ai_factory_create(
         f"маркдаун-оберток вроде ```html. Начни прямо с <!DOCTYPE html> и закончи </html>."
     )
 
-    # 🎯 ГЛАВНЫЙ СУПЕР-ФИКС ДЛЯ RENDER: Базовый корневой домен, который DNS пропустит мгновенно!
-    ai_url = "https://api.huggingface.co/models/Qwen/Qwen2.5-72B-Instruct"
-    
-    headers = {
-        "Authorization": f"Bearer {hf_token}",
-        "Content-Type": "application/json"
-    }
+    # 🎯 ИСТИННАЯ ССЫЛКА ИНФЕРЕНСА: Официальный вечный Serverless шлюз Hugging Face без лишних надстроек
+    ai_url = "https://huggingface.co/api/models/Qwen/Qwen2.5-72B-Instruct"
 
-    # Стандартный ультра-стабильный формат параметров Hugging Face
     payload = {
         "inputs": full_generation_prompt,
         "parameters": {
-            "max_new_tokens": 2500, # Огромный размер под тяжелый игровой код
+            "max_new_tokens": 2500, # Хватает под развертывание тяжелой игры
             "return_full_text": False
         }
     }
@@ -2692,9 +2731,8 @@ async def geragram_ai_factory_create(
     ai_response = ""
     
     try:
-        print(f"📡 [ИИ-ФАБРИКА] Отправка прямого POST к корневому шлюзу Hugging Face. Промпт: {prompt}")
+        print(f"📡 [ИИ-ФАБРИКА] Отправка прямого POST к официальному инференс-шлюзу. Промпт: {prompt}")
         
-        # trust_env=False намертво выбивает внутренние капризные прокси Render наружу!
         async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
             response = await client.post(ai_url, json=payload, headers=headers)
             print(f"📡 [ИИ-ФАБРИКА] Код ответа Hugging Face (Qwen): {response.status_code}")
@@ -2704,18 +2742,18 @@ async def geragram_ai_factory_create(
             if response.status_code == 200:
                 try:
                     ai_data = response.json()
-                    # Базовый инференс возвращает список словарей [{"generated_text": "..."}]
+                    # Текстовый инференс возвращает массив словарей [{"generated_text": "..."}]
                     if isinstance(ai_data, list) and len(ai_data) > 0:
-                        ai_response = ai_data[0].get("generated_text", "").strip()
+                        ai_response = ai_data.get("generated_text", "").strip()
                     elif isinstance(ai_data, dict):
                         ai_response = ai_data.get("generated_text", "").strip()
                 except Exception as json_err:
                     print(f"🔄 [ИИ-ФАБРИКА] Ошибка парсинга JSON Qwen: {json_err}. Сырой ответ: {raw_text_response}")
 
-            # Резервный шаг на Meta Llama 3 через стабильный корневой URL, если Qwen перегружен
+            # 🎯 РЕЗЕРВНЫЙ ШАГ: Прыгаем на Meta Llama 3 через классический рабочий Inference-URL
             if not ai_response or len(ai_response) < 100 or "loading" in raw_text_response.lower() or "error" in raw_text_response.lower():
-                print("🔄 [ИИ-ФАБРИКА] Ядро Qwen занято. Мгновенный прыжок на резервное ядро Meta Llama 3...")
-                backup_url = "https://api.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct"
+                print("🔄 [ИИ-ФАБРИКА] Ядро Qwen занято или загружается в кэш. Мгновенный прыжок на Meta Llama 3...")
+                backup_url = "https://huggingface.co/api/models/meta-llama/Meta-Llama-3-8B-Instruct"
                 
                 backup_res = await client.post(backup_url, json=payload, headers=headers)
                 print(f"📡 [ИИ-ФАБРИКА] Код ответа резервного ядра Llama 3: {backup_res.status_code}")
@@ -2725,7 +2763,7 @@ async def geragram_ai_factory_create(
                     try:
                         ai_data = backup_res.json()
                         if isinstance(ai_data, list) and len(ai_data) > 0:
-                            ai_response = ai_data[0].get("generated_text", "").strip()
+                            ai_response = ai_data.get("generated_text", "").strip()
                         elif isinstance(ai_data, dict):
                             ai_response = ai_data.get("generated_text", "").strip()
                     except Exception as json_backup_err:
