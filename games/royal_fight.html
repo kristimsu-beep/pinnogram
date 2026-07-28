@@ -388,6 +388,9 @@
         // 🧠 СИМУЛЯЦИЯ ХОДОВ И ТАКТИКИ СВОЙСТВ КАРТ ДЛЯ ОДИНОЧНОГО РЕЖИМА
         // =====================================================================
         function executeLocalBotCardPlay(cardVal) {
+            // 🎯 ХАКЕРСКИЙ МАНЕВР: Принудительно превращаем cardVal в число, чтобы убить баг строк!
+            cardVal = Number(cardVal);
+            
             botPlayerHand.splice(botPlayerHand.indexOf(cardVal), 1);
             logEvent(`Ты сыграл карту [${cardVal}]`);
 
@@ -395,8 +398,14 @@
                 botPlayerProtected = true;
                 endBotTurn();
             }
+            # 🎯 ФИКС: Теперь число 1 точно совпадет, и модалка Единички откроется пулей!
             else if (cardVal === 1) {
-                if (botOpponentProtected) { endBotTurn(); } else { openCard1Modal(); }
+                if (botOpponentProtected) { 
+                    logEvent("У соперника иммунитет Четвёрки! Эффект Единички сгорел.");
+                    endBotTurn(); 
+                } else { 
+                    openCard1Modal(); 
+                }
             }
             else if (cardVal === 2) {
                 if (botDeck.length > 0) {
@@ -474,14 +483,17 @@
         // 🧠 ТАКТИЧЕСКИЙ ИИ РОБОТА-СОПЕРНИКА (ХОД БОТА)
         // =====================================================================
         function endBotTurn() {
+            // 🎯 СИММЕТРИЧНЫЙ ФИКС: Ход человека завершен, наступает следующий ход Бота.
+            // Намертво сносим старый иммунитет Четвёрки у Бота в эту же миллисекунду!
+            botOpponentProtected = false;
+            
             isMyTurn = false;
             syncBotUI();
 
             if (botDeck.length === 0) { checkLocalBotFinalVictory(); return; }
 
             setTimeout(() => {
-                botOpponentHand.push(botDeck.pop()); 
-                botPlayerProtected = false; 
+                botOpponentHand.push(botDeck.pop()); // Бот берет вторую карту из колоды
                 
                 botOpponentHand.sort((a, b) => a - b);
                 let botPlaysCard = botOpponentHand.shift(); 
@@ -491,15 +503,23 @@
                 if (botPlaysCard === 1 && !botPlayerProtected) {
                     let botGuess = Math.floor(Math.random() * 7) + 2;
                     logEvent(`🤖 Бот угадывает число твоей карты и называет: [${botGuess}]`);
-                    if (botPlayerHand[0] === botGuess) { botOpponentTokens++; initBotRound(); return; }
+                    if (botPlayerHand === botGuess) { botOpponentTokens++; initBotRound(); return; }
                 }
-                else if (botPlaysCard === 4) { botOpponentProtected = true; }
-                else if (botPlaysCard === 10) { botPlayerTokens++; initBotRound(); return; }
+                else if (botPlaysCard === 4) { 
+                    botOpponentProtected = true; 
+                }
+                else if (botPlaysCard === 10) { 
+                    botPlayerTokens++; initBotRound(); return; 
+                }
 
+                // Возвращаем ход человеку и сбрасываем твою защиту
                 if (botDeck.length > 0) {
                     botPlayerHand.push(botDeck.pop());
+                    botPlayerProtected = false; // Твой щит сгорает в начале твоего хода
                     isMyTurn = true;
-                } else { checkLocalBotFinalVictory(); return; }
+                } else { 
+                    checkLocalBotFinalVictory(); return; 
+                }
 
                 syncBotUI();
             }, 1800);
