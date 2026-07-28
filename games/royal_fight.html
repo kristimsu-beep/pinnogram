@@ -463,30 +463,82 @@
             } else { endBotTurn(); }
         }
 
-        // КЛИКИ В МОДАЛКАХ ДЛЯ РЕЖИМА С БОТОМ И СЕТИ
+        // =====================================================================
+        // 🧬 КВАНТОВЫЙ БЛОК УПРАВЛЕНИЯ МОДАЛЬНЫМИ ОКНАМИ СПЕЦ-ДЕЙСТВИЙ
+        // =====================================================================
+        function openCard1Modal() {
+            // 🎯 СУПЕР-ФИКС: Очищаем сетку и безопасно генерируем кнопки угадывания через бэктики!
+            const grid = document.getElementById('card1Grid');
+            if (!grid) return;
+            
+            grid.innerHTML = '';
+            for (let i = 0; i <= 10; i++) {
+                if (i === 1) continue;
+                
+                // Используем правильные косые кавычки для стопроцентной инжекции переменной i
+                grid.innerHTML += `<button class="num-btn" onclick="submitCard1(${i})">${i}</button>`;
+            }
+            
+            // Намертво включаем отображение неоновой панели на экране!
+            const modal = document.getElementById('modalCard1');
+            if (modal) modal.style.display = 'flex';
+        }
+
         function submitCard1(guess) {
-            document.getElementById('modalCard1').style.display = 'none';
+            const modal = document.getElementById('modalCard1');
+            if (modal) modal.style.display = 'none';
+            
+            guess = Number(guess);
             if (isBotMode) {
-                if (botOpponentHand[0] === guess) { botPlayerTokens++; initBotRound(); } else { endBotTurn(); }
-            } else { ws.send(JSON.stringify({"type": "RESOLVE_CARD_1", "guess": guess})); }
+                // Извлекаем чистую карту из руки бота для честной проверки
+                let botCard = Number(botOpponentHand[0]);
+                if (botCard === guess) { 
+                    botPlayerTokens++; 
+                    logEvent(`🎯 Снайпер! Ты угадал карту Бот-питомца [${guess}] и выиграл жетон!`);
+                    initBotRound(); 
+                } else { 
+                    logEvent(`❌ Мимо! Ты назвал [${guess}], но у Бота карта [${botCard}]. Ход переходит к нему.`);
+                    endBotTurn(); 
+                }
+            } else { 
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({"type": "RESOLVE_CARD_1", "guess": guess})); 
+                }
+            }
         }
 
         function submitCard2(position) {
-            document.getElementById('modalCard2').style.display = 'none';
+            const modal = document.getElementById('modalCard2');
+            if (modal) modal.style.display = 'none';
+            
             if (isBotMode) {
                 if (position === 'top') botDeck.push(card2Cache);
                 else if (position === 'bottom') botDeck.unshift(card2Cache);
                 else botDeck.splice(Math.floor(botDeck.length / 2), 0, card2Cache);
                 endBotTurn();
-            } else { ws.send(JSON.stringify({"type": "RESOLVE_CARD_2", "position": position, "card": card2Cache})); }
+            } else { 
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({"type": "RESOLVE_CARD_2", "position": position, "card": card2Cache})); 
+                }
+            }
         }
 
         function submitCard6(swapFlag) {
-            document.getElementById('modalCard6').style.display = 'none';
+            const modal = document.getElementById('modalCard6');
+            if (modal) modal.style.display = 'none';
+            
             if (isBotMode) {
-                if (swapFlag) { let temp = botPlayerHand; botPlayerHand = [botSecretCard]; botSecretCard = temp; }
+                if (swapFlag) { 
+                    let temp = botPlayerHand[0]; 
+                    botPlayerHand[0] = botSecretCard; 
+                    botSecretCard = temp; 
+                }
                 endBotTurn();
-            } else { ws.send(JSON.stringify({"type": "RESOLVE_CARD_6", "swap": swapFlag})); }
+            } else { 
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({"type": "RESOLVE_CARD_6", "swap": swapFlag})); 
+                }
+            }
         }
 
         // =====================================================================
