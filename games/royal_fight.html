@@ -398,7 +398,7 @@
                 botPlayerProtected = true;
                 endBotTurn();
             }
-            # 🎯 ФИКС: Теперь число 1 точно совпадет, и модалка Единички откроется пулей!
+            // 🎯 ФИКС: Заменили решётку на правильные JS-слэши! Модалка Единички откроется пулей!
             else if (cardVal === 1) {
                 if (botOpponentProtected) { 
                     logEvent("У соперника иммунитет Четвёрки! Эффект Единички сгорел.");
@@ -501,15 +501,27 @@
                 logEvent(`🤖 Бот-питомец свайпнул карту и разыграл: [${botPlaysCard}]`);
 
                 if (botPlaysCard === 1 && !botPlayerProtected) {
-                    let botGuess = Math.floor(Math.random() * 7) + 2;
+                    // Хитрый Бот наугад называет случайное число от 0 до 10 (кроме 1)
+                    let validGuesses =;
+                    let botGuess = validGuesses[Math.floor(Math.random() * validGuesses.length)];
                     logEvent(`🤖 Бот угадывает число твоей карты и называет: [${botGuess}]`);
-                    if (botPlayerHand === botGuess) { botOpponentTokens++; initBotRound(); return; }
+                    
+                    // 🎯 ИСПРАВЛЕНО: Проверяем карту в твоей руке через индекс!
+                    if (botPlayerHand[0] === botGuess) { 
+                        botOpponentTokens++; 
+                        logEvent(`🎯 Бот угадал твою карту [${botGuess}] и забирает жетон!`);
+                        initBotRound(); 
+                        return; 
+                    }
                 }
                 else if (botPlaysCard === 4) { 
                     botOpponentProtected = true; 
                 }
                 else if (botPlaysCard === 10) { 
-                    botPlayerTokens++; initBotRound(); return; 
+                    botPlayerTokens++; 
+                    logEvent(`💥 Бот сбросил Десятку и автоматически проиграл раунд!`);
+                    initBotRound(); 
+                    return; 
                 }
 
                 // Возвращаем ход человеку и сбрасываем твою защиту
@@ -518,7 +530,8 @@
                     botPlayerProtected = false; // Твой щит сгорает в начале твоего хода
                     isMyTurn = true;
                 } else { 
-                    checkLocalBotFinalVictory(); return; 
+                    checkLocalBotFinalVictory(); 
+                    return; 
                 }
 
                 syncBotUI();
@@ -545,7 +558,7 @@
         function logEvent(text) {
             document.getElementById('gameLog').innerHTML = `<div>• ${text}</div>`;
         }
-    </script>
 
+    </script>
 </body>
 </html>
