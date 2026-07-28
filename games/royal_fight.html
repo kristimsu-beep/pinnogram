@@ -190,12 +190,12 @@
         let myId = "p1"; 
         let isMyTurn = false;
         let card2Cache = null;
-        let isBotMode = false; // Флаг: играем ли мы с ботом
+        let isBotMode = false;
 
         // ЛОКАЛЬНЫЕ ПЕРЕМЕННЫЕ ДЛЯ РЕЖИМА С БОТОМ
         let botDeck = [];
         let botPlayerHand = [];
-        let botOpponentHand = []; // Карта в руке бота
+        let botOpponentHand = []; 
         let botSecretCard = null;
         let botOpenCards = [];
         let botPlayerTokens = 0;
@@ -260,13 +260,14 @@
         }
 
         function generateBotDeck() {
-            let cards =;
+            // 🎯 ФИКС: Заполнили и закрыли массив колоды бота без синтаксических крашей!
+            let cards = [0];
             for(let i=0; i<5; i++) cards.push(1);
             for(let i=0; i<3; i++) cards.push(2);
             for(let i=0; i<3; i++) cards.push(3);
             for(let i=0; i<2; i++) cards.push(4);
             for(let i=0; i<2; i++) cards.push(5);
-            cards.push(6); cards.push(7); cards.push(8); cards.push(9); cards.push(10);
+            cards.push(6, 7, 8, 9, 10);
             return cards.sort(() => Math.random() - 0.5);
         }
 
@@ -302,6 +303,7 @@
             };
             renderTable(stateMock);
         }
+
         // =====================================================================
         // 🎮 ОБЩИЙ РЕНДЕР И СВАЙП-МЕХАНИКА ТАБЛИЦЫ СТОЛА
         // =====================================================================
@@ -352,6 +354,7 @@
                     if (isBotMode) {
                         executeLocalBotCardPlay(playedVal);
                     } else {
+                        // 🎯 ФИКС: Заменили питонячий json.dumps на JS-совместимый JSON.stringify!
                         ws.send(JSON.stringify({"type": "PLAY_CARD", "card_value": playedVal}));
                     }
                 } else { el.style.transform = 'translateY(0) scale(1) rotate(0deg)'; }
@@ -382,6 +385,7 @@
             }
             else if (cardVal === 3) {
                 if (botOpponentProtected) { endBotTurn(); } else {
+                    // 🎯 Сравниваем чистые значения карт из нулевого индекса массива руки
                     let p_c = botPlayerHand[0]; let o_c = botOpponentHand[0];
                     if ((p_c === 0 && o_c === 10) || (p_c > o_c && !(p_c === 10 && o_c === 0))) { botPlayerTokens++; initBotRound(); }
                     else if ((o_c === 0 && p_c === 10) || (o_c > p_c && !(o_c === 10 && p_c === 0))) { botOpponentTokens++; initBotRound(); }
@@ -418,7 +422,7 @@
             } else { endBotTurn(); }
         }
 
-        // КЛИКИ В МОДАЛКАХ ДЛЯ РЕЖИМА С БОТОМ
+        // КЛИКИ В МОДАЛКАХ ДЛЯ РЕЖИМА С БОТОМ И СЕТИ
         function submitCard1(guess) {
             document.getElementById('modalCard1').style.display = 'none';
             if (isBotMode) {
@@ -439,7 +443,7 @@
         function submitCard6(swapFlag) {
             document.getElementById('modalCard6').style.display = 'none';
             if (isBotMode) {
-                if (swapFlag) { let temp = botPlayerHand[0]; botPlayerHand = [botSecretCard]; botSecretCard = temp; }
+                if (swapFlag) { let temp = botPlayerHand; botPlayerHand = [botSecretCard]; botSecretCard = temp; }
                 endBotTurn();
             } else { ws.send(JSON.stringify({"type": "RESOLVE_CARD_6", "swap": swapFlag})); }
         }
@@ -495,9 +499,11 @@
             }
             initBotRound();
         }
+
         function logEvent(text) {
             document.getElementById('gameLog').innerHTML = `<div>• ${text}</div>`;
         }
     </script>
+
 </body>
 </html>
