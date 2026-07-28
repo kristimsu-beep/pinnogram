@@ -2663,41 +2663,39 @@ async def geragram_ai_factory_create(
 
     clean_route = route.strip().lstrip("/").replace(" ", "_").lower()
 
-    system_instruction = (
-        "Ты — гениальный Senior Frontend разработчик и геймдизайнер. "
-        "Твоя задача — написать полноценную, красивую, залипательную и полностью рабочую мини-игру "
-        "на чистом HTML, CSS и JavaScript (внутри тега <script>) на основе промпта пользователя. "
-        "Игра должна быть современной, адаптивной под телефоны и ПК, с сочным неоновым киберпанк-дизайном. "
-        "ВАЖНО: Выдавай СТРОГО чистый HTML-код страницы. Не пиши никаких вступлений, пояснений или "
-        "маркдаун-оберток вроде ```html ... ```. Твой ответ должен начинаться прямо с <!DOCTYPE html> и заканчиваться </html>."
+    # 🎯 СОБИРАЕМ ВЕЧНЫЙ ПРОМПТ ДЛЯ ПРЯМОЙ ГЕНЕРАЦИИ КОДА ИГРЫ ОДНОЙ СТРОКОЙ
+    full_generation_prompt = (
+        f"Напиши полноценную, красивую, адаптивную под телефоны и ПК мини-игру "
+        f"на чистом HTML, CSS и JavaScript на тему: {prompt}. "
+        f"Дизайн должен быть в сочном неоновом киберпанк стиле мессенджера GeraGram. "
+        f"Выдавай СТРОГО чистый HTML-код страницы. Не пиши никаких вступлений, пояснений и "
+        f"маркдаун-оберток вроде ```html. Начни прямо с <!DOCTYPE html> и закончи </html>."
     )
 
-    # 🎯 ГЛАВНЫЙ ФИКС DNS: Переводим запрос на корневой шлюз, который Render разрешит со 1000% гарантией!
-    ai_url = "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-72B-Instruct/v1/chat/completions"
+    # 🎯 ГЛАВНЫЙ СУПЕР-ФИКС ДЛЯ RENDER: Базовый корневой домен, который DNS пропустит мгновенно!
+    ai_url = "https://huggingface.co/api/models/Qwen/Qwen2.5-72B-Instruct"
     
     headers = {
         "Authorization": f"Bearer {hf_token}",
         "Content-Type": "application/json"
     }
 
+    # Стандартный ультра-стабильный формат параметров Hugging Face
     payload = {
-        # 🎯 Вшиваем имя модели внутрь структуры JSON
-        "model": "Qwen/Qwen2.5-72B-Instruct",
-        "messages": [
-            {"role": "system", "content": system_instruction},
-            {"role": "user", "content": f"Создай игру: {prompt}"}
-        ],
-        "max_tokens": 3000, 
-        "stream": False
+        "inputs": full_generation_prompt,
+        "parameters": {
+            "max_new_tokens": 2500, # Огромный размер под тяжелый игровой код
+            "return_full_text": False
+        }
     }
 
     ai_response = ""
     
     try:
-        print(f"📡 [ИИ-ФАБРИКА] Отправка авторизованного POST к Hugging Face (Qwen). Промпт: {prompt}")
+        print(f"📡 [ИИ-ФАБРИКА] Отправка прямого POST к корневому шлюзу Hugging Face. Промпт: {prompt}")
         
-        # 🎯 УБИРАЕМ trust_env=False, возвращая стандартный сетевой клиент, так как корневой домен пробьет прокси сам!
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        # trust_env=False намертво выбивает внутренние капризные прокси Render наружу!
+        async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
             response = await client.post(ai_url, json=payload, headers=headers)
             print(f"📡 [ИИ-ФАБРИКА] Код ответа Hugging Face (Qwen): {response.status_code}")
             
@@ -2706,16 +2704,18 @@ async def geragram_ai_factory_create(
             if response.status_code == 200:
                 try:
                     ai_data = response.json()
-                    if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
-                        ai_response = ai_data["choices"]["message"]["content"].strip()
+                    # Базовый инференс возвращает список словарей [{"generated_text": "..."}]
+                    if isinstance(ai_data, list) and len(ai_data) > 0:
+                        ai_response = ai_data[0].get("generated_text", "").strip()
+                    elif isinstance(ai_data, dict):
+                        ai_response = ai_data.get("generated_text", "").strip()
                 except Exception as json_err:
                     print(f"🔄 [ИИ-ФАБРИКА] Ошибка парсинга JSON Qwen: {json_err}. Сырой ответ: {raw_text_response}")
 
-            # Резервный шаг на Meta Llama 3 через стабильный корневой URL
+            # Резервный шаг на Meta Llama 3 через стабильный корневой URL, если Qwen перегружен
             if not ai_response or len(ai_response) < 100 or "loading" in raw_text_response.lower() or "error" in raw_text_response.lower():
                 print("🔄 [ИИ-ФАБРИКА] Ядро Qwen занято. Мгновенный прыжок на резервное ядро Meta Llama 3...")
-                backup_url = "https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct/v1/chat/completions"
-                payload["model"] = "meta-llama/Meta-Llama-3-8B-Instruct"
+                backup_url = "https://huggingface.co/api/models/meta-llama/Meta-Llama-3-8B-Instruct"
                 
                 backup_res = await client.post(backup_url, json=payload, headers=headers)
                 print(f"📡 [ИИ-ФАБРИКА] Код ответа резервного ядра Llama 3: {backup_res.status_code}")
@@ -2724,8 +2724,10 @@ async def geragram_ai_factory_create(
                 if backup_res.status_code == 200:
                     try:
                         ai_data = backup_res.json()
-                        if ai_data and "choices" in ai_data and len(ai_data["choices"]) > 0:
-                            ai_response = ai_data["choices"]["message"]["content"].strip()
+                        if isinstance(ai_data, list) and len(ai_data) > 0:
+                            ai_response = ai_data[0].get("generated_text", "").strip()
+                        elif isinstance(ai_data, dict):
+                            ai_response = ai_data.get("generated_text", "").strip()
                     except Exception as json_backup_err:
                         print(f"🔄 [ИИ-ФАБРИКА] Ошибка парсинга JSON Llama: {json_backup_err}. Сырой ответ: {raw_backup_text}")
                         
