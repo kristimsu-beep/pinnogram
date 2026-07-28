@@ -63,6 +63,9 @@
             width: 100px; height: 150px; border-radius: 12px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.5); cursor: grab; touch-action: none;
             background-size: cover; background-position: center; border: 1px solid rgba(255,255,255,0.1);
+            touch-action: none !important; /* Намертво запрещает браузеру прокручивать страницу вместо свайпа карты */
+            -webkit-user-drag: none !important; /* Запрещает стандартное перетаскивание картинок на iOS/Safari */
+            user-select: none !important; /* Запрещает выделение текста и подсветку карты при зажатии пальцем */
         }
         .game-card.your-turn { border-color: var(--neon-blue); box-shadow: 0 0 15px rgba(0, 242, 254, 0.4); }
 
@@ -337,27 +340,46 @@
         }
 
         function initSwipeMechanics(el) {
-            let startY = 0; let currentY = 0;
-            el.addEventListener('touchstart', (e) => { startY = e.touches.clientY; }, {passive: true});
-            el.addEventListener('touchmove', (e) => {
-                currentY = e.touches.clientY;
-                let diffY = currentY - startY;
-                if (diffY < 0) el.style.transform = `translateY(${diffY}px) scale(1.04) rotate(1deg)`;
-            }, {passive: true});
+            let startY = 0; 
+            let currentY = 0;
             
-            el.addEventListener('touchend', () => {
+            // Запоминаем начальную точку касания пальца
+            el.addEventListener('touchstart', function(e) { 
+                startY = e.touches[0].clientY; 
+                currentY = startY;
+            }, { passive: true });
+            
+            // Отслеживаем движение пальца вверх
+            el.addEventListener('touchmove', function(e) {
+                currentY = e.touches[0].clientY;
                 let diffY = currentY - startY;
-                if (diffY < -65) {
-                    el.style.transform = 'translateY(-350px) scale(0)'; el.style.opacity = '0';
-                    let playedVal = parseInt(el.dataset.value);
+                
+                if (diffY < 0) { // Свайп строго вверх
+                    // e.preventDefault() намертво блокирует прокрутку самого сайта на телефоне!
+                    if (e.cancelable) e.preventDefault(); 
+                    el.style.transform = `translateY(${diffY}px) scale(1.04) rotate(1deg)`;
+                }
+            }, { passive: false }); // Важно! false разрешает вызывать preventDefault() внутри тача
+            
+            // Фиксируем отпускание пальца с экрана
+            el.addEventListener('touchend', function() {
+                let diffY = currentY - startY;
+                
+                if (diffY < -65) { // Если свайпнули выше порога в 65 пикселей — карта улетает в космос!
+                    el.style.transform = 'translateY(-350px) scale(0)'; 
+                    el.style.opacity = '0';
+                    logEvent(`Ты разыгрываешь карту...`);
                     
+                    let playedVal = parseInt(el.dataset.value);
                     if (isBotMode) {
                         executeLocalBotCardPlay(playedVal);
                     } else {
-                        // 🎯 ФИКС: Заменили питонячий json.dumps на JS-совместимый JSON.stringify!
                         ws.send(JSON.stringify({"type": "PLAY_CARD", "card_value": playedVal}));
                     }
-                } else { el.style.transform = 'translateY(0) scale(1) rotate(0deg)'; }
+                } else { 
+                    // Если свайп был слишком слабый — мягко возвращаем карту на место в руку
+                    el.style.transform = 'translateY(0) scale(1) rotate(0deg)'; 
+                }
                 startY = 0; currentY = 0;
             });
         }
