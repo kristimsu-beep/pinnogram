@@ -5484,7 +5484,333 @@ async def geragram_toggle_2fa(data: Toggle2FaModel, request: Request):
             {"$set": {"two_fa_enabled": False, "two_fa_pin": None}}
         )
         return {"status": "disabled", "msg": "Защита 2FA отключена"}
+
+# =====================================================================
+# 🎲 GERAGRAM GAMES: MULTIPLAYER ROYAL FIGHT (WS ENGINE)
+# =====================================================================
+from fastapi import WebSocket, WebSocketDisconnect
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+import os
+import random
+import json
+
+# 🎯 Автоматически монтируем папку 'games' из корня проекта для раздачи картинок карт
+if os.path.exists("games"):
+    app.mount("/games_assets", StaticFiles(directory="games"), name="games_assets")
+
+@app.get("/royal_fight")
+async def geragram_royal_fight_game_main_page():
+    game_file_path = "games/royal_fight.html"
+    if os.path.exists(game_file_path):
+        with open(game_file_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read(), status_code=200)
+    return HTMLResponse(content="<h1>🎲 Ошибка: Файл games/royal_fight.html не найден на сервере!</h1>", status_code=404)
+
+# 🧠 СЕТЕВАЯ АРХИТЕКТУРА ИГРЫ В ОПЕРАТИВНОЙ ПАМЯТИ СЕРВЕРА
+ROYAL_MATCHMAKING_QUEUE = []  # Очередь WebSocket-клиентов, нажавших кнопку поиска
+ROYAL_ACTIVE_ROOMS = {}        # Живые игровые комнаты: {room_id: GameRoom}
+
+class GameRoom:
+    def __init__(self, room_id, p1_ws, p2_ws):
+        self.room_id = room_id
+        self.players = {
+            "p1": {"ws": p1_ws, "hand": [], "tokens": 0, "protected": False, "id": "p1"},
+            "p2": {"ws": p2_ws, "hand": [], "tokens": 0, "protected": False, "id": "p2"}
+        }
+        self.deck = []
+        self.secret_card = None
+        self.open_cards = []
+        self.current_turn = "p1"
+
+    def generate_balanced_deck(self):
+        # Строго твои пропорции: Ноль(1), Единичка(5), Двойка(3), Тройка(3), Четверка(2), Пятерка(2), 6,7,8,9,10 по 1
+        cards =
+        cards.extend( * 5)
+        cards.extend( * 3)
+        cards.extend( * 3)
+        cards.extend( * 2)
+        cards.extend( * 2)
+        cards.extend()
+        random.shuffle(cards)
+        return cards
+
+    async def start_new_round(self):
+        self.deck = self.generate_balanced_deck()
+        
+        # 1. Выбираем 1 секретную карту раунда влево вслепую лицевой стороной вниз
+        self.secret_card = self.deck.pop()
+        
+        # 2. Выбираем ещё 2 карты и кладем рядом лицевой стороной вверх
+        self.open_cards = [self.deck.pop(), self.deck.pop()]
+        
+        # Сбрасываем эффекты защиты Четвёрок перед новым раундом
+        self.players["p1"]["protected"] = False
+        self.players["p2"]["protected"] = False
+        
+        # 3. Раздаем по 1 карте каждому игроку в руку
+        self.players["p1"]["hand"] = [self.deck.pop()]
+        self.players["p2"]["hand"] = [self.deck.pop()]
+        
+        # Игрок, чей сейчас ход, сразу получает обязательную вторую карту сверху колоды
+        self.players[self.current_turn]["hand"].append(self.deck.pop())
+        
+        await self.broadcast_game_state()
+
+    async def broadcast_game_state(self):
+        # Отправляем каждому игроку защищенное состояние стола (скрывая карты чужой руки)
+        for p_key, p_data in self.players.items():
+            opp_key = "p2" if p_key == "p1" else "p1"
+            state = {
+                "type": "GAME_STATE",
+                "your_id": p_key,
+                "current_turn": self.current_turn,
+                "your_hand": p_data["hand"],
+                "opp_card_count": len(self.players[opp_key]["hand"]),
+                "deck_count": len(self.deck),
+                "open_cards": self.open_cards,
+                "your_tokens": p_data["tokens"],
+                "opp_tokens": self.players[opp_key]["tokens"],
+                "your_protected": p_data["protected"],
+                "opp_protected": self.players[opp_key]["protected"]
+            }
+            try:
+                await p_data["ws"].send_text(json.dumps(state))
+            except:
+                pass
+
+    async def send_to_player(self, p_key, data):
+        try:
+            await self.players[p_key]["ws"].send_text(json.dumps(data))
+        except:
+            pass
+
+# 🎯 ВЕБСОКЕТ-ШЛЮЗ ДУЭЛЕЙ И СИНХРОНИЗАЦИИ СВАЙПОВ КАРТ
+@app.websocket("/ws/royal_fight")
+async def royal_fight_websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    print("📱 [WS-GAME] Клиент нажал кнопку «Найти соперника» и вошел в поиск!")
     
+    global ROYAL_MATCHMAKING_QUEUE
+    ROYAL_MATCHMAKING_QUEUE.append(websocket)
+    
+    # МАТЧМЕЙКИНГ: Как только набралось 2 готовых игрока — мгновенно запускаем их в бой
+    if len(ROYAL_MATCHMAKING_QUEUE) >= 2:
+        p1 = ROYAL_MATCHMAKING_QUEUE.pop(0)
+        p2 = ROYAL_MATCHMAKING_QUEUE.pop(0)
+        
+        room_id = f"room_{random.randint(1000, 9999)}"
+        room = GameRoom(room_id, p1, p2)
+        ROYAL_ACTIVE_ROOMS[room_id] = room
+        
+        print(f"⚔️ [WS-GAME] Оппонент найден! Создана игровая комната {room_id}")
+        await room.start_new_round()
+    else:
+        # Отправляем первому игроку сигнал ожидания соперника для запуска спиннера
+        await websocket.send_text(json.dumps({"type": "MATCHMAKING_WAITING"}))
+
+    try:
+        while True:
+            data_text = await websocket.receive_text()
+            data = json.loads(data_text)
+            
+            # Определяем комнату и ключ игрока по его websocket-сессии
+            target_room = None
+            player_key = None
+            for r_id, room in ROYAL_ACTIVE_ROOMS.items():
+                if room.players["p1"]["ws"] == websocket:
+                    target_room = room; player_key = "p1"; break
+                if room.players["p2"]["ws"] == websocket:
+                    target_room = room; player_key = "p2"; break
+                    
+            if not target_room:
+                continue
+                
+            opp_key = "p2" if player_key == "p1" else "p1"
+            
+            if data["type"] == "PLAY_CARD":
+                card_val = int(data["card_value"])
+                target_room.players[player_key]["hand"].remove(card_val)
+                
+                # Проверяем, защищен ли соперник Четвёркой
+                is_opp_protected = target_room.players[opp_key]["protected"]
+                
+                # Карта 4: Защищает от 1, 3, 5, 7, 8, 9 до следующего твоего хода
+                if card_val == 4:
+                    target_room.players[player_key]["protected"] = True
+                    await target_room.broadcast_game_state()
+                    await check_and_switch_turn(target_room)
+                    continue
+                
+                # Карта 1: Угадайка (Если враг под Четвёркой — эффект сгорает)
+                elif card_val == 1:
+                    if is_opp_protected:
+                        await check_and_switch_turn(target_room)
+                    else:
+                        await target_room.send_to_player(player_key, {"type": "TRIGGER_CARD_1"})
+                    continue
+                
+                # Карта 2: Посмотреть верхнюю и переложить в любое место колоды
+                elif card_val == 2:
+                    if target_room.deck:
+                        top_card = target_room.deck.pop()
+                        await target_room.send_to_player(player_key, {"type": "TRIGGER_CARD_2", "card": top_card})
+                    else:
+                        await check_and_switch_turn(target_room)
+                    continue
+                
+                # Карта 3: Дуэль «лоб в лоб» (Игнорирует Четвёрку)
+                elif card_val == 3:
+                    if is_opp_protected:
+                        await check_and_switch_turn(target_room)
+                        continue
+                    p_card = target_room.players[player_key]["hand"]
+                    o_card = target_room.players[opp_key]["hand"]
+                    
+                    # Специальная проверка правила: Ноль ломает Десятку
+                    if (p_card == 0 and o_card == 10):
+                        target_room.players[player_key]["tokens"] += 1
+                        await target_room.start_new_round()
+                    elif (o_card == 0 and p_card == 10):
+                        target_room.players[opp_key]["tokens"] += 1
+                        await target_room.start_new_round()
+                    elif p_card > o_card:
+                        target_room.players[player_key]["tokens"] += 1
+                        await target_room.start_new_round()
+                    elif o_card > p_card:
+                        target_room.players[opp_key]["tokens"] += 1
+                        await target_room.start_new_round()
+                    else:
+                        # Если карты равны — раунд продолжается без начисления очков
+                        await check_and_switch_turn(target_room)
+                    continue
+                
+                # Карта 5: Соперник сбрасывает карту в открытую и добирает новую
+                elif card_val == 5 and not is_opp_protected:
+                    if target_room.players[opp_key]["hand"]:
+                        discarded = target_room.players[opp_key]["hand"].pop()
+                        target_room.open_cards.append(discarded)
+                        if target_room.deck:
+                            target_room.players[opp_key]["hand"].append(target_room.deck.pop())
+                
+                # Карта 6: Подсмотреть секретку и заменить по желанию
+                elif card_val == 6:
+                    await target_room.send_to_player(player_key, {"type": "TRIGGER_CARD_6", "secret": target_room.secret_card})
+                    continue
+                
+                # 🎯 Карта 7: ТВОЙ ХАКЕРСКИЙ МАНЕВР — Сгребаем карты рук строго в ОСТАТОК колоды и тасуем!
+                elif card_val == 7 and not is_opp_protected:
+                    print(f"🌋 [СЕМЁРКА-ХАК] Слияние рук с остатком колоды! Было карт в колоде: {len(target_room.deck)}")
+                    
+                    # 1. Сгребаем текущие карты из рук обоих игроков (если они там есть)
+                    p1_card = target_room.players["p1"]["hand"].pop(0) if target_room.players["p1"]["hand"] else None
+                    p2_card = target_room.players["p2"]["hand"].pop(0) if target_room.players["p2"]["hand"] else None
+                    
+                    # 2. Возвращаем их строго в ТЕКУЩИЙ ОСТАТОК колоды (секретка и открытые карты на столе НЕ ТРОГАЮТСЯ!)
+                    if p1_card is not None: target_room.deck.append(p1_card)
+                    if p2_card is not None: target_room.deck.append(p2_card)
+                    
+                    # 3. Тщательно перемешиваем поредевший остаток колоды
+                    random.shuffle(target_room.deck)
+                    print(f"🔄 [СЕМЁРКА-ХАК] Перемешано. Стало карт в колоде: {len(target_room.deck)}")
+                    
+                    # Сбрасываем эффекты защиты Четвёрок перед перераздачей
+                    target_room.players["p1"]["protected"] = False
+                    target_room.players["p2"]["protected"] = False
+                    
+                    # 4. Заново выдаем по 1 карте в руки из этого же остатка колоды
+                    if len(target_room.deck) >= 2:
+                        target_room.players["p1"]["hand"] = [target_room.deck.pop()]
+                        target_room.players["p2"]["hand"] = [target_room.deck.pop()]
+                        
+                        # Выдаем ходячему игроку его обязательную вторую карту для продолжения хода
+                        target_room.players[target_room.current_turn]["hand"].append(target_room.deck.pop())
+                        
+                        # Синхронизируем обновленный RAM-стол с обоими клиентами
+                        await target_room.broadcast_game_state()
+                        continue
+                    else:
+                        # Экстренный случай: если карт в остатке не хватило на перераздачу, раунд завершается
+                        await check_and_switch_turn(target_room)
+                        continue
+                
+                # Карта 8: Обмен картами рук (Если враг под Четвёркой — эффект сгорает)
+                elif card_val == 8 and not is_opp_protected:
+                    target_room.players[player_key]["hand"], target_room.players[opp_key]["hand"] = \
+                        target_room.players[opp_key]["hand"], target_room.players[player_key]["hand"]
+                
+                # Карта 9: Выкрасть Царя Котов (Десятку), если она у соперника на руке
+                elif card_val == 9 and not is_opp_protected:
+                    if target_room.players[opp_key]["hand"] and target_room.players[opp_key]["hand"] == 10:
+                        target_room.players[player_key]["hand"].append(10)
+                        target_room.players[opp_key]["hand"] = [target_room.players[player_key]["hand"].pop(0)]
+                
+                # Карта 10: Автоматический проигрыш при сбросе
+                elif card_val == 10:
+                    target_room.players[opp_key]["tokens"] += 1
+                    await target_room.start_new_round()
+                    continue
+
+                # Обычное завершение хода и переключение на оппонента
+                await check_and_switch_turn(target_room)
+
+            # Прием ответов от модальных окон спец-карт
+            elif data["type"] == "RESOLVE_CARD_1":
+                guess = int(data["guess"])
+                if target_room.players[opp_key]["hand"] and target_room.players[opp_key]["hand"] == guess:
+                    target_room.players[player_key]["tokens"] += 1
+                    await target_room.start_new_round()
+                else:
+                    await check_and_switch_turn(target_room)
+
+            elif data["type"] == "RESOLVE_CARD_2":
+                pos = data["position"]
+                card = int(data["card"])
+                if pos == "top": target_room.deck.append(card)
+                elif pos == "bottom": target_room.deck.insert(0, card)
+                else: target_room.deck.insert(len(target_room.deck)//2, card)
+                await check_and_switch_turn(target_room)
+
+            elif data["type"] == "RESOLVE_CARD_6":
+                if data["swap"]:
+                    old_hand = target_room.players[player_key]["hand"]
+                    target_room.players[player_key]["hand"] = [target_room.secret_card]
+                    target_room.secret_card = old_hand
+                await check_and_switch_turn(target_room)
+
+    except WebSocketDisconnect:
+        if websocket in ROYAL_MATCHMAKING_QUEUE:
+            ROYAL_MATCHMAKING_QUEUE.remove(websocket)
+        print("🔌 [WS-GAME] Клиент отключился от игрового шлюза.")
+
+async def check_and_switch_turn(room):
+    # Если колода полностью иссякла — вскрываем карты рук для подсчета очков в финале раунда
+    if not room.deck:
+        p1_c = room.players["p1"]["hand"]
+        p2_c = room.players["p2"]["hand"]
+        
+        # Проверка правила: Ноль ломает Десятку в конце раунда
+        if p1_c == 0 and p2_c == 10: room.players["p1"]["tokens"] += 1
+        elif p2_c == 0 and p1_c == 10: room.players["p2"]["tokens"] += 1
+        elif p1_c > p2_c: room.players["p1"]["tokens"] += 1
+        elif p2_c > p1_c: room.players["p2"]["tokens"] += 1
+        
+        # Проверка на тотальный конец игры (игра до 7 победных жетонов)
+        if room.players["p1"]["tokens"] >= 7 or room.players["p2"]["tokens"] >= 7:
+            winner = "Игрок 1" if room.players["p1"]["tokens"] > room.players["p2"]["tokens"] else "Игрок 2"
+            await room.players["p1"]["ws"].send_text(json.dumps({"type": "GAME_OVER", "winner": winner}))
+            await room.players["p2"]["ws"].send_text(json.dumps({"type": "GAME_OVER", "winner": winner}))
+            return
+            
+        await room.start_new_round()
+        return
+
+    # Меняем активного игрока и выдаем ему карту сверху колоды
+    room.current_turn = "p2" if room.current_turn == "p1" else "p1"
+    room.players[room.current_turn]["hand"].append(room.deck.pop())
+    await room.broadcast_game_state()
+None
+                    
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
