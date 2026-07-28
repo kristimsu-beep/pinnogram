@@ -5524,14 +5524,17 @@ class GameRoom:
         self.current_turn = "p1"
 
     def generate_balanced_deck(self):
-        # Строго твои пропорции: Ноль(1), Единичка(5), Двойка(3), Тройка(3), Четверка(2), Пятерка(2), 6,7,8,9,10 по 1
-        cards =
-        cards.extend( * 5)
-        cards.extend( * 3)
-        cards.extend( * 3)
-        cards.extend( * 2)
-        cards.extend( * 2)
-        cards.extend()
+        # 🎯 ИСПРАВЛЕНО: Собрали массив строго по твоим пропорциям карт!
+        # Ноль(1), Единичка(5), Двойка(3), Тройка(3), Четверка(2), Пятерка(2) и по 1 штуке для 6, 7, 8, 9, 10.
+        cards = [0]
+        cards.extend([1] * 5)
+        cards.extend([2] * 3)
+        cards.extend([3] * 3)
+        cards.extend([4] * 2)
+        cards.extend([5] * 2)
+        cards.extend([6, 7, 8, 9, 10])
+        
+        # Перемешиваем колоду в случайном порядке
         random.shuffle(cards)
         return cards
 
