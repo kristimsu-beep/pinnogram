@@ -2673,7 +2673,7 @@ async def geragram_ai_factory_create(
     )
 
     # 🎯 ГЛАВНЫЙ СУПЕР-ФИКС ДЛЯ RENDER: Базовый корневой домен, который DNS пропустит мгновенно!
-    ai_url = "https://huggingface.co/api/models/Qwen/Qwen2.5-72B-Instruct"
+    ai_url = "https://api.huggingface.co/models/Qwen/Qwen2.5-72B-Instruct"
     
     headers = {
         "Authorization": f"Bearer {hf_token}",
@@ -2715,7 +2715,7 @@ async def geragram_ai_factory_create(
             # Резервный шаг на Meta Llama 3 через стабильный корневой URL, если Qwen перегружен
             if not ai_response or len(ai_response) < 100 or "loading" in raw_text_response.lower() or "error" in raw_text_response.lower():
                 print("🔄 [ИИ-ФАБРИКА] Ядро Qwen занято. Мгновенный прыжок на резервное ядро Meta Llama 3...")
-                backup_url = "https://huggingface.co/api/models/meta-llama/Meta-Llama-3-8B-Instruct"
+                backup_url = "https://api.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct"
                 
                 backup_res = await client.post(backup_url, json=payload, headers=headers)
                 print(f"📡 [ИИ-ФАБРИКА] Код ответа резервного ядра Llama 3: {backup_res.status_code}")
