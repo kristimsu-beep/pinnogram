@@ -340,50 +340,45 @@
         }
 
         function initSwipeMechanics(el) {
-            let startY = 0; 
-            let currentY = 0;
+            let startY = 0; let currentY = 0;
             
-            // Запоминаем начальную точку касания пальца
             el.addEventListener('touchstart', function(e) { 
-                startY = e.touches[0].clientY; 
-                currentY = startY;
-            }, { passive: true });
+                startY = e.touches.clientY; currentY = startY;
+            }, {passive: true});
             
-            // Отслеживаем движение пальца вверх
             el.addEventListener('touchmove', function(e) {
-                currentY = e.touches[0].clientY;
+                currentY = e.touches.clientY;
                 let diffY = currentY - startY;
-                
-                if (diffY < 0) { // Свайп строго вверх
-                    // e.preventDefault() намертво блокирует прокрутку самого сайта на телефоне!
+                if (diffY < 0) {
                     if (e.cancelable) e.preventDefault(); 
                     el.style.transform = `translateY(${diffY}px) scale(1.04) rotate(1deg)`;
                 }
-            }, { passive: false }); // Важно! false разрешает вызывать preventDefault() внутри тача
+            }, {passive: false});
             
-            // Фиксируем отпускание пальца с экрана
             el.addEventListener('touchend', function() {
                 let diffY = currentY - startY;
-                
-                if (diffY < -65) { // Если свайпнули выше порога в 65 пикселей — карта улетает в космос!
-                    el.style.transform = 'translateY(-350px) scale(0)'; 
-                    el.style.opacity = '0';
-                    logEvent(`Ты разыгрываешь карту...`);
-                    
+                if (diffY < -65) {
+                    el.style.transform = 'translateY(-350px) scale(0)'; el.style.opacity = '0';
                     let playedVal = parseInt(el.dataset.value);
+                    
+                    // 🎯 ИДЕАЛЬНЫЙ СЕТЕВОЙ РАЗВЕТВИТЕЛЬ:
                     if (isBotMode) {
+                        // Если играем с ботом — запускаем локальный движок правил
                         executeLocalBotCardPlay(playedVal);
                     } else {
-                        ws.send(JSON.stringify({"type": "PLAY_CARD", "card_value": playedVal}));
+                        // Если играем по сети — шлём пакет на FastAPI WebSocket сервера
+                        if (ws && ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({"type": "PLAY_CARD", "card_value": playedVal}));
+                        } else {
+                            logEvent("🚨 Ошибка: Сетевое соединение потеряно!");
+                        }
                     }
-                } else { 
-                    // Если свайп был слишком слабый — мягко возвращаем карту на место в руку
-                    el.style.transform = 'translateY(0) scale(1) rotate(0deg)'; 
+                } else {
+                    el.style.transform = 'translateY(0) scale(1) rotate(0deg)';
                 }
                 startY = 0; currentY = 0;
             });
         }
-
         // =====================================================================
         // 🧠 СИМУЛЯЦИЯ ХОДОВ И ТАКТИКИ СВОЙСТВ КАРТ ДЛЯ ОДИНОЧНОГО РЕЖИМА
         // =====================================================================
