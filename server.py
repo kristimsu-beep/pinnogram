@@ -2707,8 +2707,59 @@ async def geragram_ai_factory_create(
         return
 
     # =====================================================================
+    clean_route = route.strip().lstrip("/").replace(" ", "_").lower()
+
+    # Считываем секретный токен Hugging Face из панели Render
+    hf_token = os.getenv("GeraApp_QuantumMatrix")
+    if not hf_token:
+        print("🚨 [ИИ-ФАБРИКА-КРИТ] Переменная GeraApp_QuantumMatrix пуста в панели управления Render!")
+        await interaction.followup.send("⚠️ Критическая ошибка бэкенда: Токен GeraApp_QuantumMatrix отсутствует в настройках Render.")
+        return
+
+    # =====================================================================
+    # 🧬 ШАГ 0: КВАНТОВЫЙ РАДАР ВАЛИДАЦИИ API-КЛЮЧА HUGGING FACE
+    # =====================================================================
+    try:
+        print("📡 [РАДАР-ВАЛИДАЦИИ] Проверка подлинности токена GeraApp_QuantumMatrix...")
+        whoami_url = "https://huggingface.co/api/whoami"
+        
+        # 🎯 ФИКС: Для GET-запроса передаем СТРОГО один заголовок авторизации, без application/json!
+        auth_headers = {
+            "Authorization": f"Bearer {hf_token.strip()}" # убираем случайные пробелы токена
+        }
+        
+        async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
+            test_auth_res = await client.get(whoami_url, headers=auth_headers)
+            print(f"📡 [РАДАР-ВАЛИДАЦИИ] Код ответа сервера авторизации: {test_auth_res.status_code}")
+            
+            if test_auth_res.status_code != 200:
+                print(f"🚨 [РАДАР-ВАЛИДАЦИИ-ОШИБКА] Битый токен! Ответ сервера: {test_auth_res.text}")
+                await interaction.followup.send(
+                    f"🚨 **Критический сбой авторизации ИИ!**\n"
+                    f"Твой токен `GeraApp_QuantumMatrix` на Render не прошёл проверку подлинности.\n"
+                    f"Сервер Hugging Face вернул ошибку: `{test_auth_res.status_code} {test_auth_res.reason_phrase}`.\n"
+                    f"Пожалуйста, перепроверь токен на Render!"
+                )
+                return
+            else:
+                auth_data = test_auth_res.json()
+                print(f"✅ [РАДАР-ВАЛИДАЦИИ-УСПЕХ] Токен валиден! Пользователь: {auth_data.get('name', 'GeraUser')}")
+                
+    except Exception as auth_err:
+        import traceback
+        print(f"⚠️ [РАДАР-ВАЛИДАЦИИ-КРАШ] Сетевой сбой проверки ключа:\n{traceback.format_exc()}")
+        await interaction.followup.send("⚠️ Не удалось достучаться до сервера валидации Hugging Face. Проверь сеть хостинга.")
+        return
+
+    # =====================================================================
     # 🌌 ШАГ 1: ГЕНЕРАЦИЯ КОДА ИГРЫ И ИНЖЕКЦИЯ РОУТА В ОПЕРАТИВНУЮ ПАМЯТЬ
     # =====================================================================
+    # 🎯 А вот здесь для POST-запроса инференса собираем полный комплект заголовков!
+    inference_headers = {
+        "Authorization": f"Bearer {hf_token.strip()}",
+        "Content-Type": "application/json"
+    }
+
     full_generation_prompt = (
         f"Напиши полноценную, красивую, адаптивную под телефоны и ПК мини-игру "
         f"на чистом HTML, CSS и JavaScript на тему: {prompt}. "
@@ -2717,13 +2768,12 @@ async def geragram_ai_factory_create(
         f"маркдаун-оберток вроде ```html. Начни прямо с <!DOCTYPE html> и закончи </html>."
     )
 
-    # 🎯 ИСТИННАЯ ССЫЛКА ИНФЕРЕНСА: Официальный вечный Serverless шлюз Hugging Face без лишних надстроек
     ai_url = "https://huggingface.co/api/models/Qwen/Qwen2.5-72B-Instruct"
 
     payload = {
         "inputs": full_generation_prompt,
         "parameters": {
-            "max_new_tokens": 2500, # Хватает под развертывание тяжелой игры
+            "max_new_tokens": 2500,
             "return_full_text": False
         }
     }
@@ -2734,7 +2784,8 @@ async def geragram_ai_factory_create(
         print(f"📡 [ИИ-ФАБРИКА] Отправка прямого POST к официальному инференс-шлюзу. Промпт: {prompt}")
         
         async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
-            response = await client.post(ai_url, json=payload, headers=headers)
+            # 🎯 ФИКС: Сюда скармливаем inference_headers с типом контента json!
+            response = await client.post(ai_url, json=payload, headers=inference_headers)
             print(f"📡 [ИИ-ФАБРИКА] Код ответа Hugging Face (Qwen): {response.status_code}")
             
             raw_text_response = response.text
