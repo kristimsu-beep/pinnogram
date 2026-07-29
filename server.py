@@ -5670,29 +5670,31 @@ async def royal_fight_websocket_endpoint(websocket: WebSocket):
                         await check_and_switch_turn(target_room)
                     continue
                 
-                # Карта 3: Дуэль «лоб в лоб» (Игнорирует Четвёрку)
+                # Карта 3: Дуэль «лоб в лоб» (С анимацией переворота!)
                 elif card_val == 3:
                     if is_opp_protected:
                         await check_and_switch_turn(target_room)
                         continue
-                    p_card = target_room.players[player_key]["hand"]
-                    o_card = target_room.players[opp_key]["hand"]
                     
-                    # Специальная проверка правила: Ноль ломает Десятку
-                    if (p_card == 0 and o_card == 10):
-                        target_room.players[player_key]["tokens"] += 1
+                    p1_c = target_room.players["p1"]["hand"][0] if target_room.players["p1"]["hand"] else 0
+                    p2_c = target_room.players["p2"]["hand"][0] if target_room.players["p2"]["hand"] else 0
+                    
+                    # 🎥 Отправляем сигнал дуэльного вскрытия на фронтенд
+                    duel_show_data = {"type": "TRIGGER_DUEL_SHOWCASE", "p1_card": p1_c, "p2_card": p2_c}
+                    await target_room.players["p1"]["ws"].send_text(json.dumps(duel_show_data))
+                    await target_room.players["p2"]["ws"].send_text(json.dumps(duel_show_data))
+                    
+                    # Даем 3.5 секунды посмотреть на вскрытые карты перед перезапуском
+                    import asyncio
+                    await asyncio.sleep(3.5)
+                    
+                    if (p1_c == 0 and p2_c == 10) or (p1_c > p2_c and not (p1_c == 10 and p2_c == 0)):
+                        target_room.players["p1"]["tokens"] += 1
                         await target_room.start_new_round()
-                    elif (o_card == 0 and p_card == 10):
-                        target_room.players[opp_key]["tokens"] += 1
-                        await target_room.start_new_round()
-                    elif p_card > o_card:
-                        target_room.players[player_key]["tokens"] += 1
-                        await target_room.start_new_round()
-                    elif o_card > p_card:
-                        target_room.players[opp_key]["tokens"] += 1
+                    elif (p2_c == 0 and p1_c == 10) or (p2_c > p1_c and not (p2_c == 10 and p1_c == 0)):
+                        target_room.players["p2"]["tokens"] += 1
                         await target_room.start_new_round()
                     else:
-                        # Если карты равны — раунд продолжается без начисления очков
                         await check_and_switch_turn(target_room)
                     continue
                 
@@ -5765,13 +5767,16 @@ async def royal_fight_websocket_endpoint(websocket: WebSocket):
                 # Обычное завершение хода и переключение на оппонента
                 await check_and_switch_turn(target_room)
 
-            # Прием ответов от модальных окон спец-карт
+           # Прием ответов от модальных окон спец-карт
             elif data["type"] == "RESOLVE_CARD_1":
                 guess = int(data["guess"])
-                if target_room.players[opp_key]["hand"] and target_room.players[opp_key]["hand"] == guess:
+                if target_room.players[opp_key]["hand"] and target_room.players[opp_key]["hand"][0] == guess:
+                    # 🎯 ФИКС ЕДИНИЧКИ: Начисляем жетон угадавшему и СРАЗУ перезапускаем раунд!
                     target_room.players[player_key]["tokens"] += 1
+                    print(f"🎯 [ЕДИНИЧКА-СЕТЬ] Игрок {player_key} угадал карту [{guess}]. Раунд завершен!")
                     await target_room.start_new_round()
                 else:
+                    print(f"❌ [ЕДИНИЧКА-СЕТЬ] Игрок {player_key} не угадал. Назвал [{guess}], у врага другое.")
                     await check_and_switch_turn(target_room)
 
             elif data["type"] == "RESOLVE_CARD_2":
@@ -5794,19 +5799,33 @@ async def royal_fight_websocket_endpoint(websocket: WebSocket):
             ROYAL_MATCHMAKING_QUEUE.remove(websocket)
         print("🔌 [WS-GAME] Клиент отключился от игрового шлюза.")
 
+# =====================================================================
+# 🧠 УМНЫЙ СЕТЕВОЙ ПЕРЕКЛЮЧАТЕЛЬ ХОДОВ И ФИНАЛОВ
+# =====================================================================
 async def check_and_switch_turn(room):
-    # Если колода полностью иссякла — вскрываем карты рук для подсчета очков в финале раунда
+    # 🎯 1. ПРОВЕРКА НА КОНЕЦ КОЛОДЫ (ВРЕМЯ ВСКРЫВАТЬСЯ)
     if not room.deck:
-        p1_c = room.players["p1"]["hand"]
-        p2_c = room.players["p2"]["hand"]
+        p1_c = room.players["p1"]["hand"][0] if room.players["p1"]["hand"] else 0
+        p2_c = room.players["p2"]["hand"][0] if room.players["p2"]["hand"] else 0
         
-        # Проверка правила: Ноль ломает Десятку в конце раунда
+        print(f"🏁 [ФИНАЛ-КОЛОДЫ] Колода пуста! Вскрываем карты: P1=[{p1_c}], P2=[{p2_c}]")
+        
+        # 🎥 Отправляем обоим игрокам команду анимированно вскрыть карты финала на столе
+        final_show_data = {"type": "TRIGGER_FINAL_SHOWCASE", "p1_card": p1_c, "p2_card": p2_c}
+        await room.players["p1"]["ws"].send_text(json.dumps(final_show_data))
+        await room.players["p2"]["ws"].send_text(json.dumps(final_show_data))
+        
+        # Даем 3.5 секунды игрокам посмотреть на анимацию переворота перед начислением очков
+        import asyncio
+        await asyncio.sleep(3.5)
+        
+        # Логика Ноля против Десятки в финале раунда
         if p1_c == 0 and p2_c == 10: room.players["p1"]["tokens"] += 1
         elif p2_c == 0 and p1_c == 10: room.players["p2"]["tokens"] += 1
         elif p1_c > p2_c: room.players["p1"]["tokens"] += 1
         elif p2_c > p1_c: room.players["p2"]["tokens"] += 1
         
-        # Проверка на тотальный конец игры (игра до 7 победных жетонов)
+        # Проверка на тотальный конец игры до 7 жетонов
         if room.players["p1"]["tokens"] >= 7 or room.players["p2"]["tokens"] >= 7:
             winner = "Игрок 1" if room.players["p1"]["tokens"] > room.players["p2"]["tokens"] else "Игрок 2"
             await room.players["p1"]["ws"].send_text(json.dumps({"type": "GAME_OVER", "winner": winner}))
@@ -5816,11 +5835,18 @@ async def check_and_switch_turn(room):
         await room.start_new_round()
         return
 
-    # Меняем активного игрока и выдаем ему карту сверху колоды
+    # 🎯 2. ОБЫЧНАЯ ПЕРЕДАЧА ХОДА С ПОДДЕРЖКОЙ СГОРАНИЯ ЧЕТВЁРКИ
     room.current_turn = "p2" if room.current_turn == "p1" else "p1"
+    
+    # 🛡️ ФИКС ЧЕТВЁРКИ: Как только наступает ход этого игрока, его защита СГОРАЕТ НАМЕРТВО!
+    room.players[room.current_turn]["protected"] = False
+    
+    # Выдаем игроку его вторую карту сверху колоды
     room.players[room.current_turn]["hand"].append(room.deck.pop())
+    
+    # Рассылаем обновленное RAM-состояние стола
     await room.broadcast_game_state()
-None
+
                     
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
