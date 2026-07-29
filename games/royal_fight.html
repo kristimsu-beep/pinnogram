@@ -246,8 +246,11 @@
         let botOpponentProtected = false;
 
         // =====================================================================
-        // 🌐 БЛОК МУЛЬТИПЛЕЕРА (ПО СЕТИ ЧЕРЕЗ WEBSOCKET С АНИМАЦИЯМИ И ОБМЕНОМ)
+        // 🌐 БЛОК МУЛЬТИПЛЕЕРА (ПО СЕТИ ЧЕРЕЗ WEBSOCKET С 3D ЖЕТОНАМИ)
         // =====================================================================
+        let lastYourTokens = 0; // Кэш для отслеживания твоих очков по сети
+        let lastOppTokens = 0;  // Кэш для отслеживания очков врага по сети
+
         function connectToMatchmaker() {
             isBotMode = false;
             document.getElementById('findMatchBtn').style.display = 'none';
@@ -268,11 +271,24 @@
                     document.getElementById('matchmakerScreen').style.display = 'none';
                     document.getElementById('gameTable').style.display = 'flex';
                     
-                    // 🎯 КИНЕТИЧЕСКИЙ ТРИГГЕР ВОСЬМЁРКИ ДЛЯ СЕТИ:
-                    // Если соперник или ты разыграли 8 — сначала запускаем перелёт карт!
+                    // 🎯 КВАНТОВЫЙ СЕТЕВОЙ ДЕТЕКТОР 3D ЖЕТОНОВ:
+                    // Проверяем, изменился ли счёт по сравнению с прошлым ходом по сети
+                    if (msg.your_tokens > lastYourTokens) {
+                        // Очко заработал ты — запускаем 3D жетон в твою сторону!
+                        trigger3DTokenAnimation("p1"); 
+                    } 
+                    else if (msg.opp_tokens > lastOppTokens) {
+                        // Очко заработал соперник — жетон летит к нему!
+                        trigger3DTokenAnimation("p2"); 
+                    }
+
+                    // Обновляем кэш текущих очков для следующей проверки
+                    lastYourTokens = msg.your_tokens;
+                    lastOppTokens = msg.opp_tokens;
+
+                    // КИНЕТИЧЕСКИЙ ТРИГГЕР ВОСЬМЁРКИ ДЛЯ СЕТИ
                     if (msg.last_played_card === 8) {
                         animateCardExchange();
-                        // Даём анимации 800мс отыграть физически, затем плавно рендерим новые карты
                         setTimeout(() => { renderTable(msg); }, 800);
                     } else {
                         renderTable(msg);
@@ -290,7 +306,7 @@
                     document.getElementById('secretCardView').style.backgroundImage = `url('/games_assets/card_${msg.secret}.png')`;
                     document.getElementById('modalCard6').style.display = 'flex';
                 }
-                // 🎥 ЭФФЕКТ ПЕРЕВОРОТА КАРТ ДЛЯ ДУЭЛИ ТРОЙКИ!
+                // ЭФФЕКТ ПЕРЕВОРОТА КАРТ ДЛЯ ДУЭЛИ ТРОЙКИ
                 else if (msg.type === "TRIGGER_DUEL_SHOWCASE") {
                     document.getElementById('showdownTitle').innerText = "⚔️ Дуэль Тройки! ⚔️";
                     document.getElementById('showdownDesc').innerText = "Питомцы сошлись лоб в лоб!";
@@ -304,7 +320,7 @@
                         if (modal) modal.style.display = 'none'; 
                     }, 3200);
                 }
-                // 🎥 ЭФФЕКТ ТОТАЛЬНОГО ВСКРЫТИЯ В КОНЦЕ КОЛОДЫ!
+                // ЭФФЕКТ ТОТАЛЬНОГО ВСКРЫТИЯ В КОНЦЕ КОЛОДЫ
                 else if (msg.type === "TRIGGER_FINAL_SHOWCASE") {
                     document.getElementById('showdownTitle').innerText = "🏁 Финал Колоды! 🏁";
                     document.getElementById('showdownDesc').innerText = "Карты кончились! Вскрываем руки:";
