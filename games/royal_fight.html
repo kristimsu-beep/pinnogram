@@ -151,12 +151,12 @@
                 <div class="setup-card" id="openCard2" style="visibility: hidden;"></div>
             </div>
             
-            <!-- 🎯 НОВАЯ С ОДНА: ЗОНА ДЛЯ ВСКРЫТИЯ КАРТЫ ХОДА СОПЕРНИКА -->
-            <div class="setup-card" id="playedCardShowcase" style="width: 55px; height: 80px; border-color: var(--neon-pink); display: none; box-shadow: 0 0 15px rgba(255, 0, 127, 0.4); transform: scale(1); transition: all 0.3s ease;" title="Последний ход"></div>
-            
-            <!-- Основная колода добора -->
-            <div class="deck-pile deck-card-back">
-                <div class="deck-count">Колода: <strong id="deckCountVal">0</strong></div>
+            <!-- Зона для вскрытия карты хода соперника -->
+            <div class="setup-card" id="playedCardShowcase" style="width: 55px; height: 80px; border-color: var(--neon-pink); display: none; box-shadow: 0 0 15px rgba(255, 0, 127, 0.4);" title="Последний ход"></div>
+
+            <!-- 🎯 ИСПРАВЛЕНО: Заменили плоскую стопку на невидимый 3D-якорь, сохранив счетчик карт -->
+            <div id="3dDeckAnchor" style="width: 75px; height: 110px; position: relative;">
+                <div class="deck-count" style="bottom: -25px; left: 0; right: 0; text-align: center;">Колода: <strong id="deckCountVal">0</strong></div>
             </div>
         </div>
 
@@ -408,11 +408,26 @@
         // 🎮 ОБЩИЙ РЕНДЕР И СВАЙП-МЕХАНИКА ТАБЛИЦЫ СТОЛА
         // =====================================================================
         function renderTable(state) {
-            // Синхронизируем твой настоящий ID (p1 или p2)
+            // 🎯 СУПЕР 3D-КОНТРОЛЛЕР ХУДЕНИЯ КОЛОДЫ КАРТ:
+            // Управляем видимостью 20 слоёв нашей трёхмерной стопки карт на сцене
+            if (typeof deckMeshGroup !== 'undefined' && deckMeshGroup && deckMeshGroup.children.length > 0) {
+                let currentCardsInDeck = Number(state.deck_count);
+                deckMeshGroup.children.forEach((cardMesh, idx) => {
+                    // Если индекс 3D-слоя больше или равен количеству оставшихся карт — скрываем его!
+                    if (idx >= currentCardsInDeck) {
+                        cardMesh.visible = false;
+                    } else {
+                        cardMesh.visible = true;
+                    }
+                });
+            }
+
+            // 🧬 СЕТЕВОЙ СИНХРОНИЗАТОР: Записываем твой настоящий ID, присланный сервером (p1 или p2)!
             if (state.your_id) {
                 myId = state.your_id;
             }
             
+            // Теперь сравнение хода будет на 1000% точным для обоих экранов
             isMyTurn = (state.current_turn === myId);
             
             document.getElementById('deckCountVal').innerText = state.deck_count;
@@ -429,7 +444,7 @@
                     showcase.style.backgroundImage = `url('/games_assets/card_${state.last_played_card}.png')`;
                     showcase.style.display = 'block';
                     
-                    // Небольшой сочный эффект появления
+                    // Сочный эффект всплытия карты сброса на столе
                     showcase.style.transform = 'scale(1.1)';
                     setTimeout(() => { showcase.style.transform = 'scale(1)'; }, 150);
                 } else {
@@ -437,25 +452,31 @@
                 }
             }
 
-            if (state.open_cards.length >= 2) {
+            // Отрисовка двух открытых карт стартового сетапа на столе
+            if (state.open_cards && state.open_cards.length >= 2) {
                 const o1 = document.getElementById('openCard1');
                 const o2 = document.getElementById('openCard2');
-                o1.style.backgroundImage = `url('/games_assets/card_${state.open_cards[0]}.png')`;
-                o2.style.backgroundImage = `url('/games_assets/card_${state.open_cards[1]}.png')`;
-                o1.style.visibility = 'visible'; o2.style.visibility = 'visible';
+                if (o1 && o2) {
+                    o1.style.backgroundImage = `url('/games_assets/card_${state.open_cards[0]}.png')`;
+                    o2.style.backgroundImage = `url('/games_assets/card_${state.open_cards[1]}.png')`;
+                    o1.style.visibility = 'visible'; o2.style.visibility = 'visible';
+                }
             }
 
+            // Отрисовка твоих карт в руке и привязка кинетических свайпов
             const handZone = document.getElementById('playerHandZone');
-            handZone.innerHTML = '';
-            state.your_hand.forEach((cardValue) => {
-                const cardEl = document.createElement('div');
-                cardEl.className = `game-card ${isMyTurn ? 'your-turn' : ''}`;
-                cardEl.style.backgroundImage = `url('/games_assets/card_${cardValue}.png')`;
-                cardEl.dataset.value = cardValue;
-                
-                if (isMyTurn) initSwipeMechanics(cardEl);
-                handZone.appendChild(cardEl);
-            });
+            if (handZone) {
+                handZone.innerHTML = '';
+                state.your_hand.forEach((cardValue) => {
+                    const cardEl = document.createElement('div');
+                    cardEl.className = `game-card ${isMyTurn ? 'your-turn' : ''}`;
+                    cardEl.style.backgroundImage = `url('/games_assets/card_${cardValue}.png')`;
+                    cardEl.dataset.value = cardValue;
+                    
+                    if (isMyTurn) initSwipeMechanics(cardEl);
+                    handZone.appendChild(cardEl);
+                });
+            }
         }
 
         function initSwipeMechanics(el) {
@@ -638,16 +659,22 @@
             const modal = document.getElementById('modalCard2');
             if (modal) modal.style.display = 'none';
             
-            if (isBotMode) {
-                if (position === 'top') botDeck.push(card2Cache);
-                else if (position === 'bottom') botDeck.unshift(card2Cache);
-                else botDeck.splice(Math.floor(botDeck.length / 2), 0, card2Cache);
-                endBotTurn();
-            } else { 
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({"type": "RESOLVE_CARD_2", "position": position, "card": card2Cache})); 
+            // 🎯 3D-ТРИГГЕР: Запускаем визуальный полёт карты внутрь стопки!
+            animate3DCardInsertion(position);
+            
+            // Передаем данные на сервер или боту с задержкой в 1 секунду, пока летит карта
+            setTimeout(() => {
+                if (isBotMode) {
+                    if (position === 'top') botDeck.push(card2Cache);
+                    else if (position === 'bottom') botDeck.unshift(card2Cache);
+                    else botDeck.splice(Math.floor(botDeck.length / 2), 0, card2Cache);
+                    endBotTurn();
+                } else { 
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({"type": "RESOLVE_CARD_2", "position": position, "card": card2Cache})); 
+                    }
                 }
-            }
+            }, 1000);
         }
 
         function submitCard6(swapFlag) {
@@ -779,6 +806,8 @@
         let animationStartTime = 0;
         let animationDuration = 2000; // 2 секунды на все шоу
         let targetDestination = { x: 0, y: 0 }; // Куда полетит жетон
+        let deckMeshGroup = new THREE.Group(); // Группа для 3D-карт колоды
+        let visual3DDeckCount = 0;
 
         function initThreeJS() {
             const canvas = document.getElementById('threeCanvas');
@@ -793,38 +822,62 @@
             threeRenderer.setSize(window.innerWidth, window.innerHeight);
             threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-            // 2. Настраиваем сочное киберпанк-освещение для преломлений
+            // 2. Настраиваем сочное киберпанк-освещение для преломлений глянца
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
             threeScene.add(ambientLight);
 
-            const neonBlueLight = new THREE.DirectionalLight(0x00f2fe, 0.8);
+            const neonBlueLight = new THREE.DirectionalLight(0x00f2fe, 0.9);
             neonBlueLight.position.set(5, 5, 4);
             threeScene.add(neonBlueLight);
 
-            const neonPinkLight = new THREE.DirectionalLight(0xff007f, 0.8);
+            const neonPinkLight = new THREE.DirectionalLight(0xff007f, 0.9);
             neonPinkLight.position.set(-5, -5, 4);
             threeScene.add(neonPinkLight);
 
             // 3. Моделируем объемный 3D-жетон (Тонкий золотой цилиндр)
-            // Радиус верх/низ = 1, высота = 0.15, сегментов по кругу = 32
             const geometry = new THREE.CylinderGeometry(1, 1, 0.15, 32);
-            
-            // Поворачиваем цилиндр боком, чтобы он смотрел на игрока как монета
-            geometry.rotateX(Math.PI / 2); 
+            geometry.rotateX(Math.PI / 2); // Разворачиваем монету к игроку лицовой стороной
 
-            // Настраиваем физический материал золота с металлическим блеском
             const material = new THREE.MeshStandardMaterial({
-                color: 0xffd700,      // Яркое золото
+                color: 0xffd700,      // Настоящее золото
                 metalness: 0.9,       // Максимальный металл
-                roughness: 0.15,      // Высокий глянец для отражения света
+                roughness: 0.12,      // Высокий глянец для неоновых отражений
                 side: THREE.DoubleSide
             });
 
             token3D = new THREE.Mesh(geometry, material);
-            token3D.visible = false; // Изначально прячем, пока никто не победил
+            token3D.visible = false; // Прячем до момента начисления очков
             threeScene.add(token3D);
 
-            // Запускаем постоянный цикл отрисовки
+            // =====================================================================
+            // 🃏 СТРОИТЕЛЬСТВО ТРЁХМЕРНОЙ 3D-КОЛОДЫ КАРТ
+            // =====================================================================
+            // Сдвигаем всю стопку карт вправо к нашему невидимому HTML-якорю
+            deckMeshGroup.position.set(1.9, 0.8, 0); 
+            // Слегка наклоняем колоду, чтобы игроки видели её потрясающую толщину!
+            deckMeshGroup.rotation.set(0.1, -0.15, 0); 
+            threeScene.add(deckMeshGroup);
+
+            // Геометрия одной тонкой 3D карты (Ширина=0.9, Высота=1.35, Толщина=0.015)
+            const cardGeo = new THREE.BoxGeometry(0.9, 1.35, 0.015);
+            const cardMat = new THREE.MeshStandardMaterial({
+                color: 0x0f172a,       // Сочный темно-синий неоновый киберпанк цвет
+                metalness: 0.6,
+                roughness: 0.25,
+                side: THREE.DoubleSide
+            });
+
+            // Наращиваем физические слои (20 карт по твоим пропорциям колоды)
+            for (let i = 0; i < 20; i++) {
+                const cardMesh = new THREE.Mesh(cardGeo, cardMat);
+                // Каждая следующая карта ложится строго выше предыдущей по оси Z
+                cardMesh.position.z = i * 0.022; 
+                // Записываем индекс карты в её имя, чтобы JS мог ей управлять
+                cardMesh.name = `layer_${i}`; 
+                deckMeshGroup.add(cardMesh);
+            }
+
+            // Запускаем постоянный цикл отрисовки кадров сцены
             animateThreeLoop();
         }
 
@@ -836,7 +889,7 @@
             threeRenderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Базовый цикл рендера
+        // Базовый цикл рендера кадров
         function animateThreeLoop(timestamp) {
             requestAnimationFrame(animateThreeLoop);
             
@@ -960,6 +1013,68 @@
             
             oldCheckLocalBotFinalVictory();
         };
+        function animate3DCardInsertion(position) {
+            logEvent(`🔮 Запускается 3D-полёт карты в положение: ${position}`);
+            
+            // 1. Создаем временную 3D-карту для анимации полёта
+            const flyGeo = new THREE.BoxGeometry(0.9, 1.35, 0.015);
+            const flyMat = new THREE.MeshStandardMaterial({
+                color: 0x00f2fe, // Подсвечиваем неоновым бирюзовым цветом Двойки!
+                metalness: 0.7, roughness: 0.15
+            });
+            const flyCard = new THREE.Mesh(flyGeo, flyMat);
+            
+            // Стартуем из центра экрана, приподняв карту по оси Z
+            flyCard.position.set(0, 0, 1);
+            threeScene.add(flyCard);
+
+            let startTime = performance.now();
+            let duration = 1000; // 1 секунда на красивый полёт
+
+            // Рассчитываем итоговую высоту в слоях колоды в зависимости от выбора
+            let targetZ = 0;
+            let currentDeckSize = deckMeshGroup ? deckMeshGroup.children.filter(c => c.visible).length : 10;
+            
+            if (position === 'top') {
+                targetZ = currentDeckSize * 0.022; // На самый верх стопки
+            } else if (position === 'bottom') {
+                targetZ = -0.022; // Под самый низ стопки
+            } else {
+                targetZ = (currentDeckSize / 2) * 0.022; // Ровно в середину!
+            }
+
+            // Конечные мировые 3D-координаты колоды (с учетом позиции deckMeshGroup)
+            let targetX = 1.9;
+            let targetY = 0.8;
+
+            function animate() {
+                let elapsed = performance.now() - startTime;
+                let progress = Math.min(elapsed / duration, 1);
+                
+                // Плавное ускорение (Ease-In-Out)
+                let t = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+                // Перемещаем карту из центра к 3D-колоде
+                flyCard.position.x = THREE.MathUtils.lerp(0, targetX, t);
+                flyCard.position.y = THREE.MathUtils.lerp(0, targetY, t);
+                flyCard.position.z = THREE.MathUtils.lerp(1, targetZ, t);
+
+                // Делаем эффектный переворот и вращение карты в воздухе!
+                flyCard.rotation.y = t * Math.PI * 2;
+                flyCard.rotation.x = t * 0.2;
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    // Полёт завершен — красиво растворяем и удаляем временную карту
+                    threeScene.remove(flyCard);
+                    flyGeo.dispose();
+                    flyMat.dispose();
+                    logEvent("✅ Карта успешно вошла вглубь 3D-колоды!");
+                }
+            }
+            requestAnimationFrame(animate);
+        }
     </script>
 </body>
 </html>
