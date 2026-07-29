@@ -295,7 +295,7 @@
             syncBotUI();
         }
 
-        function syncBotUI() {
+        function syncBotUI(lastPlayed = null) {
             const stateMock = {
                 your_id: "p1",
                 current_turn: isMyTurn ? "p1" : "p2",
@@ -305,7 +305,9 @@
                 opp_protected: botOpponentProtected,
                 opp_card_count: botOpponentHand.length,
                 open_cards: botOpenCards,
-                your_hand: botPlayerHand
+                your_hand: botPlayerHand,
+                // 🎯 Передаем ход бота во вскрытие
+                last_played_card: lastPlayed 
             };
             renderTable(stateMock);
         }
@@ -314,21 +316,35 @@
         // 🎮 ОБЩИЙ РЕНДЕР И СВАЙП-МЕХАНИКА ТАБЛИЦЫ СТОЛА
         // =====================================================================
         function renderTable(state) {
-            // 🎯 СУПЕР-СЕТЕВОЙ ФИКС: Записываем твой НАСТОЯЩИЙ ID, присланный сервером (p1 или p2)!
+        function renderTable(state) {
+            // Синхронизируем твой настоящий ID (p1 или p2)
             if (state.your_id) {
                 myId = state.your_id;
             }
             
-            // Теперь сравнение хода будет на 1000% честным и точным для обоих экранов!
             isMyTurn = (state.current_turn === myId);
             
             document.getElementById('deckCountVal').innerText = state.deck_count;
             document.getElementById('yourTokensVal').innerText = state.your_tokens;
-
             document.getElementById('oppTokensVal').innerText = state.opp_tokens;
             document.getElementById('turnIndicator').innerText = isMyTurn ? "Твой ход! Свайпни карту вперед" : "Ход соперника...";
             document.getElementById('oppShieldIndicator').innerText = state.opp_protected ? "🛡️ ИММУНИТЕТ ЧЕТВЁРКИ" : "";
             document.getElementById('oppHandState').innerText = `В руке врага: ${state.opp_card_count} 🎴`;
+
+            // 🎯 СУПЕР-ВИЗУАЛ: Вскрываем и показываем последнюю сыгранную карту соперника!
+            const showcase = document.getElementById('playedCardShowcase');
+            if (showcase) {
+                if (state.last_played_card !== undefined && state.last_played_card !== null) {
+                    showcase.style.backgroundImage = `url('/games_assets/card_${state.last_played_card}.png')`;
+                    showcase.style.display = 'block';
+                    
+                    // Небольшой сочный эффект появления
+                    showcase.style.transform = 'scale(1.1)';
+                    setTimeout(() => { showcase.style.transform = 'scale(1)'; }, 150);
+                } else {
+                    showcase.style.display = 'none';
+                }
+            }
 
             if (state.open_cards.length >= 2) {
                 const o1 = document.getElementById('openCard1');
@@ -578,7 +594,11 @@
                     // Хитрый Бот наугад называет случайное число от 0 до 10 (кроме 1)
                     let validGuesses = [0, 2, 3, 4, 5, 6, 7, 8, 9, 10];
                     let botGuess = validGuesses[Math.floor(Math.random() * validGuesses.length)];
-                    logEvent(`🤖 Бот угадывает число твоей карты и называет: [${botGuess}]`);
+                    logEvent(`🤖 Бот-питомец свайпнул карту и разыграл: [${botPlaysCard}]`);
+                    
+                    // Передаем карту бота в UI, чтобы она вскрылась на столе!
+                    syncBotUI(botPlaysCard);
+
                     
                     // 🎯 ИСПРАВЛЕНО: Проверяем карту в твоей руке через индекс!
                     if (botPlayerHand[0] === botGuess) { 
