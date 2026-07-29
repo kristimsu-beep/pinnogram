@@ -228,7 +228,7 @@
         let botOpponentProtected = false;
 
         // =====================================================================
-        // 🌐 БЛОК МУЛЬТИПЛЕЕРА (ПО СЕТИ ЧЕРЕЗ WEBSOCKET)
+        // 🌐 БЛОК МУЛЬТИПЛЕЕРА (ПО СЕТИ ЧЕРЕЗ WEBSOCKET С АНИМАЦИЯМИ ВСКРЫТИЯ)
         // =====================================================================
         function connectToMatchmaker() {
             isBotMode = false;
@@ -242,6 +242,7 @@
 
             ws.onmessage = function(event) {
                 const msg = JSON.parse(event.data);
+                
                 if (msg.type === "MATCHMAKING_WAITING") {
                     document.getElementById('matchmakerStatus').innerText = "Ищем свободного питомца на арену...";
                 }
@@ -250,7 +251,9 @@
                     document.getElementById('gameTable').style.display = 'flex';
                     renderTable(msg);
                 }
-                else if (msg.type === "TRIGGER_CARD_1") { openCard1Modal(); }
+                else if (msg.type === "TRIGGER_CARD_1") { 
+                    openCard1Modal(); 
+                }
                 else if (msg.type === "TRIGGER_CARD_2") {
                     card2Cache = msg.card;
                     document.getElementById('scriedCardView').style.backgroundImage = `url('/games_assets/card_${msg.card}.png')`;
@@ -260,33 +263,44 @@
                     document.getElementById('secretCardView').style.backgroundImage = `url('/games_assets/card_${msg.secret}.png')`;
                     document.getElementById('modalCard6').style.display = 'flex';
                 }
-                else if (msg.type === "LOG") { logEvent(msg.text); }
-                else if (msg.type === "GAME_OVER") {
-                    alert(`🏆 ТУРНИР ЗАВЕРШЕН! Абсолютный победитель: ${msg.winner}`);
-                    window.location.reload();
+                // 🎥 ЭФФЕКТ ПЕРЕВОРОТА ДЛЯ ДУЭЛИ ТРОЙКИ!
                 else if (msg.type === "TRIGGER_DUEL_SHOWCASE") {
                     document.getElementById('showdownTitle').innerText = "⚔️ Дуэль Тройки! ⚔️";
                     document.getElementById('showdownDesc').innerText = "Питомцы сошлись лоб в лоб!";
                     document.getElementById('showdownP1Card').style.backgroundImage = `url('/games_assets/card_${msg.p1_card}.png')`;
                     document.getElementById('showdownP2Card').style.backgroundImage = `url('/games_assets/card_${msg.p2_card}.png')`;
-                    document.getElementById('modalShowdown').style.display = 'flex';
                     
-                    // Через 3.2 секунды мягко прячем окно перед следующим раундом
-                    setTimeout(() => { document.getElementById('modalShowdown').style.display = 'none'; }, 3200);
+                    const modal = document.getElementById('modalShowdown');
+                    if (modal) modal.style.display = 'flex';
+                    
+                    // Через 3.2 секунды мягко прячем окно перед тем, как сервер переключит раунд
+                    setTimeout(() => { 
+                        if (modal) modal.style.display = 'none'; 
+                    }, 3200);
                 }
+                // 🎥 ЭФФЕКТ ТОТАЛЬНОГО ВСКРЫТИЯ В КОНЦЕ КОЛОДЫ!
                 else if (msg.type === "TRIGGER_FINAL_SHOWCASE") {
                     document.getElementById('showdownTitle').innerText = "🏁 Финал Колоды! 🏁";
                     document.getElementById('showdownDesc').innerText = "Карты кончились! Вскрываем руки:";
                     document.getElementById('showdownP1Card').style.backgroundImage = `url('/games_assets/card_${msg.p1_card}.png')`;
                     document.getElementById('showdownP2Card').style.backgroundImage = `url('/games_assets/card_${msg.p2_card}.png')`;
-                    document.getElementById('modalShowdown').style.display = 'flex';
                     
-                    setTimeout(() => { document.getElementById('modalShowdown').style.display = 'none'; }, 3200);
-                }       
+                    const modal = document.getElementById('modalShowdown');
+                    if (modal) modal.style.display = 'flex';
+                    
+                    setTimeout(() => { 
+                        if (modal) modal.style.display = 'none'; 
+                    }, 3200);
+                }
+                else if (msg.type === "LOG") { 
+                    logEvent(msg.text); 
+                }
+                else if (msg.type === "GAME_OVER") {
+                    alert(`🏆 ТУРНИР ЗАВЕРШЕН! Абсолютный победитель: ${msg.winner}`);
+                    window.location.reload();
                 }
             };
         }
-
         // =====================================================================
         // 🤖 БЛОК ОДИНОЧНОЙ ИГРЫ (МЕХАНИКА ИСКУССТВЕННОГО ИНТЕЛЛЕКТА БОТА)
         // =====================================================================
