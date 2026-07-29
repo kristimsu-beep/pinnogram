@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
     <title>Royal Fight Multiplayer</title>
     <!-- Место для ЧАСТИ 2 (CSS-стили) -->
+    <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+    
     <style>
         :root {
             --neon-pink: #ff007f;
@@ -44,6 +46,7 @@
             background: radial-gradient(circle, #101726 0%, #06090e 100%);
             border: 2px solid rgba(255, 255, 255, 0.05); border-radius: 24px; position: relative;
             flex-direction: column; justify-content: space-between; padding: 20px; box-sizing: border-box;
+            perspective: 1000px;
         }
 
         .top-zone { display: flex; justify-content: space-between; align-items: center; }
@@ -100,6 +103,18 @@
         }
         .btn-neon:hover { background: var(--neon-blue); color: #000; box-shadow: 0 0 15px var(--neon-blue); }
         .btn-neon.bot-mode-btn:hover { background: var(--neon-pink); color: #000; box-shadow: 0 0 15px var(--neon-pink); }
+        @keyframes flyToOpponent {
+            0% { transform: translateY(0) scale(1) rotate(0deg); opacity: 1; }
+            50% { transform: translateY(-150px) scale(1.1) rotate(180deg); opacity: 0.8; }
+            100% { transform: translateY(-300px) scale(0) rotate(360deg); opacity: 0; }
+        }
+        @keyframes flyToPlayer {
+            0% { transform: translateY(-300px) scale(0) rotate(0deg); opacity: 0; }
+            50% { transform: translateY(-150px) scale(1.1) rotate(-180deg); opacity: 0.8; }
+            100% { transform: translateY(0) scale(1) rotate(-360deg); opacity: 1; }
+        }
+        .card-fly-out { animation: flyToOpponent 0.8s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
+        .card-fly-in { animation: flyToPlayer 0.8s cubic-bezier(0.25, 1, 0.5, 1) forwards; }
     </style>
 </head>
 <body>
@@ -209,6 +224,9 @@
             </div>
         </div>
     </div>
+    <!-- Прозрачный оверлей для рендеринга 3D жетонов через Three.js -->
+    <canvas id="threeCanvas" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index: 150;"></canvas>
+    
     <script>
         let ws = null;
         let myId = "p1"; 
@@ -228,7 +246,7 @@
         let botOpponentProtected = false;
 
         // =====================================================================
-        // 🌐 БЛОК МУЛЬТИПЛЕЕРА (ПО СЕТИ ЧЕРЕЗ WEBSOCKET С АНИМАЦИЯМИ ВСКРЫТИЯ)
+        // 🌐 БЛОК МУЛЬТИПЛЕЕРА (ПО СЕТИ ЧЕРЕЗ WEBSOCKET С АНИМАЦИЯМИ И ОБМЕНОМ)
         // =====================================================================
         function connectToMatchmaker() {
             isBotMode = false;
@@ -249,7 +267,16 @@
                 else if (msg.type === "GAME_STATE") {
                     document.getElementById('matchmakerScreen').style.display = 'none';
                     document.getElementById('gameTable').style.display = 'flex';
-                    renderTable(msg);
+                    
+                    // 🎯 КИНЕТИЧЕСКИЙ ТРИГГЕР ВОСЬМЁРКИ ДЛЯ СЕТИ:
+                    // Если соперник или ты разыграли 8 — сначала запускаем перелёт карт!
+                    if (msg.last_played_card === 8) {
+                        animateCardExchange();
+                        // Даём анимации 800мс отыграть физически, затем плавно рендерим новые карты
+                        setTimeout(() => { renderTable(msg); }, 800);
+                    } else {
+                        renderTable(msg);
+                    }
                 }
                 else if (msg.type === "TRIGGER_CARD_1") { 
                     openCard1Modal(); 
@@ -263,7 +290,7 @@
                     document.getElementById('secretCardView').style.backgroundImage = `url('/games_assets/card_${msg.secret}.png')`;
                     document.getElementById('modalCard6').style.display = 'flex';
                 }
-                // 🎥 ЭФФЕКТ ПЕРЕВОРОТА ДЛЯ ДУЭЛИ ТРОЙКИ!
+                // 🎥 ЭФФЕКТ ПЕРЕВОРОТА КАРТ ДЛЯ ДУЭЛИ ТРОЙКИ!
                 else if (msg.type === "TRIGGER_DUEL_SHOWCASE") {
                     document.getElementById('showdownTitle').innerText = "⚔️ Дуэль Тройки! ⚔️";
                     document.getElementById('showdownDesc').innerText = "Питомцы сошлись лоб в лоб!";
@@ -273,7 +300,6 @@
                     const modal = document.getElementById('modalShowdown');
                     if (modal) modal.style.display = 'flex';
                     
-                    // Через 3.2 секунды мягко прячем окно перед тем, как сервер переключит раунд
                     setTimeout(() => { 
                         if (modal) modal.style.display = 'none'; 
                     }, 3200);
@@ -528,8 +554,16 @@
                 syncBotUI();
             }
             else if (cardVal === 8 && !botOpponentProtected) {
-                let temp = botPlayerHand; botPlayerHand = botOpponentHand; botOpponentHand = temp;
-                endBotTurn();
+                // 🎯 СОЛО ТРИГГЕР: Сначала запускаем красивый перелет карт на экране
+                animateCardExchange();
+                
+                // Переставляем карты в памяти и обновляем UI строго после завершения полета (через 800мс)
+                setTimeout(() => {
+                    let temp = botPlayerHand; 
+                    botPlayerHand = botOpponentHand; 
+                    botOpponentHand = temp;
+                    endBotTurn();
+                }, 800);
             }
             else if (cardVal === 9 && !botOpponentProtected) {
                 if (botOpponentHand[0] === 10) { botPlayerHand.push(10); botOpponentHand = [botPlayerHand.shift()]; }
@@ -693,10 +727,225 @@
             }
             initBotRound();
         }
-
+        function animateCardExchange() {
+            logEvent("🔮 Запускается анимированный обмен лапками!");
+            
+            const handZone = document.getElementById('playerHandZone');
+            const handCards = handZone ? handZone.querySelectorAll('.game-card') : [];
+            
+            // 1. Твоя текущая карта намертво срывается с места и улетает наверх к сопернику
+            handCards.forEach((card) => {
+                card.style.transition = 'none'; // Отключаем старые плавности
+                card.classList.add('card-fly-out');
+            });
+            
+            // 2. С небольшой задержкой имитируем эффект прилёта карты соперника сверху в твою руку
+            setTimeout(() => {
+                if (handZone) {
+                    // Очищаем старую улетевшую карту
+                    handZone.innerHTML = '';
+                    
+                    const incomingCard = document.createElement('div');
+                    incomingCard.className = 'game-card card-fly-in';
+                    incomingCard.style.backgroundImage = "url('/games_assets/card_back.png')"; 
+                    handZone.appendChild(incomingCard);
+                }
+            }, 150);
+        }
         function logEvent(text) {
             document.getElementById('gameLog').innerHTML = `<div>• ${text}</div>`;
         }
+        // =====================================================================
+        // 🔮 КВАНТОВЫЙ 3D-ДВИЖЕК THREE.JS ДЛЯ ПОБЕДНЫХ ЖЕТОНОВ
+        // =====================================================================
+        let threeScene, threeCamera, threeRenderer, token3D;
+        let is3DAnimating = false;
+        let animationStartTime = 0;
+        let animationDuration = 2000; // 2 секунды на все шоу
+        let targetDestination = { x: 0, y: 0 }; // Куда полетит жетон
+
+        function initThreeJS() {
+            const canvas = document.getElementById('threeCanvas');
+            if (!canvas) return;
+
+            // 1. Создаем сцену и прозрачный рендерер
+            threeScene = new THREE.Scene();
+            threeCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            threeCamera.position.z = 8;
+
+            threeRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+            threeRenderer.setSize(window.innerWidth, window.innerHeight);
+            threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+            // 2. Настраиваем сочное киберпанк-освещение для преломлений
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            threeScene.add(ambientLight);
+
+            const neonBlueLight = new THREE.DirectionalLight(0x00f2fe, 0.8);
+            neonBlueLight.position.set(5, 5, 4);
+            threeScene.add(neonBlueLight);
+
+            const neonPinkLight = new THREE.DirectionalLight(0xff007f, 0.8);
+            neonPinkLight.position.set(-5, -5, 4);
+            threeScene.add(neonPinkLight);
+
+            // 3. Моделируем объемный 3D-жетон (Тонкий золотой цилиндр)
+            // Радиус верх/низ = 1, высота = 0.15, сегментов по кругу = 32
+            const geometry = new THREE.CylinderGeometry(1, 1, 0.15, 32);
+            
+            // Поворачиваем цилиндр боком, чтобы он смотрел на игрока как монета
+            geometry.rotateX(Math.PI / 2); 
+
+            // Настраиваем физический материал золота с металлическим блеском
+            const material = new THREE.MeshStandardMaterial({
+                color: 0xffd700,      // Яркое золото
+                metalness: 0.9,       // Максимальный металл
+                roughness: 0.15,      // Высокий глянец для отражения света
+                side: THREE.DoubleSide
+            });
+
+            token3D = new THREE.Mesh(geometry, material);
+            token3D.visible = false; // Изначально прячем, пока никто не победил
+            threeScene.add(token3D);
+
+            // Запускаем постоянный цикл отрисовки
+            animateThreeLoop();
+        }
+
+        // Автоматически подстраиваем 3D-холст под размеры экрана при повороте телефона
+        window.addEventListener('resize', () => {
+            if (!threeCamera || !threeRenderer) return;
+            threeCamera.aspect = window.innerWidth / window.innerHeight;
+            threeCamera.updateProjectionMatrix();
+            threeRenderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Базовый цикл рендера
+        function animateThreeLoop(timestamp) {
+            requestAnimationFrame(animateThreeLoop);
+            
+            if (is3DAnimating && token3D) {
+                tick3DAnimation(timestamp);
+            }
+            
+            if (threeRenderer && threeScene && threeCamera) {
+                threeRenderer.render(threeScene, threeCamera);
+            }
+        }
+
+        // Вызываем инициализацию Three.js сразу при загрузке страницы!
+        setTimeout(initThreeJS, 500);
+        // =====================================================================
+        // 🚀 ТРАЕКТОРИЯ ПОЛЕТА И МАТЕМАТИКА 3D ЖЕТОНА THREE.JS
+        // =====================================================================
+        function trigger3DTokenAnimation(winnerId) {
+            if (!token3D) return;
+
+            // 1. Сбрасываем монету в центр экрана
+            token3D.position.set(0, 0, 0);
+            token3D.rotation.set(0, 0, 0);
+            token3D.scale.set(1, 1, 1);
+            token3D.visible = true;
+
+            is3DAnimating = true;
+            animationStartTime = performance.now();
+
+            // 2. Рассчитываем, куда полетит жетон (в пикселях переводим в 3D координаты)
+            // Если выиграл ты (p1) — летит в левый нижний угол, если соперник (p2) — в левый верхний
+            if (winnerId === "p1" || winnerId === myId) {
+                targetDestination = { x: -2.5, y: -3.5 }; // Твоя зона очков
+                logEvent("🏆 Сочный 3D жетон улетает в твою копилку!");
+            } else {
+                targetDestination = { x: -2.5, y: 3.5 };  // Зона очков врага
+                logEvent("🤖 3D жетон улетает сопернику...");
+            }
+        }
+
+        function tick3DAnimation(timestamp) {
+            let elapsed = timestamp - animationStartTime;
+            let progress = Math.min(elapsed / animationDuration, 1); // Нормализуем от 0 до 1
+
+            // Эффект плавного разгона и торможения (EaseInOut)
+            let easeProgress = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+            if (progress < 0.5) {
+                // --- ПЕРВАЯ ФАЗА: Вращение по центру стола ---
+                // За первые 50% времени монета делает ровно 3 полных оборота (3 * 2 * PI = 6 * PI)
+                token3D.rotation.y = easeProgress * 2 * Math.PI * 3;
+                token3D.rotation.x = easeProgress * Math.PI * 0.5; // Небольшой наклон для преломления глянца
+            } else {
+                // --- ВТОРЯЯ ФАЗА: Полет со сжатием масштаба ---
+                // Плавно двигаем жетон из центра (0,0) к цели (targetDestination)
+                let flightProgress = (progress - 0.5) * 2; // Переводим вторую половину в диапазон 0..1
+                
+                token3D.position.x = THREE.MathUtils.lerp(0, targetDestination.x, flightProgress);
+                token3D.position.y = THREE.MathUtils.lerp(0, targetDestination.y, flightProgress);
+                token3D.position.z = THREE.MathUtils.lerp(0, -2, flightProgress); // Слегка отдаляем вглубь сцены
+
+                // С каждым шагом уменьшаем размер 3D жетона до полного исчезновения
+                let currentScale = THREE.MathUtils.lerp(1, 0.05, flightProgress);
+                token3D.scale.set(currentScale, currentScale, currentScale);
+                
+                // Монета продолжает мягко докручиваться во время полета
+                token3D.rotation.y += 0.05;
+            }
+
+            // Конец анимации — прячем 3D меш
+            if (progress >= 1) {
+                is3DAnimating = false;
+                token3D.visible = false;
+            }
+        }
+
+        // =====================================================================
+        // 🧬 ВРЕЗАЕМ ТРИГГЕРЫ 3D В ТВОИ СУЩЕСТВУЮЩИЕ ИГРОВЫЕ МЕХАНИКИ
+        // =====================================================================
+        // Автоматически перехватываем начисление очков и запускаем 3D шоу!
+        
+        // КЛИК В МОДАЛКЕ ЕДИНИЧКИ С БОТОМ
+        const oldSubmitCard1 = submitCard1;
+        submitCard1 = function(guess) {
+            if (isBotMode) {
+                let botCard = Number(botOpponentHand);
+                if (botCard === Number(guess)) {
+                    trigger3DTokenAnimation("p1"); // Ты угадал — жетон летит к тебе!
+                } else {
+                    // Если бот угадает на своем ходу — триггер сработает внутри endBotTurn
+                }
+            }
+            oldSubmitCard1(guess);
+        };
+
+        // ДУЭЛЬ ТРОЙКИ С БОТОМ
+        const oldExecuteLocalBotCardPlay = executeLocalBotCardPlay;
+        executeLocalBotCardPlay = function(cardVal) {
+            cardVal = Number(cardVal);
+            if (cardVal === 3 && !botOpponentProtected) {
+                let p_c = botPlayerHand; let o_c = botOpponentHand;
+                if ((p_c === 0 && o_c === 10) || (p_c > o_c && !(p_c === 10 && o_c === 0))) {
+                    trigger3DTokenAnimation("p1");
+                } else if ((o_c === 0 && p_c === 10) || (o_c > p_c && !(o_c === 10 && p_c === 0))) {
+                    trigger3DTokenAnimation("p2");
+                }
+            }
+            // Сброс десятки человеком
+            if (cardVal === 10) { trigger3DTokenAnimation("p2"); }
+            
+            oldExecuteLocalBotCardPlay(cardVal);
+        };
+
+        // ХОД И УГАДЫВАНИЕ БОТА (ВНУТРИ ТВОЕЙ СТАРОЙ ФУНКЦИИ endBotTurn)
+        // Нам нужно просто отслеживать изменения токенов в твоей функции checkLocalBotFinalVictory
+        const oldCheckLocalBotFinalVictory = checkLocalBotFinalVictory;
+        checkLocalBotFinalVictory = function() {
+            let p_c = Number(botPlayerHand); let o_c = Number(botOpponentHand);
+            if (p_c === 0 && o_c === 10) trigger3DTokenAnimation("p1");
+            else if (o_c === 0 && p_c === 10) trigger3DTokenAnimation("p2");
+            else if (p_c > o_c) trigger3DTokenAnimation("p1");
+            else if (o_c > p_c) trigger3DTokenAnimation("p2");
+            
+            oldCheckLocalBotFinalVictory();
+        };
     </script>
 </body>
 </html>
