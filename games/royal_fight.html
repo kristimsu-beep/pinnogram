@@ -404,20 +404,19 @@
             };
             renderTable(stateMock);
         }
-        // =====================================================================
-        // 🎮 ОБЩИЙ РЕНДЕР И СВАЙП-МЕХАНИКА ТАБЛИЦЫ СТОЛА
-        // =====================================================================
         function renderTable(state) {
-            // 🎯 СУПЕР 3D-КОНТРОЛЛЕР ХУДЕНИЯ КОЛОДЫ КАРТ:
+            // 🎯 СУПЕР 3D-КОНТРОЛЛЕР ХУДЕНИЯ КОЛОДЫ КАРТ (ФИКС ОДИНОЧНОГО РЕЖИМА):
             // Управляем видимостью 20 слоёв нашей трёхмерной стопки карт на сцене
             if (typeof deckMeshGroup !== 'undefined' && deckMeshGroup && deckMeshGroup.children.length > 0) {
                 let currentCardsInDeck = Number(state.deck_count);
+                
                 deckMeshGroup.children.forEach((cardMesh, idx) => {
-                    // Если индекс 3D-слоя больше или равен количеству оставшихся карт — скрываем его!
-                    if (idx >= currentCardsInDeck) {
-                        cardMesh.visible = false;
-                    } else {
+                    // 🦾 ФИКС: Карты убираются сверху вниз!
+                    // Оставляем видимыми только те слои, чьи индексы меньше текущего остатка карт в колоде
+                    if (idx < currentCardsInDeck) {
                         cardMesh.visible = true;
+                    } else {
+                        cardMesh.visible = false;
                     }
                 });
             }
@@ -457,8 +456,8 @@
                 const o1 = document.getElementById('openCard1');
                 const o2 = document.getElementById('openCard2');
                 if (o1 && o2) {
-                    o1.style.backgroundImage = `url('/games_assets/card_${state.open_cards[0]}.png')`;
-                    o2.style.backgroundImage = `url('/games_assets/card_${state.open_cards[1]}.png')`;
+                    o1.style.backgroundImage = `url('/games_assets/card_${state.open_cards}.png')`;
+                    o2.style.backgroundImage = `url('/games_assets/card_${state.open_cards}.png')`;
                     o1.style.visibility = 'visible'; o2.style.visibility = 'visible';
                 }
             }
@@ -478,7 +477,6 @@
                 });
             }
         }
-
         function initSwipeMechanics(el) {
             let startY = 0;
             let moveY = 0;
