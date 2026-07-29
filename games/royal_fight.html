@@ -271,16 +271,16 @@
                     document.getElementById('matchmakerScreen').style.display = 'none';
                     document.getElementById('gameTable').style.display = 'flex';
                     
-                    // 🎯 КВАНТОВЫЙ СЕТЕВОЙ ДЕТЕКТОР 3D ЖЕТОНОВ:
-                    // Проверяем, изменился ли счёт по сравнению с прошлым ходом по сети
+                    // 🎯 АБСОЛЮТНЫЙ СЕТЕВОЙ ФИКС: Точное разделение сторон «Я» и «Соперник»
                     if (msg.your_tokens > lastYourTokens) {
-                        // Очко заработал ты — запускаем 3D жетон в твою сторону!
-                        trigger3DTokenAnimation("p1"); 
+                        // Очко заработал текущий экран (не важно p1 ты или p2) — летит в НАШУ копилку!
+                        trigger3DTokenAnimation("me"); 
                     } 
                     else if (msg.opp_tokens > lastOppTokens) {
-                        // Очко заработал соперник — жетон летит к нему!
-                        trigger3DTokenAnimation("p2"); 
+                        // Очко заработал оппонент — летит наверх, к сопернику!
+                        trigger3DTokenAnimation("opp"); 
                     }
+
 
                     // Обновляем кэш текущих очков для следующей проверки
                     lastYourTokens = msg.your_tokens;
@@ -857,7 +857,6 @@
         function trigger3DTokenAnimation(winnerId) {
             if (!token3D) return;
 
-            // 1. Сбрасываем монету в центр экрана
             token3D.position.set(0, 0, 0);
             token3D.rotation.set(0, 0, 0);
             token3D.scale.set(1, 1, 1);
@@ -866,13 +865,12 @@
             is3DAnimating = true;
             animationStartTime = performance.now();
 
-            // 2. Рассчитываем, куда полетит жетон (в пикселях переводим в 3D координаты)
-            // Если выиграл ты (p1) — летит в левый нижний угол, если соперник (p2) — в левый верхний
-            if (winnerId === "p1" || winnerId === myId) {
-                targetDestination = { x: -2.5, y: -3.5 }; // Твоя зона очков
+            // 🎯 ИСПРАВЛЕНО: Теперь траектория считает маркеры «me» и «opp» идеально для обоих игроков!
+            if (winnerId === "me" || winnerId === "p1") {
+                targetDestination = { x: -2.5, y: -3.5 }; // Летит вниз (в твой кошелек)
                 logEvent("🏆 Сочный 3D жетон улетает в твою копилку!");
             } else {
-                targetDestination = { x: -2.5, y: 3.5 };  // Зона очков врага
+                targetDestination = { x: -2.5, y: 3.5 };  // Летит вверх (в копилку врага)
                 logEvent("🤖 3D жетон улетает сопернику...");
             }
         }
