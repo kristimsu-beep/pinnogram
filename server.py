@@ -5736,17 +5736,22 @@ async def royal_fight_websocket_endpoint(websocket: WebSocket):
                         target_room.players["p1"]["hand"] = [target_room.deck.pop()]
                         target_room.players["p2"]["hand"] = [target_room.deck.pop()]
                         
-                        # Выдаем ходячему игроку его обязательную вторую карту для продолжения хода
+                        # 🎯 ФИКС СЕМЁРКИ: Сначала переключаем ход на соперника!
+                        target_room.current_turn = "p2" if target_room.current_turn == "p1" else "p1"
+                        
+                        # И уже новому ходячему выдаем обязательную вторую карту
                         target_room.players[target_room.current_turn]["hand"].append(target_room.deck.pop())
                         
-                        # Синхронизируем обновленный RAM-стол с обоими клиентами
+                        # Сбрасываем иммунитеты Четвёрок
+                        target_room.players["p1"]["protected"] = False
+                        target_room.players["p2"]["protected"] = False
+                        
                         await target_room.broadcast_game_state()
                         continue
                     else:
-                        # Экстренный случай: если карт в остатке не хватило на перераздачу, раунд завершается
                         await check_and_switch_turn(target_room)
                         continue
-                
+               
                 # Карта 8: Обмен картами рук (Если враг под Четвёркой — эффект сгорает)
                 elif card_val == 8 and not is_opp_protected:
                     target_room.players[player_key]["hand"], target_room.players[opp_key]["hand"] = \
