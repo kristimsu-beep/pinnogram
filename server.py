@@ -5522,6 +5522,8 @@ class GameRoom:
         self.secret_card = None
         self.open_cards = []
         self.current_turn = "p1"
+        # 🎯 ЗАПОМИНАЕМ ПОСЛЕДНЮЮ СЫГРАННУЮ КАРТУ:
+        self.last_played_card = None 
 
     def generate_balanced_deck(self):
         # 🎯 ИСПРАВЛЕНО: Собрали массив строго по твоим пропорциям карт!
@@ -5547,10 +5549,12 @@ class GameRoom:
         # 2. Выбираем ещё 2 карты и кладем рядом лицевой стороной вверх
         self.open_cards = [self.deck.pop(), self.deck.pop()]
         
-        # Сбрасываем эффекты защиты Четвёрок перед новым раундом
+        # Сбрасываем эффекты защиты Четвёрок
         self.players["p1"]["protected"] = False
         self.players["p2"]["protected"] = False
-        
+        # 🎯 СБРОС КАРТЫ ПРИ НОВОМ РАУНДЕ:
+        self.last_played_card = None 
+       
         # 3. Раздаем по 1 карте каждому игроку в руку
         self.players["p1"]["hand"] = [self.deck.pop()]
         self.players["p2"]["hand"] = [self.deck.pop()]
@@ -5575,7 +5579,9 @@ class GameRoom:
                 "your_tokens": p_data["tokens"],
                 "opp_tokens": self.players[opp_key]["tokens"],
                 "your_protected": p_data["protected"],
-                "opp_protected": self.players[opp_key]["protected"]
+                "opp_protected": self.players[opp_key]["protected"],
+                # 🎯 СИНХРОНИЗИРУЕМ С ФРОНТЕНДОМ:
+                "last_played_card": self.last_played_card
             }
             try:
                 await p_data["ws"].send_text(json.dumps(state))
@@ -5634,6 +5640,8 @@ async def royal_fight_websocket_endpoint(websocket: WebSocket):
             if data["type"] == "PLAY_CARD":
                 card_val = int(data["card_value"])
                 target_room.players[player_key]["hand"].remove(card_val)
+                # 🎯 ЗАПИСЫВАЕМ СЫГРАННУЮ КАРТУ:
+                target_room.last_played_card = card_val 
                 
                 # Проверяем, защищен ли соперник Четвёркой
                 is_opp_protected = target_room.players[opp_key]["protected"]
