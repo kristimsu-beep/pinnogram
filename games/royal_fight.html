@@ -567,9 +567,18 @@
             else if (cardVal === 3) {
                 if (botOpponentProtected) { endBotTurn(); } else {
                     // Сравниваем чистые значения карт из нулевого индекса массива руки
-                    let p_c = botPlayerHand[0]; let o_c = botOpponentHand[0];
-                    if ((p_c === 0 && o_c === 10) || (p_c > o_c && !(p_c === 10 && o_c === 0))) { botPlayerTokens++; initBotRound(); }
-                    else if ((o_c === 0 && p_c === 10) || (o_c > p_c && !(o_c === 10 && p_c === 0))) { botOpponentTokens++; initBotRound(); }
+                    let p_c = Number(botPlayerHand[0]); 
+                    let o_c = Number(botOpponentHand[0]);
+                    if ((p_c === 0 && o_c === 10) || (p_c > o_c && !(p_c === 10 && o_c === 0))) { 
+                        trigger3DTokenAnimation("me");
+                        botPlayerTokens++; 
+                        initBotRound(); 
+                    }
+                    else if ((o_c === 0 && p_c === 10) || (o_c > p_c && !(o_c === 10 && p_c === 0))) { 
+                        trigger3DTokenAnimation("opp");
+                        botOpponentTokens++; 
+                        initBotRound(); 
+                    }
                     else { endBotTurn(); }
                 }
             }
@@ -583,18 +592,37 @@
                 document.getElementById('modalCard6').style.display = 'flex';
             }
             else if (cardVal === 7 && !botOpponentProtected) {
-                if(botPlayerHand[0] !== undefined) botDeck.push(botPlayerHand.pop());
-                if(botOpponentHand[0] !== undefined) botDeck.push(botOpponentHand.pop());
+                // 🎯 СЕМЁРКА: Запихиваем карты рук в остаток 3D-колоды
+                if (botPlayerHand[0] !== undefined) botDeck.push(botPlayerHand.pop());
+                if (botOpponentHand[0] !== undefined) botDeck.push(botOpponentHand.pop());
+                
+                // Перемешиваем поредевший остаток колоды
                 botDeck.sort(() => Math.random() - 0.5);
-                botPlayerHand = [botDeck.pop()]; botOpponentHand = [botDeck.pop()];
+                
+                botPlayerProtected = false;
+                botOpponentProtected = false;
+                
+                // Раздаем карты заново из остатка
+                botPlayerHand = [botDeck.pop()]; 
+                botOpponentHand = [botDeck.pop()];
+                
+                // Выдаем обязательную карту в руку для хода
                 botPlayerHand.push(botDeck.pop());
-                syncBotUI();
+                
+                // Спец-эффект: Семёрка принудительно ТРЯСЁТ 3D-колоду
+                if (window.deckMeshGroup) {
+                    deckMeshGroup.position.y += 0.2;
+                    setTimeout(() => { deckMeshGroup.position.y -= 0.2; }, 150);
+                }
+                
+                // 🎯 ФИКС СЕМЁРКИ ДЛЯ БОТА: Передаём ход сопернику после ребута!
+                endBotTurn();
             }
             else if (cardVal === 8 && !botOpponentProtected) {
-                // 🎯 СОЛО ТРИГГЕР: Сначала запускаем красивый перелет карт на экране
+                // 🎯 КИНЕТИЧЕСКИЙ ТРИГГЕР ВОСЬМЁРКИ: Сначала запускаем красивый перелет карт
                 animateCardExchange();
                 
-                // Переставляем карты в памяти и обновляем UI строго после завершения полета (через 800мс)
+                // Переставляем карты в памяти строго после завершения полета (через 800мс)
                 setTimeout(() => {
                     let temp = botPlayerHand; 
                     botPlayerHand = botOpponentHand; 
@@ -603,11 +631,16 @@
                 }, 800);
             }
             else if (cardVal === 9 && !botOpponentProtected) {
-                if (botOpponentHand[0] === 10) { botPlayerHand.push(10); botOpponentHand = [botPlayerHand.shift()]; }
+                if (botOpponentHand[0] === 10) { 
+                    botPlayerHand.push(10); 
+                    botOpponentHand = [botPlayerHand.shift()]; 
+                }
                 endBotTurn();
             }
             else if (cardVal === 10) {
-                botOpponentTokens++; initBotRound();
+                trigger3DTokenAnimation("opp");
+                botOpponentTokens++; 
+                initBotRound();
             } else { endBotTurn(); }
         }
 
