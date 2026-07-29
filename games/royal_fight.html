@@ -190,6 +190,24 @@
                 <button class="num-btn" style="width:100%; margin:5px 0; border-color:var(--neon-pink);" onclick="submitCard6(false)">Оставить как есть</button>
             </div>
         </div>
+        <!-- Модалка тотального вскрытия карт для Тройки и Финала колоды -->
+        <div class="quantum-modal-overlay" id="modalShowdown">
+            <div class="modal-body" style="max-width: 360px;">
+                <h2 id="showdownTitle" style="color: var(--neon-pink); text-shadow: 0 0 10px var(--neon-pink); margin-bottom: 5px;">⚔️ Вскрытие карт! ⚔️</h2>
+                <p id="showdownDesc" style="font-size: 12px; color: #aaa; margin-bottom: 15px;">Сравнение сил питомцев...</p>
+                
+                <div style="display: flex; justify-content: center; gap: 25px; margin: 15px 0;">
+                    <div>
+                        <div style="font-size: 11px; margin-bottom: 5px; color: var(--neon-blue);">Игрок 1</div>
+                        <div id="showdownP1Card" style="width: 85px; height: 125px; border-radius: 10px; background-size: cover; border: 2px solid var(--neon-blue); box-shadow: 0 0 15px rgba(0, 242, 254, 0.3);"></div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; margin-bottom: 5px; color: var(--neon-pink);">Игрок 2</div>
+                        <div id="showdownP2Card" style="width: 85px; height: 125px; border-radius: 10px; background-size: cover; border: 2px solid var(--neon-pink); box-shadow: 0 0 15px rgba(255, 0, 127, 0.3);"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     <script>
         let ws = null;
@@ -246,6 +264,25 @@
                 else if (msg.type === "GAME_OVER") {
                     alert(`🏆 ТУРНИР ЗАВЕРШЕН! Абсолютный победитель: ${msg.winner}`);
                     window.location.reload();
+                else if (msg.type === "TRIGGER_DUEL_SHOWCASE") {
+                    document.getElementById('showdownTitle').innerText = "⚔️ Дуэль Тройки! ⚔️";
+                    document.getElementById('showdownDesc').innerText = "Питомцы сошлись лоб в лоб!";
+                    document.getElementById('showdownP1Card').style.backgroundImage = `url('/games_assets/card_${msg.p1_card}.png')`;
+                    document.getElementById('showdownP2Card').style.backgroundImage = `url('/games_assets/card_${msg.p2_card}.png')`;
+                    document.getElementById('modalShowdown').style.display = 'flex';
+                    
+                    // Через 3.2 секунды мягко прячем окно перед следующим раундом
+                    setTimeout(() => { document.getElementById('modalShowdown').style.display = 'none'; }, 3200);
+                }
+                else if (msg.type === "TRIGGER_FINAL_SHOWCASE") {
+                    document.getElementById('showdownTitle').innerText = "🏁 Финал Колоды! 🏁";
+                    document.getElementById('showdownDesc').innerText = "Карты кончились! Вскрываем руки:";
+                    document.getElementById('showdownP1Card').style.backgroundImage = `url('/games_assets/card_${msg.p1_card}.png')`;
+                    document.getElementById('showdownP2Card').style.backgroundImage = `url('/games_assets/card_${msg.p2_card}.png')`;
+                    document.getElementById('modalShowdown').style.display = 'flex';
+                    
+                    setTimeout(() => { document.getElementById('modalShowdown').style.display = 'none'; }, 3200);
+                }       
                 }
             };
         }
