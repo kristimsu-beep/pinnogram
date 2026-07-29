@@ -311,8 +311,17 @@
         // 🎮 ОБЩИЙ РЕНДЕР И СВАЙП-МЕХАНИКА ТАБЛИЦЫ СТОЛА
         // =====================================================================
         function renderTable(state) {
+            // 🎯 СУПЕР-СЕТЕВОЙ ФИКС: Записываем твой НАСТОЯЩИЙ ID, присланный сервером (p1 или p2)!
+            if (state.your_id) {
+                myId = state.your_id;
+            }
+            
+            // Теперь сравнение хода будет на 1000% честным и точным для обоих экранов!
+            isMyTurn = (state.current_turn === myId);
+            
             document.getElementById('deckCountVal').innerText = state.deck_count;
             document.getElementById('yourTokensVal').innerText = state.your_tokens;
+
             document.getElementById('oppTokensVal').innerText = state.opp_tokens;
             document.getElementById('turnIndicator').innerText = isMyTurn ? "Твой ход! Свайпни карту вперед" : "Ход соперника...";
             document.getElementById('oppShieldIndicator').innerText = state.opp_protected ? "🛡️ ИММУНИТЕТ ЧЕТВЁРКИ" : "";
