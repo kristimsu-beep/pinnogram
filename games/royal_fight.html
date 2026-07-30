@@ -928,7 +928,7 @@
             animateThreeLoop();
         }
 
-        // 🎯 ФИКС ПОЛЕТА ДВОЙКИ: Карта летит строго в динамические координаты группы deckMeshGroup!
+        // 🎯 СУПЕР-ФИКС ДВОЙКИ: Карта динамически преследует колоду на каждом кадре полёта!
         function animate3DCardInsertion(position) {
             logEvent(`🔮 Запускается 3D-полёт карты в положение: ${position}`);
             
@@ -938,38 +938,45 @@
             });
             const flyCard = new THREE.Mesh(flyGeo, flyMat);
             
+            // Стартуем из центра стола
             flyCard.position.set(0, 0, 1);
             threeScene.add(flyCard);
 
             let startTime = performance.now();
-            let duration = 1000; 
-
-            let targetZ = 0;
-            let currentDeckSize = deckMeshGroup.children.filter(c => c.visible).length;
-            
-            if (position === 'top') targetZ = currentDeckSize * 0.022;
-            else if (position === 'bottom') targetZ = -0.022;
-            else targetZ = (currentDeckSize / 2) * 0.022;
-
-            // Считываем ЖИВЫЕ координаты, куда уехала наша 3D-колода
-            let targetX = deckMeshGroup.position.x;
-            let targetY = deckMeshGroup.position.y;
+            let duration = 1000; // 1 секунда на сочный полёт
 
             function animate() {
                 let elapsed = performance.now() - startTime;
                 let progress = Math.min(elapsed / duration, 1);
+                
+                // Плавное ускорение и замедление (Ease-In-Out)
                 let t = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
 
-                flyCard.position.x = THREE.MathUtils.lerp(0, targetX, t);
-                flyCard.position.y = THREE.MathUtils.lerp(0, targetY, t);
+                // 🦾 Рассчитываем высоту встраивания в слои колоды на лету
+                let targetZ = 0;
+                let currentDeckSize = deckMeshGroup.children.filter(c => c.visible).length;
+                
+                if (position === 'top') targetZ = currentDeckSize * 0.022;
+                else if (position === 'bottom') targetZ = -0.022;
+                else targetZ = (currentDeckSize / 2) * 0.022;
+
+                // 🔥 ГЛАВНЫЙ ХАК: Считываем ЖИВЫЕ координаты колоды ПРЯМО В ДАННЫЙ КАДР!
+                let liveX = deckMeshGroup.position.x;
+                let liveY = deckMeshGroup.position.y;
+
+                // Перемещаем карту строго в динамический центр 3D-стопки
+                flyCard.position.x = THREE.MathUtils.lerp(0, liveX, t);
+                flyCard.position.y = THREE.MathUtils.lerp(0, liveY, t);
                 flyCard.position.z = THREE.MathUtils.lerp(1, deckMeshGroup.position.z + targetZ, t);
 
+                // Изящный кульбит и переворот карты в воздухе
                 flyCard.rotation.y = t * Math.PI * 2;
                 flyCard.rotation.x = t * 0.2;
 
                 if (progress < 1) {
                     requestAnimationFrame(animate);
                 } else {
+                    // Приземлилась — очищаем память
                     threeScene.remove(flyCard);
                     flyGeo.dispose(); flyMat.dispose();
                     logEvent("✅ Карта вошла вглубь 3D-колоды!");
@@ -1021,17 +1028,18 @@
             requestAnimationFrame(animateThreeLoop);
             
             const anchor = document.getElementById('3dDeckAnchor');
-            // 🎯 ФИКС КООРДИНАТ: Центрируем 3D-колоду только тогда, когда она активна и видима на столе!
+            // 🎯 КВАНТОВЫЙ РЕНДЕР-ЯКОРЬ: Центрируем и позиционируем 3D-колоду только во время игры
             if (anchor && deckMeshGroup && deckMeshGroup.visible && threeCamera && threeRenderer) {
                 const rect = anchor.getBoundingClientRect();
                 
-                // Вычисляем точный центр нашего HTML-контейнера на экране телефона
+                // Вычисляем горизонтальный центр нашего текстового блока на экране
                 const xPixels = rect.left + rect.width / 2;
-                // 🔥 ЮВЕЛИРНЫЙ СДВИГ: Смещаем 3D-модель по вертикали на 45 пикселей вверх, 
-                // чтобы стопка карт легла ровно НАД надписью «Колода: Х»!
-                const yPixels = rect.top + rect.height / 2 - 45; 
                 
-                // Переводим пиксели тач-скрина в трёхмерные координаты сцены Three.js
+                // 🔥 ЮВЕЛИРНЫЙ СДВИГ: Опускаем 3D-модель по вертикали на 95 пикселей вниз (вместо 45)!
+                // Это намертво сажает объёмную колоду на одну линию с отложенными картами стола.
+                const yPixels = rect.top + rect.height / 2 - 95; 
+                
+                // Магический перевод плоских пикселей тач-скрина в трёхмерные мировые координаты сцены
                 const vector = new THREE.Vector3(
                     (xPixels / window.innerWidth) * 2 - 1,
                     -(yPixels / window.innerHeight) * 2 + 1,
@@ -1042,16 +1050,16 @@
                 const distance = -threeCamera.position.z / dir.z;
                 const pos = threeCamera.position.clone().add(dir.multiplyScalar(distance));
                 
-                // Намертво пришиваем группу 3D-карт к динамическому якорю
+                // Пришиваем группу 3D-карт к динамическим координатам
                 deckMeshGroup.position.set(pos.x, pos.y, 0);
             }
             
-            // Если запущена анимация победного золотого жетона, прокручиваем её кадр
+            // Если запущена анимация победного золотого жетона — прокручиваем её кадр
             if (is3DAnimating && token3D) {
                 tick3DAnimation(timestamp);
             }
             
-            // Рендерим итоговую 3D картинку на прозрачный canvas-оверлей
+            // Отрисовываем итоговую 3D-картинку на прозрачный canvas-оверлей поверх стола
             if (threeRenderer && threeScene && threeCamera) {
                 threeRenderer.render(threeScene, threeCamera);
             }
