@@ -451,13 +451,13 @@
                 }
             }
 
-            // Отрисовка двух открытых карт стартового сетапа на столе
+            // 🎯 ФИКС ОТКРЫТЫХ КАРТ: Четко считываем индексы 0 и 1 из массива сервера!
             if (state.open_cards && state.open_cards.length >= 2) {
                 const o1 = document.getElementById('openCard1');
                 const o2 = document.getElementById('openCard2');
                 if (o1 && o2) {
-                    o1.style.backgroundImage = `url('/games_assets/card_${state.open_cards}.png')`;
-                    o2.style.backgroundImage = `url('/games_assets/card_${state.open_cards}.png')`;
+                    o1.style.backgroundImage = `url('/games_assets/card_${state.open_cards[0]}.png')`;
+                    o2.style.backgroundImage = `url('/games_assets/card_${state.open_cards[1]}.png')`;
                     o1.style.visibility = 'visible'; o2.style.visibility = 'visible';
                 }
             }
@@ -829,22 +829,23 @@
         function logEvent(text) {
             document.getElementById('gameLog').innerHTML = `<div>• ${text}</div>`;
         }
+
+
+        // Базовый цикл рендера кадров
         // =====================================================================
-        // 🔮 КВАНТОВЫЙ 3D-ДВИЖЕК THREE.JS ДЛЯ ПОБЕДНЫХ ЖЕТОНОВ
+        // 🔮 ИСПРАВЛЕННЫЙ 3D-ДВИЖЕК THREE.JS (НЕОНОВАЯ КОЛОДА И ТОЧНЫЙ ПОЛЕТ)
         // =====================================================================
         let threeScene, threeCamera, threeRenderer, token3D;
+        let deckMeshGroup = new THREE.Group(); 
         let is3DAnimating = false;
         let animationStartTime = 0;
-        let animationDuration = 2000; // 2 секунды на все шоу
-        let targetDestination = { x: 0, y: 0 }; // Куда полетит жетон
-        let deckMeshGroup = new THREE.Group(); // Группа для 3D-карт колоды
-        let visual3DDeckCount = 0;
+        let animationDuration = 2000; 
+        let targetDestination = { x: 0, y: 0 }; 
 
         function initThreeJS() {
             const canvas = document.getElementById('threeCanvas');
             if (!canvas) return;
 
-            // 1. Создаем сцену и прозрачный рендерер
             threeScene = new THREE.Scene();
             threeCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
             threeCamera.position.z = 8;
@@ -853,87 +854,145 @@
             threeRenderer.setSize(window.innerWidth, window.innerHeight);
             threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-            // 2. Настраиваем сочное киберпанк-освещение для преломлений глянца
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            // Сочное освещение
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
             threeScene.add(ambientLight);
 
-            const neonBlueLight = new THREE.DirectionalLight(0x00f2fe, 0.9);
-            neonBlueLight.position.set(5, 5, 4);
+            const neonBlueLight = new THREE.DirectionalLight(0x00f2fe, 1.0);
+            neonBlueLight.position.set(3, 3, 4);
             threeScene.add(neonBlueLight);
 
-            const neonPinkLight = new THREE.DirectionalLight(0xff007f, 0.9);
-            neonPinkLight.position.set(-5, -5, 4);
-            threeScene.add(neonPinkLight);
-
-            // 3. Моделируем объемный 3D-жетон (Тонкий золотой цилиндр)
+            // 3D-Жетон Золота
             const geometry = new THREE.CylinderGeometry(1, 1, 0.15, 32);
-            geometry.rotateX(Math.PI / 2); // Разворачиваем монету к игроку лицовой стороной
-
+            geometry.rotateX(Math.PI / 2); 
             const material = new THREE.MeshStandardMaterial({
-                color: 0xffd700,      // Настоящее золото
-                metalness: 0.9,       // Максимальный металл
-                roughness: 0.12,      // Высокий глянец для неоновых отражений
-                side: THREE.DoubleSide
+                color: 0xffd700, metalness: 0.9, roughness: 0.15, side: THREE.DoubleSide
             });
-
             token3D = new THREE.Mesh(geometry, material);
-            token3D.visible = false; // Прячем до момента начисления очков
+            token3D.visible = false;
             threeScene.add(token3D);
 
-            // =====================================================================
-            // 🃏 СТРОИТЕЛЬСТВО ТРЁХМЕРНОЙ 3D-КОЛОДЫ КАРТ
-            // =====================================================================
-            // Сдвигаем всю стопку карт вправо к нашему невидимому HTML-якорю
-            deckMeshGroup.position.set(1.9, 0.8, 0); 
-            // Слегка наклоняем колоду, чтобы игроки видели её потрясающую толщину!
-            deckMeshGroup.rotation.set(0.1, -0.15, 0); 
+            // 🎯 ФИКС ЦВЕТА КОЛОДЫ: Меняем материал на MeshPhongMaterial со светящимся неоновым оттенком!
             threeScene.add(deckMeshGroup);
+            deckMeshGroup.rotation.set(0.1, -0.15, 0); 
 
-            // Геометрия одной тонкой 3D карты (Ширина=0.9, Высота=1.35, Толщина=0.015)
             const cardGeo = new THREE.BoxGeometry(0.9, 1.35, 0.015);
-            const cardMat = new THREE.MeshStandardMaterial({
-                color: 0x0f172a,       // Сочный темно-синий неоновый киберпанк цвет
-                metalness: 0.6,
-                roughness: 0.25,
+            const cardMat = new THREE.MeshPhongMaterial({
+                color: 0x121b29,        // Базовый полуночно-синий
+                emissive: 0x0a111e,     // Скрытое неоновое свечение, чтобы убрать черноту!
+                specular: 0x00f2fe,     // Бирюзовый киберпанк-блик на гранях карт
+                shininess: 30,
                 side: THREE.DoubleSide
             });
 
-            // Наращиваем физические слои (20 карт по твоим пропорциям колоды)
             for (let i = 0; i < 20; i++) {
                 const cardMesh = new THREE.Mesh(cardGeo, cardMat);
-                // Каждая следующая карта ложится строго выше предыдущей по оси Z
                 cardMesh.position.z = i * 0.022; 
-                // Записываем индекс карты в её имя, чтобы JS мог ей управлять
                 cardMesh.name = `layer_${i}`; 
                 deckMeshGroup.add(cardMesh);
             }
 
-            // Запускаем постоянный цикл отрисовки кадров сцены
             animateThreeLoop();
         }
 
-        // Автоматически подстраиваем 3D-холст под размеры экрана при повороте телефона
-        window.addEventListener('resize', () => {
-            if (!threeCamera || !threeRenderer) return;
-            threeCamera.aspect = window.innerWidth / window.innerHeight;
-            threeCamera.updateProjectionMatrix();
-            threeRenderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        // 🎯 ФИКС ПОЛЕТА ДВОЙКИ: Карта летит строго в динамические координаты группы deckMeshGroup!
+        function animate3DCardInsertion(position) {
+            logEvent(`🔮 Запускается 3D-полёт карты в положение: ${position}`);
+            
+            const flyGeo = new THREE.BoxGeometry(0.9, 1.35, 0.015);
+            const flyMat = new THREE.MeshPhongMaterial({
+                color: 0x00f2fe, emissive: 0x004455, specular: 0xffffff, shininess: 40
+            });
+            const flyCard = new THREE.Mesh(flyGeo, flyMat);
+            
+            flyCard.position.set(0, 0, 1);
+            threeScene.add(flyCard);
 
-        // Базовый цикл рендера кадров
+            let startTime = performance.now();
+            let duration = 1000; 
+
+            let targetZ = 0;
+            let currentDeckSize = deckMeshGroup.children.filter(c => c.visible).length;
+            
+            if (position === 'top') targetZ = currentDeckSize * 0.022;
+            else if (position === 'bottom') targetZ = -0.022;
+            else targetZ = (currentDeckSize / 2) * 0.022;
+
+            // Считываем ЖИВЫЕ координаты, куда уехала наша 3D-колода
+            let targetX = deckMeshGroup.position.x;
+            let targetY = deckMeshGroup.position.y;
+
+            function animate() {
+                let elapsed = performance.now() - startTime;
+                let progress = Math.min(elapsed / duration, 1);
+                let t = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+                flyCard.position.x = THREE.MathUtils.lerp(0, targetX, t);
+                flyCard.position.y = THREE.MathUtils.lerp(0, targetY, t);
+                flyCard.position.z = THREE.MathUtils.lerp(1, deckMeshGroup.position.z + targetZ, t);
+
+                flyCard.rotation.y = t * Math.PI * 2;
+                flyCard.rotation.x = t * 0.2;
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    threeScene.remove(flyCard);
+                    flyGeo.dispose(); flyMat.dispose();
+                    logEvent("✅ Карта вошла вглубь 3D-колоды!");
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+
+        function trigger3DTokenAnimation(winnerId) {
+            if (!token3D) return;
+            token3D.position.set(0, 0, 0);
+            token3D.rotation.set(0, 0, 0);
+            token3D.scale.set(1, 1, 1);
+            token3D.visible = true;
+            is3DAnimating = true;
+            animationStartTime = performance.now();
+
+            if (winnerId === "me" || winnerId === "p1") {
+                targetDestination = { x: -2.5, y: -3.5 };
+                logEvent("🏆 Сочный 3D жетон улетает в твою копилку!");
+            } else {
+                targetDestination = { x: -2.5, y: 3.5 };
+                logEvent("🤖 3D жетон улетает сопернику...");
+            }
+        }
+
+        function tick3DAnimation(timestamp) {
+            let elapsed = timestamp - animationStartTime;
+            let progress = Math.min(elapsed / animationDuration, 1);
+            let t = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+            if (progress < 0.5) {
+                token3D.rotation.y = t * Math.PI * 2 * 3;
+                token3D.rotation.x = t * Math.PI * 0.5;
+            } else {
+                let flightProgress = (progress - 0.5) * 2;
+                token3D.position.x = THREE.MathUtils.lerp(0, targetDestination.x, flightProgress);
+                token3D.position.y = THREE.MathUtils.lerp(0, targetDestination.y, flightProgress);
+                token3D.position.z = THREE.MathUtils.lerp(0, -2, flightProgress);
+                let currentScale = THREE.MathUtils.lerp(1, 0.05, flightProgress);
+                token3D.scale.set(currentScale, currentScale, currentScale);
+                token3D.rotation.y += 0.05;
+            }
+
+            if (progress >= 1) { is3DAnimating = false; token3D.visible = false; }
+        }
+
         function animateThreeLoop(timestamp) {
             requestAnimationFrame(animateThreeLoop);
             
-            // 🎯 СУПЕР-ХАК: Автоматически привязываем 3D-колоду к HTML-якорю на экране!
             const anchor = document.getElementById('3dDeckAnchor');
             if (anchor && deckMeshGroup && threeCamera && threeRenderer) {
                 const rect = anchor.getBoundingClientRect();
-                
-                // Находим центр HTML-элемента колоды в пикселях
                 const xPixels = rect.left + rect.width / 2;
                 const yPixels = rect.top + rect.height / 2;
                 
-                // Магическая формула перевода пикселей экрана в 3D-координаты сцены Three.js
                 const vector = new THREE.Vector3(
                     (xPixels / window.innerWidth) * 2 - 1,
                     -(yPixels / window.innerHeight) * 2 + 1,
@@ -944,80 +1003,21 @@
                 const distance = -threeCamera.position.z / dir.z;
                 const pos = threeCamera.position.clone().add(dir.multiplyScalar(distance));
                 
-                // Намертво пришиваем 3D-колоду к тексту на экране телефона!
                 deckMeshGroup.position.set(pos.x, pos.y, 0);
             }
             
-            if (is3DAnimating && token3D) {
-                tick3DAnimation(timestamp);
-            }
-            
-            if (threeRenderer && threeScene && threeCamera) {
-                threeRenderer.render(threeScene, threeCamera);
-            }
+            if (is3DAnimating && token3D) tick3DAnimation(timestamp);
+            if (threeRenderer && threeScene && threeCamera) threeRenderer.render(threeScene, threeCamera);
         }
 
-        // Вызываем инициализацию Three.js сразу при загрузке страницы!
-        setTimeout(initThreeJS, 500);
-        // =====================================================================
-        // 🚀 ТРАЕКТОРИЯ ПОЛЕТА И МАТЕМАТИКА 3D ЖЕТОНА THREE.JS
-        // =====================================================================
-        function trigger3DTokenAnimation(winnerId) {
-            if (!token3D) return;
+        window.addEventListener('resize', () => {
+            if (!threeCamera || !threeRenderer) return;
+            threeCamera.aspect = window.innerWidth / window.innerHeight;
+            threeCamera.updateProjectionMatrix();
+            threeRenderer.setSize(window.innerWidth, window.innerHeight);
+        });
 
-            token3D.position.set(0, 0, 0);
-            token3D.rotation.set(0, 0, 0);
-            token3D.scale.set(1, 1, 1);
-            token3D.visible = true;
-
-            is3DAnimating = true;
-            animationStartTime = performance.now();
-
-            // 🎯 ИСПРАВЛЕНО: Теперь траектория считает маркеры «me» и «opp» идеально для обоих игроков!
-            if (winnerId === "me" || winnerId === "p1") {
-                targetDestination = { x: -2.5, y: -3.5 }; // Летит вниз (в твой кошелек)
-                logEvent("🏆 Сочный 3D жетон улетает в твою копилку!");
-            } else {
-                targetDestination = { x: -2.5, y: 3.5 };  // Летит вверх (в копилку врага)
-                logEvent("🤖 3D жетон улетает сопернику...");
-            }
-        }
-
-        function tick3DAnimation(timestamp) {
-            let elapsed = timestamp - animationStartTime;
-            let progress = Math.min(elapsed / animationDuration, 1); // Нормализуем от 0 до 1
-
-            // Эффект плавного разгона и торможения (EaseInOut)
-            let easeProgress = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-
-            if (progress < 0.5) {
-                // --- ПЕРВАЯ ФАЗА: Вращение по центру стола ---
-                // За первые 50% времени монета делает ровно 3 полных оборота (3 * 2 * PI = 6 * PI)
-                token3D.rotation.y = easeProgress * 2 * Math.PI * 3;
-                token3D.rotation.x = easeProgress * Math.PI * 0.5; // Небольшой наклон для преломления глянца
-            } else {
-                // --- ВТОРЯЯ ФАЗА: Полет со сжатием масштаба ---
-                // Плавно двигаем жетон из центра (0,0) к цели (targetDestination)
-                let flightProgress = (progress - 0.5) * 2; // Переводим вторую половину в диапазон 0..1
-                
-                token3D.position.x = THREE.MathUtils.lerp(0, targetDestination.x, flightProgress);
-                token3D.position.y = THREE.MathUtils.lerp(0, targetDestination.y, flightProgress);
-                token3D.position.z = THREE.MathUtils.lerp(0, -2, flightProgress); // Слегка отдаляем вглубь сцены
-
-                // С каждым шагом уменьшаем размер 3D жетона до полного исчезновения
-                let currentScale = THREE.MathUtils.lerp(1, 0.05, flightProgress);
-                token3D.scale.set(currentScale, currentScale, currentScale);
-                
-                // Монета продолжает мягко докручиваться во время полета
-                token3D.rotation.y += 0.05;
-            }
-
-            // Конец анимации — прячем 3D меш
-            if (progress >= 1) {
-                is3DAnimating = false;
-                token3D.visible = false;
-            }
-        }
+        initThreeJS();
 
         // =====================================================================
         // 🧬 ВРЕЗАЕМ ТРИГГЕРЫ 3D В ТВОИ СУЩЕСТВУЮЩИЕ ИГРОВЫЕ МЕХАНИКИ
