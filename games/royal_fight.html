@@ -924,6 +924,30 @@
         function animateThreeLoop(timestamp) {
             requestAnimationFrame(animateThreeLoop);
             
+            // 🎯 СУПЕР-ХАК: Автоматически привязываем 3D-колоду к HTML-якорю на экране!
+            const anchor = document.getElementById('3dDeckAnchor');
+            if (anchor && deckMeshGroup && threeCamera && threeRenderer) {
+                const rect = anchor.getBoundingClientRect();
+                
+                // Находим центр HTML-элемента колоды в пикселях
+                const xPixels = rect.left + rect.width / 2;
+                const yPixels = rect.top + rect.height / 2;
+                
+                // Магическая формула перевода пикселей экрана в 3D-координаты сцены Three.js
+                const vector = new THREE.Vector3(
+                    (xPixels / window.innerWidth) * 2 - 1,
+                    -(yPixels / window.innerHeight) * 2 + 1,
+                    0.5
+                );
+                vector.unproject(threeCamera);
+                const dir = vector.sub(threeCamera.position).normalize();
+                const distance = -threeCamera.position.z / dir.z;
+                const pos = threeCamera.position.clone().add(dir.multiplyScalar(distance));
+                
+                // Намертво пришиваем 3D-колоду к тексту на экране телефона!
+                deckMeshGroup.position.set(pos.x, pos.y, 0);
+            }
+            
             if (is3DAnimating && token3D) {
                 tick3DAnimation(timestamp);
             }
