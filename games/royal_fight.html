@@ -224,9 +224,9 @@
             </div>
         </div>
     </div>
-    <!-- Прозрачный оверлей для рендеринга 3D жетонов через Three.js -->
-    <canvas id="threeCanvas" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index: 150;"></canvas>
-    
+    <!-- 🎯 ИСПРАВЛЕНО: Понизили z-index до 1, чтобы холст ушёл под все модальные окна и кнопки стола! -->
+    <canvas id="threeCanvas" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index: 1;"></canvas>
+
     <script>
         let ws = null;
         let myId = "p1"; 
@@ -830,7 +830,6 @@
             document.getElementById('gameLog').innerHTML = `<div>• ${text}</div>`;
         }
 
-
         // Базовый цикл рендера кадров
         // =====================================================================
         // 🔮 ИСПРАВЛЕННЫЙ 3D-ДВИЖЕК THREE.JS (НЕОНОВАЯ КОЛОДА И ТОЧНЫЙ ПОЛЕТ)
@@ -854,13 +853,13 @@
             threeRenderer.setSize(window.innerWidth, window.innerHeight);
             threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-            // Сочное освещение
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            // Чистый белый рассеянный свет для идеальной прогрузки твоих текстур
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
             threeScene.add(ambientLight);
 
-            const neonBlueLight = new THREE.DirectionalLight(0x00f2fe, 1.0);
-            neonBlueLight.position.set(3, 3, 4);
-            threeScene.add(neonBlueLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            dirLight.position.set(0, 4, 5);
+            threeScene.add(dirLight);
 
             // 3D-Жетон Золота
             const geometry = new THREE.CylinderGeometry(1, 1, 0.15, 32);
@@ -872,22 +871,37 @@
             token3D.visible = false;
             threeScene.add(token3D);
 
-            // 🎯 ФИКС ЦВЕТА КОЛОДЫ: Меняем материал на MeshPhongMaterial со светящимся неоновым оттенком!
+            // Инициализируем группу 3D колоды
             threeScene.add(deckMeshGroup);
             deckMeshGroup.rotation.set(0.1, -0.15, 0); 
 
-            const cardGeo = new THREE.BoxGeometry(0.9, 1.35, 0.015);
-            const cardMat = new THREE.MeshPhongMaterial({
-                color: 0x121b29,        // Базовый полуночно-синий
-                emissive: 0x0a111e,     // Скрытое неоновое свечение, чтобы убрать черноту!
-                specular: 0x00f2fe,     // Бирюзовый киберпанк-блик на гранях карт
-                shininess: 30,
-                side: THREE.DoubleSide
-            });
+            // 🎯 СУПЕР-ТЕКСТУРИРОВАНИЕ ТВОЕЙ РУБАШКИ КАРТ:
+            const textureLoader = new THREE.TextureLoader();
+            const cardBackTexture = textureLoader.load('/games_assets/card_back.png');
 
+            // Создаем многотекстурный материал для 3D Куба (BoxGeometry имеет 6 граней)
+            // Материалы для боковых торцов карты (эффект слоев бумаги/картона)
+            const sideMat = new THREE.MeshPhongMaterial({ color: 0xd1d5db, shininess: 10 }); // Светло-серый торец карт
+            // Материал для верхней крышки карты — намертво накатываем ТВОЮ картинку рубашки!
+            const faceMat = new THREE.MeshPhongMaterial({ map: cardBackTexture, shininess: 20 });
+
+            // Массив материалов для [правой, левой, верхней, нижней, передней, задней] граней
+            const cubeMaterials = [
+                sideMat, // право
+                sideMat, // лево
+                sideMat, // верх
+                sideMat, // низ
+                faceMat, // ЛИЦО (ТВОЯ РУБАШКА!)
+                sideMat  // задник
+            ];
+
+            // Геометрия одной реалистичной 3D-карты (Ширина=0.9, Высота=1.35, Толщина=0.015)
+            const cardGeo = new THREE.BoxGeometry(0.9, 1.35, 0.015);
+
+            // Выстраиваем красивую стопку из 20 карт
             for (let i = 0; i < 20; i++) {
-                const cardMesh = new THREE.Mesh(cardGeo, cardMat);
-                cardMesh.position.z = i * 0.022; 
+                const cardMesh = new THREE.Mesh(cardGeo, cubeMaterials);
+                cardMesh.position.z = i * 0.022; // Смещение слоёв по высоте
                 cardMesh.name = `layer_${i}`; 
                 deckMeshGroup.add(cardMesh);
             }
