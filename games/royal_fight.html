@@ -849,18 +849,19 @@
             if (!canvas) return;
 
             threeScene = new THREE.Scene();
+            // 🎯 ФИКС КАМЕРЫ: Отодвигаем камеру чуть дальше (Z=9), чтобы объекты на мобилке не были гигантскими
             threeCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            threeCamera.position.z = 8;
+            threeCamera.position.z = 9;
 
             threeRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
             threeRenderer.setSize(window.innerWidth, window.innerHeight);
             threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-            // Чистый белый рассеянный свет для идеальной прогрузки твоих текстур
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+            // Яркий рассеянный свет для текстур
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
             threeScene.add(ambientLight);
 
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
             dirLight.position.set(0, 4, 5);
             threeScene.add(dirLight);
 
@@ -875,36 +876,51 @@
             threeScene.add(token3D);
 
             // Инициализируем группу 3D колоды
+            deckMeshGroup.visible = false; // Прячем в главном меню
+            
+            // 🎯 ФИКС НАКЛОНА: Поворачиваем колоду сильнее, чтобы игроки ВИДЕЛИ её торцы в 3D!
+            deckMeshGroup.rotation.set(0.25, -0.35, 0); 
+            
+            // 🔥 ФИКС РАЗМЕРА: Уменьшаем масштаб всей 3D-колоды на 35%, чтобы она не была огромной!
+            deckMeshGroup.scale.set(0.65, 0.65, 0.65);
             threeScene.add(deckMeshGroup);
-            deckMeshGroup.rotation.set(0.1, -0.15, 0); 
 
-            // 🎯 СУПЕР-ТЕКСТУРИРОВАНИЕ ТВОЕЙ РУБАШКИ КАРТ:
+            // 🎯 СУПЕР-ЗАПЛАТКА НА ТЕКСТУРЫ ТОРЦОВ КАРТ:
             const textureLoader = new THREE.TextureLoader();
             const cardBackTexture = textureLoader.load('/games_assets/card_back.png');
 
-            // Создаем многотекстурный материал для 3D Куба (BoxGeometry имеет 6 граней)
-            // Материалы для боковых торцов карты (эффект слоев бумаги/картона)
-            const sideMat = new THREE.MeshPhongMaterial({ color: 0xd1d5db, shininess: 10 }); // Светло-серый торец карт
-            // Материал для верхней крышки карты — намертво накатываем ТВОЮ картинку рубашки!
-            const faceMat = new THREE.MeshPhongMaterial({ map: cardBackTexture, shininess: 20 });
+            // Создаем светло-серый материал для боковых торцов карт (эффект стопки картона)
+            const sideMat = new THREE.MeshPhongMaterial({ 
+                color: 0xe5e7eb,      // Плотный светло-серый цвет среза бумаги
+                emissive: 0x222222,   // Слегка подсвечиваем, чтобы убрать черноту теней
+                shininess: 5 
+            });
+            
+            // Материал для верхней крышки карты — натягиваем ТВОЮ красивую рубашку!
+            const faceMat = new THREE.MeshPhongMaterial({ 
+                map: cardBackTexture, 
+                shininess: 25 
+            });
 
-            // Массив материалов для [правой, левой, верхней, нижней, передней, задней] граней
+            // Намертво распределяем материалы по 6 граням куба карты:
+            // [Право, Лево, Верх, Низ, ЛИЦО (ТВОЯ РУБАШКА), Задник]
             const cubeMaterials = [
-                sideMat, // право
-                sideMat, // лево
-                sideMat, // верх
-                sideMat, // низ
-                faceMat, // ЛИЦО (ТВОЯ РУБАШКА!)
-                sideMat  // задник
+                sideMat, // правый торец
+                sideMat, // левый торец
+                sideMat, // верхний торец
+                sideMat, // нижний торец
+                faceMat, // ПЕРЕДНЯЯ КРЫШКА КАРТЫ (ТВОЯ КАРТИНКА!)
+                sideMat  // задняя крышка карты
             ];
 
-            // Геометрия одной реалистичной 3D-карты (Ширина=0.9, Высота=1.35, Толщина=0.015)
-            const cardGeo = new THREE.BoxGeometry(0.9, 1.35, 0.015);
+            // Геометрия одной реалистичной 3D-карты (Ширина=0.9, Высота=1.35, Толщина стопки=0.02)
+            const cardGeo = new THREE.BoxGeometry(0.9, 1.35, 0.02);
 
             // Выстраиваем красивую стопку из 20 карт
             for (let i = 0; i < 20; i++) {
                 const cardMesh = new THREE.Mesh(cardGeo, cubeMaterials);
-                cardMesh.position.z = i * 0.022; // Смещение слоёв по высоте
+                // Каждая следующая карта ложится чуть выше по оси Z, создавая толщину
+                cardMesh.position.set(0, 0, i * 0.025); 
                 cardMesh.name = `layer_${i}`; 
                 deckMeshGroup.add(cardMesh);
             }
