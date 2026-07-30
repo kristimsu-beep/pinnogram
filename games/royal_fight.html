@@ -405,13 +405,16 @@
             renderTable(stateMock);
         }
         function renderTable(state) {
-            // 🎯 СУПЕР 3D-КОНТРОЛЛЕР ХУДЕНИЯ КОЛОДЫ КАРТ (ФИКС ОДИНОЧНОГО РЕЖИМА):
+            // 🎯 СУПЕР 3D-КОНТРОЛЛЕР ХУДЕНИЯ КОЛОДЫ КАРТ:
             // Управляем видимостью 20 слоёв нашей трёхмерной стопки карт на сцене
             if (typeof deckMeshGroup !== 'undefined' && deckMeshGroup && deckMeshGroup.children.length > 0) {
                 let currentCardsInDeck = Number(state.deck_count);
                 
+                // 🔥 ФИКС: Делаем всю 3D-колоду видимой строго во время активной игры!
+                deckMeshGroup.visible = true; 
+                
                 deckMeshGroup.children.forEach((cardMesh, idx) => {
-                    // 🦾 ФИКС: Карты убираются сверху вниз!
+                    // Карты убираются сверху вниз!
                     // Оставляем видимыми только те слои, чьи индексы меньше текущего остатка карт в колоде
                     if (idx < currentCardsInDeck) {
                         cardMesh.visible = true;
@@ -436,7 +439,7 @@
             document.getElementById('oppShieldIndicator').innerText = state.opp_protected ? "🛡️ ИММУНИТЕТ ЧЕТВЁРКИ" : "";
             document.getElementById('oppHandState').innerText = `В руке врага: ${state.opp_card_count} 🎴`;
 
-            // 🎯 СУПЕР-ВИЗУАЛ: Вскрываем и показываем последнюю сыгранную карту соперника!
+            // Вскрываем и показываем последнюю сыгранную карту соперника!
             const showcase = document.getElementById('playedCardShowcase');
             if (showcase) {
                 if (state.last_played_card !== undefined && state.last_played_card !== null) {
@@ -451,7 +454,7 @@
                 }
             }
 
-            // 🎯 ФИКС ОТКРЫТЫХ КАРТ: Четко считываем индексы 0 и 1 из массива сервера!
+            // Отрисовка двух открытых карт стартового сетапа на столе
             if (state.open_cards && state.open_cards.length >= 2) {
                 const o1 = document.getElementById('openCard1');
                 const o2 = document.getElementById('openCard2');
@@ -1002,11 +1005,17 @@
             requestAnimationFrame(animateThreeLoop);
             
             const anchor = document.getElementById('3dDeckAnchor');
-            if (anchor && deckMeshGroup && threeCamera && threeRenderer) {
+            // 🎯 ФИКС КООРДИНАТ: Центрируем 3D-колоду только тогда, когда она активна и видима на столе!
+            if (anchor && deckMeshGroup && deckMeshGroup.visible && threeCamera && threeRenderer) {
                 const rect = anchor.getBoundingClientRect();
-                const xPixels = rect.left + rect.width / 2;
-                const yPixels = rect.top + rect.height / 2;
                 
+                // Вычисляем точный центр нашего HTML-контейнера на экране телефона
+                const xPixels = rect.left + rect.width / 2;
+                // 🔥 ЮВЕЛИРНЫЙ СДВИГ: Смещаем 3D-модель по вертикали на 45 пикселей вверх, 
+                // чтобы стопка карт легла ровно НАД надписью «Колода: Х»!
+                const yPixels = rect.top + rect.height / 2 - 45; 
+                
+                // Переводим пиксели тач-скрина в трёхмерные координаты сцены Three.js
                 const vector = new THREE.Vector3(
                     (xPixels / window.innerWidth) * 2 - 1,
                     -(yPixels / window.innerHeight) * 2 + 1,
@@ -1017,19 +1026,20 @@
                 const distance = -threeCamera.position.z / dir.z;
                 const pos = threeCamera.position.clone().add(dir.multiplyScalar(distance));
                 
+                // Намертво пришиваем группу 3D-карт к динамическому якорю
                 deckMeshGroup.position.set(pos.x, pos.y, 0);
             }
             
-            if (is3DAnimating && token3D) tick3DAnimation(timestamp);
-            if (threeRenderer && threeScene && threeCamera) threeRenderer.render(threeScene, threeCamera);
+            // Если запущена анимация победного золотого жетона, прокручиваем её кадр
+            if (is3DAnimating && token3D) {
+                tick3DAnimation(timestamp);
+            }
+            
+            // Рендерим итоговую 3D картинку на прозрачный canvas-оверлей
+            if (threeRenderer && threeScene && threeCamera) {
+                threeRenderer.render(threeScene, threeCamera);
+            }
         }
-
-        window.addEventListener('resize', () => {
-            if (!threeCamera || !threeRenderer) return;
-            threeCamera.aspect = window.innerWidth / window.innerHeight;
-            threeCamera.updateProjectionMatrix();
-            threeRenderer.setSize(window.innerWidth, window.innerHeight);
-        });
 
         initThreeJS();
 
