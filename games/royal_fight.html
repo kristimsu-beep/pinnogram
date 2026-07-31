@@ -849,19 +849,20 @@
             if (!canvas) return;
 
             threeScene = new THREE.Scene();
-            // 🎯 ФИКС КАМЕРЫ: Отодвигаем камеру чуть дальше (Z=9), чтобы объекты на мобилке не были гигантскими
-            threeCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            threeCamera.position.z = 9;
+            
+            // 🎯 СУПЕР-ФИКС КАМЕРЫ (УБИРАЕМ КРИВИЗНУ): Сужаем угол до 22 градусов и отодвигаем назад на Z=16.5
+            // Это полностью уничтожает эффект «рыбьего глаза», делая колоду идеально прямоугольной и ровной!
+            threeCamera = new THREE.PerspectiveCamera(22, window.innerWidth / window.innerHeight, 0.1, 1000);
+            threeCamera.position.z = 16.5;
 
             threeRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
             threeRenderer.setSize(window.innerWidth, window.innerHeight);
             threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-            // Яркий рассеянный свет для текстур
+            // Равномерный яркий белый свет, чтобы рубашка сияла без черноты
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
             threeScene.add(ambientLight);
-
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
             dirLight.position.set(0, 4, 5);
             threeScene.add(dirLight);
 
@@ -876,47 +877,42 @@
             threeScene.add(token3D);
 
             // Инициализируем группу 3D колоды
-            deckMeshGroup.visible = false; // Прячем в главном меню
+            deckMeshGroup.visible = false; 
             
-            // 🎯 ФИКС НАКЛОНА И ГЛУБИНЫ: Ставим стопку ровно без косых завалов набок
-            // Слегка наклоняем только по оси X (на игрока), чтобы была видна толщина торца!
-            deckMeshGroup.rotation.set(0.4, 0, 0); 
+            // 🎯 ИДЕАЛЬНЫЙ НАКЛОН: Слегка наклоняем стопку строго на игрока (ось X), 
+            // чтобы была видна толщина торца, но убираем любые кривые завалы вбок по оси Y!
+            deckMeshGroup.rotation.set(0.45, 0, 0); 
             
-            // Масштабируем до аккуратного размера
-            deckMeshGroup.scale.set(0.6, 0.6, 0.6);
+            // Настраиваем масштаб (под новую далёкую камеру выставили 1.1 для сочного размера)
+            deckMeshGroup.scale.set(1.1, 1.1, 1.1);
             threeScene.add(deckMeshGroup);
 
             const textureLoader = new THREE.TextureLoader();
             const cardBackTexture = textureLoader.load('/games_assets/card_back.png');
 
-            // Идеальные плотные торцы слоев картона
-            const sideMat = new THREE.MeshPhongMaterial({ 
-                color: 0xdddddd,      
-                emissive: 0x111111,   
-                shininess: 3 
-            });
+            // Чистые матовые светло-серые торцы среза бумаги картона
+            const sideMat = new THREE.MeshBasicMaterial({ color: 0xeeeeee, side: THREE.DoubleSide });
             
-            const faceMat = new THREE.MeshPhongMaterial({ 
-                map: cardBackTexture, 
-                shininess: 15 
-            });
+            // Твоя оригинальная рубашка питомцев
+            const faceMat = new THREE.MeshBasicMaterial({ map: cardBackTexture, side: THREE.DoubleSide });
 
             const cubeMaterials = [
                 sideMat, // правый торец
                 sideMat, // левый торец
                 sideMat, // верхний торец
                 sideMat, // нижний торец
-                faceMat, // ПЕРЕДНЯЯ КРЫШКА КАРТЫ (ТВОЯ КАРТИНКА!)
-                sideMat  // задняя крышка карты
+                faceMat, // ЛИЦО С ТВОЕЙ РУБАШКОЙ
+                sideMat  // задник
             ];
 
-            // 🎯 ФИКС ТОЛЩИНЫ: Делаем одну карту чуть тоньше (0.012), чтобы стопка из 20 карт смотрелась аккуратной колодой, а не кирпичом
+            // Тонкая геометрия карты для реалистичной плотности стопки
             const cardGeo = new THREE.BoxGeometry(0.9, 1.35, 0.012);
 
+            // Генерируем красивую объёмную стопку из 20 карт
             for (let i = 0; i < 20; i++) {
                 const cardMesh = new THREE.Mesh(cardGeo, cubeMaterials);
-                // 🎯 УТАПЛИВАЕМ ВГЛУБЬ СЦЕНЫ: Каждая карта смещается назад по оси Z, уходя вглубь стола под модалки!
-                cardMesh.position.set(0, 0, i * -0.018); 
+                // Карты растут вверх по оси Z к игроку, создавая благородную толщину стопки
+                cardMesh.position.set(0, 0, i * 0.02); 
                 cardMesh.name = `layer_${i}`; 
                 deckMeshGroup.add(cardMesh);
             }
@@ -1024,14 +1020,18 @@
             requestAnimationFrame(animateThreeLoop);
             
             const anchor = document.getElementById('3dDeckAnchor');
+            // 🎯 КВАНТОВЫЙ РЕНДЕР-ЯКОРЬ: Позиционируем 3D-колоду только во время активной игры
             if (anchor && deckMeshGroup && deckMeshGroup.visible && threeCamera && threeRenderer) {
                 const rect = anchor.getBoundingClientRect();
+                
+                // Вычисляем горизонтальный центр нашего текстового блока на экране смартфона
                 const xPixels = rect.left + rect.width / 2;
                 
-                // 🎯 ФИКС ПОСАДКИ: Сдвигаем на -110 пикселей вниз по вертикали, 
-                // чтобы колода ровно и аккуратно села прямо над надписью «Колода: Х»
-                const yPixels = rect.top + rect.height / 2 - 110; 
+                // 🔥 ЮВЕЛИРНЫЙ СДВИГ: Установили смещение -35 пикселей под новую далёкую линзу камеры!
+                // Это намертво прижимает 3D-стопку к столу и сажает её ровно поверх счётчика карт.
+                const yPixels = rect.top + rect.height / 2 - 35; 
                 
+                // Магический перевод плоских пикселей экрана в трёхмерные мировые координаты сцены
                 const vector = new THREE.Vector3(
                     (xPixels / window.innerWidth) * 2 - 1,
                     -(yPixels / window.innerHeight) * 2 + 1,
@@ -1042,14 +1042,16 @@
                 const distance = -threeCamera.position.z / dir.z;
                 const pos = threeCamera.position.clone().add(dir.multiplyScalar(distance));
                 
-                // 🎯 ФИКС ГЛУБИНЫ (Z = -1.5): Силой утапливаем колоду вглубь экрана, под оверлей модальных окон!
-                deckMeshGroup.position.set(pos.x, pos.y, -1.5);
+                // Пришиваем группу 3D-карт к динамическим координатам
+                deckMeshGroup.position.set(pos.x, pos.y, 0);
             }
             
+            // Если запущена анимация победного золотого жетона — прокручиваем её кадр
             if (is3DAnimating && token3D) {
                 tick3DAnimation(timestamp);
             }
             
+            // Отрисовываем итоговую 3D-картинку на прозрачный canvas-оверлей поверх стола
             if (threeRenderer && threeScene && threeCamera) {
                 threeRenderer.render(threeScene, threeCamera);
             }
