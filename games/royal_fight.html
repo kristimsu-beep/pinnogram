@@ -850,20 +850,21 @@
 
             threeScene = new THREE.Scene();
             
-            // 🎯 СУПЕР-ФИКС КАМЕРЫ (УБИРАЕМ КРИВИЗНУ): Сужаем угол до 22 градусов и отодвигаем назад на Z=16.5
-            // Это полностью уничтожает эффект «рыбьего глаза», делая колоду идеально прямоугольной и ровной!
-            threeCamera = new THREE.PerspectiveCamera(22, window.innerWidth / window.innerHeight, 0.1, 1000);
-            threeCamera.position.z = 16.5;
+            // 🎯 СУПЕР-ФИКС КАМЕРЫ (ВЗГЛЯД СВЕРХУ): Приподнимаем камеру по Y на 3 единицы и отодвигаем на Z=12
+            threeCamera = new THREE.PerspectiveCamera(24, window.innerWidth / window.innerHeight, 0.1, 1000);
+            threeCamera.position.set(0, 3, 12);
+            // Направляем объектив камеры строго в центр сцены (вниз на стол!)
+            threeCamera.lookAt(0, 0, 0);
 
             threeRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
             threeRenderer.setSize(window.innerWidth, window.innerHeight);
             threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-            // Равномерный яркий белый свет, чтобы рубашка сияла без черноты
+            // Яркий рассеянный свет
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
             threeScene.add(ambientLight);
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
-            dirLight.position.set(0, 4, 5);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.4);
+            dirLight.position.set(0, 5, 5);
             threeScene.add(dirLight);
 
             // 3D-Жетон Золота
@@ -879,43 +880,39 @@
             // Инициализируем группу 3D колоды
             deckMeshGroup.visible = false; 
             
-            // 🎯 СУПЕР-ФИКС "ЛЕЖАЩЕЙ" КОЛОДЫ:
-            // Наклоняем её по оси X (на игрока), чтобы видеть рубашку, и слегка доворачиваем по оси Y и Z,
-            // чтобы она реалистично лежала плашмя на плоскости стола, как в Hearthstone!
-            deckMeshGroup.rotation.set(0.4, -0.3, -0.1); 
+            // 🎯 ФИКС НАКЛОНА КОЛОДЫ: Она лежит абсолютно плашмя на столе (0), 
+            // только слегка разворачиваем её вокруг своей оси (-0.45), чтобы показать сочный объем боковых торцов!
+            deckMeshGroup.rotation.set(0, -0.45, 0); 
             
-            // Настраиваем масштаб (под новую лежащую проекцию выставили 1.15 для сочного размера)
-            deckMeshGroup.scale.set(1.15, 1.15, 1.15);
+            // Настраиваем масштаб для идеального аккуратного размера стопки
+            deckMeshGroup.scale.set(0.9, 0.9, 0.9);
             threeScene.add(deckMeshGroup);
 
             const textureLoader = new THREE.TextureLoader();
             const cardBackTexture = textureLoader.load('/games_assets/card_back.png');
 
-            // Чистые матовые светло-серые торцы среза бумаги
-            const sideMat = new THREE.MeshBasicMaterial({ color: 0xeeeeee, side: THREE.DoubleSide });
+            // Матовые светло-серые торцы бумаги
+            const sideMat = new THREE.MeshBasicMaterial({ color: 0xdddddd, side: THREE.DoubleSide });
             
             // Твоя оригинальная сочная рубашка питомцев
             const faceMat = new THREE.MeshBasicMaterial({ map: cardBackTexture, side: THREE.DoubleSide });
 
-            // 🎯 ФИКС ОСЕЙ ТЕКСТУРЫ ДЛЯ ЛЕЖАЩЕЙ КАРТЫ:
-            // В BoxGeometry оси распределяются по граням: [Право, Лево, ВЕРХ (НАША РУБАШКА), Низ, Перед, Зад]
+            // Распределяем материалы: рубашка ложится строго НАВЕРХ куба карты
             const cubeMaterials = [
-                sideMat, // правый торец (виден сбоку)
+                sideMat, // правый торец
                 sideMat, // левый торец
-                faceMat, // 🌟 ВЕРХНЯЯ КРЫШКА КАРТЫ (ТВОЯ РУБАШКА НАВЕРХУ СТОПКИ!)
+                faceMat, // 🌟 ВЕРХНЯЯ КРЫШКА КАРТЫ (ТВОЯ РУБАШКА!)
                 sideMat, // нижняя крышка
-                sideMat, // передний торец (виден спереди)
+                sideMat, // передний торец
                 sideMat  // задний торец
             ];
 
-            // 🎯 ФИКС ГЕОМЕТРИИ: Ширина = 0.9 (X), Высота/Толщина = 0.015 (Y), Длина = 1.35 (Z)
-            // Карта физически ложится плашмя на пол сцены!
+            // Реалистичная геометрия плоской карты: Ширина=0.9, Толщина=0.015, Длина=1.35
             const cardGeo = new THREE.BoxGeometry(0.9, 0.015, 1.35);
 
-            // Выстраиваем 20 карт в единую плотную монолитную стопку
+            // Наращиваем слои строго ВВЕРХ по оси Y
             for (let i = 0; i < 20; i++) {
                 const cardMesh = new THREE.Mesh(cardGeo, cubeMaterials);
-                // 🦾 Каждая следующая карта ложится строго ВВЕРХ по оси Y, увеличивая толщину колоды!
                 cardMesh.position.set(0, i * 0.018, 0); 
                 cardMesh.name = `layer_${i}`; 
                 deckMeshGroup.add(cardMesh);
