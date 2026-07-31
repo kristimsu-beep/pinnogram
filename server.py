@@ -5733,19 +5733,21 @@ async def royal_fight_websocket_endpoint(websocket: WebSocket):
                     
                     # 4. Заново выдаем по 1 карте в руки из этого же остатка колоды
                     if len(target_room.deck) >= 2:
+                        # 1. Заново выдаем строго по 1 базовой карте в руки обоим игрокам из остатка колоды
                         target_room.players["p1"]["hand"] = [target_room.deck.pop()]
                         target_room.players["p2"]["hand"] = [target_room.deck.pop()]
                         
-                        # 🎯 ФИКС СЕМЁРКИ: Сначала переключаем ход на соперника!
+                        # 2. Переключаем ход на соперника (так как твой хакерский маневр завершен)
                         target_room.current_turn = "p2" if target_room.current_turn == "p1" else "p1"
                         
-                        # И уже новому ходячему выдаем обязательную вторую карту
+                        # 3. 🎯 БАЛАНСНЫЙ ФИКС: Выдаем обязательную вторую карту ТОЛЬКО новому активному игроку!
                         target_room.players[target_room.current_turn]["hand"].append(target_room.deck.pop())
                         
-                        # Сбрасываем иммунитеты Четвёрок
+                        # Сбрасываем эффекты защиты Четвёрок перед новым ходом
                         target_room.players["p1"]["protected"] = False
                         target_room.players["p2"]["protected"] = False
                         
+                        # Синхронизируем обновленный RAM-стол с клиентами
                         await target_room.broadcast_game_state()
                         continue
                     else:
