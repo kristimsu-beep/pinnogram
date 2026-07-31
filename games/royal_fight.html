@@ -593,9 +593,9 @@
                 document.getElementById('modalCard6').style.display = 'flex';
             }
             else if (cardVal === 7 && !botOpponentProtected) {
-                // 🎯 СЕМЁРКА: Запихиваем карты рук в остаток 3D-колоды
-                if (botPlayerHand[0] !== undefined) botDeck.push(botPlayerHand.pop());
-                if (botOpponentHand[0] !== undefined) botDeck.push(botOpponentHand.pop());
+                // Запихиваем карты рук в остаток 3D-колоды
+                if (botPlayerHand !== undefined && botPlayerHand.length > 0) botDeck.push(botPlayerHand.pop());
+                if (botOpponentHand !== undefined && botOpponentHand.length > 0) botDeck.push(botOpponentHand.pop());
                 
                 // Перемешиваем поредевший остаток колоды
                 botDeck.sort(() => Math.random() - 0.5);
@@ -603,12 +603,12 @@
                 botPlayerProtected = false;
                 botOpponentProtected = false;
                 
-                // Раздаем карты заново из остатка
+                // 1. Раздаем базово по 1 карте в руки (у каждого по одной)
                 botPlayerHand = [botDeck.pop()]; 
                 botOpponentHand = [botDeck.pop()];
                 
-                // Выдаем обязательную карту в руку для хода
-                botPlayerHand.push(botDeck.pop());
+                // 2. 🎯 БАЛАНСНЫЙ ФИКС: Так как ход переходит к Боту, выдаем вторую карту ЕМУ, а не тебе!
+                botOpponentHand.push(botDeck.pop());
                 
                 // Спец-эффект: Семёрка принудительно ТРЯСЁТ 3D-колоду
                 if (window.deckMeshGroup) {
@@ -616,9 +616,10 @@
                     setTimeout(() => { deckMeshGroup.position.y -= 0.2; }, 150);
                 }
                 
-                // 🎯 ФИКС СЕМЁРКИ ДЛЯ БОТА: Передаём ход сопернику после ребута!
+                // Передаём ход Боту-сопернику (он ходит с двумя картами, у тебя осталась одна!)
                 endBotTurn();
             }
+
             else if (cardVal === 8 && !botOpponentProtected) {
                 // 🎯 КИНЕТИЧЕСКИЙ ТРИГГЕР ВОСЬМЁРКИ: Сначала запускаем красивый перелет карт
                 animateCardExchange();
@@ -1021,18 +1022,14 @@
             requestAnimationFrame(animateThreeLoop);
             
             const anchor = document.getElementById('3dDeckAnchor');
-            // 🎯 КВАНТОВЫЙ РЕНДЕР-ЯКОРЬ: Позиционируем 3D-колоду только во время активной игры
             if (anchor && deckMeshGroup && deckMeshGroup.visible && threeCamera && threeRenderer) {
                 const rect = anchor.getBoundingClientRect();
-                
-                // Вычисляем горизонтальный центр нашего текстового блока на экране смартфона
                 const xPixels = rect.left + rect.width / 2;
                 
-                // 🔥 ЮВЕЛИРНЫЙ СДВИГ: Установили смещение -35 пикселей под новую далёкую линзу камеры!
-                // Это намертво прижимает 3D-стопку к столу и сажает её ровно поверх счётчика карт.
-                const yPixels = rect.top + rect.height / 2 - 35; 
+                // 🎯 ФИКС ВЫСОТЫ СВЕРХУ: Сместили на -145 пикселей вниз под новый ракурс наклонной камеры!
+                // Колода опустится и монолитно сядет прямо над надписью «Колода: Х».
+                const yPixels = rect.top + rect.height / 2 - 145; 
                 
-                // Магический перевод плоских пикселей экрана в трёхмерные мировые координаты сцены
                 const vector = new THREE.Vector3(
                     (xPixels / window.innerWidth) * 2 - 1,
                     -(yPixels / window.innerHeight) * 2 + 1,
@@ -1043,19 +1040,12 @@
                 const distance = -threeCamera.position.z / dir.z;
                 const pos = threeCamera.position.clone().add(dir.multiplyScalar(distance));
                 
-                // Пришиваем группу 3D-карт к динамическим координатам
+                // Намертво фиксируем положение 3D-колоды на столе
                 deckMeshGroup.position.set(pos.x, pos.y, 0);
             }
             
-            // Если запущена анимация победного золотого жетона — прокручиваем её кадр
-            if (is3DAnimating && token3D) {
-                tick3DAnimation(timestamp);
-            }
-            
-            // Отрисовываем итоговую 3D-картинку на прозрачный canvas-оверлей поверх стола
-            if (threeRenderer && threeScene && threeCamera) {
-                threeRenderer.render(threeScene, threeCamera);
-            }
+            if (is3DAnimating && token3D) tick3DAnimation(timestamp);
+            if (threeRenderer && threeScene && threeCamera) threeRenderer.render(threeScene, threeCamera);
         }
 
         initThreeJS();
