@@ -879,40 +879,41 @@
             // Инициализируем группу 3D колоды
             deckMeshGroup.visible = false; 
             
-            // 🎯 ИДЕАЛЬНЫЙ НАКЛОН: Слегка наклоняем стопку строго на игрока (ось X), 
-            // чтобы была видна толщина торца, но убираем любые кривые завалы вбок по оси Y!
-            deckMeshGroup.rotation.set(0.45, 0, 0); 
+            // 🎯 СУПЕР-ФИКС ОБЪЕМА И НАКЛОНА:
+            // Наклоняем колоду вперед (0.4) и СЛЕГКА разворачиваем боком (-0.25)
+            // Это откроет камере ОДНОВРЕМЕННО и верхний торец слоев, и правый бок стопки карт!
+            deckMeshGroup.rotation.set(0.4, -0.25, 0); 
             
-            // Настраиваем масштаб (под новую далёкую камеру выставили 1.1 для сочного размера)
-            deckMeshGroup.scale.set(1.1, 1.1, 1.1);
+            // 🎯 ФИКС РАЗМЕРА: Уменьшаем масштаб до 0.52, чтобы колода на мобилках была аккуратной стопочкой, а не гигантом!
+            deckMeshGroup.scale.set(0.52, 0.52, 0.55);
             threeScene.add(deckMeshGroup);
 
             const textureLoader = new THREE.TextureLoader();
             const cardBackTexture = textureLoader.load('/games_assets/card_back.png');
 
-            // Чистые матовые светло-серые торцы среза бумаги картона
+            // Красивые плотные матовые торцы среза картона слоев бумаги
             const sideMat = new THREE.MeshBasicMaterial({ color: 0xeeeeee, side: THREE.DoubleSide });
             
-            // Твоя оригинальная рубашка питомцев
+            // Твоя оригинальная сочная рубашка питомцев
             const faceMat = new THREE.MeshBasicMaterial({ map: cardBackTexture, side: THREE.DoubleSide });
 
             const cubeMaterials = [
-                sideMat, // правый торец
+                sideMat, // правый торец (ТЕПЕРЬ ОН БУДЕТ КРАСИВО ВИДЕН!)
                 sideMat, // левый торец
-                sideMat, // верхний торец
+                sideMat, // верхний торец (ТОЖЕ ВИДЕН СВЕРХУ!)
                 sideMat, // нижний торец
-                faceMat, // ЛИЦО С ТВОЕЙ РУБАШКОЙ
+                faceMat, // ПЕРЕДНЯЯ КРЫШКА С ТВОЕЙ РУБАШКОЙ
                 sideMat  // задник
             ];
 
-            // Тонкая геометрия карты для реалистичной плотности стопки
-            const cardGeo = new THREE.BoxGeometry(0.9, 1.35, 0.012);
+            // Реалистичная тонкая геометрия одной кибер-карты
+            const cardGeo = new THREE.BoxGeometry(0.9, 1.35, 0.015);
 
-            // Генерируем красивую объёмную стопку из 20 карт
+            // 🎯 ФИКС СЛОЕВ: Выстраиваем 20 карт в единую плотную монолитную стопку
             for (let i = 0; i < 20; i++) {
                 const cardMesh = new THREE.Mesh(cardGeo, cubeMaterials);
-                // Карты растут вверх по оси Z к игроку, создавая благородную толщину стопки
-                cardMesh.position.set(0, 0, i * 0.02); 
+                // Наращиваем строго по оси Z с микро-шагом 0.018, чтобы колода не вытягивалась и не кривилась
+                cardMesh.position.set(0, 0, i * 0.018); 
                 cardMesh.name = `layer_${i}`; 
                 deckMeshGroup.add(cardMesh);
             }
