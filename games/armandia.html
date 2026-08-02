@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
+    <title>Armandia Global Map & Roaming</title>
+    <!-- Полный рабочий набор CDN импортов (Leaflet, Исправленный SweetAlert2, FontAwesome) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.12.0/sweetalert2.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.12.0/sweetalert2.all.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+    <script src="https://unpkg.com/three@0.128/build/three.min.js"></script>
+
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+        }
+
+        /* 3D Панорамный контейнер карты */
+        #map-container {
+            width: 100%; height: 100%;
+            /* Фикс наклона: Меняем угол карты, чтобы она казалась панорамной */
+            transform: perspective(800px) rotateX(24deg) scale(1.05);
+            transform-origin: center bottom;
+            background: #000;
+        }
+        #map { width: 100%; height: 100%; background: #000; }
+
+        /* Холст Three.js для 3D неоновых границ */
+        #three-canvas {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%; pointer-events: none; z-index: 10;
+        }
+
+        /* Зона захвата свайпа вверху экрана */
+        #swipe-trigger-zone {
+            position: absolute; top: 0; left: 0; width: 100%; height: 40px;
+            z-index: 200; cursor: grab; display: flex; justify-content: center; align-items: center;
+        }
+        .swipe-bar {
+            width: 40px; height: 5px; background: rgba(255,255,255,0.4); border-radius: 3px; margin-top: 8px;
+        }
+
+        /* Эффект Liquid Glass шторки iPhone-Style */
+        #roaming-panel {
+            position: absolute; top: -100%; left: 0; width: 100%; height: 280px;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(25px) saturate(190%);
+            -webkit-backdrop-filter: blur(25px) saturate(190%);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border-radius: 0 0 24px 24px;
+            z-index: 190; transition: top 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+            color: #fff; box-sizing: border-box; padding: 25px;
+            display: flex; flex-direction: column; justify-content: space-between;
+        }
+        #roaming-panel.panel-open { top: 0; }
+
+        .panel-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+        .panel-title { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; }
+        
+        .setting-row { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; }
+        .setting-label { font-size: 14px; font-weight: 500; display: flex; flex-direction: column; }
+        .setting-sub { font-size: 11px; color: rgba(255,255,255,0.5); }
+
+        /* iOS-Style Переключатели (Toggle) */
+        .ios-switch {
+            position: relative; inline-block; width: 50px; height: 28px;
+        }
+        .ios-switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(255,255,255,0.2); transition: .3s; border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 24px; width: 24px; left: 2px; bottom: 2px;
+            background-color: white; transition: .3s; border-radius: 50%;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        input:checked + .slider { background-color: #34c759; }
+        input:checked + .slider:before { transform: translateX(22px); }
+        input:disabled + .slider { opacity: 0.4; cursor: not-allowed; }
+
+        /* Плавающий индикатор сети на основном экране */
+        #network-status-indicator {
+            position: absolute; bottom: 20px; right: 20px; z-index: 100;
+            background: rgba(0,0,0,0.7); backdrop-filter: blur(10px);
+            padding: 10px 15px; border-radius: 14px; color: #fff; font-size: 12px;
+            border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; gap: 8px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ЗОНА СВАЙПА -->
+    <div id="swipe-trigger-zone">
+        <div class="swipe-bar"></div>
+    </div>
+
+    <!-- LIQUID GLASS ШТОРКА НАСТРОЕК -->
+    <div id="roaming-panel">
+        <div class="panel-header">
+            <div class="panel-title"><i class="fa-solid fa-satellite-dish" style="color: #00f2fe;"></i> Настройки Связи Армандии</div>
+            <div style="font-size: 12px; opacity: 0.6;" onclick="togglePanel(false)"><i class="fa-solid fa-chevron-up"></i></div>
+        </div>
+        <div>
+            <div class="setting-row">
+                <div class="setting-label">
+                    <span>Включить связь</span>
+                    <span class="setting-sub">Основное подключение к сотовой вышке</span>
+                </div>
+                <label class="ios-switch">
+                    <input type="checkbox" id="toggle-signal" onchange="updateNetworkSettings()">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="setting-row">
+                <div class="setting-label">
+                    <span>Собственный роуминг</span>
+                    <span class="setting-sub">Автоматический суверенный шлюз Армандии</span>
+                </div>
+                <label class="ios-switch">
+                    <input type="checkbox" id="toggle-roaming" onchange="updateNetworkSettings()">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+        <div style="text-align: center; font-size: 10px; opacity: 0.4; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px;">
+            Armandia Frontier Control v1.0 • Суверенная Сеть
+        </div>
+    </div>
+
+    <!-- ИНДИКАТОР СВЯЗИ -->
+    <div id="network-status-indicator">
+        <i class="fa-solid fa-signal" id="signal-icon" style="color: #ff007f;"></i>
+        <span id="signal-text">Нет сети</span>
+    </div>
+
+    <!-- ПАНЕЛЬ КАРТЫ -->
+    <div id="map-container">
+        <div id="map"></div>
+    </div>
+
+    <!-- 3D НЕОНОВЫЙ ОВЕРЛЕЙ -->
+    <canvas id="three-canvas"></canvas>
+
+    <script>
+        // 1. ИНИЦИАЛИЗАЦИЯ ПАНОРАМНОЙ КАРТЫ С МАКСИМАЛЬНЫМ ЗУМОМ
+        // Центр в твоей точке: 52.775348, 49.690844
+        const centerLat = 52.775348;
+        const centerLng = 49.690844;
+        
+        // Leaflet-карта с максимальным уровнем зума 19
+        const map = L.map('map', {
+            center: [centerLat, centerLng],
+            zoom: 19,
+            maxZoom: 19,
+            zoomControl: false,
+            attributionControl: false
+        });
+
+        // Подключаем сочные спутниковые снимки
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 19
+        }).addTo(map);
+
+        // Координаты углов твоего суверенного государства Армандия
+        const armandiaCoords = [
+            [52.775487, 49.690799],
+            [52.775396, 49.690508],
+            [52.775656, 49.690236],
+            [52.775774, 49.690600]
+        ];
+
+        // Рисуем невидимый Leaflet полигон для проверки пересечений
+        const armandiaPolygon = L.polygon(armandiaCoords, {
+            color: 'transparent',
+            fillColor: 'transparent'
+        }).addTo(map);
+
+        // Метка пользователя на карте
+        let userMarker = L.marker([centerLat, centerLng], {
+            icon: L.divIcon({
+                className: 'user-geo-pulse-icon',
+                html: `<div style="width:16px; height:16px; background:#00f2fe; border:3px solid #fff; border-radius:50%; box-shadow:0 0 15px #00f2fe; animation: geoPulse 1.5s infinite;"></div>`
+            })
+        }).addTo(map);
+
+        // Добавляем стиль пульсации метки в документ
+        const style = document.createElement('style');
+        style.innerHTML = `@keyframes geoPulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }`;
+        document.head.appendChild(style);
+
+        // =====================================================================
+        // 🔮 ЧЕСТНЫЙ 3D НЕОНОВЫЙ ОВЕРЛЕЙ ГРАНИЦЫ ЧЕРЕЗ THREE.JS
+        // =====================================================================
+        let scene, camera, renderer, lineMesh;
+
+        function initThreeOverlay() {
+            const canvas = document.getElementById('three-canvas');
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 0, 10);
+
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            // Создаем материал голубого полупрозрачного неонового свечения
+            const material = new THREE.LineBasicMaterial({
+                color: 0x00f2fe,
+                transparent: true,
+                opacity: 0.7,
+                linewidth: 4 // Примечание: на некоторых устройствах толщина линий WebGL жестко зафиксирована в 1px
+            });
+
+            const points = [];
+            // Переводим GPS-координаты Армандии в относительные 3D-точки на экране
+            armandiaCoords.forEach(coord => {
+                let x = (coord[1] - centerLng) * 8000;  // Множитель масштабирования под Leaflet
+                let y = (coord[0] - centerLat) * 12000;
+                points.push(new THREE.Vector3(x, y, 0));
+            });
+            points.push(points[0]); // Замыкаем квадрат
+
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            lineMesh = new THREE.Line(geometry, material);
+            scene.add(lineMesh);
+
+            animateThree();
+        }
+
+        function animateThree() {
+            requestAnimationFrame(animateThree);
+            if (lineMesh) {
+                // Синхронизируем 3D-границу с зумом и движением карты Leaflet
+                const center = map.getCenter();
+                const zoom = map.getZoom();
+                const scale = Math.pow(2, zoom - 19) * 1.05;
+
+                lineMesh.position.x = (centerLng - center.lng) * 8000 * scale;
+                lineMesh.position.y = (centerLat - center.lat) * 12000 * scale;
+                lineMesh.scale.set(scale, scale, 1);
+                
+                // Эффект легкого неонового мерцания границ
+                lineMesh.material.opacity = 0.5 + Math.sin(performance.now() * 0.004) * 0.2;
+            }
+            renderer.render(scene, camera);
+        }
+
+        // =====================================================================
+        // 🔀 МЕХАНИКА ЖИВОГО ПЕРЕСЕЧЕНИЯ ГРАНИЦЫ И ГЕОЛОКАЦИЯ
+        // =====================================================================
+        let insideArmandia = false;
+
+        function checkGeoFence(lat, lng) {
+            // Математический алгоритм проверки: Находится ли точка внутри полигона Армандии (Ray-casting)
+            const x = lat, y = lng;
+            let inside = false;
+            for (let i = 0, j = armandiaCoords.length - 1; i < armandiaCoords.length; j = i++) {
+                const xi = armandiaCoords[i][0], yi = armandiaCoords[i][1];
+                const xj = armandiaCoords[j][0], yj = armandiaCoords[j][1];
+                const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+
+            // Если статус изменился — включаем роуминг!
+            if (inside !== insideArmandia) {
+                insideArmandia = inside;
+                if (insideArmandia) {
+                    document.getElementById('toggle-roaming').disabled = false;
+                    document.getElementById('toggle-roaming').checked = true; // Авто-включение роуминга Армандии
+                    updateNetworkSettings();
+                    
+                    Swal.fire({
+                        title: '🇦🇲 Добро пожаловать!',
+                        text: 'Вы пересекли суверенную границу Армандии. Автоматически активирован внутренний роуминг.',
+                        icon: 'info',
+                        background: '#0d141f',
+                        color: '#fff',
+                        confirmButtonColor: '#00f2fe'
+                    });
+                } else {
+                    document.getElementById('toggle-roaming').checked = false;
+                    updateNetworkSettings();
+                }
+            }
+        }
+
+        // Запуск непрерывного GPS-слежения за смартфоном
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(position => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+
+                // Передвигаем метку на карте за реальным шагом человека
+                userMarker.setLatLng([lat, lng]);
+                map.setView([lat, lng]);
+                
+                checkGeoFence(lat, lng);
+            }, error => {
+                console.log("GPS заблокирован, запущен симуляционный режим.");
+            }, { enableHighAccuracy: true });
+        }
+
+        // =====================================================================
+        // 📱 ДВИЖОК СВАЙПА IPHONE-STYLE ДЛЯ LIQUID GLASS ШТОРКИ
+        // =====================================================================
+        const panel = document.getElementById('roaming-panel');
+        const triggerZone = document.getElementById('swipe-trigger-zone');
+        let touchStartY = 0;
+        let touchMoveY = 0;
+        let isSwiping = false;
+
+        // Перехватываем касание пальца вверху экрана
+        triggerZone.addEventListener('touchstart', e => {
+            touchStartY = e.touches[0].clientY;
+            isSwiping = true;
+        }, { passive: true });
+
+        document.addEventListener('touchmove', e => {
+            if (!isSwiping) return;
+            touchMoveY = e.touches[0].clientY;
+            let diffY = touchMoveY - touchStartY;
+            
+            // Если тянем палец вниз — принудительно выкатываем Liquid шторку
+            if (diffY > 50) {
+                togglePanel(true);
+                isSwiping = false;
+            }
+        }, { passive: true });
+
+        // Закрываем шторку свайпом обратно наверх внутри панели
+        panel.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; isSwiping = true; }, { passive: true });
+        panel.addEventListener('touchmove', e => {
+            if (!isSwiping) return;
+            touchMoveY = e.touches[0].clientY;
+            if (touchStartY - touchMoveY > 50) {
+                togglePanel(false);
+                isSwiping = false;
+            }
+        }, { passive: true });
+
+        function togglePanel(openFlag) {
+            if (openFlag) panel.classList.add('panel-open');
+            else panel.classList.remove('panel-open');
+        }
+
+        // =====================================================================
+        // ⚙️ СИСТЕМА УПРАВЛЕНИЯ СВЯЗЬЮ И СЕТЕВЫМИ СТАТУСАМИ
+        // =====================================================================
+        function updateNetworkSettings() {
+            const signalOn = document.getElementById('toggle-signal').checked;
+            const roamingOn = document.getElementById('toggle-roaming').checked;
+            const icon = document.getElementById('signal-icon');
+            const text = document.getElementById('signal-text');
+
+            if (!signalOn) {
+                icon.className = "fa-solid fa-signal";
+                icon.style.color = "#ff007f"; // Розовый — сеть полностью отключена
+                text.innerText = "Нет сети";
+            } else {
+                if (roamingOn && insideArmandia) {
+                    icon.className = "fa-solid fa-satellite-dish";
+                    icon.style.color = "#34c759"; // Зеленый — суверенный роуминг Армандии активен!
+                    text.innerText = "Armandia Roaming 5G";
+                } else {
+                    icon.className = "fa-solid fa-signal";
+                    icon.style.color = "#00f2fe"; // Бирюзовый — стандартная вышка GeraGram
+                    text.innerText = "GeraGram Network LTE";
+                }
+            }
+        }
+
+        // Автоматический ресайз оверлея Three.js при повороте экрана смартфона
+        window.addEventListener('resize', () => {
+            if (camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        });
+
+        // 🚀 ГЛАВНЫЙ СТАРТ СИСТЕМЫ ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+        initThreeOverlay();
+        updateNetworkSettings(); // По канону изначально связь и роуминг выключены
+    </script>
+</body>
+</html>
+
+
