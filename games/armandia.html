@@ -190,13 +190,23 @@
 
     <script>
         // =====================================================================
-        // 🌍 1. КАРТОГРАФИЯ И СПУТНИК LEAFLET (МАКСИМАЛЬНЫЙ ЗУМ)
+        // 🌍 1. КАРТОГРАФИЯ И СПУТНИК LEAFLET (БРОНИРОВАННЫЙ ТАЧ-ФИКС)
         // =====================================================================
         const centerLat = 52.775348; const centerLng = 49.690844;
         
         const map = L.map('map', {
-            center: [centerLat, centerLng], zoom: 19, maxZoom: 19,
-            zoomControl: false, attributionControl: false
+            center: [centerLat, centerLng], 
+            zoom: 19, 
+            maxZoom: 19,
+            zoomControl: false, 
+            attributionControl: false,
+            
+            // 🎯 СУПЕР-ФИКС СВАЙПОВ: Запрещаем Leaflet воровать тачи у экрана!
+            dragging: false,         // Отключаем ручной перетаск карты пальцем
+            touchZoom: false,        // Отключаем зум щипком (чтобы не блокировать экран)
+            doubleClickZoom: false,  // Отключаем зум по двойному тапу
+            boxZoom: false,
+            scrollWheelZoom: false   // Полная блокировка перехвата мыши/тачей
         });
 
         // Запрашивает сочные спутниковые тайлы ArcGIS с максимальным зумом 19
