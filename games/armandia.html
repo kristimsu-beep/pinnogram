@@ -189,230 +189,89 @@
     <canvas id="three-canvas"></canvas>
 
     <script>
-        // 1. ИНИЦИАЛИЗАЦИЯ ПАНОРАМНОЙ КАРТЫ С МАКСИМАЛЬНЫМ ЗУМОМ
-        // Центр в твоей точке: 52.775348, 49.690844
-        const centerLat = 52.775348;
-        const centerLng = 49.690844;
+        // =====================================================================
+        // 🌍 1. КАРТОГРАФИЯ И СПУТНИК LEAFLET (МАКСИМАЛЬНЫЙ ЗУМ)
+        // =====================================================================
+        const centerLat = 52.775348; const centerLng = 49.690844;
         
-        // Leaflet-карта с максимальным уровнем зума 19
         const map = L.map('map', {
-            center: [centerLat, centerLng],
-            zoom: 19,
-            maxZoom: 19,
-            zoomControl: false,
-            attributionControl: false
+            center: [centerLat, centerLng], zoom: 19, maxZoom: 19,
+            zoomControl: false, attributionControl: false
         });
 
-        // Подключаем сочные спутниковые снимки
+        // Запрашивает сочные спутниковые тайлы ArcGIS с максимальным зумом 19
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
             maxZoom: 19
         }).addTo(map);
 
-        // Координаты углов твоего суверенного государства Армандия
+        // Точные углы твоего суверенного государства Армандия
         const armandiaCoords = [
-            [52.775487, 49.690799],
-            [52.775396, 49.690508],
-            [52.775656, 49.690236],
-            [52.775774, 49.690600]
+            [52.775487, 49.690799], [52.775396, 49.690508],
+            [52.775656, 49.690236], [52.775774, 49.690600]
         ];
 
-        // Рисуем невидимый Leaflet полигон для проверки пересечений
-        const armandiaPolygon = L.polygon(armandiaCoords, {
-            color: 'transparent',
-            fillColor: 'transparent'
-        }).addTo(map);
-
-        // Метка пользователя на карте
+        // Метка игрока со светящимся пульсом
         let userMarker = L.marker([centerLat, centerLng], {
             icon: L.divIcon({
-                className: 'user-geo-pulse-icon',
-                html: `<div style="width:16px; height:16px; background:#00f2fe; border:3px solid #fff; border-radius:50%; box-shadow:0 0 15px #00f2fe; animation: geoPulse 1.5s infinite;"></div>`
+                className: 'pulse-icon',
+                html: `<div style="width:14px; height:14px; background:#00f2fe; border:2px solid #fff; border-radius:50%; box-shadow:0 0 10px #00f2fe;"></div>`
             })
         }).addTo(map);
 
-        // Добавляем стиль пульсации метки в документ
-        const style = document.createElement('style');
-        style.innerHTML = `@keyframes geoPulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }`;
-        document.head.appendChild(style);
-
         // =====================================================================
-        // 🔮 ОБЪЁМНАЯ 3D НЕОНОВАЯ СТЕНА ГРАНИЦЫ АРМАНДИИ (THREE.JS)
+        // 🎨 2. СИНХРОНИЗАЦИЯ НЕОНОВОГО 3D-ОВЕРЛЕЯ THREE.JS С СЕТКОЙ LEAFLET
         // =====================================================================
-        let scene, camera, renderer, borderGroup;
+        let scene, camera, renderer, lineMesh;
 
         function initThreeOverlay() {
             const canvas = document.getElementById('three-canvas');
             scene = new THREE.Scene();
-            
-            // 🎯 ИСПРАВЛЕНО: Возвращаем камеру строго в центр по оси X и Y, чтобы убрать кривой сдвиг границ
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 0, 10); // Идеальный прямой взгляд сверху-вниз
-            camera.lookAt(0, 0, 0);
+            camera.position.z = 10;
 
             renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
 
-            // Создаем группу для всей границы
-            borderGroup = new THREE.Group();
-            scene.add(borderGroup);
-
-            // 🎯 СУПЕР-МАТЕРИАЛ НЕОНОВОГО КУПОЛА: Полупрозрачный светящийся голубой неон
-            const wallMaterial = new THREE.MeshBasicMaterial({
-                color: 0x00f2fe,
-                transparent: true,
-                opacity: 0.25, // Полупрозрачный сочный щит
-                side: THREE.DoubleSide,
-                wireframe: false // Ставь true, если хочешь лазерную сетку!
+            // Сочный неоновый бирюзовый материал
+            const material = new THREE.LineBasicMaterial({
+                color: 0x00f2fe, transparent: true, opacity: 0.8
             });
 
-            // Высота нашей неоновой стены, взмывающей вверх (в 3D единицах)
-            const wallHeight = 3.5; 
+            const points = [];
+            armandiaCoords.forEach(c => {
+                // Проецируем GPS в пиксельную сетку центра Leaflet
+                let x = (c - centerLng) * 11500;
+                let y = (c - centerLat) * 18500;
+                points.push(new THREE.Vector3(x, y, 0));
+            });
+            points.push(points); // Замыкаем неоновый контур квадрата
 
-            // Генерируем 3D-стены между четырьмя GPS-углами Армандии
-            for (let i = 0; i < armandiaCoords.length; i++) {
-                let nextIdx = (i + 1) % armandiaCoords.length;
-
-                // Переводим текущую и следующую GPS-точки в локальные 3D координаты пола
-                let x1 = (armandiaCoords[i] - centerLng) * 8000;
-                let y1 = (armandiaCoords[i] - centerLat) * 12000;
-
-                let x2 = (armandiaCoords[nextIdx] - centerLng) * 8000;
-                let y2 = (armandiaCoords[nextIdx] - centerLat) * 12000;
-
-                // Строим вертикальную стену (из двух треугольников / Plane)
-                const wallGeo = new THREE.BufferGeometry();
-                
-                // 🦾 Координаты 4-х вершин стены: две на земле (Z=0) и две взмывают ВВЕРХ в небо (Z=wallHeight)!
-                const vertices = new Float32Array([
-                    x1, y1, 0,           // Снизу 1
-                    x2, y2, 0,           // Снизу 2
-                    x1, y1, wallHeight,  // Сверху 1 (Взмыла вверх!)
-                    
-                    x2, y2, 0,           // Снизу 2
-                    x2, y2, wallHeight,  // Сверху 2 (Взмыла вверх!)
-                    x1, y1, wallHeight   // Сверху 1
-                ]);
-
-                wallGeo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-                const wallMesh = new THREE.Mesh(wallGeo, wallMaterial);
-                borderGroup.add(wallMesh);
-
-                // Добавляем яркую неоновую линию-контур на самый верх стены для пущего эффекта
-                const lineGeo = new THREE.BufferGeometry().setFromPoints([
-                    new THREE.Vector3(x1, y1, wallHeight),
-                    new THREE.Vector3(x2, y2, wallHeight)
-                ]);
-                const lineMat = new THREE.LineBasicMaterial({ color: 0x00f2fe, transparent: true, opacity: 0.8 });
-                const topLine = new THREE.Line(lineGeo, lineMat);
-                borderGroup.add(topLine);
-            }
-
-            // 🎯 СИНХРОНИЗИРУЕМ НАКЛОН СЦЕНЫ С НАКЛОНОМ КАРТЫ (18 градусов)
-            borderGroup.rotation.x = -18 * Math.PI / 180;
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            lineMesh = new THREE.Line(geometry, material);
+            scene.add(lineMesh);
 
             animateThree();
         }
 
         function animateThree() {
             requestAnimationFrame(animateThree);
-            if (borderGroup) {
+            if (lineMesh) {
+                // Пришиваем 3D-матрицу к движениям и зуму карты намертво!
                 const center = map.getCenter();
                 const zoom = map.getZoom();
-                // 🎯 Масштаб теперь строго соответствует плоской карте 1:1
-                const scale = Math.pow(2, zoom - 19); 
+                const scale = Math.pow(2, zoom - 19);
 
-                // Двигаем и масштабируем всю 3D-систему стен за картой Leaflet
-                borderGroup.position.x = (centerLng - center.lng) * 8000 * scale;
-                borderGroup.position.y = (centerLat - center.lat) * 12000 * scale;
-                borderGroup.scale.set(scale, scale, scale);
+                lineMesh.position.x = (centerLng - center.lng) * 11500 * scale;
+                lineMesh.position.y = (centerLat - center.lat) * 18500 * scale;
+                lineMesh.scale.set(scale, scale, 1);
                 
-                // Плавное космическое дыхание/пульсация неонового силового щита
-                borderGroup.children.forEach(mesh => {
-                    if (mesh.material) {
-                        mesh.material.opacity = mesh instanceof THREE.Mesh 
-                            ? 0.25 + Math.sin(performance.now() * 0.003) * 0.08  
-                            : 0.7 + Math.sin(performance.now() * 0.003) * 0.2;  
-                    }
-                });
+                // Легкое мерцание силового неонового поля купола
+                lineMesh.material.opacity = 0.6 + Math.sin(performance.now() * 0.005) * 0.2;
             }
             renderer.render(scene, camera);
         }
-
-        // =====================================================================
-        // 🔀 МЕХАНИКА ЖИВОГО ПЕРЕСЕЧЕНИЯ ГРАНИЦЫ И ГЕОЛОКАЦИЯ
-        // =====================================================================
-
-
-        // =====================================================================
-        // 📱 ДВИЖОК СВАЙПА IPHONE-STYLE ДЛЯ LIQUID GLASS ШТОРКИ
-        // =====================================================================
-        const panel = document.getElementById('roaming-panel');
-        const triggerZone = document.getElementById('swipe-trigger-zone');
-        let touchStartY = 0;
-        let touchMoveY = 0;
-        let isSwiping = false;
-
-        // Перехватываем касание пальца вверху экрана
-        triggerZone.addEventListener('touchstart', e => {
-            touchStartY = e.touches[0].clientY;
-            isSwiping = true;
-        }, { passive: true });
-
-        document.addEventListener('touchmove', e => {
-            if (!isSwiping) return;
-            touchMoveY = e.touches[0].clientY;
-            let diffY = touchMoveY - touchStartY;
-            
-            // Если тянем палец вниз — принудительно выкатываем Liquid шторку
-            if (diffY > 50) {
-                togglePanel(true);
-                isSwiping = false;
-            }
-        }, { passive: true });
-
-        // Закрываем шторку свайпом обратно наверх внутри панели
-        panel.addEventListener('touchstart', e => { touchStartY = e.touches[0].clientY; isSwiping = true; }, { passive: true });
-        panel.addEventListener('touchmove', e => {
-            if (!isSwiping) return;
-            touchMoveY = e.touches[0].clientY;
-            if (touchStartY - touchMoveY > 50) {
-                togglePanel(false);
-                isSwiping = false;
-            }
-        }, { passive: true });
-
-        function togglePanel(openFlag) {
-            if (openFlag) panel.classList.add('panel-open');
-            else panel.classList.remove('panel-open');
-        }
-
-        // =====================================================================
-        // ⚙️ СИСТЕМА УПРАВЛЕНИЯ СВЯЗЬЮ И СЕТЕВЫМИ СТАТУСАМИ
-        // =====================================================================
-        function updateNetworkSettings() {
-            const signalOn = document.getElementById('toggle-signal').checked;
-            const roamingOn = document.getElementById('toggle-roaming').checked;
-            const icon = document.getElementById('signal-icon');
-            const text = document.getElementById('signal-text');
-
-            if (!signalOn) {
-                icon.className = "fa-solid fa-signal";
-                icon.style.color = "#ff007f"; // Розовый — сеть полностью отключена
-                text.innerText = "Нет сети";
-            } else {
-                if (roamingOn && insideArmandia) {
-                    icon.className = "fa-solid fa-satellite-dish";
-                    icon.style.color = "#34c759"; // Зеленый — суверенный роуминг Армандии активен!
-                    text.innerText = "Armandia Roaming 5G";
-                } else {
-                    icon.className = "fa-solid fa-signal";
-                    icon.style.color = "#00f2fe"; // Бирюзовый — стандартная вышка GeraGram
-                    text.innerText = "GeraGram Network LTE";
-                }
-            }
-        }
-        // =====================================================================
-        // 🍏 ФАБРИКА IOS DYNAMIC ISLAND И ЦЕНТРА УВЕДОМЛЕНИЙ
+          // =====================================================================
+        // 🍏 3. ФАБРИКА IOS DYNAMIC ISLAND И ЦЕНТРА УВЕДОМЛЕНИЙ
         // =====================================================================
         let insideArmandia = false;
 
@@ -474,14 +333,15 @@
             container.style.maxHeight = '0'; container.style.margin = '0'; container.style.opacity = '0';
             setTimeout(() => { container.remove(); }, 400);
         }
+
         // =====================================================================
-        // 🛰️ РЕГИСТРАЦИЯ ПЕРЕСЕЧЕНИЙ И ТУМБЛЕРЫ СВЯЗИ
+        // 🛰️ 4. GPS-РАДАР, ГЕОЗОНИРОВАНИЕ АРМАНДИИ И ТУМБЛЕРЫ СВЯЗИ
         // =====================================================================
         function checkGeoFence(lat, lng) {
             const x = lat, y = lng; let inside = false;
             for (let i = 0, j = armandiaCoords.length - 1; i < armandiaCoords.length; j = i++) {
-                const xi = armandiaCoords[i][0], yi = armandiaCoords[i][1];
-                const xj = armandiaCoords[j][0], yj = armandiaCoords[j][1];
+                const xi = armandiaCoords[i], yi = armandiaCoords[i];
+                const xj = armandiaCoords[j], yj = armandiaCoords[j];
                 if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
             }
 
@@ -517,7 +377,7 @@
             }
         }
 
-        // Принудительные логи при кликах по тумблерам
+        // Логи при ручных кликах по тумблерам шторки сотовой связи
         document.getElementById('toggle-signal').addEventListener('change', (e) => {
             pushiOSNotification(e.target.checked ? "Сотовая связь GeraGram включена" : "Авиарежим: связь отключена", "fa-tower-cell", "#00f2fe");
         });
@@ -534,8 +394,8 @@
                 checkGeoFence(lat, lng);
             }, e => { console.log("GPS в симуляции."); checkGeoFence(centerLat, centerLng); }, { enableHighAccuracy: true });
         } else { checkGeoFence(centerLat, centerLng); }
-        // =====================================================================
-        // 📱 ДВУХЗОННЫЙ СВАЙП-ДВИЖОК И МАССОВАЯ ОЧИСТКА TELEGRAM-STYLE
+         // =====================================================================
+        // 📱 5. ДВУХЗОННЫЙ СВАЙП-ДВИЖОК И МАССОВАЯ ОЧИСТКА TELEGRAM-STYLE
         // =====================================================================
         const settingsPanel = document.getElementById('roaming-panel');
         const notifPanel = document.getElementById('notification-center-panel');
@@ -621,12 +481,15 @@
             if (camera && renderer) { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
         });
 
-        // 🚀 ЗАПУСК СИСТЕМЫ ПРИ ЗАГРУЗКЕ
+        // =====================================================================
+        // 🚀 6. ЗАПУСК ВСЕХ 3D И СЕТЕВЫХ СИСТЕМ СТРАНИЦЫ
+        // =====================================================================
         initThreeOverlay();
         updateNetworkSettings();
         
-        // Приветственный iOS пузырь через 1 секунду после входа
+        // Стартовый приветственный iOS пузырь Dynamic Island через 1 секунду
         setTimeout(() => { pushiOSNotification("Спутниковая система Армандии взведена", "fa-satellite", "#00f2fe"); }, 1000);
     </script>
+       
 </body>
 </html>
