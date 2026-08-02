@@ -5854,7 +5854,16 @@ async def check_and_switch_turn(room):
     # Рассылаем обновленное RAM-состояние стола
     await room.broadcast_game_state()
 
-                    
+@app.get("/armandia")
+async def get_armandia_page():
+    # Отдаем HTML-файл виртуального государства из папки games
+    from fastapi.responses import FileResponse
+    import os
+    file_path = os.path.join("games", "armandia.html")
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return {"error": "Файл armandia.html не найден в папке games"}
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
