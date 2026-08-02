@@ -29,10 +29,13 @@
         }
         #map { width: 100%; height: 100%; background: #000; }
 
-        /* Холст Three.js для 3D неоновых границ */
+        /* Холст Three.js для 3D неоновых границ — ФИКС МАСШТАБА */
         #three-canvas {
             position: absolute; top: 0; left: 0;
             width: 100%; height: 100%; pointer-events: none; z-index: 10;
+            /* 🎯 СУПЕР-ФИКС: Наклоняем холст Three.js синхронно с картой, возвращая границы на экран! */
+            transform: perspective(1000px) rotateX(18deg) scale(1.2, 1.1);
+            transform-origin: center bottom;
         }
 
         /* Зона захвата свайпа вверху экрана */
@@ -203,10 +206,10 @@
             const canvas = document.getElementById('three-canvas');
             scene = new THREE.Scene();
             
-            // Настраиваем камеру под новую панорамную перспективу стола
+            // 🎯 ИСПРАВЛЕНО: Возвращаем камеру строго в центр по оси X и Y, чтобы убрать кривой сдвиг границ
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, -3, 10); // Сместили камеру чуть вниз
-            camera.lookAt(0, 2, 0); // Направили взгляд слегка вверх по карте
+            camera.position.set(0, 0, 10); // Идеальный прямой взгляд сверху-вниз
+            camera.lookAt(0, 0, 0);
 
             renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -277,20 +280,20 @@
             if (borderGroup) {
                 const center = map.getCenter();
                 const zoom = map.getZoom();
-                const scale = Math.pow(2, zoom - 19) * 1.15; // Слегка скорректировали масштаб под CSS-scale
+                // 🎯 Масштаб теперь строго соответствует плоской карте 1:1
+                const scale = Math.pow(2, zoom - 19); 
 
                 // Двигаем и масштабируем всю 3D-систему стен за картой Leaflet
                 borderGroup.position.x = (centerLng - center.lng) * 8000 * scale;
-                // Сдвигаем по Y чуть ниже, чтобы компенсировать перспективное искажение наклона
-                borderGroup.position.y = (centerLat - center.lat) * 12000 * scale - 0.2;
+                borderGroup.position.y = (centerLat - center.lat) * 12000 * scale;
                 borderGroup.scale.set(scale, scale, scale);
                 
                 // Плавное космическое дыхание/пульсация неонового силового щита
                 borderGroup.children.forEach(mesh => {
                     if (mesh.material) {
                         mesh.material.opacity = mesh instanceof THREE.Mesh 
-                            ? 0.2 + Math.sin(performance.now() * 0.003) * 0.08  // Пульсация стен
-                            : 0.6 + Math.sin(performance.now() * 0.003) * 0.2;  // Пульсация верхних линий
+                            ? 0.25 + Math.sin(performance.now() * 0.003) * 0.08  
+                            : 0.7 + Math.sin(performance.now() * 0.003) * 0.2;  
                     }
                 });
             }
