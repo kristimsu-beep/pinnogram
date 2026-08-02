@@ -36,12 +36,36 @@
             z-index: 1; 
         }
 
-        /* 📱 ДВУХЗОННЫЙ ТАЧ-РАДАР СВАЙПОВ */
+        /* 📱 АБСОЛЮТНЫЙ ФИКС СВАЙП-РАДАРОВ (ВЗЛЁТ НАД КАРТОЙ) */
         #swipe-zone-settings {
-            position: absolute; top: 0; left: 0; width: 100%; height: 35px; z-index: 210;
+            position: absolute; top: 0; left: 0; width: 100%; height: 35px; 
+            /* Выводим полосу на самый верхний слой над картой и Three.js! */
+            z-index: 999; 
+            cursor: grab;
+            display: flex; justify-content: center;
         }
+
         #swipe-zone-notifications {
-            position: absolute; top: 35px; left: 0; width: 100%; height: 45px; z-index: 205;
+            position: absolute; top: 35px; left: 0; width: 100%; height: 45px; 
+            /* Вторая зона тоже летит на самый верх! */
+            z-index: 998; 
+            cursor: grab;
+            display: flex; justify-content: center;
+        }
+
+        /* 🍏 ВОЗВРАЩАЕМ РИСОЧКУ: Создаем красивую физическую полосочку iPhone-Style прямо внутри верхней зоны */
+        #swipe-zone-settings::before {
+            content: "";
+            width: 45px; height: 5px; 
+            background: rgba(255, 255, 255, 0.45); 
+            backdrop-filter: blur(5px);
+            border-radius: 3px; 
+            margin-top: 8px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.3);
+            transition: background 0.2s ease;
+        }
+        #swipe-zone-settings:active::before {
+            background: rgba(255, 255, 255, 0.8); /* Подсвечивается при нажатии пальцем */
         }
 
         /* ШТОРКА НАСТРОЕК (ЛИКВИД ГЛАСС) */
