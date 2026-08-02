@@ -15,132 +15,170 @@
     <style>
         body, html {
             margin: 0; padding: 0; width: 100%; height: 100%;
-            overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #000;
+            overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #000; user-select: none;
         }
 
-        /* 3D Панорамный контейнер карты — ФИКС РАСШИРЕНИЯ */
-        #map-container {
-            width: 100%; height: 100%;
-            /* Слегка уменьшили угол и растянули карту по бокам, чтобы убрать черные пустоты */
+        /* Панорамная карта */
+        #map-container { 
+            width: 100%; height: 100%; background: #000; 
             transform: perspective(1000px) rotateX(18deg) scale(1.2, 1.1);
             transform-origin: center bottom;
-            background: #000;
         }
         #map { width: 100%; height: 100%; background: #000; }
 
-        /* Холст Three.js для 3D неоновых границ — ФИКС МАСШТАБА */
+        /* Идеальный холст 3D-оверлея без завалов */
         #three-canvas {
-            position: absolute; top: 0; left: 0;
-            width: 100%; height: 100%; pointer-events: none; z-index: 10;
-            /* 🎯 СУПЕР-ФИКС: Наклоняем холст Three.js синхронно с картой, возвращая границы на экран! */
-            transform: perspective(1000px) rotateX(18deg) scale(1.2, 1.1);
-            transform-origin: center bottom;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 10;
         }
 
-        /* Зона захвата свайпа вверху экрана */
-        #swipe-trigger-zone {
-            position: absolute; top: 0; left: 0; width: 100%; height: 40px;
-            z-index: 200; cursor: grab; display: flex; justify-content: center; align-items: center;
+        /* 📱 ДВУХЗОННЫЙ ТАЧ-РАДАР СВАЙПОВ */
+        #swipe-zone-settings {
+            position: absolute; top: 0; left: 0; width: 100%; height: 35px; z-index: 210;
         }
-        .swipe-bar {
-            width: 40px; height: 5px; background: rgba(255,255,255,0.4); border-radius: 3px; margin-top: 8px;
+        #swipe-zone-notifications {
+            position: absolute; top: 35px; left: 0; width: 100%; height: 45px; z-index: 205;
         }
 
-        /* Эффект Liquid Glass шторки iPhone-Style */
+        /* ШТОРКА НАСТРОЕК (ЛИКВИД ГЛАСС) */
         #roaming-panel {
-            position: absolute; top: -100%; left: 0; width: 100%; height: 280px;
-            background: rgba(255, 255, 255, 0.08);
-            backdrop-filter: blur(25px) saturate(190%);
-            -webkit-backdrop-filter: blur(25px) saturate(190%);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            position: absolute; top: -100%; left: 0; width: 100%; height: 260px;
+            background: rgba(20, 20, 20, 0.4); backdrop-filter: blur(25px) saturate(180%);
+            -webkit-backdrop-filter: blur(25px) saturate(180%);
+            border-bottom: 1px solid rgba(255,255,255,0.12); z-index: 200;
+            transition: top 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+            color: #fff; box-sizing: border-box; padding: 20px;
             border-radius: 0 0 24px 24px;
-            z-index: 190; transition: top 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
-            color: #fff; box-sizing: border-box; padding: 25px;
-            display: flex; flex-direction: column; justify-content: space-between;
         }
         #roaming-panel.panel-open { top: 0; }
 
-        .panel-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
-        .panel-title { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; }
-        
+        /* 📱 ШТОРКА ЦЕНТРА УВЕДОМЛЕНИЙ IOS-STYLE */
+        #notification-center-panel {
+            position: absolute; top: -100%; left: 0; width: 100%; height: 420px;
+            background: rgba(15, 15, 15, 0.6); backdrop-filter: blur(30px) saturate(190%);
+            -webkit-backdrop-filter: blur(30px) saturate(190%);
+            border-bottom: 1px solid rgba(255,255,255,0.15); z-index: 195;
+            transition: top 0.4s cubic-bezier(0.165, 0.84, 0.44, 1), transform 0.2s ease;
+            color: #fff; box-sizing: border-box; padding: 20px;
+            border-radius: 0 0 28px 24px; display: flex; flex-direction: column;
+        }
+        #notification-center-panel.panel-open { top: 0; }
+
+        .notif-scroll-area {
+            flex-grow: 1; overflow-y: auto; margin-top: 15px; padding-right: 5px;
+        }
+        .notif-scroll-area::-webkit-scrollbar { width: 3px; }
+        .notif-scroll-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+
+        /* ПУЗЫРИ УВЕДОМЛЕНИЙ ВНУТРИ ШТОРКИ */
+        .notif-item-container {
+            position: relative; width: 100%; margin-bottom: 10px; overflow: hidden;
+            border-radius: 16px; transition: max-height 0.4s ease, margin 0.4s ease, opacity 0.3s ease;
+            max-height: 100px;
+        }
+        .notif-item {
+            background: rgba(255,255,255,0.07); padding: 12px 16px; border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 12px;
+            transform: translateX(0); transition: transform 0.2s ease; position: relative; z-index: 2;
+        }
+        .notif-delete-btn {
+            position: absolute; right: 0; top: 0; height: 100%; width: 70px;
+            background: #ff3b30; color: #fff; display: flex; justify-content: center;
+            align-items: center; border-radius: 0 16px 16px 0; font-size: 14px; z-index: 1;
+        }
+
+        /* 🍏 ВСПЛЫВАЮЩИЙ IOS DYNAMIC ISLAND (ВВЕРХУ ЭКРАНА) */
+        #dynamic-island-toast {
+            position: absolute; top: -100px; left: 50%; transform: translateX(-50%);
+            min-width: 180px; max-width: 90%; height: 35px; background: #000;
+            border-radius: 20px; z-index: 300; display: flex; align-items: center;
+            justify-content: center; padding: 0 15px; color: #fff; font-size: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            overflow: hidden; font-weight: 500;
+        }
+        #dynamic-island-toast.island-active {
+            top: 15px; height: 45px; border-radius: 22px;
+        }
+
+        /* 🗑️ НЕОНОВОЕ ВЕДРО УТИЛИЗАЦИИ TELEGRAM-STYLE */
+        #telegram-trash-can {
+            position: absolute; bottom: -100px; left: 50%; transform: translateX(-50%);
+            width: 70px; height: 70px; background: rgba(255, 59, 48, 0.2);
+            border: 2px dashed #ff3b30; border-radius: 50%; z-index: 250;
+            display: flex; justify-content: center; align-items: center; color: #ff3b30;
+            font-size: 24px; box-shadow: 0 0 20px rgba(255,59,48,0.4);
+            transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+            opacity: 0; pointer-events: none;
+        }
+        #telegram-trash-can.trash-active { bottom: 30px; opacity: 1; }
+        #telegram-trash-can.trash-hover { background: #ff3b30; color: #fff; scale: 1.15; box-shadow: 0 0 30px #ff3b30; }
+
         .setting-row { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; }
-        .setting-label { font-size: 14px; font-weight: 500; display: flex; flex-direction: column; }
-        .setting-sub { font-size: 11px; color: rgba(255,255,255,0.5); }
-
-        /* iOS-Style Переключатели (Toggle) */
-        .ios-switch {
-            position: relative; inline-block; width: 50px; height: 28px;
-        }
+        .ios-switch { position: relative; display: inline-block; width: 46px; height: 26px; }
         .ios-switch input { opacity: 0; width: 0; height: 0; }
-        .slider {
-            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(255,255,255,0.2); transition: .3s; border-radius: 34px;
-        }
-        .slider:before {
-            position: absolute; content: ""; height: 24px; width: 24px; left: 2px; bottom: 2px;
-            background-color: white; transition: .3s; border-radius: 50%;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-        }
-        input:checked + .slider { background-color: #34c759; }
-        input:checked + .slider:before { transform: translateX(22px); }
-        input:disabled + .slider { opacity: 0.4; cursor: not-allowed; }
+        .slider { position: absolute; cursor: pointer; top:0; left:0; right:0; bottom:0; background: rgba(255,255,255,0.15); transition: .3s; border-radius: 30px; }
+        .slider:before { position: absolute; content: ""; height: 22px; width: 24px; left: 2px; bottom: 2px; background: #fff; transition: .3s; border-radius: 50%; }
+        input:checked + .slider { background: #34c759; }
+        input:checked + .slider:before { transform: translateX(18px); }
 
-        /* Плавающий индикатор сети на основном экране */
         #network-status-indicator {
             position: absolute; bottom: 20px; right: 20px; z-index: 100;
-            background: rgba(0,0,0,0.7); backdrop-filter: blur(10px);
-            padding: 10px 15px; border-radius: 14px; color: #fff; font-size: 12px;
-            border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; gap: 8px;
+            background: rgba(0,0,0,0.75); backdrop-filter: blur(10px); padding: 8px 14px;
+            border-radius: 12px; color: #fff; font-size: 11px; border: 1px solid rgba(255,255,255,0.1);
+            display: flex; align-items: center; gap: 6px;
         }
     </style>
 </head>
 <body>
 
-    <!-- ЗОНА СВАЙПА -->
-    <div id="swipe-trigger-zone">
-        <div class="swipe-bar"></div>
+    <!-- 📱 ДВУХЗОННЫЙ ТАЧ-РАДАР -->
+    <div id="swipe-zone-settings"></div>
+    <div id="swipe-zone-notifications"></div>
+
+    <!-- 🍏 DYNAMIC ISLAND TOAST (ВСПЛЫВАЮЩИЙ ПУЗЫРЬ) -->
+    <div id="dynamic-island-toast">
+        <i class="fa-solid fa-satellite-dish" id="island-icon" style="margin-right: 8px; color: #00f2fe;"></i>
+        <span id="island-text">Система активна</span>
     </div>
 
-    <!-- LIQUID GLASS ШТОРКА НАСТРОЕК -->
+    <!-- ТВОЯ СТАРАЯ ШТОРКА НАСТРОЕК СВЯЗИ -->
     <div id="roaming-panel">
-        <div class="panel-header">
-            <div class="panel-title"><i class="fa-solid fa-satellite-dish" style="color: #00f2fe;"></i> Настройки Связи Армандии</div>
-            <div style="font-size: 12px; opacity: 0.6;" onclick="togglePanel(false)"><i class="fa-solid fa-chevron-up"></i></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:8px;">
+            <div style="font-weight:600; font-size:16px;"><i class="fa-solid fa-gear" style="color:#00f2fe;"></i> Настройки Связи Армандии</div>
+            <div style="font-size:12px; opacity:0.5;" onclick="toggleSettings(false)"><i class="fa-solid fa-chevron-up"></i></div>
         </div>
-        <div>
-            <div class="setting-row">
-                <div class="setting-label">
-                    <span>Включить связь</span>
-                    <span class="setting-sub">Основное подключение к сотовой вышке</span>
-                </div>
-                <label class="ios-switch">
-                    <input type="checkbox" id="toggle-signal" onchange="updateNetworkSettings()">
-                    <span class="slider"></span>
-                </label>
-            </div>
-            <div class="setting-row">
-                <div class="setting-label">
-                    <span>Собственный роуминг</span>
-                    <span class="setting-sub">Автоматический суверенный шлюз Армандии</span>
-                </div>
-                <label class="ios-switch">
-                    <input type="checkbox" id="toggle-roaming" onchange="updateNetworkSettings()">
-                    <span class="slider"></span>
-                </label>
-            </div>
+        <div class="setting-row">
+            <div>Включить связь<br><span style="font-size:11px; opacity:0.5;">Основное сотовое подключение</span></div>
+            <label class="ios-switch"><input type="checkbox" id="toggle-signal" onchange="updateNetworkSettings()"><span class="slider"></span></label>
         </div>
-        <div style="text-align: center; font-size: 10px; opacity: 0.4; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px;">
-            Armandia Frontier Control v1.0 • Суверенная Сеть
+        <div class="setting-row">
+            <div>Собственный роуминг<br><span style="font-size:11px; opacity:0.5;">Автоматический суверенный шлюз</span></div>
+            <label class="ios-switch"><input type="checkbox" id="toggle-roaming" onchange="updateNetworkSettings()"><span class="slider"></span></label>
         </div>
     </div>
 
-    <!-- ИНДИКАТОР СВЯЗИ -->
+    <!-- 📱 НОВАЯ ВТОРАЯ ШТОРКА: ЦЕНТРА УВЕДОМЛЕНИЙ IOS -->
+    <div id="notification-center-panel">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:8px;">
+            <div style="font-weight:600; font-size:16px;"><i class="fa-solid fa-bell" style="color:#ff007f;"></i> Центр уведомлений iOS</div>
+            <div style="font-size:11px; opacity:0.4;">Удерживай для очистки Telegram-Style</div>
+        </div>
+        
+        <div class="notif-scroll-area" id="notifContainer">
+            <!-- Сюда JS начнет инжектировать пузыри уведомлений -->
+        </div>
+    </div>
+
+    <!-- ИНДИКАТОР СЕТИ -->
     <div id="network-status-indicator">
-        <i class="fa-solid fa-signal" id="signal-icon" style="color: #ff007f;"></i>
+        <i class="fa-solid fa-signal" id="signal-icon" style="color:#ff007f;"></i>
         <span id="signal-text">Нет сети</span>
     </div>
+
+    <!-- 🗑️ ВЕДРО TELEGRAM-STYLE -->
+    <div id="telegram-trash-can"><i class="fa-solid fa-trash-can"></i></div>
 
     <!-- ПАНЕЛЬ КАРТЫ -->
     <div id="map-container">
@@ -305,55 +343,6 @@
         // =====================================================================
         let insideArmandia = false;
 
-        function checkGeoFence(lat, lng) {
-            // Математический алгоритм проверки: Находится ли точка внутри полигона Армандии (Ray-casting)
-            const x = lat, y = lng;
-            let inside = false;
-            for (let i = 0, j = armandiaCoords.length - 1; i < armandiaCoords.length; j = i++) {
-                const xi = armandiaCoords[i][0], yi = armandiaCoords[i][1];
-                const xj = armandiaCoords[j][0], yj = armandiaCoords[j][1];
-                const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-                if (intersect) inside = !inside;
-            }
-
-            // Если статус изменился — включаем роуминг!
-            if (inside !== insideArmandia) {
-                insideArmandia = inside;
-                if (insideArmandia) {
-                    document.getElementById('toggle-roaming').disabled = false;
-                    document.getElementById('toggle-roaming').checked = true; // Авто-включение роуминга Армандии
-                    updateNetworkSettings();
-                    
-                    Swal.fire({
-                        title: '🇦🇲 Добро пожаловать!',
-                        text: 'Вы пересекли суверенную границу Армандии. Автоматически активирован внутренний роуминг.',
-                        icon: 'info',
-                        background: '#0d141f',
-                        color: '#fff',
-                        confirmButtonColor: '#00f2fe'
-                    });
-                } else {
-                    document.getElementById('toggle-roaming').checked = false;
-                    updateNetworkSettings();
-                }
-            }
-        }
-
-        // Запуск непрерывного GPS-слежения за смартфоном
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(position => {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-
-                // Передвигаем метку на карте за реальным шагом человека
-                userMarker.setLatLng([lat, lng]);
-                map.setView([lat, lng]);
-                
-                checkGeoFence(lat, lng);
-            }, error => {
-                console.log("GPS заблокирован, запущен симуляционный режим.");
-            }, { enableHighAccuracy: true });
-        }
 
         // =====================================================================
         // 📱 ДВИЖОК СВАЙПА IPHONE-STYLE ДЛЯ LIQUID GLASS ШТОРКИ
@@ -423,21 +412,222 @@
                 }
             }
         }
+        // =====================================================================
+        // 🍏 ФАБРИКА IOS DYNAMIC ISLAND И ЦЕНТРА УВЕДОМЛЕНИЙ
+        // =====================================================================
+        let insideArmandia = false;
 
-        // Автоматический ресайз оверлея Three.js при повороте экрана смартфона
-        window.addEventListener('resize', () => {
-            if (camera && renderer) {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
+        function pushiOSNotification(text, iconClass = "fa-bell", iconColor = "#00f2fe") {
+            // 1. Анимация Dynamic Island всплывашки вверху экрана
+            const island = document.getElementById('dynamic-island-toast');
+            const isText = document.getElementById('island-text');
+            const isIcon = document.getElementById('island-icon');
+
+            if (isText && isIcon && island) {
+                isText.innerText = text;
+                isIcon.className = `fa-solid ${iconClass}`;
+                isIcon.style.color = iconColor;
+
+                island.classList.add('island-active');
+                setTimeout(() => { island.classList.remove('island-active'); }, 3000);
+            }
+
+            // 2. Добавляем пузырь в Центр Уведомлений шторки
+            const container = document.getElementById('notifContainer');
+            if (!container) return;
+
+            const itemWrap = document.createElement('div');
+            itemWrap.className = 'notif-item-container';
+            
+            itemWrap.innerHTML = `
+                <div class="notif-item">
+                    <i class="fa-solid ${iconClass}" style="color:${iconColor}; font-size:16px;"></i>
+                    <div style="font-size:13px; font-weight:500; color:#fff;">${text}</div>
+                </div>
+                <div class="notif-delete-btn" onclick="deleteSingleNotif(this)">Удалить</div>
+            `;
+            
+            container.insertBefore(itemWrap, container.firstChild);
+            initSwipeToDelete(itemWrap.querySelector('.notif-item'));
+        }
+
+        // Кинетический свайп влево для удаления отдельного уведомления
+        function initSwipeToDelete(element) {
+            if (!element) return;
+            let startX = 0; let currentX = 0;
+            element.addEventListener('touchstart', e => { startX = e.touches.clientX; }, {passive:true});
+            element.addEventListener('touchmove', e => {
+                currentX = e.touches.clientX;
+                let diffX = currentX - startX;
+                if (diffX < 0 && diffX > -80) element.style.transform = `translateX(${diffX}px)`;
+            }, {passive:true});
+            element.addEventListener('touchend', () => {
+                let diffX = currentX - startX;
+                if (diffX < -45) {
+                    element.style.transform = 'translateX(-70px)';
+                } else { element.style.transform = 'translateX(0)'; }
+            });
+        }
+
+        function deleteSingleNotif(btnElement) {
+            const container = btnElement.parentElement;
+            if (!container) return;
+            container.style.maxHeight = '0'; container.style.margin = '0'; container.style.opacity = '0';
+            setTimeout(() => { container.remove(); }, 400);
+        }
+        // =====================================================================
+        // 🛰️ РЕГИСТРАЦИЯ ПЕРЕСЕЧЕНИЙ И ТУМБЛЕРЫ СВЯЗИ
+        // =====================================================================
+        function checkGeoFence(lat, lng) {
+            const x = lat, y = lng; let inside = false;
+            for (let i = 0, j = armandiaCoords.length - 1; i < armandiaCoords.length; j = i++) {
+                const xi = armandiaCoords[i][0], yi = armandiaCoords[i][1];
+                const xj = armandiaCoords[j][0], yj = armandiaCoords[j][1];
+                if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+            }
+
+            if (inside !== insideArmandia) {
+                insideArmandia = inside;
+                if (insideArmandia) {
+                    document.getElementById('toggle-roaming').checked = true; // Авто-включение роуминга
+                    pushiOSNotification("Вход в воздушное пространство Армандии", "fa-passport", "#34c759");
+                    updateNetworkSettings();
+                } else {
+                    document.getElementById('toggle-roaming').checked = false;
+                    pushiOSNotification("Выход из пространства Армандии. Связь разорвана", "fa-door-open", "#ff3b30");
+                    updateNetworkSettings();
+                }
+            }
+        }
+
+        function updateNetworkSettings() {
+            const signalOn = document.getElementById('toggle-signal').checked;
+            const roamingOn = document.getElementById('toggle-roaming').checked;
+            const icon = document.getElementById('signal-icon'); const text = document.getElementById('signal-text');
+
+            if (!icon || !text) return;
+
+            if (!signalOn) {
+                icon.className = "fa-solid fa-signal"; icon.style.color = "#ff007f"; text.innerText = "Нет сети";
+            } else {
+                if (roamingOn && insideArmandia) {
+                    icon.className = "fa-solid fa-satellite-dish"; icon.style.color = "#34c759"; text.innerText = "Armandia Roaming 5G";
+                } else {
+                    icon.className = "fa-solid fa-signal"; icon.style.color = "#00f2fe"; text.innerText = "GeraGram LTE";
+                }
+            }
+        }
+
+        // Принудительные логи при кликах по тумблерам
+        document.getElementById('toggle-signal').addEventListener('change', (e) => {
+            pushiOSNotification(e.target.checked ? "Сотовая связь GeraGram включена" : "Авиарежим: связь отключена", "fa-tower-cell", "#00f2fe");
+        });
+        document.getElementById('toggle-roaming').addEventListener('change', (e) => {
+            pushiOSNotification(e.target.checked ? "Роуминг Армандии взведен" : "Роуминг отключен пользователем", "fa-shield-dog", "#ff007f");
+        });
+
+        // Слежение по спутнику GPS
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(p => {
+                const lat = p.coords.latitude; const lng = p.coords.longitude;
+                if (userMarker) userMarker.setLatLng([lat, lng]); 
+                map.setView([lat, lng]);
+                checkGeoFence(lat, lng);
+            }, e => { console.log("GPS в симуляции."); checkGeoFence(centerLat, centerLng); }, { enableHighAccuracy: true });
+        } else { checkGeoFence(centerLat, centerLng); }
+        // =====================================================================
+        // 📱 ДВУХЗОННЫЙ СВАЙП-ДВИЖОК И МАССОВАЯ ОЧИСТКА TELEGRAM-STYLE
+        // =====================================================================
+        const settingsPanel = document.getElementById('roaming-panel');
+        const notifPanel = document.getElementById('notification-center-panel');
+        const trashCan = document.getElementById('telegram-trash-can');
+        
+        let touchStartY = 0; let isSettingsDragging = false; let isNotifDragging = false;
+        let pressTimer = null; let isLongPressing = false;
+
+        // Зона 1: Шторка Настроек (Самый верх, 0-35px)
+        const zoneSettings = document.getElementById('swipe-zone-settings');
+        if (zoneSettings) {
+            zoneSettings.addEventListener('touchstart', e => {
+                touchStartY = e.touches.clientY; isSettingsDragging = true;
+            }, {passive:true});
+        }
+
+        // Зона 2: Шторка Уведомлений (Чуть ниже, 35-80px)
+        const zoneNotifs = document.getElementById('swipe-zone-notifications');
+        if (zoneNotifs) {
+            zoneNotifs.addEventListener('touchstart', e => {
+                touchStartY = e.touches.clientY; isNotifDragging = true;
+            }, {passive:true});
+        }
+
+        document.addEventListener('touchmove', e => {
+            let currentY = e.touches.clientY;
+            let diffY = currentY - touchStartY;
+
+            if (isSettingsDragging && diffY > 40) { settingsPanel.classList.add('panel-open'); isSettingsDragging = false; }
+            if (isNotifDragging && diffY > 40) { notifPanel.classList.add('panel-open'); isNotifDragging = false; }
+            
+            // Если шторка уведомлений удерживается для перетаскивания в ведро Telegram-Style!
+            if (isLongPressing && notifPanel && notifPanel.classList.contains('panel-open')) {
+                notifPanel.style.transition = 'none';
+                notifPanel.style.transform = `translateY(${diffY}px) scale(0.95)`;
+                
+                // Проверяем наведение шторки на ведро снизу экрана
+                if (currentY > window.innerHeight - 120) { trashCan.classList.add('trash-hover'); }
+                else { trashCan.classList.remove('trash-hover'); }
+            }
+        }, {passive:false});
+
+        document.addEventListener('touchend', e => {
+            isSettingsDragging = false; isNotifDragging = false;
+            clearTimeout(pressTimer);
+            
+            if (isLongPressing && notifPanel && trashCan) {
+                isLongPressing = false;
+                trashCan.classList.remove('trash-active');
+                notifPanel.style.transition = 'top 0.4s cubic-bezier(0.165, 0.84, 0.44, 1), transform 0.2s ease';
+                
+                if (trashCan.classList.contains('trash-hover')) {
+                    // 💥 УНИЧТОЖЕНИЕ TELEGRAM-STYLE: Все пузыри схлопываются в ноль и исчезают!
+                    trashCan.classList.remove('trash-hover');
+                    const items = document.querySelectorAll('.notif-item-container');
+                    items.forEach((item, idx) => {
+                        setTimeout(() => {
+                            item.style.maxHeight = '0'; item.style.margin = '0'; item.style.opacity = '0';
+                            setTimeout(() => { item.remove(); }, 400);
+                        }, idx * 60);
+                    });
+                    pushiOSNotification("Уведомления очищены в Telegram-Style", "fa-trash-arrow-up", "#ff3b30");
+                }
+                notifPanel.style.transform = 'translateY(0) scale(1)';
             }
         });
 
-        // 🚀 ГЛАВНЫЙ СТАРТ СИСТЕМЫ ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+        // Регистрация долгого удержания шторки уведомлений для вызова Ведра
+        if (notifPanel) {
+            notifPanel.addEventListener('touchstart', e => {
+                touchStartY = e.touches.clientY;
+                pressTimer = setTimeout(() => {
+                    isLongPressing = true;
+                    if (trashCan) trashCan.classList.add('trash-active');
+                    if (navigator.vibrate) navigator.vibrate(40); // Мягкий тактильный отклик смартфона
+                }, 1500); // 1.5 секунды для идеального отклика
+            }, {passive:true});
+        }
+
+        function toggleSettings(f) { if(f) settingsPanel.classList.add('panel-open'); else settingsPanel.classList.remove('panel-open'); }
+        
+        window.addEventListener('resize', () => {
+            if (camera && renderer) { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+        });
+
+        // 🚀 ЗАПУСК СИСТЕМЫ ПРИ ЗАГРУЗКЕ
         initThreeOverlay();
-        updateNetworkSettings(); // По канону изначально связь и роуминг выключены
+        updateNetworkSettings();
+        
+        // Приветственный iOS пузырь через 1 секунду после входа
+        setTimeout(() => { pushiOSNotification("Спутниковая система Армандии взведена", "fa-satellite", "#00f2fe"); }, 1000);
     </script>
 </body>
 </html>
-
-
