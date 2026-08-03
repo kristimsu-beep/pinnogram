@@ -432,77 +432,76 @@
             }, e => { console.log("GPS в симуляции."); checkGeoFence(centerLat, centerLng); }, { enableHighAccuracy: true });
         } else { checkGeoFence(centerLat, centerLng); }
         // =====================================================================
-        // 📱 5. ИСПРАВЛЕННЫЙ СВАЙП-ДВИЖОК (БРОНИРОВАННЫЕ МОБИЛЬНЫЕ ТАЧИ)
+        // =====================================================================
+        // 📱 5. БРОНИРОВАННЫЙ ТАЧ-ДВИЖОК (ФИКС ЗАКЛИНИВАНИЯ ШТОРКИ)
         // =====================================================================
         const settingsPanel = document.getElementById('roaming-panel');
         const notifPanel = document.getElementById('notification-center-panel');
         const trashCan = document.getElementById('telegram-trash-can');
         
-        let touchStartY = 0; let isSettingsDragging = false; let isNotifDragging = false;
-        let pressTimer = null; let isLongPressing = false;
+        let touchStartY = 0;
+        let pressTimer = null; 
+        let isLongPressing = false;
 
-        // Зона 1: Шторка Настроек (Самый верх, 0-35px)
+        // Зона 1: Шторка Настроек (Клик/Тап по верхней рисочке — МГНОВЕННОЕ ОТКРЫТИЕ!)
         const zoneSettings = document.getElementById('swipe-zone-settings');
         if (zoneSettings) {
-            zoneSettings.addEventListener('touchstart', e => {
-                touchStartY = e.touches.clientY; isSettingsDragging = true;
-            }, {passive: true});
-
-            // 🎯 СУПЕР-ФИКС: Вешаем touchmove напрямую на зону с passive: false!
-            zoneSettings.addEventListener('touchmove', e => {
-                if (!isSettingsDragging) return;
-                let currentY = e.touches.clientY;
-                let diffY = currentY - touchStartY;
-
-                if (diffY > 35) { // Снизили порог для мгновенной отзывчивости
-                    if (e.cancelable) e.preventDefault();
-                    settingsPanel.classList.add('panel-open');
-                    isSettingsDragging = false;
+            zoneSettings.addEventListener('click', () => {
+                if (settingsPanel) {
+                    settingsPanel.classList.toggle('panel-open');
+                    // Если открываем настройки — закрываем уведомления, чтобы не было каши
+                    if (notifPanel) notifPanel.classList.remove('panel-open');
+                    logEvent("⚙️ Шторка настроек связи успешно активирована");
                 }
-            }, {passive: false});
+            });
+            // Дублируем для мобильных тачей на всякий случай
+            zoneSettings.addEventListener('touchstart', (e) => {
+                touchStartY = e.touches[0].clientY;
+            }, {passive: true});
+            zoneSettings.addEventListener('touchend', (e) => {
+                let diffY = e.changedTouches[0].clientY - touchStartY;
+                if (diffY > 30 && settingsPanel) settingsPanel.classList.add('panel-open');
+            }, {passive: true});
         }
 
-        // Зона 2: Шторка Уведомлений (Чуть ниже, 35-80px)
+        // Зона 2: Шторка Уведомлений (Клик/Тап чуть ниже рисочки — ОТКРЫТИЕ ЦЕНТРА УВЕДОМЛЕНИЙ!)
         const zoneNotifs = document.getElementById('swipe-zone-notifications');
         if (zoneNotifs) {
-            zoneNotifs.addEventListener('touchstart', e => {
-                touchStartY = e.touches.clientY; isNotifDragging = true;
-            }, {passive: true});
-
-            // 🎯 СУПЕР-ФИКС: Вешаем touchmove напрямую на зону с passive: false!
-            zoneNotifs.addEventListener('touchmove', e => {
-                if (!isNotifDragging) return;
-                let currentY = e.touches.clientY;
-                let diffY = currentY - touchStartY;
-
-                if (diffY > 35) {
-                    if (e.cancelable) e.preventDefault();
-                    notifPanel.classList.add('panel-open');
-                    isNotifDragging = false;
+            zoneNotifs.addEventListener('click', () => {
+                if (notifPanel) {
+                    notifPanel.classList.toggle('panel-open');
+                    if (settingsPanel) settingsPanel.classList.remove('panel-open');
+                    logEvent("📱 Центр уведомлений iOS развернут на экране");
                 }
-            }, {passive: false});
+            });
+            zoneNotifs.addEventListener('touchstart', (e) => {
+                touchStartY = e.touches[0].clientY;
+            }, {passive: true});
+            zoneNotifs.addEventListener('touchend', (e) => {
+                let diffY = e.changedTouches[0].clientY - touchStartY;
+                if (diffY > 30 && notifPanel) notifPanel.classList.add('panel-open');
+            }, {passive: true});
         }
 
-        // Движение открытой шторки при долгой зажатии (для утилизации в ведро)
+        // Перетаскивание открытой шторки при долгой зажатии (для утилизации в ведро Telegram-Style)
         if (notifPanel) {
             notifPanel.addEventListener('touchmove', e => {
                 if (!isLongPressing) return;
-                if (e.cancelable) e.preventDefault(); // Намертво блокируем системный скролл смартфона!
+                if (e.cancelable) e.preventDefault(); // Намертво глушим системный скролл браузера
 
-                let currentY = e.touches.clientY;
+                let currentY = e.touches[0].clientY;
                 let diffY = currentY - touchStartY;
 
                 notifPanel.style.transition = 'none';
-                notifPanel.style.transform = `translateY(${diffY}px) scale(0.95)`;
+                notifPanel.style.transform = `translateY(${diffY}px) scale(0.96)`;
                 
-                if (currentY > window.innerHeight - 120) { trashCan.classList.add('trash-hover'); }
-                else { trashCan.classList.remove('trash-hover'); }
+                if (currentY > window.innerHeight - 120) { if(trashCan) trashCan.classList.add('trash-hover'); }
+                else { if(trashCan) trashCan.classList.remove('trash-hover'); }
             }, {passive: false});
         }
 
         // Универсальный обработчик отпускания пальца
         document.addEventListener('touchend', e => {
-            isSettingsDragging = false; isNotifDragging = false;
             clearTimeout(pressTimer);
             
             if (isLongPressing && notifPanel && trashCan) {
@@ -528,13 +527,13 @@
         // Регистрация долгого удержания шторки уведомлений для вызова Ведра
         if (notifPanel) {
             notifPanel.addEventListener('touchstart', e => {
-                touchStartY = e.touches.clientY;
+                touchStartY = e.touches[0].clientY;
                 pressTimer = setTimeout(() => {
                     isLongPressing = true;
                     if (trashCan) trashCan.classList.add('trash-active');
-                    if (navigator.vibrate) navigator.vibrate(40); // Тактильный отклик
-                }, 1200); // Сократили до 1.2с для сочного отклика
-            }, {passive:true});
+                    if (navigator.vibrate) navigator.vibrate(40); // Тактильный клик смартфона
+                }, 1200); 
+            }, {passive: true});
         }
 
         function toggleSettings(f) { if(f) settingsPanel.classList.add('panel-open'); else settingsPanel.classList.remove('panel-open'); }
