@@ -5864,6 +5864,16 @@ async def get_armandia_page():
         return FileResponse(file_path)
     return {"error": "Файл armandia.html не найден в папке games"}
 
+@app.get("/EA")
+async def get_ea_referee_page():
+    # Отдаем HTML-страницу интеллектуального футбольного видео-повтора
+    from fastapi.responses import FileResponse
+    import os
+    file_path = os.path.join("games", "ea_referee.html")
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return {"error": "Файл ea_referee.html не найден в папке games"}
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
