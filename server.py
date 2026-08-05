@@ -5864,7 +5864,7 @@ async def get_armandia_page():
         return FileResponse(file_path)
     return {"error": "Файл armandia.html не найден в папке games"}
 
-@app.get("/EA")
+@app.get("/ea")
 async def get_ea_referee_page():
     # Отдаем HTML-страницу интеллектуального футбольного видео-повтора
     from fastapi.responses import FileResponse
