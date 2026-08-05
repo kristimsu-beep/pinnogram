@@ -189,8 +189,9 @@
             // Собираем все контрастные точки в виде полноценных объектов с координатами {x, y}
             let rawPoints = []; 
 
-            for (let y = 0; y < canvas.height; y += 4) {
-                for (let x = 0; x < canvas.width; x += 4) {
+            // 🎯 СУПЕР-ФИКС ДЕТАЛИЗАЦИИ: Сканируем с плотным шагом в 2 пикселя вместо 4!
+            for (let y = 0; y < canvas.height; y += 2) {
+                for (let x = 0; x < canvas.width; x += 2) {
                     const idx = (y * canvas.width + x) * 4;
                     const brightness = 0.299 * pixels[idx] + 0.587 * pixels[idx+1] + 0.114 * pixels[idx+2];
 
@@ -198,7 +199,7 @@
                     if (nextIdx < pixels.length) {
                         const nextBrightness = 0.299 * pixels[nextIdx] + 0.587 * pixels[nextIdx+1] + 0.114 * pixels[nextIdx+2];
 
-                        // Нашли жесткую черно-белую границу
+                        // Нашли жесткую черно-белую границу мяча
                         if ((brightness > 190 && nextBrightness < 65) || (brightness < 60 && nextBrightness > 190)) {
                             rawPoints.push({ x: x, y: y });
                         }
@@ -218,7 +219,7 @@
                     let dist = Math.sqrt(Math.pow(point.x - c.centerX, 2) + Math.pow(point.y - c.centerY, 2));
                     if (dist < maxDistance) {
                         c.points.push(point);
-                        // Динамически пересчитываем центр масс кластера
+                        // Динамически пересчитываем центр масс кластера на лету
                         c.centerX = c.points.reduce((sum, p) => sum + p.x, 0) / c.points.length;
                         c.centerY = c.points.reduce((sum, p) => sum + p.y, 0) / c.points.length;
                         foundCluster = true;
@@ -242,9 +243,9 @@
                 }
             });
 
-            // 🔥 СУПЕР-ЗАПЛАТКА НА ОБЪЁМ: Мяч должен быть монолитным и больше всех остальных шумов вместе взятых!
-            // Плотное ядро мяча должно содержать минимум 30 локальных точек, собранных в одном месте
-            if (ballCluster && ballCluster.points.length >= 30) {
+            // 🔥 СУПЕР-ЗАПЛАТКА НА ОБЪЁМ: Снизили порог фильтра массы до 15 плотных точек 
+            // с учётом новой детализированной сетки шага сканирования.
+            if (ballCluster && ballCluster.points.length >= 15) {
                 
                 // Переводим очищенную координату центра X плотного мяча в проценты (0% - 100%)
                 const ballPercentX = (ballCluster.centerX / canvas.width) * 100;
@@ -260,9 +261,9 @@
                     triggerGoalEvent("alpha");
                 }
             } else {
-                // Все мелкие разрозненные пятна на обоях и коврах теперь летят в корзину
+                // Все мелкие разрозненные блики и шумы теперь летят в корзину
                 let noiseCount = ballCluster ? ballCluster.points.length : 0;
-                document.getElementById('log-text').innerText = `ИИ: Фоновые шумы отсечены (Плотность: ${noiseCount}/30). Ожидание мяча...`;
+                document.getElementById('log-text').innerText = `ИИ: Фоновые шумы отсечены (Плотность: ${noiseCount}/15). Ожидание мяча...`;
                 document.getElementById('log-text').style.color = "#94a3b8";
             }
         }
