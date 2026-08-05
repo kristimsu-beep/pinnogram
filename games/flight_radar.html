@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
+    <title>MSFS 2020 Live AI Radar Center</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.12.0/sweetalert2.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.12.0/sweetalert2.all.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: #030712; color: #fff; overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        /* 🗺️ ЖИВАЯ КАРТА НА ВЕСЬ ЭКРАН */
+        #radar-map { width: 100%; height: 100%; background: #030712; z-index: 10; }
+
+        /* 🎛️ КИБЕРПАНК ПАНЕЛЬ ПОИСКА ПИЛОТА */
+        .radar-search-box {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 360px; background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 16px;
+            padding: 12px; z-index: 100; box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            display: flex; gap: 10px;
+        }
+        .radar-input {
+            flex-grow: 1; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px; padding: 0 12px; color: #fff; font-size: 14px;
+            font-weight: 600; text-transform: uppercase; outline: none; transition: border 0.3s;
+        }
+        .radar-input:focus { border-color: #00f2fe; box-shadow: 0 0 10px rgba(0,242,254,0.2); }
+        .radar-btn {
+            background: #00f2fe; color: #030712; border: none; border-radius: 10px;
+            padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer;
+            transition: all 0.2s; display: flex; align-items: center; gap: 6px;
+        }
+        .radar-btn:active { scale: 0.95; background: #00c2cc; }
+
+        /* 🛩️ ТАКТИЧЕСКИЙ БОРТОВОЙ КОМПЬЮТЕР (ТЕЛЕМЕТРИЯ) */
+        #telemetry-panel {
+            position: absolute; bottom: -300px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 400px; background: rgba(10, 15, 30, 0.7);
+            backdrop-filter: blur(25px) saturate(190%); -webkit-backdrop-filter: blur(25px) saturate(190%);
+            border: 1px solid rgba(0, 242, 254, 0.2); border-radius: 20px 20px 0 0;
+            padding: 20px; z-index: 100; box-shadow: 0 -10px 30px rgba(0,242,254,0.1);
+            transition: bottom 0.5s cubic-bezier(0.165, 0.84, 0.44, 1);
+            box-sizing: border-box; display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;
+        }
+        #telemetry-panel.panel-active { bottom: 0; }
+
+        .tel-header { grid-column: span 2; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px; }
+        .tel-pilot-name { font-size: 15px; font-weight: 700; color: #fff; }
+        .tel-aircraft { font-size: 11px; background: #ff007f; color: #fff; padding: 2px 8px; border-radius: 6px; font-weight: bold; }
+        
+        .tel-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); padding: 10px; border-radius: 12px; display: flex; align-items: center; gap: 10px; }
+        .tel-icon { font-size: 20px; color: #00f2fe; width: 25px; text-align: center; }
+        .tel-info { display: flex; flex-direction: column; }
+        .tel-val { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+        .tel-lbl { font-size: 10px; color: #94a3b8; text-transform: uppercase; margin-top: 2px; }
+
+        .tel-route { grid-column: span 2; display: flex; justify-content: center; align-items: center; gap: 20px; background: rgba(0,242,254,0.05); padding: 8px; border-radius: 10px; border: 1px dashed rgba(0,242,254,0.2); font-weight: 700; font-size: 14px; }
+
+        /* Кастомный стиль маркера самолета для Leaflet */
+        .airplane-marker-icon { transition: transform 0.4s linear; }
+    </style>
+</head>
+<body>
+
+    <!-- ОКНО ПОИСКА -->
+    <div class="radar-search-box">
+        <input type="text" id="pilotCallsignInput" class="radar-input" placeholder="Введите Callsign (напр. AFL123)" autocomplete="off">
+        <button class="radar-btn" onclick="startFlightTracking()"><i class="fa-solid fa-radar" id="btn-icon"></i> Скан</button>
+    </div>
+
+    <!-- ТАКТИЧЕСКАЯ ПАНЕЛЬ ПРИБОРОВ -->
+    <div id="telemetry-panel">
+        <div class="tel-header">
+            <div class="tel-pilot-name" id="tel-name">PILOT ONLINE</div>
+            <div class="tel-aircraft" id="tel-type">A320</div>
+        </div>
+        
+        <div class="tel-route">
+            <span id="tel-dep">UUEE</span>
+            <i class="fa-solid fa-plane-takeoff" style="color:#00f2fe; font-size:12px;"></i>
+            <span id="tel-arr">ULLLI</span>
+        </div>
+
+        <div class="tel-card">
+            <i class="fa-solid fa-cloud-arrow-up tel-icon"></i>
+            <div class="tel-info">
+                <span class="tel-val" id="tel-alt">0</span>
+                <span class="tel-lbl">Высота (FT)</span>
+            </div>
+        </div>
+
+        <div class="tel-card">
+            <i class="fa-solid fa-gauge-high tel-icon" style="color:#34c759;"></i>
+            <div class="tel-info">
+                <span class="tel-val" id="tel-spd">0</span>
+                <span class="tel-lbl">Скор. (GS КТ)</span>
+            </div>
+        </div>
+
+        <div class="tel-card" style="grid-column: span 2;">
+            <i class="fa-solid fa-compass tel-icon" style="color:#ff007f;"></i>
+            <div class="tel-info">
+                <span class="tel-val" id="tel-hdg">0°</span>
+                <span class="tel-lbl">Курс полета (Heading)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- КАРТА СИМУЛЯТОРА -->
+    <div id="radar-map"></div>
+
+    <!-- Место для ЧАСТИ 3 (JavaScript Авиа-Радар Движок) -->
+    <script>
+        // =====================================================================
+        // 🌍 1. ИНИЦИАЛИЗАЦИЯ НОЧНОЙ КАРТЫ И НЕОНОВОЙ ИКОНКИ САМОЛЕТА
+        // =====================================================================
+        let radarMap;
+        let airplaneMarker = null;
+        let trackingInterval = null;
+        let activeCallsign = "";
+
+        // Инициализируем карту мира Leaflet с базовым видом на Европу
+        radarMap = L.map('radar-map', {
+            center: [55.7558, 37.6173], // Старт над Москвой
+            zoom: 4,
+            zoomControl: false,
+            attributionControl: false
+        });
+
+        // Накатываем сочную, контрастную премиальную ночную тему карты (CartoDB Dark Matter)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            maxZoom: 19
+        }).addTo(radarMap);
+
+        // 🍏 Создаем кастомный маркер-самолет, который умеет плавно крутиться по CSS-курсу
+        const planeIcon = L.divIcon({
+            className: 'airplane-marker-icon',
+            html: `
+                <div id="plane-avatar-rotate" style="width: 40px; height: 40px; display: flex; justify-content: center; align-items: center; transition: transform 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);">
+                    <i class="fa-solid fa-plane" style="font-size: 28px; color: #00f2fe; drop-shadow: 0 0 10px #00f2fe; text-shadow: 0 0 12px #00f2fe;"></i>
+                </div>
+            `,
+            iconSize:[40, 40],
+            iconAnchor: [20, 20]
+        });
+          // =====================================================================
+        // 📡 2. АСИНХРОННЫЙ ДВИЖОК ОПРОСА FASTAPI И ОБНОВЛЕНИЕ ТЕЛЕМЕТРИИ
+        // =====================================================================
+        
+        // Главная функция запуска циклического трекинга
+        function startFlightTracking() {
+            const input = document.getElementById('pilotCallsignInput');
+            if (!input) return;
+
+            const callsign = input.value.trim().toUpperCase();
+            if (!callsign) {
+                Swal.fire({ title: "Ошибка", text: "Введите позывной пилота (Callsign)!", icon: "warning", background: "#0d141f", color: "#fff", confirmButtonColor: "#00f2fe" });
+                return;
+            }
+
+            // Очищаем старый таймер, если он работал
+            if (trackingInterval) clearInterval(trackingInterval);
+            activeCallsign = callsign;
+
+            document.getElementById('btn-icon').className = "fa-solid fa-spinner fa-spin";
+            
+            // Делаем первый мгновенный опрос и взводим цикл на каждые 5 секунд (5000мс)
+            fetchFlightData();
+            trackingInterval = setInterval(fetchFlightData, 5000);
+        }
+
+        async function fetchFlightData() {
+            if (!activeCallsign) return;
+
+            try {
+                // Дергаем наш защищенный API роут на бэкенде FastAPI
+                const response = await fetch(`/api/flight/track/${activeCallsign}`);
+                const data = await response.json();
+
+                if (data.status === "online") {
+                    // Пилот в воздухе! Активируем тактическую панель приборов
+                    document.getElementById('telemetry-panel').classList.add('panel-active');
+                    document.getElementById('btn-icon').className = "fa-solid fa-plane-lock";
+
+                    // Обновляем текстовые неоновые индикаторы на табло
+                    document.getElementById('tel-name').innerText = `${data.name} (${data.callsign})`;
+                    document.getElementById('tel-type').innerText = data.aircraft;
+                    document.getElementById('tel-dep').innerText = data.departure;
+                    document.getElementById('tel-arr').innerText = data.arrival;
+                    
+                    // Бегущие цифры высоты, скорости и курса
+                    document.getElementById('tel-alt').innerText = Number(data.altitude).toLocaleString();
+                    document.getElementById('tel-spd').innerText = data.groundspeed;
+                    document.getElementById('tel-hdg').innerText = `${data.heading}°`;
+
+                    const latLng = [data.lat, data.lng];
+
+                    // Если маркер самолета еще не создан на карте мира — материализуем его
+                    if (!airplaneMarker) {
+                        airplaneMarker = L.marker(latLng, { icon: planeIcon }).addTo(radarMap);
+                        radarMap.setView(latLng, 6); // Центрируем камеру на самолете
+                    } else {
+                        // Если уже летит — плавно передвигаем по новым GPS-координатам
+                        airplaneMarker.setLatLng(latLng);
+                    }
+
+                    // 🎯 КИНЕТИЧЕСКИЙ ПОВОРОТ ПО КОМПАСУ:
+                    // Находим внутренний DOM-элемент иконки и крутим его через CSS-трансформ
+                    setTimeout(() => {
+                        const planeDiv = document.getElementById('plane-avatar-rotate');
+                        if (planeDiv) {
+                            // В шрифтах FontAwesome иконка самолета изначально смотрит на северо-восток (45 градусов)
+                            // Вычитаем 45, чтобы курс 0° смотрел строго на Север, и крутим по часовой стрелке!
+                            let correctRotation = data.heading - 45;
+                            planeDiv.style.transform = `rotate(${correctRotation}deg)`;
+                        }
+                    }, 100);
+
+                } else if (data.status === "offline") {
+                    // Пилот закрыл симулятор или не в сети VATSIM
+                    clearInterval(trackingInterval);
+                    document.getElementById('btn-icon').className = "fa-solid fa-radar";
+                    document.getElementById('telemetry-panel').classList.remove('panel-active');
+                    
+                    Swal.fire({ title: "Борт не найден", text: data.message, icon: "info", background: "#0d141f", color: "#fff", confirmButtonColor: "#ff007f" });
+                }
+            } catch (err) {
+                console.error("Ошибка трекера: ", err);
+                document.getElementById('btn-icon').className = "fa-solid fa-triangle-exclamation";
+            }
+        }
+      
+        // =====================================================================
+        // 📱 3. АДАПТИВНОСТЬ И ФИНАЛЬНЫЙ СТАРТ СИСТЕМЫ ПЕРЕД ВЗЛЁТОМ
+        // =====================================================================
+        
+        // Автоматический ресайз холста ночной карты при повороте экрана смартфона
+        window.addEventListener('resize', () => {
+            if (radarMap) {
+                radarMap.invalidateSize({ animate: true });
+            }
+        });
+
+        // Снайперский фокус: автоматически активируем поле ввода при загрузке страницы,
+        // чтобы пилоту не нужно было лишний раз тыкать в экран телефона
+        window.addEventListener('DOMContentLoaded', () => {
+            const input = document.getElementById('pilotCallsignInput');
+            if (input) input.focus();
+        });
+      
+    </script>
+</body>
+</html>
