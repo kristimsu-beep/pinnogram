@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
+    <title>EA Smart Referee AI System</title>
+    <link rel="stylesheet" href="https://cloudflare.com"></link>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: #060b13; color: #fff; overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        /* 📊 КИБЕРПАНК ФУТБОЛЬНОЕ ТАБЛО */
+        .scoreboard-container {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 400px; background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(15px); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px; padding: 12px 20px; z-index: 100;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .team-box { text-align: center; width: 35%; }
+        .team-name { font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; }
+        .score-val { font-size: 32px; font-weight: 800; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(255,255,255,0.2); }
+        .team-left .score-val { color: #00f2fe; text-shadow: 0 0 15px rgba(0,242,254,0.4); }
+        .team-right .score-val { color: #ff007f; text-shadow: 0 0 15px rgba(255,0,127,0.4); }
+        .time-box { text-align: center; width: 30%; font-size: 14px; font-weight: 700; color: #e2e8f0; border-left: 1px solid rgba(255,255,255,0.1); border-right: 1px solid rgba(255,255,255,0.1); }
+
+        /* 📹 ЗОНА СТАТИЧНОЙ КАМЕРЫ И ВИДОИСКАТЕЛЯ */
+        .camera-viewport-container {
+            position: relative; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+        }
+        #webcam-stream {
+            width: 100%; height: 100%; object-fit: cover;
+            transform: scaleX(-1); /* Зеркалим для удобства калибровки ворот */
+        }
+        
+        /* Скрытый холст для ИИ-анализа пикселей */
+        #analyzer-canvas { display: none; }
+
+        /* Лазерные линии фиксации ворот (15% слева и справа) */
+        .goal-laser-line {
+            position: absolute; top: 0; height: 100%; width: 2px; z-index: 50;
+            pointer-events: none; opacity: 0.6;
+        }
+        .laser-left { left: 15%; background: linear-gradient(to bottom, transparent, #00f2fe, transparent); box-shadow: 0 0 10px #00f2fe, 0 0 20px #00f2fe; }
+        .laser-right { right: 15%; background: linear-gradient(to bottom, transparent, #ff007f, transparent); box-shadow: 0 0 10px #ff007f, 0 0 20px #ff007f; }
+
+        /* 🎯 ВСПЛЫВАЮЩИЙ ТРИГГЕР ГОЛА В СТИЛЕ FIFA */
+        #goal-splash-screen {
+            position: absolute; top: -100%; left: 0; width: 100%; height: 100%;
+            background: rgba(6, 11, 19, 0.85); backdrop-filter: blur(12px);
+            z-index: 200; display: flex; flex-direction: column; justify-content: center;
+            align-items: center; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            opacity: 0; pointer-events: none;
+        }
+        #goal-splash-screen.active-goal { top: 0; opacity: 1; }
+        .goal-title { font-size: 56px; font-weight: 900; letter-spacing: 4px; text-transform: uppercase; animation: goalPulse 1s infinite alternate; }
+        .goal-desc { font-size: 16px; margin-top: 10px; font-weight: 500; letter-spacing: 1px; }
+
+        @keyframes goalPulse {
+            0% { transform: scale(1); text-shadow: 0 0 20px rgba(255,255,255,0.4); }
+            100% { transform: scale(1.08); text-shadow: 0 0 40px rgba(255,255,255,0.8); }
+        }
+
+        /* 📡 КВАНТОВЫЙ ИНДИКАТОР СКАНЕРА ИИ */
+        .ai-scanner-bar {
+            position: absolute; top: 0; left: 0; width: 100%; height: 4px;
+            background: linear-gradient(to right, transparent, #34c759, transparent);
+            box-shadow: 0 0 12px #34c759; z-index: 60; pointer-events: none;
+            animation: scanMove 2s linear infinite;
+        }
+        @keyframes scanMove {
+            0% { top: 0%; }
+            50% { top: 100%; }
+            100% { top: 0%; }
+        }
+
+        /* Системный лог работы ИИ снизу */
+        #ai-system-log {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.7); padding: 8px 16px; border-radius: 10px;
+            font-size: 11px; font-family: monospace; color: #34c759; z-index: 100;
+            border: 1px solid rgba(52, 199, 89, 0.2); display: flex; align-items: center; gap: 8px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ТАБЛО МАТЧА -->
+    <div class="scoreboard-container">
+        <div class="team-box team-left">
+            <div class="team-name" id="name-l">TEAM ALPHA</div>
+            <div class="score-val" id="score-l">0</div>
+        </div>
+        <div class="time-box">
+            <div style="font-size: 9px; opacity: 0.5; margin-bottom: 2px;">LIVE ARBITER</div>
+            <div id="match-timer">00:00</div>
+        </div>
+        <div class="team-box team-right">
+            <div class="team-name" id="name-r">TEAM OMEGA</div>
+            <div class="score-val" id="score-r">0</div>
+        </div>
+    </div>
+
+    <!-- ВСПЛЫВАЮЩИЙ ЭКРАН ГОЛА -->
+    <div id="goal-splash-screen">
+        <div class="goal-title" id="splash-title" style="color: #34c759;">GOAL!</div>
+        <div class="goal-desc" id="splash-desc">ФИКСАЦИЯ СИСТЕМОЙ КОМПЬЮТЕРНОГО ЗРЕНИЯ</div>
+    </div>
+
+    <!-- ВИДЕОИСКАТЕЛЬ СТАТИЧНОЙ КАМЕРЫ -->
+    <div class="camera-viewport-container">
+        <video id="webcam-stream" autoplay playsinline></video>
+        <canvas id="analyzer-canvas"></canvas>
+        
+        <!-- ЛАЗЕРНЫЕ ГРАНИЦЫ ВОРОТ -->
+        <div class="goal-laser-line laser-left"></div>
+        <div class="goal-laser-line laser-right"></div>
+        
+        <!-- АНИМАЦИЯ ИИ-СКАНЕРА -->
+        <div class="ai-scanner-bar"></div>
+    </div>
+
+    <!-- СИСТЕМНЫЙ СТАТУС-ЛОГ -->
+    <div id="ai-system-log">
+        <i class="fa-solid fa-microchip" style="animation: fa-spin 2s linear infinite;"></i>
+        <span id="log-text">Инициализация нейро-матрицы пикселей...</span>
+    </div>
+
+    <!-- Место для ЧАСТИ 3 (JavaScript-ИИ Анализатор Кадров) -->
+    <script>
+        // =====================================================================
+        // 🔮 ИИ-АРБИТР: КОМПЬЮТЕРНОЕ ЗРЕНИЕ И СКАНИРОВАНИЕ КАДРОВ В РЕАЛЬНОМ ВРЕМЕНИ
+        // =====================================================================
+        const video = document.getElementById('webcam-stream');
+        const canvas = document.getElementById('analyzer-canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        
+        let scoreLeft = 0;
+        let scoreRight = 0;
+        let isGoalFreeze = false; // Защита от повторного засчитывания гола, пока мяч в воротах
+        let startTime = Date.now();
+
+        // 1. ПОДКЛЮЧАЕМ СТАТИЧНУЮ ВЕБ-КАМЕРУ СМАРТФОНА ИЛИ ПК
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        facingMode: "environment", // Задняя камера на телефоне
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    },
+                    audio: false
+                });
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    // Синхронизируем размеры скрытого холста анализатора с видеокадром
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    document.getElementById('log-text').innerText = "ИИ: Матрица пикселей синхронизирована. Сканирование запущено!";
+                    // Запускаем непрерывный цикл сканирования каждые 500мс (0.5 сек)
+                    setInterval(scanFootballFrame, 500);
+                };
+            } catch (err) {
+                console.error("Ошибка камеры: ", err);
+                document.getElementById('log-text').innerText = "Критическая ошибка: Доступ к камере заблокирован.";
+                document.getElementById('log-text').style.color = "#ff007f";
+            }
+        }
+
+        // 2. МАТЕМАТИЧЕСКИЙ АНАЛИЗАТОР КАДРА (КОНТРАСТНЫЙ ПОИСК МЯЧА)
+        function scanFootballFrame() {
+            if (video.paused || video.ended || isGoalFreeze) return;
+
+            // Переносим текущий кадр из видео-потока на невидимый холст
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Выдергиваем массив всех пикселей кадра [R, G, B, A, R, G, B, A...]
+            const frameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const pixels = frameData.data;
+
+            let contrastPointsX = []; // Сюда складываем координаты пикселей мяча
+
+            // Пробегаемся по пиксельной сетке кадра с шагом в 4 пикселя ради мега-скорости
+            for (let y = 0; y < canvas.height; y += 4) {
+                for (let x = 0; x < canvas.width; x += 4) {
+                    const idx = (y * canvas.width + x) * 4;
+                    const r = pixels[idx];
+                    const g = pixels[idx + 1];
+                    const b = pixels[idx + 2];
+
+                    // Переводим цвет пикселя в яркость по стандартам Computer Vision
+                    const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+
+                    // Детектор черно-белого мяча: ищем жесткий контраст!
+                    // Проверяем соседний правый пиксель на противоположность
+                    const nextIdx = idx + 16; 
+                    if (nextIdx < pixels.length) {
+                        const nextR = pixels[nextIdx];
+                        const nextG = pixels[nextIdx + 1];
+                        const nextB = pixels[nextIdx + 2];
+                        const nextBrightness = 0.299 * nextR + 0.587 * nextG + 0.114 * nextB;
+
+                        // Если один пиксель очень белый (яркость > 200), а соседний очень черный (яркость < 60)
+                        if ((brightness > 200 && nextBrightness < 60) || (brightness < 60 && nextBrightness > 200)) {
+                            contrastPointsX.push(x); // Нашли контрастный край мяча!
+                        }
+                    }
+                }
+            }
+
+            // Если система нашла контрастное пятно мяча на статичном кадре
+            if (contrastPointsX.length > 3) { // Игнорируем микро-шумы
+                // Находим среднюю координату X центра мяча
+                const sumX = contrastPointsX.reduce((a, b) => a + b, 0);
+                const ballX = sumX / contrastPointsX.length;
+
+                // Переводим координату X в относительные проценты от ширины кадра (0% - 100%)
+                const ballPercentX = (ballX / canvas.width) * 100;
+                
+                document.getElementById('log-text').innerText = `ИИ: Мяч обнаружен на отметке X = ${Math.round(ballPercentX)}%`;
+                document.getElementById('log-text').style.color = "#34c759";
+
+                // 🥅 ФИКСАЦИЯ ВЗЯТИЯ ВОРОТ АРБИТРОМ:
+                // Так как видео отзеркалено через CSS transform, левая сторона экрана — это левая команда
+                if (ballPercentX < 15) {
+                    // Мяч улетел в левые 15% кадра — ГОЛ ПРАВОЙ КОМАНДЕ OMEGA!
+                    triggerGoalEvent("omega");
+                } 
+                else if (ballPercentX > 85) {
+                    // Мяч улетел в правые 15% кадра — ГОЛ ЛЕВОЙ КОМАНДЕ ALPHA!
+                    triggerGoalEvent("alpha");
+                }
+            } else {
+                document.getElementById('log-text').innerText = "ИИ: Мяч вне поля зрения. Ожидание...";
+                document.getElementById('log-text').style.color = "#94a3b8";
+            }
+        }
+
+        // =====================================================================
+        // ⚽ СИСТЕМА ФИКСАЦИИ И АНИМАЦИИ ГОЛА (FIFA IOS-STYLE)
+        // =====================================================================
+        function triggerGoalEvent(winnerTeam) {
+            isGoalFreeze = true; // Замораживаем сканер, чтобы не начислить 100 голов за секунду
+
+            const splash = document.getElementById('goal-splash-screen');
+            const title = document.getElementById('splash-title');
+            const desc = document.getElementById('splash-desc');
+
+            if (winnerTeam === "alpha") {
+                scoreLeft++;
+                document.getElementById('score-l').innerText = scoreLeft;
+                title.innerText = "GOAL ALPHA!";
+                title.style.color = "#00f2fe";
+                title.style.textShadow = "0 0 25px rgba(0,242,254,0.6)";
+                desc.innerText = "СИСТЕМА СМАРТ-ПОВТОРУ ФИКСИРУЕТ ВЗЯТИЕ ПРАВЫХ ВОРОТ";
+            } else {
+                scoreRight++;
+                document.getElementById('score-r').innerText = scoreRight;
+                title.innerText = "GOAL OMEGA!";
+                title.style.color = "#ff007f";
+                title.style.textShadow = "0 0 25px rgba(255,0,127,0.6)";
+                desc.innerText = "СИСТЕМА СМАРТ-ПОВТОРУ ФИКСИРУЕТ ВЗЯТИЕ ЛЕВЫХ ВОРОТ";
+            }
+
+            // Выкатываем сочный полноэкранный оверлей гола
+            splash.classList.add('active-goal');
+
+            // Через 3.5 секунды мягко убираем плашку гола и размораживаем ИИ-сканер для продолжения матча!
+            setTimeout(() => {
+                splash.classList.remove('active-goal');
+                isGoalFreeze = false;
+                document.getElementById('log-text').innerText = "ИИ: Матч возобновлен. Сканер взведен.";
+            }, 3500);
+        }
+
+        // Простой бегущий таймер матча LIVE вверху табло
+        setInterval(() => {
+            let diff = Date.now() - startTime;
+            let sec = Math.floor((diff / 1000) % 60);
+            let min = Math.floor((diff / (1000 * 60)) % 60);
+            document.getElementById('match-timer').innerText = 
+                (min < 10 ? "0" + min : min) + ":" + (sec < 10 ? "0" + sec : sec);
+        }, 1000);
+
+        // Запуск
+        initCamera();
+      
+    </script>
+</body>
+</html>
