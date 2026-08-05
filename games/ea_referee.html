@@ -243,9 +243,8 @@
                 }
             });
 
-            // 🔥 СУПЕР-ЗАПЛАТКА НА ОБЪЁМ: Снизили порог фильтра массы до 15 плотных точек 
-            // с учётом новой детализированной сетки шага сканирования.
-            if (ballCluster && ballCluster.points.length >= 15) {
+            // 🔥 СУПЕР-ЗАПЛАТКА НА ОБЪЁМ: Подняли порог фильтра массы до 20 плотных точек!
+            if (ballCluster && ballCluster.points.length >= 25) {
                 
                 // Переводим очищенную координату центра X плотного мяча в проценты (0% - 100%)
                 const ballPercentX = (ballCluster.centerX / canvas.width) * 100;
@@ -263,10 +262,9 @@
             } else {
                 // Все мелкие разрозненные блики и шумы теперь летят в корзину
                 let noiseCount = ballCluster ? ballCluster.points.length : 0;
-                document.getElementById('log-text').innerText = `ИИ: Фоновые шумы отсечены (Плотность: ${noiseCount}/15). Ожидание мяча...`;
+                document.getElementById('log-text').innerText = `ИИ: Фоновые шумы отсечены (Плотность: ${noiseCount}/20). Ожидание мяча...`;
                 document.getElementById('log-text').style.color = "#94a3b8";
             }
-        }
 
         // =====================================================================
         // ⚽ СИСТЕМА ФИКСАЦИИ И АНИМАЦИИ ГОЛА (FIFA IOS-STYLE)
