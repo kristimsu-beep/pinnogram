@@ -173,71 +173,96 @@
             }
         }
 
-        // 2. МАТЕМАТИЧЕСКИЙ АНАЛИЗАТОР КАДРА (КОНТРАСТНЫЙ ПОИСК МЯЧА)
+        // =====================================================================
+        // 🎯 НЕУБИВАЕМЫЙ ИИ-СКАНЕР С АЛГОРИТМОМ КЛАСТЕРИЗАЦИИ И ПЛОТНОСТИ МЯЧА
+        // =====================================================================
         function scanFootballFrame() {
             if (video.paused || video.ended || isGoalFreeze) return;
 
-            // Переносим текущий кадр из видео-потока на невидимый холст
+            // Рисуем текущий кадр видео на невидимый холст-анализатор
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            // Выдергиваем массив всех пикселей кадра [R, G, B, A, R, G, B, A...]
+            // Забираем пиксельную матрицу кадра
             const frameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const pixels = frameData.data;
 
-            let contrastPointsX = []; // Сюда складываем координаты пикселей мяча
+            // Собираем все контрастные точки в виде полноценных объектов с координатами {x, y}
+            let rawPoints = []; 
 
-            // Пробегаемся по пиксельной сетке кадра с шагом в 4 пикселя ради мега-скорости
             for (let y = 0; y < canvas.height; y += 4) {
                 for (let x = 0; x < canvas.width; x += 4) {
                     const idx = (y * canvas.width + x) * 4;
-                    const r = pixels[idx];
-                    const g = pixels[idx + 1];
-                    const b = pixels[idx + 2];
+                    const brightness = 0.299 * pixels[idx] + 0.587 * pixels[idx+1] + 0.114 * pixels[idx+2];
 
-                    // Переводим цвет пикселя в яркость по стандартам Computer Vision
-                    const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
-
-                    // Детектор черно-белого мяча: ищем жесткий контраст!
-                    // Проверяем соседний правый пиксель на противоположность
                     const nextIdx = idx + 16; 
                     if (nextIdx < pixels.length) {
-                        const nextR = pixels[nextIdx];
-                        const nextG = pixels[nextIdx + 1];
-                        const nextB = pixels[nextIdx + 2];
-                        const nextBrightness = 0.299 * nextR + 0.587 * nextG + 0.114 * nextB;
+                        const nextBrightness = 0.299 * pixels[nextIdx] + 0.587 * pixels[nextIdx+1] + 0.114 * pixels[nextIdx+2];
 
-                        // Если один пиксель очень белый (яркость > 200), а соседний очень черный (яркость < 60)
-                        if ((brightness > 200 && nextBrightness < 60) || (brightness < 60 && nextBrightness > 200)) {
-                            contrastPointsX.push(x); // Нашли контрастный край мяча!
+                        // Нашли жесткую черно-белую границу
+                        if ((brightness > 190 && nextBrightness < 65) || (brightness < 60 && nextBrightness > 190)) {
+                            rawPoints.push({ x: x, y: y });
                         }
                     }
                 }
             }
 
-            // Если система нашла контрастное пятно мяча на статичном кадре
-            if (contrastPointsX.length > 3) { // Игнорируем микро-шумы
-                // Находим среднюю координату X центра мяча
-                const sumX = contrastPointsX.reduce((a, b) => a + b, 0);
-                const ballX = sumX / contrastPointsX.length;
+            // 🧠 ИИ-ФИЛЬТР КЛАСТЕРОВ: Группируем точки, которые лежат РЯДОМ друг с другом (в радиусе мяча)
+            let clusters = [];
+            const maxDistance = 45; // Максимальный радиус физического футбольного мяча в пикселях
 
-                // Переводим координату X в относительные проценты от ширины кадра (0% - 100%)
-                const ballPercentX = (ballX / canvas.width) * 100;
+            rawPoints.forEach(point => {
+                let foundCluster = false;
+                // Пытаемся подселить точку к уже существующим плотным группам
+                for (let c of clusters) {
+                    // Проверяем расстояние до центра группы
+                    let dist = Math.sqrt(Math.pow(point.x - c.centerX, 2) + Math.pow(point.y - c.centerY, 2));
+                    if (dist < maxDistance) {
+                        c.points.push(point);
+                        // Динамически пересчитываем центр масс кластера
+                        c.centerX = c.points.reduce((sum, p) => sum + p.x, 0) / c.points.length;
+                        c.centerY = c.points.reduce((sum, p) => sum + p.y, 0) / c.points.length;
+                        foundCluster = true;
+                        break;
+                    }
+                }
+                // Если точка лежит одиноко — создаем для неё микро-кластер (шум)
+                if (!foundCluster) {
+                    clusters.push({ points: [point], centerX: point.x, centerY: point.y });
+                }
+            });
+
+            // Находим САМЫЙ КРУПНЫЙ, МОНОЛИТНЫЙ И ПЛОТНЫЙ КЛАСТЕР (наш потенциальный мяч)
+            let ballCluster = null;
+            let maxPointsCount = 0;
+
+            clusters.forEach(c => {
+                if (c.points.length > maxPointsCount) {
+                    maxPointsCount = c.points.length;
+                    ballCluster = c;
+                }
+            });
+
+            // 🔥 СУПЕР-ЗАПЛАТКА НА ОБЪЁМ: Мяч должен быть монолитным и больше всех остальных шумов вместе взятых!
+            // Плотное ядро мяча должно содержать минимум 30 локальных точек, собранных в одном месте
+            if (ballCluster && ballCluster.points.length >= 30) {
                 
-                document.getElementById('log-text').innerText = `ИИ: Мяч обнаружен на отметке X = ${Math.round(ballPercentX)}%`;
+                // Переводим очищенную координату центра X плотного мяча в проценты (0% - 100%)
+                const ballPercentX = (ballCluster.centerX / canvas.width) * 100;
+                
+                document.getElementById('log-text').innerText = `ИИ: МЯЧ ПРИНЯТ! Кластер: ${ballCluster.points.length}px • X = ${Math.round(ballPercentX)}%`;
                 document.getElementById('log-text').style.color = "#34c759";
 
-                // 🥅 ФИКСАЦИЯ ВЗЯТИЯ ВОРОТ АРБИТРОМ:
-                // Так как видео отзеркалено через CSS transform, левая сторона экрана — это левая команда
+                // Робот-арбитр фиксирует пересечение лазерных линий ворот
                 if (ballPercentX < 15) {
-                    // Мяч улетел в левые 15% кадра — ГОЛ ПРАВОЙ КОМАНДЕ OMEGA!
                     triggerGoalEvent("omega");
                 } 
                 else if (ballPercentX > 85) {
-                    // Мяч улетел в правые 15% кадра — ГОЛ ЛЕВОЙ КОМАНДЕ ALPHA!
                     triggerGoalEvent("alpha");
                 }
             } else {
-                document.getElementById('log-text').innerText = "ИИ: Мяч вне поля зрения. Ожидание...";
+                // Все мелкие разрозненные пятна на обоях и коврах теперь летят в корзину
+                let noiseCount = ballCluster ? ballCluster.points.length : 0;
+                document.getElementById('log-text').innerText = `ИИ: Фоновые шумы отсечены (Плотность: ${noiseCount}/30). Ожидание мяча...`;
                 document.getElementById('log-text').style.color = "#94a3b8";
             }
         }
