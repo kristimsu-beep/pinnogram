@@ -5874,6 +5874,59 @@ async def get_ea_referee_page():
         return FileResponse(file_path)
     return {"error": "Файл ea_referee.html не найден в папке games"}
 
+import httpx
+
+# 1. Роут для выдачи HTML-страницы авиа-радара
+@app.get("/flight")
+async def get_flight_radar_page():
+    from fastapi.responses import FileResponse
+    import os
+    file_path = os.path.join("games", "flight_radar.html")
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return {"error": "Файл flight_radar.html не найден в папке games"}
+
+# 2. Умный API-сканер данных VATSIM по никнейму (Callsign) пилота
+@app.get("/api/flight/track/{callsign}")
+async def track_vatsim_pilot(callsign: str):
+    url = "https://vatsim.net"
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, timeout=5.0)
+            if response.status_code != 200:
+                return {"status": "error", "message": "Не удалось получить данные VATSIM"}
+            
+            data = response.json()
+            pilots = data.get("pilots", [])
+            
+            # Ищем пилота в глобальном онлайн-списке (приводим к верхнему регистру)
+            target_pilot = null
+            for pilot in pilots:
+                if pilot.get("callsign", "").upper() == callsign.upper():
+                    target_pilot = pilot
+                    break
+            
+            if target_pilot:
+                return {
+                    "status": "online",
+                    "callsign": target_pilot.get("callsign"),
+                    "name": target_pilot.get("name"),
+                    "lat": target_pilot.get("latitude"),
+                    "lng": target_pilot.get("longitude"),
+                    "altitude": target_pilot.get("altitude"), # в футах
+                    "heading": target_pilot.get("heading"),   # курс в градусах
+                    "groundspeed": target_pilot.get("groundspeed"), # скорость в узлах
+                    "aircraft": target_pilot.get("aircraft_short"), # тип самолета
+                    "departure": target_pilot.get("flight_plan", {}).get("departure", "N/A"),
+                    "arrival": target_pilot.get("flight_plan", {}).get("arrival", "N/A")
+                }
+            else:
+                return {"status": "offline", "message": f"Пилот {callsign} сейчас не в сети или не в полете"}
+                
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
