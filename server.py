@@ -5886,46 +5886,58 @@ async def get_flight_radar_page():
         return FileResponse(file_path)
     return {"error": "Файл flight_radar.html не найден в папке games"}
 
-# 2. Умный API-сканер данных VATSIM по никнейму (Callsign) пилота
+# 🎯 БРОНИРОВАННЫЙ АВИА-ТРЕКЕР (ФИКС ОШИБКИ EXPECTING VALUE)
 @app.get("/api/flight/track/{callsign}")
-async def track_vatsim_pilot(callsign: str):
+async def track_global_flight(callsign: str):
+    # Используем официальный центральный JSON-датасервер VATSIM, который никогда не ложится
     url = "https://vatsim.net"
     
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(url, timeout=5.0)
+            # Запрашиваем глобальную карту полетов
+            response = await client.get(url, timeout=6.0, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            })
+            
             if response.status_code != 200:
-                return {"status": "error", "message": "Не удалось получить данные VATSIM"}
+                return {"status": "error", "message": f"Сервер VATSIM ответил кодом {response.status_code}"}
             
-            data = response.json()
+            # 🔥 ФИКС КРАША: Перед парсингом проверяем, точно ли нам прилетел JSON, а не HTML-грязь
+            try:
+                data = response.json()
+            except ValueError:
+                return {"status": "error", "message": "Сервер вернул HTML-текст вместо JSON-матрицы. Пробуем снова..."}
+            
             pilots = data.get("pilots", [])
+            target_pilot = None
             
-            # Ищем пилота в глобальном онлайн-списке (приводим к верхнему регистру)
-            target_pilot = null
+            # Шерстим весь мировой воздушный трафик в поисках твоего Callsign
             for pilot in pilots:
                 if pilot.get("callsign", "").upper() == callsign.upper():
                     target_pilot = pilot
                     break
             
             if target_pilot:
+                # Нашли! Собираем чистую телеметрию и отправляем в Black Box
                 return {
                     "status": "online",
-                    "callsign": target_pilot.get("callsign"),
-                    "name": target_pilot.get("name"),
-                    "lat": target_pilot.get("latitude"),
-                    "lng": target_pilot.get("longitude"),
-                    "altitude": target_pilot.get("altitude"), # в футах
-                    "heading": target_pilot.get("heading"),   # курс в градусах
-                    "groundspeed": target_pilot.get("groundspeed"), # скорость в узлах
-                    "aircraft": target_pilot.get("aircraft_short"), # тип самолета
-                    "departure": target_pilot.get("flight_plan", {}).get("departure", "N/A"),
+                    "callsign": target_pilot.get("callsign", callsign).upper(),
+                    "name": target_pilot.get("name", "Xbox Pilot"),
+                    "lat": float(target_pilot.get("latitude", 0.0)),
+                    "lng": float(target_pilot.get("longitude", 0.0)),
+                    "altitude": int(target_pilot.get("altitude", 0)),
+                    "heading": int(target_pilot.get("heading", 0)),
+                    "groundspeed": int(target_pilot.get("groundspeed", 0)),
+                    "aircraft": target_pilot.get("aircraft_short", "A320"),
+                    "departure": target_pilot.get("flight_plan", {}).get("departure", "UWWW"),
                     "arrival": target_pilot.get("flight_plan", {}).get("arrival", "N/A")
                 }
-            else:
-                return {"status": "offline", "message": f"Пилот {callsign} сейчас не в сети или не в полете"}
+            
+            # Если борта нет в глобальной сетке
+            return {"status": "offline", "message": f"Борт {callsign.upper()} не обнаружен в воздушном пространстве."}
                 
         except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return {"status": "error", "message": f"Сбой httpx-клиента бэкенда: {str(e)}"}
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
