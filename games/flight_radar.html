@@ -77,7 +77,11 @@
         <input type="text" id="pilotCallsignInput" class="radar-input" placeholder="Введите Callsign (напр. AFL123)" autocomplete="off">
         <button class="radar-btn" onclick="startFlightTracking()"><i class="fa-solid fa-radar" id="btn-icon"></i> Скан</button>
     </div>
-
+    <!-- 📟 АВИАЦИОННЫЙ ТЕРМИНАЛ ОТЛАДКИ (BLACK BOX LOG) -->
+    <div id="radar-terminal-log" style="position: absolute; top: 85px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 360px; height: 75px; background: rgba(5, 10, 20, 0.85); backdrop-filter: blur(15px); border: 1px solid rgba(0, 242, 254, 0.15); border-radius: 12px; z-index: 100; box-shadow: 0 5px 15px rgba(0,0,0,0.5); box-sizing: border-box; padding: 8px 12px; font-family: 'Courier New', monospace; font-size: 11px; overflow-y: auto; color: #34c759;">
+        <div style="color: #00f2fe; font-weight: bold; border-bottom: 1px solid rgba(0,242,254,0.1); padding-bottom: 3px; margin-bottom: 4px;"><i class="fa-solid fa-terminal"></i> BLACK BOX DIAGNOSTIC SYSTEM:</div>
+        <div id="terminal-content">Система готова. Ожидание ввода Callsign...</div>
+    </div>  
     <!-- ТАКТИЧЕСКАЯ ПАНЕЛЬ ПРИБОРОВ -->
     <div id="telemetry-panel">
         <div class="tel-header">
@@ -257,7 +261,77 @@
             const input = document.getElementById('pilotCallsignInput');
             if (input) input.focus();
         });
-      
+        // Функция для печати логов в наш мини-терминал на экране
+        function logRadarEvent(text, color = "#34c759") {
+            const content = document.getElementById('terminal-content');
+            if (content) {
+                const time = new Date().toLocaleTimeString();
+                content.innerHTML = `<span style="color: rgba(255,255,255,0.4)">[${time}]</span> <span style="color: ${color}">${text}</span><br>` + content.innerHTML;
+            }
+        }
+
+        async function fetchFlightData() {
+            if (!activeCallsign) return;
+
+            try {
+                logRadarEvent(`Запрос к FastAPI для борта ${activeCallsign}...`, "#94a3b8");
+                
+                // Дергаем наш API роут на бэкенде FastAPI
+                const response = await fetch(`/api/flight/track/${activeCallsign}`);
+                
+                if (!response.ok) {
+                    logRadarEvent(`Ошибка HTTP: Сервер вернул статус ${response.status}`, "#ff007f");
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (data.status === "online") {
+                    logRadarEvent(`Борт НАЙДЕН! Координаты: ${data.lat.toFixed(4)}, ${data.lng.toFixed(4)}`, "#34c759");
+                    
+                    document.getElementById('telemetry-panel').classList.add('panel-active');
+                    document.getElementById('btn-icon').className = "fa-solid fa-plane-lock";
+
+                    // Обновляем неоновые индикаторы
+                    document.getElementById('tel-name').innerText = `${data.name} (${data.callsign})`;
+                    document.getElementById('tel-type').innerText = data.aircraft;
+                    document.getElementById('tel-dep').innerText = data.departure;
+                    document.getElementById('tel-arr').innerText = data.arrival;
+                    
+                    document.getElementById('tel-alt').innerText = Number(data.altitude).toLocaleString();
+                    document.getElementById('tel-spd').innerText = data.groundspeed;
+                    document.getElementById('tel-hdg').innerText = `${data.heading}°`;
+
+                    const latLng = [data.lat, data.lng];
+
+                    if (!airplaneMarker) {
+                        airplaneMarker = L.marker(latLng, { icon: planeIcon }).addTo(radarMap);
+                        radarMap.setView(latLng, 6);
+                    } else {
+                        airplaneMarker.setLatLng(latLng);
+                    }
+
+                    setTimeout(() => {
+                        const planeDiv = document.getElementById('plane-avatar-rotate');
+                        if (planeDiv) {
+                            let correctRotation = data.heading - 45;
+                            planeDiv.style.transform = `rotate(${correctRotation}deg)`;
+                        }
+                    }, 100);
+
+                } else if (data.status === "offline") {
+                    logRadarEvent(`Ответ сети: Пилот не в сети или Volanta ещё не обновила кэш.`, "#ffaa00");
+                    document.getElementById('btn-icon').className = "fa-solid fa-radar";
+                } else if (data.status === "error") {
+                    logRadarEvent(`Сбой API: ${data.message}`, "#ff007f");
+                }
+            } catch (err) {
+                console.error("Ошибка трекера: ", err);
+                logRadarEvent(`Критический сбой сети фронтенда: ${err.message}`, "#ff007f");
+                document.getElementById('btn-icon').className = "fa-solid fa-triangle-exclamation";
+            }
+        }
+        
     </script>
 </body>
 </html>
