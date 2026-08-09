@@ -5939,6 +5939,73 @@ async def track_global_flight(callsign: str):
         except Exception as e:
             return {"status": "error", "message": f"Сбой httpx-клиента бэкенда: {str(e)}"}
 
+# =====================================================================
+# 🌐 СУВЕРЕННЫЙ БРАУЗЕР PINNET (БЭКЕНД-ДВИЖОК ДЛЯ ДОМЕНОВ .PIN)
+# =====================================================================
+
+# Объявляем коллекции в твоей MongoDB
+pin_sites_collection = db["pin_sites"]
+pin_history_collection = db["pin_history"]
+
+# 1. Раздача главной страницы браузера Pinnet
+@app.get("/pinnet")
+async def get_pinnet_browser_page():
+    from fastapi.responses import FileResponse
+    import os
+    file_path = os.path.join("games", "pinnet.html")
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return {"error": "Файл pinnet.html не найден в папке games"}
+
+# 2. API: Публикация / Создание своего сайта .pin в MongoDB
+@app.post("/api/pinnet/create")
+async def create_pin_site(data: dict):
+    domain = data.get("domain", "").strip().lower()
+    html_code = data.get("html", "")
+    
+    if not domain.endswith(".pin"):
+        domain += ".pin"
+        
+    if not domain or not html_code:
+        return {"status": "error", "message": "Имя домена и HTML-код не могут быть пустыми"}
+        
+    # Сохраняем или обновляем сайт в MongoDB (upsert=True)
+    pin_sites_collection.update_one(
+        {"domain": domain},
+        {"$set": {"domain": domain, "html": html_code, "created_at": datetime.utcnow()}},
+        upsert=True
+    )
+    return {"status": "success", "message": f"Сайт {domain} успешно опубликован в сети Pinnet!"}
+
+# 3. API: Запрос / Разрешение домена .pin (Поиск сайта по базе)
+@app.get("/api/pinnet/resolve/{domain}")
+async def resolve_pin_domain(domain: str):
+    domain_clean = domain.strip().lower()
+    if not domain_clean.endswith(".pin"):
+        domain_clean += ".pin"
+        
+    site = pin_sites_collection.find_one({"domain": domain_clean})
+    if site:
+        # Автоматически добавляем переход в историю закладок MongoDB
+        pin_history_collection.update_one(
+            {"domain": domain_clean},
+            {"$set": {"domain": domain_clean, "visited_at": datetime.utcnow()}},
+            upsert=True
+        )
+        return {"status": "found", "html": site["html"], "domain": domain_clean}
+    
+    return {"status": "404", "message": f"Домен {domain_clean} не зарегистрирован в сети Pinnet."}
+
+# 4. API: Получение списка недавно посещенных закладок из MongoDB
+@app.get("/api/pinnet/history")
+async def get_pinnet_history():
+    # Достаем последние 8 посещенных сайтов, сортируя по времени
+    history_cursor = pin_history_collection.find().sort("visited_at", -1).limit(8)
+    history_list = []
+    for item in history_cursor:
+        history_list.append({"domain": item["domain"]})
+    return {"status": "success", "history": history_list}
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
