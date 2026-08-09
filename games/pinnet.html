@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
+    <title>Pinnet Sovereign Web 3.0 Browser</title>
+    <link rel="stylesheet" href="https://cloudflare.com"></link>
+    <style>
+        /* Переменные для динамической смены тем оформления (По умолчанию: Киберпанк) */
+        :root {
+            --bg-main: #060b13;
+            --bg-panel: rgba(15, 23, 42, 0.6);
+            --accent: #00f2fe;
+            --accent-glow: rgba(0, 242, 254, 0.3);
+            --text: #ffffff;
+            --text-muted: #94a3b8;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        /* 🍏 ТЕМА: Apple Clean Glass */
+        body.theme-apple {
+            --bg-main: #f5f5f7;
+            --bg-panel: rgba(255, 255, 255, 0.4);
+            --accent: #0071e3;
+            --accent-glow: rgba(0, 113, 227, 0.15);
+            --text: #1d1d1f;
+            --text-muted: #86868b;
+            --border: rgba(0, 0, 0, 0.1);
+        }
+
+        /* 🖲️ ТЕМА: Dark Obsidian */
+        body.theme-obsidian {
+            --bg-main: #09090b;
+            --bg-panel: rgba(20, 20, 20, 0.8);
+            --accent: #a855f7;
+            --accent-glow: rgba(168, 85, 247, 0.25);
+            --text: #f4f4f5;
+            --text-muted: #71717a;
+            --border: rgba(255, 255, 255, 0.06);
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: var(--bg-main); color: var(--text); overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            transition: background 0.4s ease;
+        }
+
+        /* 🖥️ ШАПКА И НАВИГАЦИЯ БРАУЗЕРА */
+        .browser-header {
+            display: flex; align-items: center; gap: 12px; padding: 12px 20px;
+            background: var(--bg-panel); backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border); box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            z-index: 100; position: relative;
+        }
+
+        .browser-actions { display: flex; gap: 8px; }
+        .action-dot { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; }
+        .dot-close { background: #ff5f56; }
+        .dot-min { background: #ffbd2e; }
+        .dot-theme { background: #27c93f; } /* Зелёная точка переключает темы! */
+
+        .url-bar-container {
+            flex-grow: 1; display: flex; align-items: center; background: rgba(0,0,0,0.2);
+            border: 1px solid var(--border); border-radius: 10px; padding: 6px 12px; gap: 10px;
+            transition: border 0.3s;
+        }
+        .url-bar-container:focus-within { border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+        .url-input {
+            flex-grow: 1; background: transparent; border: none; color: var(--text);
+            font-size: 14px; font-weight: 500; outline: none;
+        }
+
+        /* 🏠 ГЛАВНЫЙ ЭКРАН И ЛЕНТА ЗАКЛАДОК (ДОМАШНЯЯ СТРАНИЦА) */
+        #home-screen {
+            padding: 40px 20px; max-width: 800px; margin: 0 auto;
+            display: flex; flex-direction: column; align-items: center; gap: 35px;
+        }
+        .browser-logo { font-size: 48px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; background: linear-gradient(45deg, var(--accent), #ff007f); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+        .search-container {
+            width: 100%; display: flex; background: var(--bg-panel);
+            border: 1px solid var(--border); border-radius: 14px; padding: 10px 16px; gap: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        .search-input { flex-grow: 1; background: transparent; border: none; color: var(--text); font-size: 16px; outline: none; }
+        .search-btn { background: transparent; border: none; color: var(--accent); font-size: 18px; cursor: pointer; }
+
+        .bookmarks-section { width: 100%; }
+        .section-title { font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 15px; display: flex; align-items: center; gap: 6px; }
+        .bookmarks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 15px; width: 100%; }
+        
+        /* КАРТОЧКИ САЙТОВ В ЛЕНТЕ */
+        .bookmark-card {
+            background: var(--bg-panel); border: 1px solid var(--border); border-radius: 14px;
+            padding: 15px 10px; text-align: center; cursor: pointer; transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+            display: flex; flex-direction: column; align-items: center; gap: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        .bookmark-card:hover { transform: translateY(-5px); border-color: var(--accent); box-shadow: 0 8px 20px var(--accent-glow); }
+        .bookmark-icon { width: 36px; height: 36px; background: rgba(255,255,255,0.05); border-radius: 10px; display: flex; justify-content: center; align-items: center; color: var(--accent); font-size: 18px; }
+        .bookmark-title { font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; width: 100%; }
+
+        /* 🖥️ КОНТЕНТНЫЙ ПЛЕЙСХОЛДЕР СУВЕРЕННЫХ САЙТОВ */
+        #web-viewport-container { display: none; width: 100%; height: calc(100% - 60px); background: #fff; }
+        #web-viewport-iframe { width: 100%; height: 100%; border: none; background: #fff; }
+
+        /* 🎛️ КАСТОМНОЕ КОНТЕКСТНОЕ МЕНЮ (ПРАВЫЙ КЛИК МЫШИ) */
+        #custom-context-menu {
+            position: absolute; display: none; background: rgba(20, 20, 20, 0.8);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 200px; z-index: 1000;
+            padding: 6px 0; animation: menuFade 0.2s ease;
+        }
+        @keyframes menuFade { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .context-item { padding: 10px 16px; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 10px; cursor: pointer; color: #f4f4f5; transition: background 0.2s; }
+        .context-item:hover { background: var(--accent); color: #000; font-weight: 600; }
+        .context-divider { height: 1px; background: rgba(255,255,255,0.08); margin: 4px 0; }
+
+        /* 🏗️ МОДАЛЬНОЕ ОКНО КОНСТРУКТОРА САЙТОВ */
+        .pin-modal-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(10px);
+            z-index: 500; display: none; justify-content: center; align-items: center;
+        }
+        .pin-modal {
+            background: #0d1527; border: 1px solid var(--accent); border-radius: 20px;
+            width: 90%; max-width: 550px; padding: 25px; box-shadow: 0 0 30px var(--accent-glow);
+            box-sizing: border-box; display: flex; flex-direction: column; gap: 15px;
+        }
+        .modal-input { background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: #fff; font-size: 14px; outline: none; }
+        .modal-textarea { background: rgba(0,0,0,0.4); border: 1px solid var(--border); border-radius: 10px; padding: 12px; color: #fff; font-size: 13px; font-family: monospace; height: 180px; resize: none; outline: none; }
+        .modal-btn-row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 5px; }
+        .modal-btn { padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; border: none; }
+    </style>
+</head>
+<body>
+
+    <!-- 🌐 ШАПКА БРАУЗЕРА (ПАНЕЛЬ УПРАВЛЕНИЯ) -->
+    <div class="browser-header">
+        <div class="browser-actions">
+            <div class="action-dot dot-close" onclick="goHome()" title="Домой"></div>
+            <div class="action-dot dot-min" onclick="location.reload()" title="Перезагрузить"></div>
+            <div class="action-dot dot-theme" onclick="rotateTheme()" title="Сменить оформление"></div>
+        </div>
+        
+        <div class="url-bar-container">
+            <i class="fa-solid fa-globe" style="color: var(--accent); font-size: 14px;"></i>
+            <input type="text" id="browserUrlInput" class="url-input" placeholder="Введите адрес сайта... (напр. google.pin)" autocomplete="off">
+            <i class="fa-solid fa-arrow-right" style="cursor: pointer; opacity: 0.6;" onclick="navigatePinnet()"></i>
+        </div>
+    </div>
+
+    <!-- 🏠 ДОМАШНИЙ ЭКРАН (ЛЕНТА С ЗАСТАВКАМИ И ЗАКЛАДКАМИ) -->
+    <div id="home-screen">
+        <div class="browser-logo"><i class="fa-solid fa-network-wired"></i> PINNET Browser</div>
+        
+        <!-- СТРОКА ПОИСКА PINNET -->
+        <div class="search-container">
+            <i class="fa-solid fa-magnifying-glass" style="color: var(--text-muted); margin-top: 2px;"></i>
+            <input type="text" id="browserSearchInput" class="search-input" placeholder="Поиск в суверенной сети Pinnet...">
+            <button class="search-btn" onclick="executePinnetSearch()"><i class="fa-solid fa-arrow-turn-down"></i></button>
+        </div>
+
+        <!-- ЛЕНТА НЕДАВНО ПОСЕЩЕННЫХ КАРТОЧЕК -->
+        <div class="bookmarks-section">
+            <div class="section-title"><i class="fa-solid fa-clock-rotate-left"></i> Недавно посещённые сайты (.pin)</div>
+            <div class="bookmarks-grid" id="historyGrid">
+                <!-- Карточки закладок будут генерироваться через JS из MongoDB -->
+                <div style="grid-column: span 3; color: var(--text-muted); font-size: 12px; font-style: italic;">Загрузка закладок из MongoDB...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🖥️ ИЗОЛИРОВАННЫЙ КОНТЕЙНЕР ДЛЯ ПРОСМОТРА САЙТОВ -->
+    <div id="web-viewport-container">
+        <iframe id="web-viewport-iframe" sandbox="allow-scripts"></iframe>
+    </div>
+
+    <!-- 🎛️ КАСТОМНОЕ КОНТЕКСТНОЕ МЕНЮ (ПРАВЫЙ КЛИК МЫШИ) -->
+    <div id="custom-context-menu">
+        <div class="context-item" onclick="openConstructorModal()"><i class="fa-solid fa-laptop-code"></i> Создать свой сайт</div>
+        <div class="context-item" onclick="viewCurrentSource()"><i class="fa-solid fa-code"></i> Посмотреть код страницы</div>
+        <div class="context-divider"></div>
+        <div class="context-item" onclick="location.reload()"><i class="fa-solid fa-rotate-right"></i> Перезагрузить</div>
+    </div>
+
+    <!-- 🏗️ МОДАЛЬНОЕ ОКНО КОНСТРУКТОРА САЙТОВ -->
+    <div class="pin-modal-overlay" id="constructorModal">
+        <div class="pin-modal">
+            <div style="font-weight: 700; font-size: 16px; color: var(--accent);"><i class="fa-solid fa-network-wired"></i> Регистратор доменов & Web-песочница</div>
+            <input type="text" id="modalDomainInput" class="modal-input" placeholder="Желаемый адрес домена (напр. news.pin)">
+            <textarea id="modalHtmlInput" class="modal-textarea" placeholder="&lt;html&gt;&#10;&lt;body style='background:#111; color:#fff; padding:20px; font-family:sans-serif;'&gt;&#10;  &lt;h1&gt;Привет, Pinnet!&lt;/h1&gt;&#10;&lt;/body&gt;&#10;&lt;/html&gt;"></textarea>
+            <div class="modal-btn-row">
+                <button class="modal-btn" style="background: rgba(255,255,255,0.08); color: #fff;" onclick="closeConstructorModal()">Отмена</button>
+                <button class="modal-btn" style="background: var(--accent); color: #000;" onclick="publishCustomSite()">Опубликовать в MongoDB</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        // =====================================================================
+        // 🎛️ 1. ГЛОБАЛЬНЫЙ СЕТАП ТЕМ ОФОРМЛЕНИЯ И КОНТЕКСТНОГО МЕНЮ
+        // =====================================================================
+        const currentThemeList = ['theme-cyberpunk', 'theme-apple', 'theme-obsidian'];
+        let activeThemeIdx = 0;
+        let lastLoadedHtmlCode = ""; // Хранилище для просмотра исходного кода страницы
+
+        // Функция поочередного переключения оформления браузера Pinnet
+        function rotateTheme() {
+            document.body.classList.remove(currentThemeList[activeThemeIdx]);
+            activeThemeIdx = (activeThemeIdx + 1) % currentThemeList.length;
+            if (activeThemeIdx > 0) {
+                document.body.classList.add(currentThemeList[activeThemeIdx]);
+            }
+            console.log(`Тема переключена на: ${currentThemeList[activeThemeIdx] || 'default-cyberpunk'}`);
+        }
+
+        // Вспомогательный хелпер: подбирает красивую иконку под имя домена .pin
+        function getIconForDomain(domain) {
+            if (domain.includes('news')) return 'fa-newspaper';
+            if (domain.includes('game') || domain.includes('fight') || domain.includes('play')) return 'fa-gamepad';
+            if (domain.includes('chat') || domain.includes('social') || domain.includes('gram')) return 'fa-comments';
+            if (domain.includes('crypto') || domain.includes('bank') || domain.includes('coin')) return 'fa-coins';
+            return 'fa-globe'; // Иконка по умолчанию
+        }
+
+        // 🔥 СУПЕР-ПЕРЕХВАТ: Блокируем системное меню Windows/Android и выводим наше кастомное меню!
+        document.addEventListener('contextmenu', e => {
+            e.preventDefault(); // Намертво глушим дефолтное меню браузера
+            
+            const menu = document.getElementById('custom-context-menu');
+            if (!menu) return;
+
+            menu.style.display = 'block';
+            
+            // Ювелирно позиционируем меню ровно в точке клика мыши или тапа пальцем
+            let posX = e.clientX;
+            let posY = e.clientY;
+
+            // Защита от вылета меню за правый и нижний край экрана
+            if (posX + 200 > window.innerWidth) posX = window.innerWidth - 210;
+            if (posY + 160 > window.innerHeight) posY = window.innerHeight - 170;
+
+            menu.style.left = `${posX}px`;
+            menu.style.top = `${posY}px`;
+        });
+
+        // Прячем кастомное контекстное меню при обычном левом клике в любую точку экрана
+        document.addEventListener('click', e => {
+            const menu = document.getElementById('custom-context-menu');
+            if (menu && !menu.contains(e.target)) {
+                menu.style.display = 'none';
+            }
+        });
+        // =====================================================================
+        // 📡 2. АСИНХРОННЫЙ ДВИЖОК ОПРОСА MONGODB И НАВИГАЦИЯ PINNET
+        // =====================================================================
+        
+        // Автоматически подгружаем последние 8 закладок из MongoDB при старте браузера
+        async function loadBrowserHistoryFromMongo() {
+            const grid = document.getElementById('historyGrid');
+            if (!grid) return;
+
+            try {
+                const response = await fetch('/api/pinnet/history');
+                const data = await response.json();
+
+                if (data.status === "success" && data.history.length > 0) {
+                    grid.innerHTML = ""; // Стираем плашку загрузки
+                    
+                    data.history.forEach(item => {
+                        const iconClass = getIconForDomain(item.domain);
+                        
+                        // Генерируем сочную интерактивную карточку в ленте закладок
+                        const card = document.createElement('div');
+                        card.className = 'bookmark-card';
+                        card.setAttribute('onclick', `fastNavigate('${item.domain}')`);
+                        card.innerHTML = `
+                            <div class="bookmark-icon"><i class="fa-solid ${iconClass}"></i></div>
+                            <div class="bookmark-title" title="${item.domain}">${item.domain}</div>
+                        `;
+                        grid.appendChild(card);
+                    });
+                } else {
+                    grid.innerHTML = `<div style="grid-column: span 3; color: var(--text-muted); font-size: 12px; font-style: italic;">Лента закладок пуста. Создайте свой первый сайт!</div>`;
+                }
+            } catch (err) {
+                console.error("Ошибка MongoDB истории: ", err);
+                grid.innerHTML = `<div style="grid-column: span 3; color: #ff007f; font-size: 12px;">Ошибка синхронизации с MongoDB.</div>`;
+            }
+        }
+
+        // Функция перехода по клику на карточку из ленты
+        function fastNavigate(domain) {
+            const urlInput = document.getElementById('browserUrlInput');
+            if (urlInput) urlInput.value = domain;
+            navigatePinnet();
+        }
+
+        // Главный парсер поисковой строки Pinnet
+        function executePinnetSearch() {
+            const searchInput = document.getElementById('browserSearchInput');
+            if (!searchInput || !searchInput.value.trim()) return;
+
+            const query = searchInput.value.trim();
+            // Поисковый хак: если вбили слово, превращаем его в суверенный домен поиска
+            const targetDomain = query.includes('.pin') ? query : `${query.toLowerCase()}.pin`;
+            
+            const urlInput = document.getElementById('browserUrlInput');
+            if (urlInput) urlInput.value = targetDomain;
+            navigatePinnet();
+        }
+
+        // МЕГА-НАВИГАТОР: Разрешение доменов .pin через API-шлюз FastAPI + MongoDB
+        async function navigatePinnet() {
+            const urlInput = document.getElementById('browserUrlInput');
+            if (!urlInput) return;
+
+            let domain = urlInput.value.trim().toLowerCase();
+            if (!domain) return;
+
+            // Если пользователь забыл дописать .pin — дописываем принудительно
+            if (!domain.endsWith('.pin')) {
+                domain += '.pin';
+                urlInput.value = domain;
+            }
+
+            try {
+                // Перехватываем управление и шлём запрос в MongoDB через бэкенд
+                const response = await fetch(`/api/pinnet/resolve/${domain}`);
+                const data = await response.json();
+
+                const homeScreen = document.getElementById('home-screen');
+                const viewportCont = document.getElementById('web-viewport-container');
+                const iframe = document.getElementById('web-viewport-iframe');
+
+                if (data.status === "found") {
+                    // Переключаем экраны: прячем ленту закладок, открываем Web-песочницу
+                    homeScreen.style.display = 'none';
+                    viewportCont.style.display = 'block';
+
+                    // Сохраняем код для просмотра исходников
+                    lastLoadedHtmlCode = data.html;
+
+                    // Инжектируем суверенный HTML/CSS код сайта напрямую внутрь изолированного iframe
+                    iframe.srcdoc = data.html;
+                    
+                    // Перезагружаем ленту карточек на фоне, чтобы обновить историю в MongoDB
+                    loadBrowserHistoryFromMongo();
+                } else {
+                    // Если сайта .pin нет в базе данных — выводим кастомную 404 ошибку браузера
+                    homeScreen.style.display = 'none';
+                    viewportCont.style.display = 'block';
+                    
+                    const error404Html = `
+                        <html>
+                        <body style="background: #060b13; color: #fff; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; margin:0;">
+                            <h1 style="font-size: 72px; color: #ff007f; margin: 0; text-shadow: 0 0 15px rgba(255,0,127,0.4);">404</h1>
+                            <h2 style="margin-top: 10px; font-size: 18px; color: #94a3b8;">Pinnet Link Error</h2>
+                            <p style="font-size: 13px; color: rgba(255,255,255,0.4); max-width: 300px; text-align: center; line-height: 1.5; margin-top: 15px;">
+                                Домен <b>${domain}</b> не зарегистрирован в суверенном реестре MongoDB. Кликните правой кнопкой мыши для создания!
+                            </p>
+                        </body>
+                        </html>
+                    `;
+                    lastLoadedHtmlCode = error404Html;
+                    iframe.srcdoc = error404Html;
+                }
+            } catch (err) {
+                console.error("Критический сбой навигации: ", err);
+            }
+        }
+
+        // Кнопка возврата на домашний экран (История/Закладки)
+        function goHome() {
+            document.getElementById('home-screen').style.display = 'flex';
+            document.getElementById('web-viewport-container').style.display = 'none';
+            const urlInput = document.getElementById('browserUrlInput');
+            if (urlInput) urlInput.value = "";
+            lastLoadedHtmlCode = "";
+            loadBrowserHistoryFromMongo(); // Обновляем ленту закладок
+        }
+        // =====================================================================
+        // 🏗️ 3. МОДАЛЬНЫЙ КОНСТРУКТОР САЙТОВ И ПРОСМОТР КОДА (ФИНАЛ)
+        // =====================================================================
+        
+        // Управление модальным окном веб-песочницы
+        function openConstructorModal() {
+            const menu = document.getElementById('custom-context-menu');
+            if (menu) menu.style.display = 'none'; // Прячем меню
+            
+            const modal = document.getElementById('constructorModal');
+            if (modal) modal.style.display = 'flex';
+            
+            // Если пользователь уже находится на каком-то сайте — подставляем его имя для удобного апдейта
+            const urlInput = document.getElementById('browserUrlInput');
+            const modalDomain = document.getElementById('modalDomainInput');
+            if (urlInput && modalDomain && urlInput.value) {
+                modalDomain.value = urlInput.value;
+            }
+        }
+
+        function closeConstructorModal() {
+            const modal = document.getElementById('constructorModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        // ОТПРАВКА HTML-КОДА САЙТА НАПРЯМУЮ В MONGODB
+        async function publishCustomSite() {
+            const domainInput = document.getElementById('modalDomainInput');
+            const htmlInput = document.getElementById('modalHtmlInput');
+
+            if (!domainInput || !htmlInput) return;
+
+            let domain = domainInput.value.trim().toLowerCase();
+            const html = htmlInput.value.trim();
+
+            if (!domain || !html) {
+                Swal.fire({ title: "Ошибка", text: "Заполните имя домена и HTML-код страницы!", icon: "warning", background: "#0d141f", color: "#fff", confirmButtonColor: "#ff007f" });
+                return;
+            }
+
+            if (!domain.endsWith('.pin')) {
+                domain += '.pin';
+            }
+
+            try {
+                // Шлём POST-запрос с JSON-пакетом на наш бэкенд FastAPI
+                const response = await fetch('/api/pinnet/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ domain: domain, html: html })
+                });
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    closeConstructorModal();
+                    
+                    // Переключаем адресную строку на свежесозданный сайт и летим туда!
+                    const urlInput = document.getElementById('browserUrlInput');
+                    if (urlInput) urlInput.value = domain;
+                    
+                    Swal.fire({
+                        title: "🚀 Успех!",
+                        text: `Сайт ${domain} успешно скомпилирован и опубликован в суверенной сети Pinnet!`,
+                        icon: "success",
+                        background: "#0d141f",
+                        color: "#fff",
+                        confirmButtonColor: "#34c759"
+                    }).then(() => {
+                        navigatePinnet(); // Авто-переход на новый сайт
+                    });
+                }
+            } catch (err) {
+                console.error("Ошибка публикации в MongoDB: ", err);
+                Swal.fire({ title: "Сбой сети", text: "Не удалось достучаться до базы данных MongoDB.", icon: "error", background: "#0d141f", color: "#fff" });
+            }
+        }
+
+        // КЛАССИКА VIEW-SOURCE: Выводим код текущей страницы через красивый SweetAlert2
+        function viewCurrentSource() {
+            const menu = document.getElementById('custom-context-menu');
+            if (menu) menu.style.display = 'none';
+
+            if (!lastLoadedHtmlCode) {
+                Swal.fire({ title: "Пустая страница", text: "На домашнем экране нет исходного HTML-кода.", icon: "info", background: "#0d141f", color: "#fff" });
+                return;
+            }
+
+            // Экранируем спецсимволы, чтобы HTML не отрендерился внутри модалки
+            const escapedHtml = lastLoadedHtmlCode
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+
+            Swal.fire({
+                title: "🖥️ Исходный код страницы (View Source)",
+                html: `<pre style="text-align: left; background: #050a14; padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto; color: #34c759; white-space: pre-wrap; word-break: break-all;">${escapedHtml}</pre>`,
+                width: '600px',
+                background: "#0d141f",
+                color: "#fff",
+                confirmButtonColor: "#00f2fe"
+            });
+        }
+
+        // Привязываем клавишу Enter к поисковой и адресной строкам браузера
+        document.getElementById('browserUrlInput').addEventListener('keydown', e => { if (e.key === 'Enter') navigatePinnet(); });
+        document.getElementById('browserSearchInput').addEventListener('keydown', e => { if (e.key === 'Enter') executePinnetSearch(); });
+
+        // 🚀 ГЛАВНЫЙ ЗАПУСК СИСТЕМЫ ПРИ ИНИЦИАЛИЗАЦИИ РОУТА
+        // Подгружаем закладки за секунду до рендера домашней страницы
+        loadBrowserHistoryFromMongo();
+    </script>
+</body>
+</html>
