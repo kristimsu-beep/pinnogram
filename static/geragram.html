@@ -365,29 +365,10 @@
             line-height: 1.4;
             position: relative;
             word-wrap: break-word;
-            
-            /* 🎯 ДОБАВЛЯЕМ ДЛЯ TELEGRAM-STYLE: */
-            /* Настраиваем идеальную кривую Безье для мягкого жидкого сжатия */
-            transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1), opacity 0.3s ease;
-            max-height: 800px; /* Запас по высоте для длинных простыней текста */
-            overflow: hidden;  /* Намертво прячем текст, когда пузырь начинает сжиматься */
-            box-sizing: border-box;
         }
         .msg-inbound { background: #182533; align-self: flex-start; border-bottom-left-radius: 4px; }
         .msg-outbound { background: #2b5278; align-self: flex-end; border-bottom-right-radius: 4px; }
         .msg-time { font-size: 11px; color: rgba(255,255,255,0.5); text-align: right; margin-top: 4px; display: block; }
-
-        /* 🔥 УЛЬТИМАТИВНЫЙ КЛАСС СЖАТИЯ ПО ВЫСОТЕ В НОЛЬ: */
-        .msg-bubble.message-collapse-anim {
-            max-height: 0 !important;
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-            margin-top: 0 !important;
-            margin-bottom: 0 !important;
-            opacity: 0 !important;
-            border: none !important;
-            pointer-events: none; /* Защита от случайных кликов во время исчезновения */
-        }
 
         /* ПОЛЕ ВВОДА СООБЩЕНИЙ (ФУТЕР) — НАМЕРТВО ПРИЖАТ К НИЗУ ЭКРАНА */
         /* 5. Нижняя строка ввода (Футер чата) */
@@ -2187,11 +2168,6 @@
                 // Возвращаем старую привязку ID
                 bubble.dataset.id = msg.id || msg._id;
                 
-                // 🎯 СУПЕР-ФИКС ДЛЯ TELEGRAM-STYLE АНИМАЦИИ:
-                // Принудительно создаем физический HTML id у пузыря, чтобы JS мог намертво вцепиться в него при удалении!
-                bubble.id = `msg-${msg.id || msg._id}`;
-
-                
                 let quoteContent = '';
                 let mainMediaContent = '';
                 let forwardedBadgeHtml = "";
@@ -2343,7 +2319,7 @@
             } catch (err) { alert('Ошибка отправки.'); }
         } // 🎯 ФИКС: ВОТ ЭТА ЗАКРЫВАЮЩАЯ СКОБКА СПАСАЕТ ВЕСЬ МЕССЕНДЖЕР!
 
-        // 🔥 НАСТОЯЩЕЕ БОЕВОЕ УДАЛЕНИЕ ИЗ MONGODB ATLAS С TELEGRAM-STYLE КИНЕТИКОЙ
+        // 🔥 НАСТОЯЩЕЕ БОЕВОЕ УДАЛЕНИЕ ИЗ MONGODB ATLAS
         async function triggerDeleteAction() {
             if (!selectedMsgId || selectedMsgId === "undefined") {
                 alert("Не удалось определить ID сообщения для удаления.");
@@ -2357,32 +2333,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message_id: selectedMsgId })
                 });
-
-                if (res.ok) {
-                    // 1. Находим DOM-элемент удаляемого пузыря в чате
-                    // 🎯 ВАЖНО: Убедись, что при рендере в innerHTML у тебя пузырю присваивается id, 
-                    // например: id="msg-${item._id}" или id="msg-${item.message_id}"
-                    const messageElement = document.getElementById(`msg-${selectedMsgId}`);
-                    
-                    if (messageElement) {
-                        // 🦾 ВЫСТРЕЛИВАЕМ КИНЕТИКУ: Добавляем класс плавного сжатия по высоте в ноль!
-                        messageElement.classList.add('message-collapse-anim');
-                        
-                        // 2. Даём анимации ровно 400мс полностью раствориться и схлопнуться...
-                        setTimeout(() => {
-                            // ...и только после этого мягко перерисовываем историю из MongoDB Atlas!
-                            loadChatHistory();
-                        }, 400);
-                    } else {
-                        // Запасной вариант: если элемент по ID на экране не найден, обновляем сразу
-                        loadChatHistory();
-                    }
-                } else { 
-                    alert('Ошибка удаления на стороне сервера.'); 
-                }
-            } catch (err) { 
-                alert('Сбой сети.'); 
-            }
+                if (res.ok) { loadChatHistory(); } 
+                else { alert('Ошибка удаления на стороне сервера.'); }
+            } catch (err) { alert('Сбой сети.'); }
         }
 
         // Подготовка к изменению сообщения
@@ -4362,4 +4315,3 @@
 
 </body>
 </html>
-
