@@ -1834,6 +1834,21 @@
                         const isCurrentActive = activeChatUser && contact.username && (activeChatUser.toString().toLowerCase() === contact.username.toString().toLowerCase());
                         item.className = 'chat-item' + (isCurrentActive ? ' active' : '');
                         
+                        // 🎯 АВТО-МАРКИРОВКА ДЛЯ ПАПОК TELEGRAM-STYLE:
+                        let chatType = "private"; // По умолчанию — личный чат с человеком
+                        
+                        // Приводим позывной / ник к нижнему регистру для снайперской точности
+                        const uNameLower = (contact.username || "").toLowerCase();
+                        
+                        if (uNameLower.includes('bot') || contact.is_bot) {
+                            chatType = "bot";   // Сортировка в папку «Боты» 🤖
+                        } else if (uNameLower === "losmorer" || contact.is_game || contact.room_id || uNameLower.includes('game') || uNameLower.includes('fight') || uNameLower.includes('radar') || uNameLower.includes('referee')) {
+                            chatType = "game";  // Сортировка в папку «Игры» (Настолка, Армандия, ЕА, Авиарадар) 🎮
+                        }
+                        
+                        // Намертво привязываем дата-атрибут к элементу HTML перед рендером
+                        item.setAttribute('data-type', chatType);
+                     
                         let avHtml = getAvatarElementHtml(contact, 44);
                         
                         // 🟢 ТЕЛЕГРАМ-СТИЛЬ: Индикатор статуса онлайна
@@ -2344,11 +2359,18 @@
                     reactionsHtml += `</div>`;
                 }
                 
-                // 🎯 СБОРКА ШАБЛОНА ПУЗЫРЯ: Метка пересылки выводится на самый верх контента!
+                // 🎯 СУПЕР-ФИКС СПОЙЛЕРА: Пропускаем сырой текст сообщения через маскировщик палочек ||
+                let processedText = parseSpoilersInText(msg.text || "");
+
+                // 🧬 СБОРКА ШАБЛОНА ПУЗЫРЯ: Метка пересылки выводится на самый верх контента!
                 bubble.innerHTML = `
                     ${forwardedBadgeHtml}
                     ${quoteContent}
                     ${mainMediaContent}
+                    
+                    <!-- 🤫 ВСТАВЛЯЕМ ОБРАБОТАННЫЙ ТЕКСТ СО СПОЙЛЕРОМ -->
+                    <div class="msg-text-body" style="font-size: 15px; line-height: 1.4; color: #fff; word-wrap: break-word;">${processedText}</div>
+                    
                     <div style="text-align: right; margin-top: 4px; display: block; font-size: 11px;">
                         ${editedLabel}
                         <span class="msg-time" style="color: rgba(255,255,255,0.4);">${msgTime}</span>
