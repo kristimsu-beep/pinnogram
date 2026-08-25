@@ -1047,6 +1047,64 @@
         .quantum-ai-fullscreen-overlay.visible .quantum-ai-dynamic-text-panel {
             transform: translateY(0) !important;
         }
+        /* 🤫 СТИЛИ ШПИОНСКОГО СПОЙЛЕРА (МАСКИРОВЩИК ТЕКСТА) */
+        .msg-spoiler {
+            background: rgba(255, 255, 255, 0.15);
+            color: transparent !important;
+            text-shadow: 0 0 8px rgba(255, 255, 255, 0.9);
+            cursor: pointer;
+            border-radius: 4px;
+            padding: 0 4px;
+            transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+            position: relative;
+            user-select: none;
+        }
+        /* Анимация летящих неоновых искр/пыли поверх скрытого текста */
+        .msg-spoiler::after {
+            content: "░▒░▒░";
+            position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+            color: var(--neon-blue, #00f2fe);
+            text-shadow: 0 0 4px var(--neon-blue, #00f2fe);
+            opacity: 0.6;
+            font-size: 12px;
+            letter-spacing: 1px;
+            overflow: hidden;
+            white-space: nowrap;
+            animation: spoilerBlink 1.5s infinite alternate;
+        }
+        .msg-spoiler.spoiler-revealed {
+            background: transparent;
+            color: inherit !important;
+            text-shadow: none !important;
+            user-select: text;
+        }
+        .msg-spoiler.spoiler-revealed::after { display: none; }
+
+        @keyframes spoilerBlink { 0% { opacity: 0.3; } 100% { opacity: 0.8; } }
+
+        /* 🗂️ СТИЛИ TELEGRAM-STYLE ПАПОК ЧАТОВ */
+        .chats-folder-bar {
+            display: flex; gap: 8px; padding: 10px 15px;
+            background: rgba(15, 23, 42, 0.4);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            overflow-x: auto; scrollbar-width: none;
+        }
+        .chats-folder-bar::-webkit-scrollbar { display: none; }
+        
+        .folder-tab {
+            padding: 6px 14px; font-size: 12px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            color: rgba(255, 255, 255, 0.5); border-radius: 20px;
+            cursor: pointer; transition: all 0.3s ease;
+            white-space: nowrap; border: 1px solid transparent;
+        }
+        .folder-tab:hover { color: #fff; }
+        .folder-tab.folder-active {
+            background: rgba(0, 242, 254, 0.12);
+            color: var(--neon-blue, #00f2fe);
+            border-color: rgba(0, 242, 254, 0.3);
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.15);
+        }
     </style>
 </head>
 <body>
@@ -1087,6 +1145,7 @@
             
             <!-- ЛЕВАЯ КОЛОНКА: СЕРВИСНАЯ ПАНЕЛЬ И КОНТАКТЫ (ОБНОВЛЕНО: ДОБАВЛЕНА КНОПКА ТРЁХ ТОЧЕК) -->
             <div class="sidebar">
+
                 <!-- ПАНЕЛЬ ТВОЕГО ПРОФИЛЯ + КНОПКА НАСТРОЕК DISCORD-STYLE -->
                 <div style="padding: 16px 16px 4px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
                     <div style="display: flex; align-items: center; gap: 12px; min-width: 0;">
@@ -1112,7 +1171,13 @@
                     <!-- Выпадающий список найденных людей -->
                     <div class="search-results-dropdown" id="searchResults"></div>
                 </div>
-                
+                <!-- 🗂️ СУПЕР-ПОСАДКА: Вставляем папки чатов Telegram-Style ровно сюда! -->
+                <div class="chats-folder-bar">
+                    <div class="folder-tab folder-active" onclick="switchFolder('all', this)">Все</div>
+                    <div class="folder-tab" onclick="switchFolder('private', this)">Личные</div>
+                    <div class="folder-tab" onclick="switchFolder('bots', this)">Боты</div>
+                    <div class="folder-tab" onclick="switchFolder('games', this)">Игры</div>
+                </div>             
                 <!-- Список чатов / контактов -->
                 <div class="chats-list" id="chatsContainerList">
                     <!-- Сюда JS будет рендерить активные диалоги -->
@@ -2293,6 +2358,8 @@
                 `;
                 container.appendChild(bubble);
             });
+            // Запускаем радар спойлеров для свежеотрендеренных сообщений чата
+            initMessageSpoilers();
             
             // Скролл вниз
             const scrollWrapper = document.getElementById('chatBodyScroll');
@@ -4224,7 +4291,72 @@
             globalRecognizedPromptText = "";
             if (globalSpeechRecognitionEngine) globalSpeechRecognitionEngine = null;
         }
+        // =====================================================================
+        // 🤫 1. ИНТЕЛЛЕКТУАЛЬНЫЙ МАСКИРОВЩИК ТЕКСТА (ШПИОНСКИЙ СПОЙЛЕР)
+        // =====================================================================
         
+        // Функция, которая находит все скрытые спойлеры и вешает на них клик раскрытия
+        function initMessageSpoilers() {
+            const spoilers = document.querySelectorAll('.msg-spoiler:not(.spoiler-inited)');
+            spoilers.forEach(spoiler => {
+                spoiler.classList.add('spoiler-inited');
+                spoiler.addEventListener('click', function(e) {
+                    e.stopPropagation(); // Защита от случайного вызова меню сообщения
+                    
+                    // Плавно растворяем неоновую пыль и показываем скрытый текст
+                    this.classList.add('spoiler-revealed');
+                    
+                    // Мягкий тактильный вибро-отклик на смартфонах
+                    if (navigator.vibrate) navigator.vibrate(20);
+                });
+            });
+        }
+
+        // Хак: Чтобы спойлер работал, текст при отправке нужно оборачивать в тег:
+        // Пример: Привет, я купил ||секретный|| подарок! -> Скрипт превратит || в класс .msg-spoiler
+        function parseSpoilersInText(text) {
+            return text.replace(/\|\|(.*?)\|\|/g, '<span class="msg-spoiler">$1</span>');
+        }
+
+
+        // =====================================================================
+        // 🗂️ 2. СОРТИРОВЩИК ДИАЛОГОВ И ПЕРЕКЛЮЧАТЕЛЬ ПАПОК TELEGRAM-STYLE
+        // =====================================================================
+        let currentActiveFolder = 'all';
+
+        function switchFolder(folderType, tabElement) {
+            currentActiveFolder = folderType;
+
+            // Снимаем класс активности со всех вкладок папок
+            document.querySelectorAll('.folder-tab').forEach(tab => {
+                tab.classList.remove('folder-active');
+            });
+            
+            // Вешаем активность на ту вкладку, по которой кликнули
+            if (tabElement) tabElement.classList.add('folder-active');
+
+            // 🎯 МГНОВЕННЫЙ ФИЛЬТР: Шерстим все чаты в левой панели
+            // (Убедись, что у элементов чата в списке есть дата-атрибут, например data-type="bot")
+            const chatItems = document.querySelectorAll('.chat-item'); // Твой класс элементов списка чатов
+            
+            chatItems.forEach(chat => {
+                const type = chat.dataset.type; // Считываем тип: private, bot, game
+
+                if (folderType === 'all') {
+                    chat.style.display = 'flex'; // Показываем абсолютно всё
+                } else if (folderType === 'private' && type === 'private') {
+                    chat.style.display = 'flex';
+                } else if (folderType === 'bots' && type === 'bot') {
+                    chat.style.display = 'flex';
+                } else if (folderType === 'games' && (type === 'game' || type === 'play')) {
+                    chat.style.display = 'flex';
+                } else {
+                    chat.style.display = 'none'; // Прячем чаты, не подходящие под папку
+                }
+            });
+
+            console.log(`Папка чатов переключена на режим: ${folderType}`);
+        }        
     </script>
     <!-- 📱 КОНТЕКСТНОЕ МЕНЮ GERAGRAM (ОБНОВЛЕНО: С ПАНЕЛЬЮ РЕАКЦИЙ TELEGRAM-STYLE) -->
     <div class="context-menu" id="msgContextMenu" style="position: fixed; background: var(--menu-bg); border: 1px solid var(--tg-border); border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,0.6); padding: 8px; z-index: 5000; display: none; min-width: 230px; animation: menuFadeIn 0.15s ease;">
