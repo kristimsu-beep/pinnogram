@@ -5048,26 +5048,41 @@ async def save_or_update_game(data: dict):
         gg_games_collection.insert_one(game_payload)
         return {"status": "success", "message": "Проект сохранен в черновики 'Мои разработки'!"}
 
-# 3. API: Глобальный поиск и выдача опубликованных игр
+# 🎯 БРОНИРОВАННЫЙ ФИКС КАТАЛОГА: Ликвидация ошибки 500 и Unexpected token 'I'
 @app.get("/api/gg-games/catalog")
 async def get_global_catalog(search: str = ""):
-    query = {"is_published": True}
-    if search:
-        # Поиск без учета регистра по названию или описанию
-        query["$or"] = [
-            {"title": {"$regex": search, "$options": "i"}},
-            {"description": {"$regex": search, "$options": "i"}}
-        ]
-    
-    games = list(gg_games_collection.find(query))
-    output = []
-    for g in games:
-        output.append({
-            "id": str(g["_id"]), "title": g["title"], "description": g["description"],
-            "image_url": g["image_url"], "weight": g["weight"], "author": g["author"],
-            "downloads": g["downloads"], "rating": g["rating"]
-        })
-    return {"status": "success", "catalog": output}
+    try:
+        query = {"is_published": True}
+        if search:
+            query["$or"] = [
+                {"title": {"$regex": search, "$options": "i"}},
+                {"description": {"$regex": search, "$options": "i"}}
+            ]
+        
+        # 🦾 Безопасно проверяем существование коллекции перед чтением
+        if "gg_games" not in db.list_collection_names():
+            return {"status": "success", "catalog": []}
+            
+        games = list(db["gg_games"].find(query))
+        output = []
+        for g in games:
+            output.append({
+                "id": str(g["_id"]), 
+                "title": g.get("title", "Без названия"), 
+                "description": g.get("description", ""),
+                "image_url": g.get("image_url", "https://unsplash.com"), 
+                "weight": g.get("weight", "1.2 MB"), 
+                "author": g.get("author", "Anonymous"),
+                "downloads": g.get("downloads", 0), 
+                "rating": g.get("rating", 5.0)
+            })
+        return {"status": "success", "catalog": output}
+        
+    except Exception as e:
+        # 🔥 Вместо падения в Internal Server Error 500, бэкенд теперь красиво вернет ошибку текстом в JSON!
+        print(f"🚨 [КРАШ КАТАЛОГА] Ошибка Python в server.py: {str(e)}")
+        return {"status": "error", "message": f"Внутренний сбой бэкенда: {str(e)}", "catalog": []}
+
 
 # 4. API: Выдача "Моих разработок" конкретного автора
 @app.get("/api/gg-games/my-devs/{username}")
