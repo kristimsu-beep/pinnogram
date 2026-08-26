@@ -134,8 +134,8 @@
     </style>
 </head>
 <body>
-    <!-- 🌌 ЖИВОЙ СЕТОЧНЫЙ ФОН-ХАМЕЛЕОН -->
-    <div id="live-parallax-bg-wrapper" id="parallaxBg"></div>
+    <!-- 🌌 ЖИВОЙ СЕТОЧНЫЙ ФОН-ХАМЕЛЕОН (ОПЕЧАТКА С ID УСТРАНЕНА) -->
+    <div id="live-parallax-bg-wrapper"></div>
 
     <!-- 🎛️ НАВИГАЦИОННАЯ ПАНЕЛЬ ПЛАТФОРМЫ -->
     <div class="games-navbar">
@@ -521,20 +521,25 @@
 
                     // 🌌 ГЕНЕРАТОР ЖИВОГО ПАРАЛЛАКС-ФОНА: Перемешиваем обложки опубликованных игр
                     const bgWrapper = document.getElementById('live-parallax-bg-wrapper');
-                    if (bgWrapper && !searchVal) { // Меняем фон только при общем обзоре, без строки поиска
-                        // Копируем массив игр и рандомизируем алгоритмом Фишера-Йетса
-                        let shuffledGames = [...data.catalog].sort(() => 0.5 - Math.random());
-                        // Берем строго первые 10 штук (или сколько есть в базе)
-                        let selectedForBg = shuffledGames.slice(0, 10);
-                        
+                    if (bgWrapper && !searchVal) { 
                         bgWrapper.innerHTML = ""; // Стираем старую мозаику
-                        selectedForBg.forEach((game, idx) => {
+                        
+                        // ХАК НА МАЛОЕ КОЛИЧЕСТВО ИГР: Если игр меньше 10, зацикливаем их, чтобы забить все 10 плиток фона
+                        let bgTilesArray = [];
+                        while (bgTilesArray.length < 10 && data.catalog.length > 0) {
+                            bgTilesArray = bgTilesArray.concat(data.catalog);
+                        }
+                        // Перемешиваем получившуюся палитру
+                        let shuffledBg = bgTilesArray.sort(() => 0.5 - Math.random()).slice(0, 10);
+                        
+                        shuffledBg.forEach((game, idx) => {
                             const imgTile = document.createElement('img');
                             imgTile.src = game.image_url;
                             imgTile.className = 'parallax-bg-tile';
                             bgWrapper.appendChild(imgTile);
-                            // Плавно зажигаем плитки с микро-задержкой для кино-эффекта
-                            setTimeout(() => { imgTile.style.opacity = "1"; }, idx * 80);
+                            
+                            // Плавно зажигаем плитки с кино-эффектом
+                            setTimeout(() => { imgTile.style.opacity = "1"; }, idx * 60);
                         });
                     }
 
