@@ -5002,6 +5002,132 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
 
     return {"status": "success", "msg": "Сообщение успешно доставлено"}
 # =====================================================================
+# 🎮 СУВЕРЕННАЯ ИГРОВАЯ ПЛАТФОРМА GERAGRAM GAMES (FASTAPI + MONGODB)
+# =====================================================================
+from bson import ObjectId
+
+gg_games_collection = db["gg_games"]
+gg_installations_collection = db["gg_installations"]
+
+# 1. Роут для выдачи HTML-страницы магазина игр
+@app.get("/geragram-games")
+async def get_geragram_games_platform():
+    from fastapi.responses import FileResponse
+    import os
+    file_path = os.path.join("games", "geragram_games.html")
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return {"error": "Файл geragram_games.html не найден в папке games"}
+
+# 2. API: Создание или редактирование игры разработчиком
+@app.post("/api/gg-games/save")
+async def save_or_update_game(data: dict):
+    # Достаем автора из сессии/запроса (для теста берем из JSON)
+    author = data.get("author", "Anonymous")
+    game_id = data.get("game_id") # Если есть, значит это РЕДАКТИРОВАНИЕ
+    
+    game_payload = {
+        "title": data.get("title", "Новая игра").strip(),
+        "description": data.get("description", "").strip(),
+        "code": data.get("code", ""),
+        "lang": data.get("lang", "HTML5/JS"),
+        "image_url": data.get("image_url", "https://unsplash.com"),
+        "weight": data.get("weight", "1.2 MB"),
+        "author": author,
+        "is_published": data.get("is_published", False),
+        "downloads": data.get("downloads", 0),
+        "rating": data.get("rating", 5.0)
+    }
+
+    if game_id:
+        # Редактирование существующей разработки
+        gg_games_collection.update_one({"_id": ObjectId(game_id), "author": author}, {"$set": game_payload})
+        return {"status": "success", "message": "Игра успешно обновлена в каталоге 'Мои разработки'!"}
+    else:
+        # Создание новой игры с нуля
+        gg_games_collection.insert_one(game_payload)
+        return {"status": "success", "message": "Проект сохранен в черновики 'Мои разработки'!"}
+
+# 3. API: Глобальный поиск и выдача опубликованных игр
+@app.get("/api/gg-games/catalog")
+async def get_global_catalog(search: str = ""):
+    query = {"is_published": True}
+    if search:
+        # Поиск без учета регистра по названию или описанию
+        query["$or"] = [
+            {"title": {"$regex": search, "$options": "i"}},
+            {"description": {"$regex": search, "$options": "i"}}
+        ]
+    
+    games = list(gg_games_collection.find(query))
+    output = []
+    for g in games:
+        output.append({
+            "id": str(g["_id"]), "title": g["title"], "description": g["description"],
+            "image_url": g["image_url"], "weight": g["weight"], "author": g["author"],
+            "downloads": g["downloads"], "rating": g["rating"]
+        })
+    return {"status": "success", "catalog": output}
+
+# 4. API: Выдача "Моих разработок" конкретного автора
+@app.get("/api/gg-games/my-devs/{username}")
+async def get_my_developments(username: str):
+    devs = list(gg_games_collection.find({"author": username}))
+    output = []
+    for d in devs:
+        output.append({
+            "id": str(d["_id"]), "title": d["title"], "description": d["description"],
+            "code": d["code"], "lang": d["lang"], "image_url": d["image_url"],
+            "weight": d["weight"], "is_published": d["is_published"]
+        })
+    return {"status": "success", "developments": output}
+
+# 5. API: Установка / Скачивание игры пользователем
+@app.post("/api/gg-games/install")
+async def install_game_to_user(data: dict):
+    username = data.get("username")
+    game_id = data.get("game_id")
+    
+    if not username or not game_id:
+        return {"status": "error", "message": "Недостаточно данных"}
+
+    # Фиксируем установку в MongoDB (upsert=True защищает от дубликатов)
+    gg_installations_collection.update_one(
+        {"username": username, "game_id": game_id},
+        {"$set": {"username": username, "game_id": game_id, "installed_at": datetime.utcnow()}},
+        upsert=True
+    )
+    # Накручиваем счетчик скачиваний у игры
+    gg_games_collection.update_one({"_id": ObjectId(game_id)}, {"$inc": {"downloads": 1}})
+    return {"status": "success", "message": "Игра успешно добавлена в раздел 'Мои Игры' и GeraGram!"}
+
+# 6. API: Запуск установленной игры (Разрешение кода)
+@app.get("/api/gg-games/launch/{game_id}")
+async def launch_installed_game(game_id: str):
+    game = gg_games_collection.find_one({"_id": ObjectId(game_id)})
+    if game:
+        return {"status": "success", "code": game["code"], "title": game["title"]}
+    return {"status": "error", "message": "Игра не найдена в базе данных"}
+
+# 7. API: Интеграционный шлюз для левой панели GeraGram (Выдача установленных игр)
+@app.get("/api/gg-games/installed-list/{username}")
+async def get_user_installed_games_for_sidebar(username: str):
+    installations = list(gg_installations_collection.find({"username": username}))
+    game_ids = [ObjectId(i["game_id"]) for i in installations]
+    
+    games = list(gg_games_collection.find({"_id": {"$in": game_ids}}))
+    output = []
+    for g in games:
+        output.append({
+            "username": f"game_{str(g['_id'])}", # Уникальный псевдо-ник для сайдбара
+            "display_name": f"🎮 {g['title']}",
+            "status": f"Установленная игра • {g['weight']}",
+            "is_game": True,
+            "is_online": True
+        })
+    return {"contacts": output}
+
+# =====================================================================
 # 🧠 КВАНТОВЫЙ ИИ-ПЕРЕНАПРАВИТЕЛЬ: АВТОНОМНЫЙ МНОГОЯДЕРНЫЙ ДВИЖОК G4F
 # =====================================================================
 @app.post("/api/geragram/ai/front-proxy")
