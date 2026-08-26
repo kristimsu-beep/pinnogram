@@ -5007,6 +5007,15 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
 from bson import ObjectId
 from datetime import datetime
 
+@app.get("/geragram-games")
+async def get_geragram_games_platform():
+    from fastapi.responses import FileResponse
+    import os
+    file_path = os.path.join("games", "geragram_games.html")
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return {"error": "Файл geragram_games.html не найден в папке games"}
+
 # 1. API: Выдача опубликованных игр в глобальный каталог (ИСПРАВЛЕНО)
 @app.get("/api/gg-games/catalog")
 async def get_global_catalog(search: str = ""):
