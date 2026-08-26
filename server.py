@@ -5018,6 +5018,36 @@ async def get_geragram_games_platform():
         return FileResponse(file_path)
     return {"error": "Файл geragram_games.html не найден в папке games"}
 
+# 🎯 ВОЗВРАЩАЕМ КАТАЛОГ: Фикс ошибки 404 в магазине игр
+@app.get("/api/gg-games/catalog")
+async def get_global_catalog(search: str = ""):
+    try:
+        query = {"is_published": True}
+        if search:
+            query["$or"] = [
+                {"title": {"$regex": search, "$options": "i"}},
+                {"description": {"$regex": search, "$options": "i"}}
+            ]
+        
+        # Безопасная проверка существования базы данных и коллекции
+        games = list(db["gg_games"].find(query))
+        output = []
+        for g in games:
+            output.append({
+                "id": str(g["_id"]), 
+                "title": g.get("title", "Без названия"), 
+                "description": g.get("description", ""),
+                "image_url": g.get("image_url", "https://unsplash.com"), 
+                "weight": g.get("weight", "1.2 MB"), 
+                "author": g.get("author", "Anonymous"),
+                "downloads": g.get("downloads", 0), 
+                "rating": g.get("rating", 5.0)
+            })
+        return {"status": "success", "catalog": output}
+    except Exception as e:
+        print(f"🚨 [ОШИБКА CATALOG]: {str(e)}")
+        return {"status": "error", "message": str(e), "catalog": []}
+
 # 2. API: Создание или редактирование игры разработчиком
 @app.post("/api/gg-games/save")
 async def save_or_update_game(data: dict):
