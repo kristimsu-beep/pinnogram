@@ -1751,7 +1751,7 @@
             }
         }
 
-        // Рендерим список контактов (ОБНОВЛЕНО: БРОНИРОВАННЫЙ СЧИТЫВАТЕЛЬ КУК СЕССИИ)
+        // 🔄 СУПЕР-ОБНОВЛЕНИЕ: Рендеринг контактов + Авто-маркировка папок + Шлюз Кибер-Steam
         async function loadContactsAndRequests() {
             try {
                 const res = await fetch('/api/geragram/contacts/list');
@@ -1767,7 +1767,6 @@
                     if (eqIdx !== -1) {
                         const name = cookie.substring(0, eqIdx).trim();
                         const val = cookie.substring(eqIdx + 1).trim();
-                        // Проверяем все стандартные имена кук для FastAPI сессий
                         if (name === 'gera_user' || name === 'username' || name === 'user_session' || name === 'session_user') {
                             cookieUser = decodeURIComponent(val);
                             break;
@@ -1779,22 +1778,18 @@
                 const realUsername = data.current_user || data.username || cookieUser || localStorage.getItem('geraUsername') || '';
                 
                 if (realUsername) {
-                    // Жестко привязываем ник к движку переписки
                     myUsername = realUsername;
                     window.geraCurrentUser = realUsername;
                     localStorage.setItem('geraUsername', realUsername);
                     
-                    // Обновляем текст на экране с @загрузка... на твой ник
                     const myDisplay = document.getElementById('myUsernameDisplay');
                     if (myDisplay) {
                         myDisplay.innerText = `@${realUsername}`;
                     }
                     
-                    // Скрываем форму входа
                     const auth = document.getElementById('authBox') || document.getElementById('authScreen') || document.getElementById('loginContainer');
                     if (auth) auth.style.display = 'none';
                     
-                    // Включаем сетку мессенджера
                     const app = document.getElementById('messengerApp') || document.getElementById('messengerMainLayout');
                     if (app) app.style.display = 'flex';
                 }
@@ -1807,6 +1802,9 @@
                     data.incoming_requests.forEach(req => {
                         const item = document.createElement('div');
                         item.className = 'chat-item';
+                        
+                        // 🗂️ ПАПКИ ЧАТОВ: Заявки в друзья всегда летят во вкладку «Личные»
+                        item.setAttribute('data-type', 'private');
                         item.style.borderLeft = '4px solid var(--tg-button)';
                         
                         let avHtml = getAvatarElementHtml(req, 40);
@@ -1824,29 +1822,41 @@
                         if (container) container.appendChild(item);
                     });
                 }
+                // 🎮 ИНТЕГРАЦИЯ С КИБЕР-STEAM: Запрашиваем из MongoDB установленные пользователем игры
+                try {
+                    const gamesRes = await fetch(`/api/gg-games/installed-list/${encodeURIComponent(realUsername)}`);
+                    if (gamesRes.ok) {
+                        const gamesData = await gamesRes.json();
+                        // Если игры найдены, склеиваем их с массивом твоих основных контактов!
+                        if (gamesData && gamesData.contacts && Array.isArray(gamesData.contacts)) {
+                            if (!data.contacts) data.contacts = [];
+                            data.contacts = data.contacts.concat(gamesData.contacts);
+                            console.log("🎮 [ИИ-ШЛЮЗ] Установленные игры успешно подгружены из MongoDB в GeraGram:", gamesData.contacts);
+                        }
+                    }
+                } catch (gameErr) {
+                    console.error("Ошибка интеграции списка игр в сайдбар:", gameErr);
+                }
 
-                // 2. Рендерим список подтверждённых контактов (с кружочками онлайна и фиксом фоновой подсветки групп)
+                // 2. Рендерим список подтверждённых контактов (и склеенных с ними игр)
                 if (data.contacts && data.contacts.length > 0) {
                     data.contacts.forEach(contact => {
                         const item = document.createElement('div');
                         
-                        // 🎯 ИСПРАВЛЕНО: Приводим ID групп и имена юзеров к одному регистру, чтобы активная комната ВСЕГДА подсвечивалась синим фоном!
                         const isCurrentActive = activeChatUser && contact.username && (activeChatUser.toString().toLowerCase() === contact.username.toString().toLowerCase());
                         item.className = 'chat-item' + (isCurrentActive ? ' active' : '');
                         
-                        // 🎯 АВТО-МАРКИРОВКА ДЛЯ ПАПОК TELEGRAM-STYLE:
+                        // 🗂️ АВТО-МАРКИРОВКА ДЛЯ ПАПОК TELEGRAM-STYLE:
                         let chatType = "private"; // По умолчанию — личный чат с человеком
-                        
-                        // Приводим позывной / ник к нижнему регистру для снайперской точности
                         const uNameLower = (contact.username || "").toLowerCase();
                         
                         if (uNameLower.includes('bot') || contact.is_bot) {
                             chatType = "bot";   // Сортировка в папку «Боты» 🤖
                         } else if (uNameLower === "losmorer" || contact.is_game || contact.room_id || uNameLower.includes('game') || uNameLower.includes('fight') || uNameLower.includes('radar') || uNameLower.includes('referee')) {
-                            chatType = "game";  // Сортировка в папку «Игры» (Настолка, Армандия, ЕА, Авиарадар) 🎮
+                            chatType = "game";  // Сортировка в папку «Игры» 🎮
                         }
                         
-                        // Намертво привязываем дата-атрибут к элементу HTML перед рендером
+                        // Намертво пришиваем дата-атрибут перед выводом на экран
                         item.setAttribute('data-type', chatType);
                      
                         let avHtml = getAvatarElementHtml(contact, 44);
@@ -1866,13 +1876,12 @@
                             </div>
                         `;
 
-                        // 🎯 СУПЕР-ФИКС: ЗАЩИТА ОТ NULL И КРИВЫХ ТИПОВ ДАННЫХ
+                        // 🎯 ЗАЩИТА ОТ NULL И КРИВЫХ ТИПОВ ДАННЫХ
                         let officialBadge = '';
-                        
                         if (contact.is_official) {
                             officialBadge += ` <i class="fa-solid fa-circle-check" style="color: #2481cc; font-size:14px; margin-left: 4px;"></i>`;
                         }
-                        
+
                         // Безопасно проверяем, чтобы тег прилетел строкой и не был пустым
                         const hasCustomTag = contact.custom_tag && String(contact.custom_tag).trim() !== '' && String(contact.custom_tag) !== 'null';
                         const activeTagText = hasCustomTag ? contact.custom_tag : (contact.is_official ? 'OFFICIAL' : null);
@@ -1898,7 +1907,14 @@
                             </div>
                         `;
 
-                        item.onclick = () => selectChat(contact.username);
+                        // 🕹️ УМНЫЙ ПЕРЕХВАТ КЛИКА:
+                        // Если это игра — перекидываем в маркетплейс, если человек — открываем чат!
+                        if (contact.is_game) {
+                            item.onclick = () => { window.location.href = '/geragram-games'; };
+                        } else {
+                            item.onclick = () => selectChat(contact.username);
+                        }
+
                         if (container) container.appendChild(item);
                     });
                 } else if (!data.incoming_requests || data.incoming_requests.length === 0) {
