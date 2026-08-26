@@ -112,9 +112,30 @@
         .modal-input { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 14px; color: #fff; font-size: 14px; outline: none; }
         .modal-select { background: #060b15; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px; color: #fff; font-size: 14px; outline: none; }
         .modal-textarea { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; color: #fff; font-size: 13px; font-family: monospace; height: 160px; resize: none; outline: none; }
+
+        /* 🌌 КИНЕТИЧЕСКИЙ ЖИВОЙ ПАРАЛЛАКС-ФОН ДЛЯ ИГРОВОГО СТОРУ */
+        #live-parallax-bg-wrapper {
+            position: fixed; top: -10%; left: -10%; width: 120%; height: 120%;
+            z-index: -1; pointer-events: none; overflow: hidden;
+            background: #060b15; transition: transform 0.15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(2, 1fr); gap: 0;
+            opacity: 0.35; /* Мягкое свечение, чтобы не слепило глаза */
+        }
+        .parallax-bg-tile {
+            width: 100%; height: 100%; object-fit: cover;
+            filter: blur(25px) saturate(140%); /* Матовое глубокое размытие */
+            transform: scale(1.1); transition: opacity 1s ease; opacity: 0;
+        }
+        /* Темная вуаль поверх картинок для идеальной контрастности текста */
+        #live-parallax-bg-wrapper::after {
+            content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, rgba(6,11,21,0.5), #060b15 95%);
+        }
     </style>
 </head>
 <body>
+    <!-- 🌌 ЖИВОЙ СЕТОЧНЫЙ ФОН-ХАМЕЛЕОН -->
+    <div id="live-parallax-bg-wrapper" id="parallaxBg"></div>
 
     <!-- 🎛️ НАВИГАЦИОННАЯ ПАНЕЛЬ ПЛАТФОРМЫ -->
     <div class="games-navbar">
@@ -479,6 +500,93 @@
             // По умолчанию загружаем глобальный каталог
             loadGlobalCatalogFromMongo();
         });
+        // ПОДГРУЗКА РАЗДЕЛА 1: Глобальный маркетплейс игр + ИИ Живой Параллакс-Фон
+        async function loadGlobalCatalogFromMongo() {
+            const grid = document.getElementById('catalogGrid');
+            if (!grid) return;
+
+            const searchVal = document.getElementById('catalogSearchInput').value.trim();
+
+            try {
+                const response = await fetch(`/api/gg-games/catalog?search=${encodeURIComponent(searchVal)}`);
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    grid.innerHTML = ""; // Очищаем лоадер
+                    
+                    if (data.catalog.length === 0) {
+                        grid.innerHTML = `<div style="grid-column: span 3; color: rgba(255,255,255,0.4); text-align:center; padding:20px; font-size:13px; font-style:italic;">Ничего не найдено. Напишите и опубликуйте первую игру!</div>`;
+                        return;
+                    }
+
+                    // 🌌 ГЕНЕРАТОР ЖИВОГО ПАРАЛЛАКС-ФОНА: Перемешиваем обложки опубликованных игр
+                    const bgWrapper = document.getElementById('live-parallax-bg-wrapper');
+                    if (bgWrapper && !searchVal) { // Меняем фон только при общем обзоре, без строки поиска
+                        // Копируем массив игр и рандомизируем алгоритмом Фишера-Йетса
+                        let shuffledGames = [...data.catalog].sort(() => 0.5 - Math.random());
+                        // Берем строго первые 10 штук (или сколько есть в базе)
+                        let selectedForBg = shuffledGames.slice(0, 10);
+                        
+                        bgWrapper.innerHTML = ""; // Стираем старую мозаику
+                        selectedForBg.forEach((game, idx) => {
+                            const imgTile = document.createElement('img');
+                            imgTile.src = game.image_url;
+                            imgTile.className = 'parallax-bg-tile';
+                            bgWrapper.appendChild(imgTile);
+                            // Плавно зажигаем плитки с микро-задержкой для кино-эффекта
+                            setTimeout(() => { imgTile.style.opacity = "1"; }, idx * 80);
+                        });
+                    }
+
+                    // Рендерим стандартные карточки в магазин
+                    data.catalog.forEach(game => {
+                        const card = document.createElement('div');
+                        card.className = 'game-card';
+                        card.innerHTML = `
+                            <img src="${game.image_url}" class="game-img" alt="game covers">
+                            <div class="game-body">
+                                <div class="game-title">
+                                    <span>${game.title}</span>
+                                    <span class="game-weight">${game.weight}</span>
+                                </div>
+                                <div class="game-desc">${game.description || 'Описание отсутствует.'}</div>
+                                <div class="game-meta">
+                                    <span>Автор: @${game.author}</span>
+                                    <div class="game-rating"><i class="fa-solid fa-star"></i> ${game.rating.toFixed(1)}</div>
+                                </div>
+                                <div class="game-meta" style="padding:0; margin-top:-4px; border:none;">
+                                    <span><i class="fa-solid fa-cloud-arrow-down"></i> Скачиваний: ${game.downloads}</span>
+                                </div>
+                                <button class="game-btn" onclick="installGameToMyLibrary('${game.id}')"><i class="fa-solid fa-download"></i> Установить игру</button>
+                            </div>
+                        `;
+                        grid.appendChild(card);
+                    });
+                }
+            } catch (err) { console.error("Ошибка каталога и параллакса: ", err); }
+        }
+
+        // 🏎️ КИНЕТИЧЕСКИЙ ТРЕКЕР ДВИЖЕНИЯ ДЛЯ ЭФФЕКТА ОБЪЕМА (ПАРАЛЛАКС)
+        // Для ПК: реагирует на движение мышки по экрану
+        document.addEventListener('mousemove', e => {
+            const bg = document.getElementById('live-parallax-bg-wrapper');
+            if (!bg) return;
+            // Вычисляем отклонение курсора от центра экрана в процентах
+            const moveX = (e.clientX - window.innerWidth / 2) / (window.innerWidth / 2) * -25; // Смещение на 25px max
+            const moveY = (e.clientY - window.innerHeight / 2) / (window.innerHeight / 2) * -25;
+            bg.style.transform = `translate(${moveX}px, ${moveY}px)`;
+        });
+
+        // Для смартфонов: реагирует на физический наклон корпуса через гироскоп!
+        window.addEventListener('deviceorientation', e => {
+            const bg = document.getElementById('live-parallax-bg-wrapper');
+            if (!bg || !e.gamma || !e.beta) return;
+            // Ограничиваем углы наклона для мягкого скольжения
+            const moveX = Math.max(-30, Math.min(30, e.gamma)) * -0.8;
+            const moveY = Math.max(-30, Math.min(30, e.beta - 45)) * -0.8;
+            bg.style.transform = `translate(${moveX}px, ${moveY}px)`;
+        });
+
     </script>
 </body>
 </html>
