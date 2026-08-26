@@ -5001,24 +5001,13 @@ async def geragram_send_message(data: MessageSendModel, request: Request):
             await geragram_chats.insert_one(bot_msg)
 
     return {"status": "success", "msg": "Сообщение успешно доставлено"}
+# =====================================================================
+# 🎮 АСИНХРОННЫЙ ДВИЖОК GERAGRAM GAMES (ФИКС ASYNCIOMOTORCURSOR)
+# =====================================================================
 from bson import ObjectId
-from datetime import datetime # 🎯 ОБЯЗАТЕЛЬНО: Импортируем модуль времени, чтобы install_game не падал!
+from datetime import datetime
 
-# =====================================================================
-# 🎮 СУВЕРЕННАЯ ИГРОВАЯ ПЛАТФОРМА GERAGRAM GAMES (БЭКЕНД И РОУТЫ СТРАНИЦ)
-# =====================================================================
-
-# 1. Роут для выдачи HTML-страницы магазина игр
-@app.get("/geragram-games")
-async def get_geragram_games_platform():
-    from fastapi.responses import FileResponse
-    import os
-    file_path = os.path.join("games", "geragram_games.html")
-    if os.path.exists(file_path):
-        return FileResponse(file_path)
-    return {"error": "Файл geragram_games.html не найден в папке games"}
-
-# 🎯 ВОЗВРАЩАЕМ КАТАЛОГ: Фикс ошибки 404 в магазине игр
+# 1. API: Выдача опубликованных игр в глобальный каталог (ИСПРАВЛЕНО)
 @app.get("/api/gg-games/catalog")
 async def get_global_catalog(search: str = ""):
     try:
@@ -5029,8 +5018,10 @@ async def get_global_catalog(search: str = ""):
                 {"description": {"$regex": search, "$options": "i"}}
             ]
         
-        # Безопасная проверка существования базы данных и коллекции
-        games = list(db["gg_games"].find(query))
+        # 🎯 СУПЕР-ФИКС: Используем асинconvert to_list вместо синхронного list()
+        cursor = db["gg_games"].find(query)
+        games = await cursor.to_list(length=100)
+        
         output = []
         for g in games:
             output.append({
@@ -5048,7 +5039,32 @@ async def get_global_catalog(search: str = ""):
         print(f"🚨 [ОШИБКА CATALOG]: {str(e)}")
         return {"status": "error", "message": str(e), "catalog": []}
 
-# 2. API: Создание или редактирование игры разработчиком
+# 2. API: Выдача "Моих разработок" конкретного автора (ИСПРАВЛЕНО)
+@app.get("/api/gg-games/my-devs/{username}")
+async def get_my_developments(username: str):
+    try:
+        # 🎯 СУПЕР-ФИКС: Добавлен await и to_list
+        cursor = db["gg_games"].find({"author": username})
+        devs = await cursor.to_list(length=100)
+        
+        output = []
+        for d in devs:
+            output.append({
+                "id": str(d["_id"]), 
+                "title": d.get("title", "Без названия"), 
+                "description": d.get("description", ""),
+                "code": d.get("code", ""), 
+                "lang": d.get("lang", "HTML5/Canvas"), 
+                "image_url": d.get("image_url", ""),
+                "weight": d.get("weight", "1.2 MB"), 
+                "is_published": d.get("is_published", False)
+            })
+        return {"status": "success", "developments": output}
+    except Exception as e:
+        print(f"🚨 [ОШИБКА MY_DEVS]: {str(e)}")
+        return {"status": "error", "message": str(e), "developments": []}
+
+# 3. API: Создание или редактирование игры разработчиком
 @app.post("/api/gg-games/save")
 async def save_or_update_game(data: dict):
     try:
@@ -5068,38 +5084,16 @@ async def save_or_update_game(data: dict):
             "rating": data.get("rating", 5.0)
         }
 
-        # 🦾 ПРЯМОЕ И БЕЗОПАСНОЕ ОБРАЩЕНИЕ К КЛАССИЧЕСКОЙ КОЛЛЕКЦИИ DB В МОМЕНТ ЗАПРОСА
         if game_id and game_id != "null" and game_id != "undefined":
-            db["gg_games"].update_one({"_id": ObjectId(game_id), "author": author}, {"$set": game_payload})
+            # 🎯 Асинхронные операции изменения в motor требуют await перед db!
+            await db["gg_games"].update_one({"_id": ObjectId(game_id), "author": author}, {"$set": game_payload})
             return {"status": "success", "message": "Игра успешно обновлена в каталоге 'Мои разработки'!"}
         else:
-            db["gg_games"].insert_one(game_payload)
+            await db["gg_games"].insert_one(game_payload)
             return {"status": "success", "message": "Проект сохранен в черновики 'Мои разработки'!"}
     except Exception as e:
         print(f"🚨 [ОШИБКА SAVE_GAME]: {str(e)}")
         return {"status": "error", "message": f"Ошибка сохранения: {str(e)}"}
-
-# 3. API: Выдача "Моих разработок" конкретного автора
-@app.get("/api/gg-games/my-devs/{username}")
-async def get_my_developments(username: str):
-    try:
-        devs = list(db["gg_games"].find({"author": username}))
-        output = []
-        for d in devs:
-            output.append({
-                "id": str(d["_id"]), 
-                "title": d.get("title", "Без названия"), 
-                "description": d.get("description", ""),
-                "code": d.get("code", ""), 
-                "lang": d.get("lang", "HTML5/Canvas"), 
-                "image_url": d.get("image_url", ""),
-                "weight": d.get("weight", "1.2 MB"), 
-                "is_published": d.get("is_published", False)
-            })
-        return {"status": "success", "developments": output}
-    except Exception as e:
-        print(f"🚨 [ОШИБКА MY_DEVS]: {str(e)}")
-        return {"status": "error", "message": str(e), "developments": []}
 
 # 4. API: Установка / Скачивание игры пользователем
 @app.post("/api/gg-games/install")
@@ -5111,13 +5105,13 @@ async def install_game_to_user(data: dict):
         if not username or not game_id:
             return {"status": "error", "message": "Недостаточно данных для установки"}
 
-        db["gg_installations"].update_one(
+        await db["gg_installations"].update_one(
             {"username": username, "game_id": game_id},
             {"$set": {"username": username, "game_id": game_id, "installed_at": datetime.utcnow()}},
             upsert=True
         )
-        db["gg_games"].update_one({"_id": ObjectId(game_id)}, {"$inc": {"downloads": 1}})
-        return {"status": "success", "message": "Игра успешно добавлена в раздел 'Мои Игры' and GeraGram!"}
+        await db["gg_games"].update_one({"_id": ObjectId(game_id)}, {"$inc": {"downloads": 1}})
+        return {"status": "success", "message": "Игра успешно добавлена в раздел 'Мои Игры' и GeraGram!"}
     except Exception as e:
         print(f"🚨 [ОШИБКА INSTALL]: {str(e)}")
         return {"status": "error", "message": str(e)}
@@ -5126,7 +5120,7 @@ async def install_game_to_user(data: dict):
 @app.get("/api/gg-games/launch/{game_id}")
 async def launch_installed_game(game_id: str):
     try:
-        game = db["gg_games"].find_one({"_id": ObjectId(game_id)})
+        game = await db["gg_games"].find_one({"_id": ObjectId(game_id)})
         if game:
             return {"status": "success", "code": game.get("code", ""), "title": game.get("title", "Game")}
         return {"status": "error", "message": "Игра не найдена в базе данных"}
@@ -5134,29 +5128,33 @@ async def launch_installed_game(game_id: str):
         print(f"🚨 [ОШИБКА LAUNCH]: {str(e)}")
         return {"status": "error", "message": str(e)}
 
-# 6. API: Интеграционный шлюз для левой панели GeraGram (Выдача установленных игр)
+# 6. API: Интеграционный шлюз для левой панели GeraGram (ИСПРАВЛЕНО)
 @app.get("/api/gg-games/installed-list/{username}")
 async def get_user_installed_games_for_sidebar(username: str):
     try:
-        installations = list(db["gg_installations"].find({"username": username}))
+        # 🎯 СУПЕР-ФИКС: Добавлен await и to_list
+        cursor_inst = db["gg_installations"].find({"username": username})
+        installations = await cursor_inst.to_list(length=100)
+        
         if not installations:
             return {"status": "success", "contacts": []}
             
         game_ids = []
         for i in installations:
             if "game_id" in i and i["game_id"]:
-                try:
-                    game_ids.append(ObjectId(i["game_id"]))
-                except:
-                    continue
+                try: game_ids.append(ObjectId(i["game_id"]))
+                except: continue
         
-        games = list(db["gg_games"].find({"_id": {"$in": game_ids}}))
+        # 🎯 СУПЕР-ФИКС: Добавлен await и to_list
+        cursor_games = db["gg_games"].find({"_id": {"$in": game_ids}})
+        games = await cursor_games.to_list(length=100)
+        
         output = []
         for g in games:
             output.append({
                 "username": f"game_{str(g['_id'])}", 
                 "display_name": f"🎮 {g.get('title', 'Game')}",
-                "status": f"Установленная game • {g.get('weight', '1.2 MB')}",
+                "status": f"Установленная игра • {g.get('weight', '1.2 MB')}",
                 "is_game": True,
                 "is_online": True
             })
@@ -5164,7 +5162,6 @@ async def get_user_installed_games_for_sidebar(username: str):
     except Exception as e:
         print(f"🚨 [ОШИБКА INSTALLED_LIST]: {str(e)}")
         return {"status": "error", "message": str(e), "contacts": []}
-
 # =====================================================================
 # 🧠 КВАНТОВЫЙ ИИ-ПЕРЕНАПРАВИТЕЛЬ: АВТОНОМНЫЙ МНОГОЯДЕРНЫЙ ДВИЖОК G4F
 # =====================================================================
