@@ -1859,22 +1859,36 @@
                         // Намертво пришиваем дата-атрибут перед выводом на экран
                         item.setAttribute('data-type', chatType);
                      
-                        let avHtml = getAvatarElementHtml(contact, 44);
-                        
-                        // 🟢 ТЕЛЕГРАМ-СТИЛЬ: Индикатор статуса онлайна
-                        let badgeClass = contact.is_online ? 'online' : 'offline';
-                        
-                        // Группы и боты всегда визуально находятся в сети
-                        if (contact.is_group || contact.username === 'geragram_bot') {
-                            badgeClass = 'online'; 
-                        }
+                        // 🎮 ФИКС АВАТАРОК ИГР + ЛИКВИДАЦИЯ ОШИБКИ UNDEFINED 404
+                        let avatarWithStatusHtml = '';
 
-                        let avatarWithStatusHtml = `
-                            <div class="avatar-wrapper" style="position: relative; display: inline-block;">
-                                ${avHtml}
-                                <div class="status-badge ${badgeClass}" style="position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--tg-sidebar); z-index: 2;"></div>
-                            </div>
-                        `;
+                        if (contact.is_game) {
+                            // 👾 Для игр создаем роскошный неоновый аватар-геймпад в стиле Cyber-Steam!
+                            avatarWithStatusHtml = `
+                                <div class="avatar-wrapper" style="position: relative; display: inline-block;">
+                                    <div class="avatar-circle" style="width: 44px; height: 44px; background: linear-gradient(135deg, #00f2fe, #4cd964); font-size: 20px; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 10px rgba(0,242,254,0.4); border-radius: 50%;">
+                                        <i class="fa-solid fa-gamepad" style="color: #060b15;"></i>
+                                    </div>
+                                    <!-- Игры всегда имеют зеленый маркер "Онлайн", так как запустить их можно в любой миг -->
+                                    <div class="status-badge online" style="position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--tg-sidebar); z-index: 2;"></div>
+                                </div>
+                            `;
+                        } else {
+                            // 👤 Для обычных людей и ботов оставляем твой стандартный проверенный рендер аватарок
+                            let avHtml = getAvatarElementHtml(contact, 44);
+                            let badgeClass = contact.is_online ? 'online' : 'offline';
+                            
+                            if (contact.is_group || contact.username === 'geragram_bot') {
+                                badgeClass = 'online'; 
+                            }
+
+                            avatarWithStatusHtml = `
+                                <div class="avatar-wrapper" style="position: relative; display: inline-block;">
+                                    ${avHtml}
+                                    <div class="status-badge ${badgeClass}" style="position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--tg-sidebar); z-index: 2;"></div>
+                                </div>
+                            `;
+                        }
 
                         // 🎯 ЗАЩИТА ОТ NULL И КРИВЫХ ТИПОВ ДАННЫХ
                         let officialBadge = '';
