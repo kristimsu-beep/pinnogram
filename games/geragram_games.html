@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
+    <title>GeraGram Games Store & Launchpad</title>
+    
+    <!-- 🟢 КРИТИЧЕСКИЕ ССЫЛКИ ДЛЯ ПЛАТФОРМЫ (ИКОНКИ И МОДАЛКИ) -->
+    <!-- Сочные значки для кнопок, вкладок и табло -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
+    <!-- Премиальные всплывающие уведомления SweetAlert2 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.12.0/sweetalert2.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.12.0/sweetalert2.all.min.js"></script>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: #060b15; color: #fff; overflow-x: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        /* 🎛️ ФУТУРИСТИЧНАЯ ПАНЕЛЬ НАВИГАЦИИ (ВКЛАДКИ СТЕЙШН) */
+        .games-navbar {
+            display: flex; justify-content: space-around; background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.08);
+            position: sticky; top: 0; z-index: 100; padding: 5px 0;
+        }
+        .nav-tab {
+            padding: 12px 16px; font-size: 13px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.5px; color: rgba(255,255,255,0.4); cursor: pointer;
+            transition: all 0.3s ease; position: relative;
+        }
+        .nav-tab:hover { color: #fff; }
+        .nav-tab.tab-active { color: #00f2fe; text-shadow: 0 0 10px rgba(0,242,254,0.3); }
+        .nav-tab.tab-active::after {
+            content: ""; position: absolute; bottom: 0; left: 15%; width: 70%; height: 3px;
+            background: #00f2fe; border-radius: 3px; box-shadow: 0 0 10px #00f2fe;
+        }
+
+        /* 🏠 КОНТЕНТНЫЙ БЛОК ПЛАТФОРМЫ */
+        .content-section { padding: 25px 20px; max-width: 900px; margin: 0 auto; display: none; }
+        .content-section.section-active { display: block; }
+
+        /* Поисковая строка */
+        .search-box {
+            display: flex; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px; padding: 10px 16px; gap: 12px; margin-bottom: 25px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .search-input { flex-grow: 1; background: transparent; border: none; color: #fff; font-size: 15px; outline: none; }
+        .search-btn { background: transparent; border: none; color: #00f2fe; font-size: 16px; cursor: pointer; }
+
+        /* СЕТКА ИГРОВЫХ КАРТОЧЕК */
+        .games-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+        
+        .game-card {
+            background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px; overflow: hidden; display: flex; flex-direction: column;
+            transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1); box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+        .game-card:hover { transform: translateY(-5px); border-color: #00f2fe; box-shadow: 0 8px 25px rgba(0,242,254,0.15); }
+        
+        .game-img { width: 100%; height: 140px; object-fit: cover; background: #111e30; }
+        .game-body { padding: 15px; flex-grow: 1; display: flex; flex-direction: column; gap: 8px; }
+        .game-title { font-size: 16px; font-weight: 700; color: #fff; display: flex; justify-content: space-between; align-items: center; }
+        .game-weight { font-size: 11px; background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; color: #94a3b8; }
+        .game-desc { font-size: 12px; color: #94a3b8; line-height: 1.4; flex-grow: 1; margin: 4px 0; }
+        
+        .game-meta { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: rgba(255,255,255,0.4); border-top: 1px solid rgba(255,255,255,0.05); padding-top: 10px; }
+        .game-rating { color: #ffbd2e; display: flex; align-items: center; gap: 4px; font-weight: bold; }
+        
+        .game-btn {
+            width: 100%; background: #00f2fe; color: #060b15; border: none; padding: 10px;
+            font-size: 13px; font-weight: 700; border-radius: 10px; cursor: pointer; transition: all 0.2s;
+            display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 10px;
+        }
+        .game-btn:active { scale: 0.97; }
+        .game-btn.btn-secondary { background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.1); }
+        .game-btn.btn-secondary:hover { background: rgba(255,255,255,0.15); }
+        .game-btn.btn-danger { background: #ff3b30; color: #fff; }
+
+        /* Кнопка создания на вкладке Мои Разработки */
+        .create-dev-btn {
+            background: linear-gradient(45deg, #34c759, #00f2fe); color: #060b15;
+            border: none; padding: 12px 24px; font-size: 14px; font-weight: 700;
+            border-radius: 12px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+            margin-bottom: 25px; box-shadow: 0 4px 15px rgba(52,199,89,0.2);
+        }
+
+        /* 🖥️ ПОЛНОЭКРАННЫЙ SANDBOX-ОВЕРЛЕЙ ДЛЯ ЗАПУСКА ИГР */
+        #game-runtime-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 1000; display: none; flex-direction: column;
+        }
+        .runtime-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 20px; background: #0c101d; border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .runtime-iframe { width: 100%; height: calc(100% - 45px); border: none; background: #fff; }
+
+        /* 🏗️ МОДАЛЬНОЕ ОКНО IDE-КОНСТРУКТОРА */
+        .games-modal-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(15px);
+            z-index: 500; display: none; justify-content: center; align-items: center;
+        }
+        .games-modal {
+            background: #0d1527; border: 1px solid #00f2fe; border-radius: 20px;
+            width: 90%; max-width: 600px; padding: 25px; box-shadow: 0 0 30px rgba(0,242,254,0.2);
+            box-sizing: border-box; display: flex; flex-direction: column; gap: 12px;
+        }
+        .modal-input { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 14px; color: #fff; font-size: 14px; outline: none; }
+        .modal-select { background: #060b15; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px; color: #fff; font-size: 14px; outline: none; }
+        .modal-textarea { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; color: #fff; font-size: 13px; font-family: monospace; height: 160px; resize: none; outline: none; }
+    </style>
+</head>
+<body>
+
+    <!-- 🎛️ НАВИГАЦИОННАЯ ПАНЕЛЬ ПЛАТФОРМЫ -->
+    <div class="games-navbar">
+        <div class="nav-tab tab-active" onclick="switchMainTab('catalog', this)"><i class="fa-solid fa-store"></i> Игры</div>
+        <div class="nav-tab" onclick="switchMainTab('installed', this)"><i class="fa-solid fa-circle-check"></i> Мои Игры</div>
+        <div class="nav-tab" onclick="switchMainTab('devs', this)"><i class="fa-solid fa-laptop-code"></i> Мои разработки</div>
+    </div>
+
+    <!-- 🛒 РАЗДЕЛ 1: ГЛОБАЛЬНЫЙ КАТАЛОГ ИГР -->
+    <div id="sec-catalog" class="content-section section-active">
+        <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass" style="color: rgba(255,255,255,0.3); margin-top:2px;"></i>
+            <input type="text" id="catalogSearchInput" class="search-input" placeholder="Поиск игры по названию или описанию..." oninput="loadGlobalCatalogFromMongo()">
+        </div>
+        <div class="games-grid" id="catalogGrid">
+            <!-- Сюда JS инжектирует карточки глобальных игр -->
+        </div>
+    </div>
+
+    <!-- 📲 РАЗДЕЛ 2: УСТАНОВЛЕННЫЕ ИГРЫ (ОТКУДА МОЖНО ИГРАТЬ) -->
+    <div id="sec-installed" class="content-section">
+        <div class="games-grid" id="installedGrid">
+            <!-- Сюда JS выведет установленные тобой игры -->
+        </div>
+    </div>
+
+    <!-- 🦾 РАЗДЕЛ 3: МОИ РАЗРАБОТКИ (ДЛЯ КОДИНГА И РЕДАКТИРОВАНИЯ) -->
+    <div id="sec-devs" class="content-section">
+        <button class="create-dev-btn" onclick="openDevModal()"><i class="fa-solid fa-square-plus"></i> Создать новую игру</button>
+        <div class="games-grid" id="devsGrid">
+            <!-- Сюда JS выгрузит черновики и твои личные игры -->
+        </div>
+    </div>
+
+    <!-- 🏗️ МОДАЛЬНОЕ ОКНО IDE-КОНСТРУКТОРА КАРТОЧКИ И КОДА -->
+    <div class="games-modal-overlay" id="devModal">
+        <div class="games-modal">
+            <div style="font-weight: 700; font-size: 16px; color: #00f2fe;" id="modalEngineTitle"><i class="fa-solid fa-gamepad"></i> Конструктор Игровых Движков</div>
+            <input type="hidden" id="modalGameId">
+            <input type="text" id="modalTitleInput" class="modal-input" placeholder="Название игры (напр. Flappy Bird)">
+            <input type="text" id="modalDescInput" class="modal-input" placeholder="Краткое описание игрового процесса">
+            <input type="text" id="modalImgInput" class="modal-input" placeholder="Ссылка на URL обложки карточки (Unsplash)">
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <select id="modalLangSelect" class="modal-select">
+                    <option value="HTML5/Canvas">HTML5 Canvas / JS</option>
+                    <option value="WebGL/ThreeJS">Three.js / WebGL</option>
+                </select>
+                <input type="text" id="modalWeightInput" class="modal-input" placeholder="Вес (напр. 1.5 MB)" value="1.2 MB">
+            </div>
+
+            <!-- Исходный код или импорт файлов -->
+            <textarea id="modalCodeInput" class="modal-textarea" placeholder="&lt;html&gt;&#10;&lt;body style='background:#000; color:#fff; display:flex; justify-content:center; align-items:center; height:100vh;'&gt;&#10;  &lt;h1&gt;Моя кастомная игра!&lt;/h1&gt;&#10;&lt;/body&gt;&#10;&lt;/html&gt;"></textarea>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 5px;">
+                <button class="game-btn btn-secondary" style="margin:0; width:auto;" onclick="closeDevModal()">Отмена</button>
+                <button class="game-btn" style="margin:0; width:auto; background:#34c759;" onclick="publishGameToMongo(true)">Опубликовать</button>
+                <button class="game-btn" style="margin:0; width:auto;" onclick="publishGameToMongo(false)">В черновики</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🖥️ ПОЛНОЭКРАННАЯ ВИРТУАЛЬНАЯ ПЕСОЧНИЦА ЗАПУСКА ИГРЫ -->
+    <div id="game-runtime-overlay">
+        <div class="runtime-header">
+            <div style="font-weight: 700; font-size: 14px;" id="runtimeGameTitle">Запуск симуляции...</div>
+            <button class="game-btn btn-danger" style="margin:0; width:auto; padding:6px 14px; font-size:12px;" onclick="closeGameRuntime()"><i class="fa-solid fa-rectangle-xmark"></i> Закрыть игру</button>
+        </div>
+        <iframe id="game-runtime-iframe" class="runtime-iframe" sandbox="allow-scripts"></iframe>
+    </div>
+    <script>
+        // =====================================================================
+        // 🎛️ 1. ГЛОБАЛЬНЫЙ СЕТАП СЕССИИ И НАВИГАЦИЯ МЕЖДУ РАЗДЕЛАМИ ПЛАТФОРМЫ
+        // =====================================================================
+        let currentUser = localStorage.getItem('geraUsername') || 'Anonymous';
+        
+        // 🎯 СУПЕР-ХАК: Считываем имя юзера напрямую из кук, если он авторизован в GeraGram
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.startsWith('gera_user=') || cookie.startsWith('username=')) {
+                currentUser = decodeURIComponent(cookie.substring(cookie.indexOf('=') + 1));
+                localStorage.setItem('geraUsername', currentUser);
+                break;
+            }
+        }
+
+        // Главный переключатель экранов маркетплейса (Игры / Мои Игры / Разработки)
+        function switchMainTab(targetSection, tabElement) {
+            // Снимаем класс активности со всех вкладок навигации
+            document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('tab-active'));
+            // Прячем абсолютно все контентные секции на странице
+            document.querySelectorAll('.content-section').forEach(sec => sec.classList.remove('section-active'));
+
+            // Включаем активную вкладку и плавно выводим нужный экран
+            if (tabElement) tabElement.classList.add('tab-active');
+            
+            const target = document.getElementById(`sec-${targetSection}`);
+            if (target) target.classList.add('section-active');
+
+            // Автоматически обновляем данные при каждом переходе на вкладку
+            if (targetSection === 'catalog') loadGlobalCatalogFromMongo();
+            if (targetSection === 'installed') loadInstalledGamesFromMongo();
+            if (targetSection === 'devs') loadMyDevelopmentsFromMongo();
+        }
+
+        // Управление модальным окном конструктора игровых движков
+        function openDevModal(gameId = "", title = "", desc = "", img = "", weight = "1.2 MB", lang = "HTML5/Canvas", code = "") {
+            document.getElementById('modalGameId').value = gameId;
+            document.getElementById('modalTitleInput').value = title;
+            document.getElementById('modalDescInput').value = desc;
+            document.getElementById('modalImgInput').value = img;
+            document.getElementById('modalWeightInput').value = weight;
+            document.getElementById('modalLangSelect').value = lang;
+            document.getElementById('modalCodeInput').value = code || `<html>\n<body style="background:#000; color:#fff; display:flex; justify-content:center; align-items:center; height:100vh;">\n  <h1>Моя новая игра!</h1>\n</body>\n</html>`;
+
+            document.getElementById('modalEngineTitle').innerHTML = gameId 
+                ? `<i class="fa-solid fa-pen-to-square"></i> Модернизация Проекта` 
+                : `<i class="fa-solid fa-gamepad"></i> Создание Игрового Движка`;
+
+            document.getElementById('devModal').style.display = 'flex';
+        }
+
+        function closeDevModal() {
+            document.getElementById('devModal').style.display = 'none';
+        }
+        // =====================================================================
+        // 📡 2. АСИНХРОННЫЙ ДВИЖОК ОПРОСА MONGODB И КАТАЛОГ РАЗРАБОТОК
+        // =====================================================================
+        
+        // КЛИК "ОПУБЛИКОВАТЬ" ИЛИ "В ЧЕРНОВИКИ": Сохранение игры в MongoDB
+        async function publishGameToMongo(shouldPublish) {
+            const gameId = document.getElementById('modalGameId').value;
+            const title = document.getElementById('modalTitleInput').value.trim();
+            const description = document.getElementById('modalDescInput').value.trim();
+            const image_url = document.getElementById('modalImgInput').value.trim();
+            const weight = document.getElementById('modalWeightInput').value.trim();
+            const lang = document.getElementById('modalLangSelect').value;
+            const code = document.getElementById('modalCodeInput').value.trim();
+
+            if (!title || !code) {
+                Swal.fire({ title: "Внимание", text: "Укажите название игры и вставьте её исходный код!", icon: "warning", background: "#0d141f", color: "#fff" });
+                return;
+            }
+
+            const payload = {
+                author: currentUser, game_id: gameId || null, title: title,
+                description: description, code: code, lang: lang,
+                image_url: image_url || "https://unsplash.com",
+                weight: weight || "1.2 MB", is_published: shouldPublish
+            };
+
+            try {
+                const response = await fetch('/api/gg-games/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    closeDevModal();
+                    Swal.fire({ title: "Успех!", text: data.message, icon: "success", background: "#0d141f", color: "#fff", confirmButtonColor: "#34c759" });
+                    loadMyDevelopmentsFromMongo(); // Обновляем вкладку разработок
+                }
+            } catch (err) {
+                console.error("Ошибка сохранения игры: ", err);
+                Swal.fire({ title: "Ошибка", text: "Не удалось отправить код в MongoDB.", icon: "error", background: "#0d141f", color: "#fff" });
+            }
+        }
+
+        // ПОДГРУЗКА РАЗДЕЛА 1: Глобальный маркетплейс игр из MongoDB Atlas
+        async function loadGlobalCatalogFromMongo() {
+            const grid = document.getElementById('catalogGrid');
+            if (!grid) return;
+
+            const searchVal = document.getElementById('catalogSearchInput').value.trim();
+
+            try {
+                const response = await fetch(`/api/gg-games/catalog?search=${encodeURIComponent(searchVal)}`);
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    grid.innerHTML = ""; // Очищаем лоадер
+                    
+                    if (data.catalog.length === 0) {
+                        grid.innerHTML = `<div style="grid-column: span 3; color: rgba(255,255,255,0.4); text-align:center; padding:20px; font-size:13px; font-style:italic;">Ничего не найдено. Напишите и опубликуйте первую игру!</div>`;
+                        return;
+                    }
+
+                    data.catalog.forEach(game => {
+                        const card = document.createElement('div');
+                        card.className = 'game-card';
+                        card.innerHTML = `
+                            <img src="${game.image_url}" class="game-img" alt="game covers">
+                            <div class="game-body">
+                                <div class="game-title">
+                                    <span>${game.title}</span>
+                                    <span class="game-weight">${game.weight}</span>
+                                </div>
+                                <div class="game-desc">${game.description || 'Описание отсутствует.'}</div>
+                                <div class="game-meta">
+                                    <span>Автор: @${game.author}</span>
+                                    <div class="game-rating"><i class="fa-solid fa-star"></i> ${game.rating.toFixed(1)}</div>
+                                </div>
+                                <div class="game-meta" style="padding:0; margin-top:-4px; border:none;">
+                                    <span><i class="fa-solid fa-cloud-arrow-down"></i> Скачиваний: ${game.downloads}</span>
+                                </div>
+                                <button class="game-btn" onclick="installGameToMyLibrary('${game.id}')"><i class="fa-solid fa-download"></i> Установить игру</button>
+                            </div>
+                        `;
+                        grid.appendChild(card);
+                    });
+                }
+            } catch (err) { console.error("Ошибка каталога: ", err); }
+        }
+
+        // ПОДГРУЗКА РАЗДЕЛА 3: Моя личная студия разработки (Черновики и релизы)
+        async function loadMyDevelopmentsFromMongo() {
+            const grid = document.getElementById('devsGrid');
+            if (!grid) return;
+
+            try {
+                const response = await fetch(`/api/gg-games/my-devs/${currentUser}`);
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    grid.innerHTML = "";
+                    if (data.developments.length === 0) {
+                        grid.innerHTML = `<div style="grid-column: span 3; color: rgba(255,255,255,0.4); text-align:center; padding:20px; font-size:13px; font-style:italic;">Вы ещё не создали ни одной игры. Нажмите кнопку выше для старта!</div>`;
+                        return;
+                    }
+
+                    data.developments.forEach(d => {
+                        const statusLabel = d.is_published 
+                            ? `<span class="game-weight" style="background:rgba(52,199,89,0.15); color:#34c759; border:1px solid #34c759;">В МАГАЗИНЕ</span>`
+                            : `<span class="game-weight" style="background:rgba(255,189,46,0.15); color:#ffbd2e; border:1px solid #ffbd2e;">ЧЕРНОВИК</span>`;
+
+                        const card = document.createElement('div');
+                        card.className = 'game-card';
+                        
+                        // Экранируем спец-символы кода перед передачей в функцию в кавычках
+                        const escapedCode = encodeURIComponent(d.code);
+
+                        card.innerHTML = `
+                            <img src="${d.image_url}" class="game-img" alt="covers">
+                            <div class="game-body">
+                                <div class="game-title">
+                                    <span>${d.title}</span>
+                                    ${statusLabel}
+                                </div>
+                                <div class="game-desc">${d.description || 'Без описания.'}</div>
+                                <button class="game-btn btn-secondary" onclick="openDevModal('${d.id}', '${d.title}', '${d.description}', '${d.image_url}', '${d.weight}', '${d.lang}', decodeURIComponent('${escapedCode}'))"><i class="fa-solid fa-pen-to-square"></i> Редактировать код</button>
+                            </div>
+                        `;
+                        grid.appendChild(card);
+                    });
+                }
+            } catch (err) { console.error("Ошибка загрузки разработок: ", err); }
+        }
+        // =====================================================================
+        // 🖥️ 3. УСТАНОВКА, SANDBOX-ЗАПУСК И СТАРТ ПЛАТФОРМЫ (ФИНАЛ)
+        // =====================================================================
+        
+        // КЛИК "УСТАНОВИТЬ": Синхронизируем игру с аккаунтом и GeraGram
+        async function installGameToMyLibrary(gameId) {
+            try {
+                const response = await fetch('/api/gg-games/install', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentUser, game_id: gameId })
+                });
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    Swal.fire({
+                        title: "🎮 Установлено!",
+                        text: "Игра добавлена в раздел 'Мои Игры' и теперь доступна прямо в папке 'Игры' внутри мессенджера GeraGram!",
+                        icon: "success",
+                        background: "#0d141f",
+                        color: "#fff",
+                        confirmButtonColor: "#00f2fe"
+                    });
+                }
+            } catch (err) {
+                console.error("Ошибка инсталляции: ", err);
+            }
+        }
+
+        // ПОДГРУЗКА РАЗДЕЛА 2: Моя библиотека установленных игр из MongoDB
+        async function loadInstalledGamesFromMongo() {
+            const grid = document.getElementById('installedGrid');
+            if (!grid) return;
+
+            try {
+                // Дергаем наш интеграционный шлюз, который видит только скачанное тобой
+                const response = await fetch(`/api/gg-games/installed-list/${currentUser}`);
+                const data = await response.json();
+
+                if (data.contacts) {
+                    grid.innerHTML = "";
+                    if (data.contacts.length === 0) {
+                        grid.innerHTML = `<div style="grid-column: span 3; color: rgba(255,255,255,0.4); text-align:center; padding:20px; font-size:13px; font-style:italic;">У вас пока нет установленных игр. Перейдите во вкладку 'Игры' и скачайте что-нибудь!</div>`;
+                        return;
+                    }
+
+                    // Для красоты на вкладке установленных игр запрашиваем детали из глобального каталога
+                    const catalogRes = await fetch('/api/gg-games/catalog');
+                    const catalogData = await catalogRes.json();
+                    
+                    data.contacts.forEach(inst => {
+                        // Выковыриваем реальный ObjectId из псевдо-ника game_id
+                        const gameId = inst.username.replace('game_', '');
+                        
+                        // Ищем оригинальную обложку в каталоге
+                        const orig = catalogData.catalog ? catalogData.catalog.find(g => g.id === gameId) : null;
+                        const imgUrl = orig ? orig.image_url : "https://unsplash.com";
+                        const desc = orig ? orig.description : "Установленная игра.";
+
+                        const card = document.createElement('div');
+                        card.className = 'game-card';
+                        card.innerHTML = `
+                            <img src="${imgUrl}" class="game-img" alt="covers">
+                            <div class="game-body">
+                                <div class="game-title"><span>${inst.display_name.replace('🎮 ', '')}</span></div>
+                                <div class="game-desc">${desc}</div>
+                                <button class="game-btn" style="background: linear-gradient(45deg, #00f2fe, #4cd964);" onclick="launchGameRuntime('${gameId}')"><i class="fa-solid fa-circle-play"></i> Запустить игру</button>
+                            </div>
+                        `;
+                        grid.appendChild(card);
+                    });
+                }
+            } catch (err) { console.error("Ошибка загрузки установленных игр: ", err); }
+        }
+
+        // ОЖИВЛЯЕМ ПЕСОЧНИЦУ: Вытаскиваем код игры из MongoDB и запускаем в iframe
+        async function launchGameRuntime(gameId) {
+            try {
+                const response = await fetch(`/api/gg-games/launch/${gameId}`);
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    document.getElementById('runtimeGameTitle').innerText = `🕹️ СИМУЛЯЦИЯ: ${data.title.toUpperCase()}`;
+                    
+                    const overlay = document.getElementById('game-runtime-overlay');
+                    const iframe = document.getElementById('game-runtime-iframe');
+
+                    overlay.style.display = 'flex';
+                    // Прямой инжект HTML5/JS кода игры внутрь изолированного iframe
+                    iframe.srcdoc = data.code;
+                }
+            } catch (err) { console.error("Ошибка запуска симулятора: ", err); }
+        }
+
+        function closeGameRuntime() {
+            document.getElementById('game-runtime-overlay').style.display = 'none';
+            document.getElementById('game-runtime-iframe').srcdoc = ""; // Очищаем память
+        }
+
+        // 🚀 ГЛАВНЫЙ СТАРТ СИСТЕМЫ ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+        window.addEventListener('DOMContentLoaded', () => {
+            // По умолчанию загружаем глобальный каталог
+            loadGlobalCatalogFromMongo();
+        });
+    </script>
+</body>
+</html>
