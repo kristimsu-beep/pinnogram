@@ -6108,6 +6108,157 @@ async def track_global_flight(callsign: str):
                 
         except Exception as e:
             return {"status": "error", "message": f"Сбой httpx-клиента бэкенда: {str(e)}"}
+# =====================================================================
+# 🌍 МОНУМЕНТАЛЬНАЯ ГЕОПОЛИТИЧЕСКАЯ СТРАТЕГИЯ CTW 2 (FASTAPI + MONGO)
+# =====================================================================
+import httpx
+import time
+from bson import ObjectId
+from datetime import datetime
+
+# Глобальный климатический кэш, чтобы не спамить сервера Open-Meteo и не ловить баны
+CTW2_WEATHER_CACHE = {"last_update": 0, "data": []}
+
+# 1. Главный шлюз: Выдача HTML-страницы тактического глобуса
+@app.get("/ctw2")
+async def get_ctw2_game_page():
+    from fastapi.responses import FileResponse
+    import os
+    file_path = os.path.join("games", "ctw2.html")
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    return {"error": "Файл ctw2.html не найден в папке games"}
+
+# 2. API: Признание государства в MongoDB Atlas (Сохранение границ полигона)
+@app.post("/api/ctw2/country/save")
+async def ctw2_save_country(data: dict):
+    try:
+        username = data.get("username", "Anonymous").strip()
+        country_name = data.get("name", "Новая Империя").strip()
+        lang = data.get("lang", "Русский").strip()
+        flag = data.get("flag", "🏳️").strip()
+        coordinates = data.get("coordinates", []) # GPS точки нарисованных границ [[lat, lng], ...]
+
+        if not coordinates or len(coordinates) < 3:
+            return {"status": "error", "message": "Вы должны обвести на карте минимум 3 точки границ вашей страны!"}
+
+        # Сохраняем или обновляем границы государства игрока (upsert=True)
+        await db["ctw2_countries"].update_one(
+            {"username": username},
+            {"$set": {
+                "username": username, "name": country_name, "lang": lang,
+                "flag": flag, "coordinates": coordinates, "updated_at": datetime.utcnow()
+            }},
+            upsert=True
+        )
+        return {"status": "success", "message": f"Государство {country_name} официально признано на мировой карте CTW 2!"}
+    except Exception as e:
+        print(f"🚨 [ОШИБКА CTW2 SAVE]: {str(e)}")
+        return {"status": "error", "message": f"Ошибка СУБД MongoDB Atlas: {str(e)}"}
+
+# 3. API: Выдача всех зарегистрированных стран мира для рендеринга Leaflet
+@app.get("/api/ctw2/countries/list")
+async def ctw2_get_all_countries():
+    try:
+        cursor = db["ctw2_countries"].find()
+        countries = await cursor.to_list(length=500)
+        
+        output = []
+        for c in countries:
+            output.append({
+                "username": c.get("username"), 
+                "name": c.get("name", "Империя"),
+                "lang": c.get("lang", "RU"), 
+                "flag": c.get("flag", "🏳️"),
+                "coordinates": c.get("coordinates", [])
+            })
+        return {"status": "success", "countries": output}
+    except Exception as e:
+        print(f"🚨 [ОШИБКА CTW2 COUNTRIES_LIST]: {str(e)}")
+        return {"status": "error", "message": str(e), "countries": []}
+
+# 4. API: Климат-движок — Сканирование погоды ВСЕЙ планеты (Плотная температурная сетка)
+@app.get("/api/ctw2/weather/map")
+async def ctw2_get_weather_map():
+    now = time.time()
+    # Если в кэше лежат свежие метео-данные (прошло меньше 1 часа) — пулей отдаем кэш!
+    if CTW2_WEATHER_CACHE["data"] and (now - CTW2_WEATHER_CACHE["last_update"] < 3600):
+        return {"status": "success", "source": "cache", "weather": CTW2_WEATHER_CACHE["data"]}
+        
+    try:
+        lats = []
+        lngs = []
+        
+        # 🦾 ИИ-ГЕНЕРАТОР ГЛОБУСА: Нарезаем планету плотной сеткой (широта и долгота)
+        # Это покроет тепловым слоем абсолютно всю карту Земли, включая океаны и полюса!
+        for lat in range(-55, 75, 12):      # От Антарктиды до Гренландии
+            for lng in range(-140, 170, 20): # По всему экватору вокруг Земли
+                lats.append(str(lat))
+                lngs.append(str(lng))
+                
+        lat_param = ",".join(lats)
+        lng_param = ",".join(lngs)
+        
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat_param}&longitude={lng_param}&current_weather=true"
+        
+        async with httpx.AsyncClient() as client:
+            res = await client.get(url, timeout=15.0)
+            if res.status_code == 200:
+                data = res.json()
+                weather_points = []
+                current_list = data.get("current_weather", [])
+                
+                if isinstance(current_list, list):
+                    for idx, curr in enumerate(current_list):
+                        weather_points.append({
+                            "lat": float(lats[idx]), "lng": float(lngs[idx]),
+                            "temp": curr.get("temperature", 15.0)
+                        })
+                else:
+                    # Запасной парсинг одиночного ответа Open-Meteo
+                    curr = data.get("current_weather", {})
+                    weather_points.append({
+                        "lat": float(data.get("latitude", 55.75)), 
+                        "lng": float(data.get("longitude", 37.62)),
+                        "temp": curr.get("temperature", 15.0)
+                    })
+
+                if weather_points:
+                    CTW2_WEATHER_CACHE["last_update"] = now
+                    CTW2_WEATHER_CACHE["data"] = weather_points
+                    return {"status": "success", "source": "api", "weather": weather_points}
+                    
+        raise Exception("Битый ответ метео-сервера")
+    except Exception as e:
+        print(f"🚨 [ОШИБКА МЕТЕО-СЕТКИ]: {str(e)}")
+        # Аварийная интерполяционная матрица (если внешнее API легло, радар продолжит жить)
+        fake_grid = []
+        for lt in range(-50, 70, 15):
+            for ln in range(-120, 160, 25):
+                base_temp = 32.0 - abs(lt) * 0.5  # На экваторе жарко, на полюсах холодно
+                fake_grid.append({"lat": float(lt), "lng": float(ln), "temp": round(base_temp, 1)})
+        return {"status": "success", "source": "fallback", "weather": fake_grid}
+
+# 5. API: Точечный метеозонд (Выдача погоды в любой точке зажатия / лонг-тапа на карте)
+@app.get("/api/ctw2/weather/point")
+async def ctw2_get_point_weather(lat: float, lng: float):
+    try:
+        url = f"https://open-meteo.com{lat}&longitude={lng}&current_weather=true"
+        async with httpx.AsyncClient() as client:
+            res = await client.get(url, timeout=5.0)
+            if res.status_code == 200:
+                curr = res.json().get("current_weather", {})
+                return {
+                    "status": "success",
+                    "temp": curr.get("temperature", 15.0),
+                    "windspeed": curr.get("windspeed", 0.0),
+                    "winddirection": curr.get("winddirection", 0)
+                }
+        return {"status": "error", "message": "Метеосервер занят."}
+    except Exception as e:
+        # Резервный математический расчет температуры по широте
+        fallback_temp = round(30.0 - abs(lat) * 0.6, 1)
+        return {"status": "success", "temp": fallback_temp, "note": "fallback_math"}
 
 # =====================================================================
 # 🌐 СУВЕРЕННЫЙ БРАУЗЕР PINNET (БЭКЕНД-ДВИЖОК ДЛЯ ДОМЕНОВ .PIN)
