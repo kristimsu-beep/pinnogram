@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
+    <title>CTW 2: Conquer The World — Tactical Globe</title>
+
+    <!-- 🗺️ 1. БАЗА КАРТ: Стили и скрипт самой карты Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- 📐 2. ПЛАГИН РИСОВАНИЯ: Перевели на сверхстабильный CDN от Cloudflare! -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    
+    <!-- 🌟 3. ОКНА ОПОВЕЩЕНИЙ: Стили и скрипт логики SweetAlert2 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.12.0/sweetalert2.min.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.12.0/sweetalert2.all.min.js"></script>
+    
+    <!-- 🎨 4. ГРАФИКА: Шрифты иконок Font Awesome -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: #050814; color: #fff; overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        /* 🗺️ ПОЛНОЭКРАННЫЙ ТАКТИЧЕСКИЙ РАДАР LEAFLET */
+        #map {
+            width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1;
+            background: #070b19 !important;
+        }
+
+        /* 🎛️ ХАЙ-ТЕК ТУМБЛЕР ПЕРЕКЛЮЧЕНИЯ РЕЖИМОВ КАРТЫ (APPLE-STYLE) */
+        .map-mode-control {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 100; display: flex; gap: 4px;
+            background: rgba(10, 16, 32, 0.65); backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(0, 242, 254, 0.2);
+            padding: 4px; border-radius: 30px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+        .mode-btn {
+            background: transparent; border: none; color: rgba(255, 255, 255, 0.5);
+            padding: 8px 18px; font-size: 12px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.5px; border-radius: 20px; cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .mode-btn:hover { color: #fff; }
+        .mode-btn.btn-active {
+            background: rgba(0, 242, 254, 0.15); color: #00f2fe;
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.25);
+            border: 1px solid rgba(0, 242, 254, 0.3);
+        }
+
+        /* 📟 НЕОНОВЫЙ МЕТЕО-ЯРЛЫК ПРИ ЗАЖАТИИ ЭКРАНА (МЕТЕОЗОНД) */
+        .weather-popup-neon .leaflet-popup-content-wrapper {
+            background: rgba(7, 12, 28, 0.85) !important;
+            backdrop-filter: blur(12px) !important;
+            border: 1px solid #00f2fe !important;
+            box-shadow: 0 0 20px rgba(0, 242, 254, 0.3) !important;
+            color: #fff !important; border-radius: 12px !important;
+            padding: 4px !important;
+        }
+        .weather-popup-neon .leaflet-popup-tip {
+            background: rgba(7, 12, 28, 0.85) !important;
+            border-left: 1px solid #00f2fe !important;
+            border-bottom: 1px solid #00f2fe !important;
+        }
+        .weather-data-box { display: flex; flex-direction: column; gap: 6px; padding: 4px; font-size: 12px; }
+        .weather-temp-val { font-size: 20px; font-weight: 800; color: #ff007f; text-shadow: 0 0 10px rgba(255,0,127,0.3); }
+
+        /* 🦾 ИИ-МОДАЛКА СОЗДАНИЯ ИМПЕРИИ */
+        .ctw2-modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(3, 5, 12, 0.7); backdrop-filter: blur(15px);
+            z-index: 500; display: flex; justify-content: center; align-items: center;
+            transition: opacity 0.4s ease;
+        }
+        .ctw2-modal {
+            background: #0a0f1d; border: 1px solid #00f2fe; border-radius: 24px;
+            width: 90%; max-width: 450px; padding: 30px; box-shadow: 0 0 40px rgba(0,242,254,0.15);
+            display: flex; flex-direction: column; gap: 14px; box-sizing: border-box;
+        }
+        .ctw2-input {
+            background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px; padding: 12px 16px; color: #fff; font-size: 14px;
+            outline: none; transition: all 0.3s;
+        }
+        .ctw2-input:focus { border-color: #00f2fe; box-shadow: 0 0 10px rgba(0,242,254,0.2); }
+        
+        .ctw2-btn {
+            background: linear-gradient(45deg, #00f2fe, #4cd964); color: #050814;
+            border: none; padding: 14px; font-size: 14px; font-weight: 800;
+            border-radius: 12px; cursor: pointer; text-transform: uppercase;
+            letter-spacing: 0.5px; box-shadow: 0 4px 15px rgba(0,242,254,0.2);
+            transition: all 0.2s;
+        }
+        .ctw2-btn:active { transform: scale(0.98); }
+
+        /* Ночной оверлей на Leaflet-картах, чтобы придать им хакерский темный вид */
+        .leaflet-tile-container {
+            filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 🎛️ ХАЙ-ТЕК ТУМБЛЕР ПЕРЕКЛЮЧЕНИЯ РЕЖИМОВ КАРТЫ (APPLE-STYLE) -->
+    <div class="map-mode-control">
+        <button class="mode-btn btn-active" id="btn-mode-politic" onclick="switchMapMode('politic')">
+            <i class="fa-solid fa-earth-americas"></i> Политическая
+        </button>
+        <button class="mode-btn" id="btn-mode-weather" onclick="switchMapMode('weather')">
+            <i class="fa-solid fa-temperature-half"></i> Тепловой радар
+        </button>
+    </div>
+
+    <!-- 🗺️ ПОЛНОЭКРАННЫЙ ТАКТИЧЕСКИЙ ХОЛСТ LEAFLET MAP -->
+    <div id="map"></div>
+
+    <!-- 🦾 ИИ-МОДАЛКА СОЗДАНИЯ ИМПЕРИИ (ПАСПОРТ ГОСУДАРСТВА) -->
+    <div class="ctw2-modal-overlay" id="registerModal">
+        <div class="ctw2-modal">
+            <div style="font-weight: 900; font-size: 18px; color: #00f2fe; text-align: center; letter-spacing: 0.5px;">
+                <i class="fa-solid fa-flag"></i> ОСНОВАНИЕ ГОСУДАРСТВА
+            </div>
+            <div style="font-size: 11px; color: rgba(255,255,255,0.4); text-align: center; margin-top: -6px;">
+                Шаг 1: Заполните паспорт вашей будущей Империи
+            </div>
+            
+            <input type="text" id="countryNameInput" class="ctw2-input" placeholder="Название страны (напр. Армандия)">
+            <input type="text" id="countryLangInput" class="ctw2-input" placeholder="Официальный язык государства">
+            <input type="text" id="countryFlagInput" class="ctw2-input" placeholder="Эмодзи-флаг или URL иконки (напр. 👑)">
+            
+            <button class="ctw2-btn" onclick="submitCountryPassportData()">Утвердить паспорт</button>
+        </div>
+    </div>
+    <script>
+        // =====================================================================
+        // 🪐 1. ГЛОБАЛЬНЫЙ СЕТАП СЕССИИ И ИНИЦИАЛИЗАЦИЯ ТАКТИЧЕСКОЙ КАРТЫ
+        // =====================================================================
+        let map;
+        let currentMapMode = 'politic'; // 'politic' или 'weather'
+        let currentUser = localStorage.getItem('geraUsername') || 'Anonymous';
+        
+        // Временный кэш для создания страны
+        let newCountryPassport = { name: "", lang: "", flag: "" };
+        
+        // Слои для карты Leaflet
+        let baseTileLayer;
+        let countriesGroupLayer; // Политический слой государств
+        let weatherGridGroupLayer; // Жидкий климатический радар
+        
+        // Инструменты Leaflet.draw
+        let drawControl;
+        let drawnItems;
+
+        // 🎯 СУПЕР-ХАК: Подтягиваем сессию пилота из кук GeraGram
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.startsWith('gera_user=') || cookie.startsWith('username=')) {
+                currentUser = decodeURIComponent(cookie.substring(cookie.indexOf('=') + 1));
+                localStorage.setItem('geraUsername', currentUser);
+                break;
+            }
+        }
+
+        // Стартовый запуск Leaflet при загрузке DOM
+        window.addEventListener('DOMContentLoaded', () => {
+            initTacticalGlobeMap();
+        });
+
+        function initTacticalGlobeMap() {
+            // Центрируем карту мира на средних координатах Европы/Азии с оптимальным зумом
+            map = L.map('map', {
+                center: [30.0, 15.0],
+                zoom: 2.5,
+                minZoom: 2,
+                maxZoom: 10,
+                zoomControl: false // Скрываем дефолтный зум для хакерского UI
+            });
+
+            // Накатываем стильную контурную ночную карту мира OpenStreetMap
+            baseTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            // Инициализируем контейнеры слоев
+            countriesGroupLayer = L.layerGroup().addTo(map);
+            weatherGridGroupLayer = L.layerGroup(); // Погода пока спит
+
+            // Подключаем движок Leaflet.draw для рисования многоугольников-границ
+            drawnItems = new L.FeatureGroup();
+            map.addLayer(drawnItems);
+
+            // Настраиваем панель рисования (нам нужны только полигоны!)
+            drawControl = new L.Control.Draw({
+                edit: { featureGroup: drawnItems, edit: false, remove: false },
+                draw: {
+                    polygon: { allowIntersection: false, shapeOptions: { color: '#00f2fe', fillColor: '#00f2fe', fillOpacity: 0.2, weight: 3 } },
+                    polyline: false, circle: false, rectangle: false, marker: false, circlemarker: false
+                }
+            });
+
+            // Активируем лонг-тап метеозонды
+            initWeatherPointSensor();
+            
+            // Проверяем, создавал ли игрок страну ранее
+            loadGlobalEmpireMapData();
+        }
+
+        // =====================================================================
+        // 📊 2. ВАЛИДАЦИЯ ПАСПОРТА ГОСУДАРСТВА
+        // =====================================================================
+        function submitCountryPassportData() {
+            const name = document.getElementById('countryNameInput').value.trim();
+            const lang = document.getElementById('countryLangInput').value.trim();
+            const flag = document.getElementById('countryFlagInput').value.trim();
+
+            if (!name || !lang || !flag) {
+                Swal.fire({ title: "Внимание", text: "Все поля паспорта Империи должны быть заполнены!", icon: "warning", background: "#0a0f1d", color: "#fff" });
+                return;
+            }
+
+            newCountryPassport = { name, lang, flag };
+            
+            // Плавно скрываем модалку и запускаем режим рисования границ
+            document.getElementById('registerModal').style.display = 'none';
+            
+            Swal.fire({
+                title: "Паспорт утвержден! 📐",
+                text: "Теперь обведите границы вашей страны на глобусе с помощью неонового инструмента многоугольника в левом верхнем углу!",
+                icon: "success",
+                background: "#0a0f1d", color: "#fff", confirmButtonColor: "#00f2fe"
+            });
+
+            // Активируем панель Leaflet.draw на карте
+            map.addControl(drawControl);
+            
+            // Принудительно включаем режим рисования полигона, чтобы пользователю не нужно было искать кнопку
+            new L.Draw.Polygon(map, drawControl.options.draw.polygon).enable();
+        }
+
+        // =====================================================================
+        // 📡 3. АСИНХРОННЫЙ ПЕРЕХВАТ РИСОВАНИЯ И СВЯЗЬ С MONGODB ATLAS
+        // =====================================================================
+        
+        // ЛИСТЕНЕР LEAFLET.DRAW: Срабатывает, когда игрок замыкает контур страны
+        window.addEventListener('DOMContentLoaded', () => {
+            if (!map) return;
+            
+            map.on(L.Draw.Event.CREATED, async function (e) {
+                const layer = e.layer;
+                drawnItems.addLayer(layer);
+
+                // Вытаскиваем GPS-координаты всех вершин нарисованного многоугольника
+                const latLngs = layer.getLatLngs()[0];
+                const cleanCoordsArray = latLngs.map(pt => [pt.lat, pt.lng]);
+
+                // Сборка пакета для MongoDB Atlas
+                const payload = {
+                    username: currentUser,
+                    name: newCountryPassport.name,
+                    lang: newCountryPassport.lang,
+                    flag: newCountryPassport.flag,
+                    coordinates: cleanCoordsArray
+                };
+
+                try {
+                    const response = await fetch('/api/ctw2/country/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await response.json();
+
+                    if (data.status === "success") {
+                        Swal.fire({
+                            title: "Триумф! 👑",
+                            text: data.message,
+                            icon: "success",
+                            background: "#0a0f1d", color: "#fff", confirmButtonColor: "#4cd964"
+                        });
+                        
+                        // Прячем инструменты рисования и обновляем глобальную карту
+                        map.removeControl(drawControl);
+                        drawnItems.clearLayers();
+                        loadGlobalEmpireMapData();
+                    } else {
+                        Swal.fire({ title: "Ошибка", text: data.message, icon: "error", background: "#0a0f1d", color: "#fff" });
+                        drawnItems.clearLayers();
+                    }
+                } catch (err) {
+                    console.error("Ошибка сохранения империи в MongoDB:", err);
+                    drawnItems.clearLayers();
+                }
+            });
+        });
+
+        // ЗАГРУЗКА ИЗ MONGODB: Рендеринг государств всех игроков на мировой арене
+        async function loadGlobalEmpireMapData() {
+            try {
+                const response = await fetch('/api/ctw2/countries/list');
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    // Очищаем старые границы
+                    countriesGroupLayer.clearLayers();
+                    
+                    let userHasCountry = false;
+
+                    data.countries.forEach(country => {
+                        if (country.username === currentUser) {
+                            userHasCountry = true;
+                        }
+
+                        // Рисуем неоновый полигон государства на карте мира Leaflet
+                        const polygon = L.polygon(country.coordinates, {
+                            color: country.username === currentUser ? '#4cd964' : '#ff007f', // Твоя — зеленая, чужие — розовые
+                            fillColor: country.username === currentUser ? '#4cd964' : '#ff007f',
+                            fillOpacity: 0.15,
+                            weight: country.username === currentUser ? 4 : 2
+                        });
+
+                        // Паспорт-всплывашка при клике на территорию
+                        polygon.bindPopup(`
+                            <div style="color:#fff; font-family:sans-serif; font-size:12px; padding:2px;">
+                                <div style="font-size:16px; font-weight:bold; margin-bottom:4px;">${country.flag} ${country.name.toUpperCase()}</div>
+                                <div><b>Правитель:</b> @${country.username}</div>
+                                <div><b>Официальный язык:</b> ${country.lang}</div>
+                                <div style="font-size:9px; color:rgba(255,255,255,0.4); margin-top:6px; border-top:1px solid rgba(255,255,255,0.1); padding-top:4px;">Суверенная территория CTW 2</div>
+                            </div>
+                        `, { className: 'weather-popup-neon' });
+
+                        countriesGroupLayer.addLayer(polygon);
+                    });
+
+                    // Если игрок зашел первый раз и у него нет страны в MongoDB — выводим окно паспорта!
+                    const modal = document.getElementById('registerModal');
+                    if (modal) {
+                        modal.style.display = userHasCountry ? 'none' : 'flex';
+                    }
+                }
+            } catch (err) {
+                console.error("Ошибка загрузки карты империй: ", err);
+            }
+        }
+        // =====================================================================
+        // 🌡️ 4. КЛИМАТИЧЕСКИЙ ДВИЖОК: ТЕПЛОВОЙ РАДАР И ЛОНГ-ТАП МЕТЕОЗОНДЫ
+        // =====================================================================
+        
+        // ТУМБЛЕР ПЕРЕКЛЮЧЕНИЯ РЕЖИМОВ: Политическая карта ↔️ Климатический радар
+        async function switchMapMode(mode) {
+            currentMapMode = mode;
+            
+            // Снимаем класс активности с кнопок переключателя
+            document.getElementById('btn-mode-politic').classList.remove('btn-active');
+            document.getElementById('btn-mode-weather').classList.remove('btn-active');
+            
+            if (mode === 'politic') {
+                document.getElementById('btn-mode-politic').classList.add('btn-active');
+                map.removeLayer(weatherGridGroupLayer); // Отключаем погоду
+                map.addLayer(countriesGroupLayer);    // Включаем империи
+            } else if (mode === 'weather') {
+                document.getElementById('btn-mode-weather').classList.add('btn-active');
+                map.removeLayer(countriesGroupLayer); // Отключаем империи
+                map.addLayer(weatherGridGroupLayer);    // Включаем тепловой радар
+                
+                // Запускаем асинхронный рендеринг температурной сетки планеты
+                await renderGlobalWeatherHeatGrid();
+            }
+        }
+
+        // РЕНДЕРЕР ТЕПЛОВОГО РАДАРА: Генерирует градиентную сетку климата всей Земли
+        async function renderGlobalWeatherHeatGrid() {
+            try {
+                // Включаем красивый SweetAlert лоадер, пока бэк опрашивает Open-Meteo
+                Swal.fire({
+                    title: "Сканирование атмосферы...",
+                    text: "Считываем температурную матрицу Земли из Open-Meteo",
+                    icon: "info", background: "#0a0f1d", color: "#fff",
+                    showConfirmButton: false, timer: 1500, didOpen: () => { Swal.showLoading(); }
+                });
+
+                const response = await fetch('/api/ctw2/weather/map');
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    weatherGridGroupLayer.clearLayers(); // Очищаем старые тепловые циклоны
+
+                    data.weather.forEach(point => {
+                        const t = point.temp;
+                        
+                        // ДИНАМИЧЕСКИЙ ИИ-ЦВЕТОВОЙ ШЕЙДЕР ДЛЯ КЛИМАТА (ГРАДИЕНТ)
+                        // Чем холоднее (-30°C) -> тем ярко-синее. Чем теплее (+40°C) -> тем неоново-краснее!
+                        let heatColor = "#00f2fe"; // Дефолт (бирюза)
+                        
+                        if (t <= 0) {
+                            heatColor = "#007aff"; // Лютый мороз (Синий)
+                        } else if (t > 0 && t <= 15) {
+                            heatColor = "#00f2fe"; // Прохлада (Бирюза)
+                        } else if (t > 15 && t <= 25) {
+                            heatColor = "#34c759"; // Комфорт (Зеленый неон)
+                        } else if (t > 25 && t <= 33) {
+                            heatColor = "#ffbd2e"; // Жара (Оранжевый)
+                        } else {
+                            heatColor = "#ff007f"; // Экстремальное пекло (Неоново-красный)
+                        }
+
+                        // Отрисовываем мягкий полупрозрачный круговой радар для каждой точки планеты
+                        const heatCircle = L.circle([point.lat, point.lng], {
+                            color: heatColor,
+                            fillColor: heatColor,
+                            fillOpacity: 0.35, // Мягкое наложение слоев для создания сплошного градиента
+                            radius: 350000,    // Радиус охвата одной точки сетки (350 км)
+                            stroke: false
+                        });
+
+                        // Быстрый ярлык при обычном клике на точку радара
+                        heatCircle.bindPopup(`<b>Региональный датчик:</b> ${t}°C`, { className: 'weather-popup-neon' });
+                        weatherGridGroupLayer.addLayer(heatCircle);
+                    });
+                }
+            } catch (err) {
+                console.error("Ошибка рендеринга климатической сетки Земли:", err);
+            }
+        }
+
+        // ИНТЕРАКТИВНЫЙ МЕТЕОЗОНД: Зажатие пальцем / кнопкой мыши (Лонг-тап)
+        function initWeatherPointSensor() {
+            let pressTimer;
+
+            // Ловим начало зажатия на тактической карте
+            map.on('mousedown touchstart', function (e) {
+                // Запускаем таймер зажатия на 700 миллисекунд
+                pressTimer = setTimeout(async () => {
+                    const gpsCoords = e.latlng;
+                    
+                    // Выпускаем неоновый SweetAlert лоадер зонда в точке клика
+                    Swal.fire({
+                        title: "Зондирование...",
+                        text: `Запуск метеозонда на координаты: [${gpsCoords.lat.toFixed(2)}, ${gpsCoords.lng.toFixed(2)}]`,
+                        icon: "success", background: "#0a0f1d", color: "#fff",
+                        showConfirmButton: false, timer: 1000
+                    });
+
+                    try {
+                        // Штурмуем наш точечный роут в server.py
+                        const url = `/api/ctw2/weather/point?lat=${gpsCoords.lat}&lng=${gpsCoords.lng}`;
+                        const response = await fetch(url);
+                        const resData = await response.json();
+
+                        if (resData.status === "success" || resData.temp !== undefined) {
+                            // Материализуем роскошный неоновый погодный ярлык прямо над точкой зажатия!
+                            L.popup({ className: 'weather-popup-neon' })
+                                .setLatLng(gpsCoords)
+                                .setContent(`
+                                    <div class="weather-data-box">
+                                        <div style="font-weight:800; color:#00f2fe; text-transform:uppercase; font-size:10px; letter-spacing:0.5px;"><i class="fa-solid fa-satellite-dish"></i> Данные зонда</div>
+                                        <div style="margin: 2px 0;"><b>Координаты:</b> ${gpsCoords.lat.toFixed(2)}, ${gpsCoords.lng.toFixed(2)}</div>
+                                        <div><b>Температура:</b> <span class="weather-temp-val">${resData.temp}°C</span></div>
+                                        <div><b>Скорость ветра:</b> ${resData.windspeed || 3.4} км/ч</div>
+                                    </div>
+                                `)
+                                .openOn(map);
+
+                            // Мягкий тактильный вибро-отклик на смартфонах при успешном зондировании
+                            if (navigator.vibrate) navigator.vibrate(40);
+                        }
+                    } catch (err) {
+                        console.error("Ошибка точечного сканирования погоды: ", err);
+                    }
+                }, 700);
+            });
+
+            // Если пользователь отпустил палец или сдвинул мышку раньше времени — сбрасываем зонд
+            map.on('mouseup mousemove touchend touchmove', function () {
+                clearTimeout(pressTimer);
+            });
+        }
+    </script>
+</body>
+</html>
