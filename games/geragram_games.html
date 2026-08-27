@@ -179,9 +179,40 @@
         .stat-row { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); padding: 12px 16px; border-radius: 14px; display: flex; justify-content: space-between; align-items: center; }
         .stat-lbl { font-size: 12px; color: #94a3b8; font-weight: 600; display: flex; align-items: center; gap: 8px; }
         .stat-val { font-size: 18px; font-weight: 800; color: #00f2fe; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(0,242,254,0.2); }
+
+        /* 🍏 APPLE-STYLE: ПОЛНОЭКРАННОЕ ПРИВЕТСТВИЕ */
+        #apple-hello-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #060b15; z-index: 5000;
+            display: flex; justify-content: center; align-items: center;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.8s cubic-bezier(0.165, 0.84, 0.44, 1);
+        }
+        #apple-hello-overlay.hello-active { opacity: 1; pointer-events: all; }
+
+        /* Переливающийся градиентный текст */
+        .hello-text-gradient {
+            font-size: 64px; font-weight: 900; letter-spacing: -1px;
+            background: linear-gradient(45deg, #00f2fe, #ff007f, #34c759, #00f2fe);
+            background-size: 300% 300%;
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            animation: appleGradientFlow 4s ease infinite;
+            text-align: center; padding: 0 20px;
+        }
+
+        @keyframes appleGradientFlow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
     </style>
 </head>
 <body>
+    <!-- 🍏 ОКНО ПРИВЕТСТВИЯ APPLE HELLO -->
+    <div id="apple-hello-overlay">
+        <div class="hello-text-gradient" id="helloTextContainer">Hello</div>
+    </div>
+
     <!-- 🌌 ЖИВОЙ СЕТОЧНЫЙ ФОН-ХАМЕЛЕОН (ОПЕЧАТКА С ID УСТРАНЕНА) -->
     <div id="live-parallax-bg-wrapper"></div>
 
@@ -742,6 +773,83 @@
         const originalStartListener = window.onload;
         window.addEventListener('DOMContentLoaded', () => {
             initUserWidgetDisplay();
+        });
+
+        // =====================================================================
+        // 🌍 4. ИИ-ДВИЖОК ГЕО-ПРИВЕТСТВИЯ APPLE STYLE ПО IP С УМНЫМ ТАЙМЕРОМ
+        // =====================================================================
+        
+        // Словарь официальных приветствий по кодам стран мира
+        const geoHelloDictionary = {
+            "RU": "Привет", "BY": "Прывітанне", "KZ": "Сәлем", "UA": "Привіт",
+            "US": "Hello", "GB": "Hello", "DE": "Hallo", "FR": "Bonjour",
+            "IT": "Ciao", "ES": "Hola", "CN": "你好", "JP": "こんにちは",
+            "IL": "היי", "TR": "Merhaba", "AE": "مرحبا"
+        };
+
+        async function checkAndShowAppleHello() {
+            const now = Date.now();
+            const lastActive = parseInt(localStorage.getItem('gg_last_active_time') || 0);
+            const isSessionOpened = sessionStorage.getItem('gg_session_hello_shown');
+
+            // Вычисляем, прошло ли 10 минут (10 * 60 * 1000 = 600000 мс) idle-таймаута
+            const isIdleTimeout = lastActive && (now - lastActive > 600000);
+
+            // Если это просто перезагрузка страницы в рамках одной сессии и 10 минут не прошло — выходим
+            if (isSessionOpened && !isIdleTimeout) {
+                // Обновляем время активности на будущее
+                localStorage.setItem('gg_last_active_time', now.toString());
+                return;
+            }
+
+            // Включаем полноэкранный оверлей приветствия
+            const overlay = document.getElementById('apple-hello-overlay');
+            const textContainer = document.getElementById('helloTextContainer');
+            if (!overlay || !textContainer) return;
+
+            overlay.classList.add('hello-active');
+
+            let greeting = "Hello"; // Значение по умолчанию
+
+            try {
+                // 🎯 УЛЬТИМАТИВНОЕ РЕШЕНИЕ: Меняем упавший сервис на ipapi.co, который официально и БЕСПЛАТНО работает через безопасный HTTPS!
+                const ipResponse = await fetch('https://ipapi.co/json/');
+                if (ipResponse.ok) {
+                    const geoData = await ipResponse.json();
+                    
+                    // В этом API ключ страны пишется как country_code
+                    const countryCode = geoData.country_code ? geoData.country_code.toUpperCase() : "US";
+                    
+                    // Достаем приветствие из нашего словаря по коду страны
+                    greeting = geoHelloDictionary[countryCode] || "Hello";
+                }
+            } catch (err) {
+                console.error("Ошибка определения IP-геолокации через HTTPS шлюз:", err);
+            }
+
+            // Добавляем восклицательный знак или никнейм для сочности
+            textContainer.innerText = `${greeting}!`;
+
+            // Фиксируем в текущей сессии вкладки, что приветствие показано
+            sessionStorage.setItem('gg_session_hello_shown', 'true');
+            localStorage.setItem('gg_last_active_time', Date.now().toString());
+
+            // Через 2.5 секунды красиво и плавно растворяем экран приветствия
+            setTimeout(() => {
+                overlay.classList.remove('hello-active');
+            }, 2500);
+        }
+
+        // Обновляем таймер активности при любых кликах или движениях по экрану (Слежение за Idle)
+        function updateGamerActivityTimer() {
+            localStorage.setItem('gg_last_active_time', Date.now().toString());
+        }
+        document.addEventListener('click', updateGamerActivityTimer);
+        document.addEventListener('keydown', updateGamerActivityTimer);
+
+        // Инжектируем проверку в стартовый листенер DOMContentLoaded
+        window.addEventListener('DOMContentLoaded', () => {
+            checkAndShowAppleHello();
         });
 
     </script>
