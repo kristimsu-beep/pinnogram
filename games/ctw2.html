@@ -333,59 +333,52 @@
             }
         }
 
-        // РЕНДЕРЕР СВЕРХПЛАВНОГО БЕСШОВНОГО ТЕПЛОВОГО РАДАРА (ИСПРАВЛЕНО: КРУГИ И ПЯТНА СТЁРТЫ НАМЕРТВО)
+        // РЕНДЕРЕР ТЕПЛОВОГО РАДАРА С РЕАЛИСТИЧНЫМИ ЦВЕТАМИ (ИСПРАВЛЕНО: ЖАРА СТАЛА КРАСНОЙ)
         async function renderGlobalWeatherHeatGrid() {
             try {
                 Swal.fire({
-                    title: "Анализ атмосферного фронта...",
-                    text: "Генерируем бесшовную метео-матрицу Земли",
+                    title: "Синхронизация с атмосферой...",
+                    text: "Отрисовываем планетарные температурные фронты",
                     icon: "info", background: "#0a0f1d", color: "#fff",
-                    showConfirmButton: false, timer: 800, didOpen: () => { Swal.showLoading(); }
+                    showConfirmButton: false, timer: 600, didOpen: () => { Swal.showLoading(); }
                 });
 
                 const response = await fetch('/api/ctw2/weather/map');
                 const data = await response.json();
 
                 if (data.status === "success") {
-                    // 🔥 ШАГ 1: Полностью очищаем климатический слой от старых остатков
                     weatherGridGroupLayer.clearLayers(); 
                     const heatPointsArray = [];
 
-                    // 🔥 ШАГ 2: Собираем плотную матрицу координат для Canvas-плагина
                     data.weather.forEach(point => {
                         const t = point.temp;
-                        // Нормализуем яркость интенсивности от пекла к холоду
-                        let intensity = (t + 25) / 65; 
-                        intensity = Math.max(0.05, Math.min(1.0, intensity));
+                        
+                        // 🎯 НОВАЯ СНАЙПЕРСКАЯ ФОРМУЛА ИНТЕНСИВНОСТИ:
+                        // Сдвигаем шкалу так, чтобы температура +35°C давала максимальную интенсивность 1.0 (Красный),
+                        // а прохлада и мороз уходили в минимальные значения (Синий).
+                        let intensity = (t + 10) / 45; 
+                        intensity = Math.max(0.01, Math.min(1.0, intensity)); // Жесткая фиксация границ
+                        
                         heatPointsArray.push([point.lat, point.lng, intensity]);
                     });
 
-                    // 🔥 ШАГ 3: Инициализируем плагин бесшовного холста Leaflet.heat
                     // Инициализируем плагин бесшовного холста Leaflet.heat
                     const heatmapLayer = L.heatLayer(heatPointsArray, {
-                        radius: 70,  // 🎯 ИСПРАВЛЕНО под новую плотную сетку: идеальное слияние без пятен!
-                        blur: 45,    // 🎯 Мягкое размытие краев для эффекта жидкого циклона
+                        radius: 75, 
+                        blur: 50,    
                         maxZoom: 4,
+                        
+                        // 🎨 ПРЕМИАЛЬНЫЙ ТЕПЛОВОЙ ГРАДИЕНТ (ТОЧЬ-В-ТОЧЬ КАК НА СПУТНИКАХ):
                         gradient: {
-                            0.05: '#3a00b0', // Лютый фиолетовый мороз
+                            0.01: '#3a00b0', // Глубокий фиолетовый мороз (Полюса)
                             0.15: '#0044ff', // Синий холод
-                            0.35: '#00ccff', // Легкая прохлада
-                            0.55: '#00f2fe', // Бирюзовый неоновый нектар
-                            0.70: '#34c759', // Зеленая зона комфорта
-                            0.85: '#ff9500', // Тропическое оранжевое тепло
-                            1.0: '#ff3b30'   // Раскаленное красное пекло Сахары
+                            0.40: '#00f2fe', // Бирюзовая умеренная зона
+                            0.65: '#34c759', // Зеленый весенний комфорт
+                            0.80: '#ff9500', // Оранжевое субтропическое тепло
+                            1.00: '#ff3b30'  // Раскаленное экваториальное пекло (Ближний Восток / Сахара)
                         }
                     });
 
-                    // 🔥 ШАГ 4: Инжектируем атрибут willReadFrequently, чтобы окончательно убрать варнинг из консоли
-                    setTimeout(() => {
-                        const canvasLayer = document.querySelector('canvas.leaflet-heatmap-layer');
-                        if (canvasLayer) {
-                            canvasLayer.getContext('2d', { willReadFrequently: true });
-                        }
-                    }, 150);
-
-                    // Добавляем чистый бесшовный слой на карту мира
                     weatherGridGroupLayer.addLayer(heatmapLayer);
                 }
             } catch (err) { 
@@ -393,11 +386,14 @@
             }
         }
 
-        // БРОНИРОВАННЫЙ ТОЧЕЧНЫЙ МЕТЕОЗОНД ПО ДОЛГОМУ НАЖАТИЮ (CONTEXTMENU)
+        // НЕУБИВАЕМЫЙ МЕТЕОЗОНД ПО ПРЯМОМУ КЛИКУ НА КАРТЕ (ЯРЛЫК ТЕПЕРЬ СТРЕЛЯЕТ СРАЗУ!)
         function initWeatherPointSensor() {
-            // Привязываем лонг-тап на contextmenu (правый клик мыши на ПК / долгий прижим на смартфонах)
-            // Это эталонный способ, который работает сквозь любые Canvas слои!
-            map.on('contextmenu', async function (e) {
+            // 🎯 СУПЕР-ФИКС: Пересадили зонд с забагованного contextmenu на классический 'click'.
+            // Теперь достаточно просто один раз нажать на любую точку глобуса — и ярлык вылетит пулей!
+            map.on('click', async function (e) {
+                // Если мы сейчас в политическом режиме, метеозонд не должен мешать кликать по странам
+                if (currentMapMode !== 'weather') return;
+
                 const gpsCoords = e.latlng;
                 
                 if (navigator.vibrate) navigator.vibrate(30);
@@ -406,7 +402,7 @@
                     title: "Зондирование...",
                     text: `Запрос климата: [${gpsCoords.lat.toFixed(2)}, ${gpsCoords.lng.toFixed(2)}]`,
                     icon: "success", background: "#0a0f1d", color: "#fff",
-                    showConfirmButton: false, timer: 600
+                    showConfirmButton: false, timer: 500
                 });
 
                 try {
@@ -415,12 +411,13 @@
                     const resData = await response.json();
 
                     if (resData.status === "success" || resData.temp !== undefined) {
-                        L.popup({ className: 'weather-popup-neon', offset: [0, -10] })
+                        // Материализуем неоновый метео-паспорт прямо над точкой клика!
+                        L.popup({ className: 'weather-popup-neon', offset: [0, -5] })
                             .setLatLng(gpsCoords)
                             .setContent(`
                                 <div class="weather-data-box">
                                     <div style="font-weight:900; color:#00f2fe; text-transform:uppercase; font-size:10px; letter-spacing:0.5px;"><i class="fa-solid fa-satellite-dish"></i> МЕТЕОЗОНД CTW 2</div>
-                                    <div style="margin: 2px 0; color:rgba(255,255,255,0.6);"><b>GPS:</b> ${gpsCoords.lat.toFixed(2)}, ${gpsCoords.lng.toFixed(2)}</div>
+                                    <div style="margin: 2px 0; color:rgba(255,255,255,0.6); font-size:11px;"><b>GPS:</b> ${gpsCoords.lat.toFixed(2)}, ${gpsCoords.lng.toFixed(2)}</div>
                                     <div><b>Температура:</b> <span class="weather-temp-val">${resData.temp}°C</span></div>
                                     <div><b>Ветер:</b> ${resData.windspeed || 4.2} км/ч</div>
                                 </div>
