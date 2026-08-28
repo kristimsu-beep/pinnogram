@@ -17,6 +17,9 @@
     <!-- 🌟 3. ОКНА ОПОВЕЩЕНИЙ: Стили и скрипт логики SweetAlert2 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.12.0/sweetalert2.min.css"/>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sweetalert2/11.12.0/sweetalert2.all.min.js"></script>
+    <!-- 🔥 ПЛАГИН БЕСШОВНОГО ТЕПЛОВОГО РАДАРА (КРИТИЧЕСКИЙ ИНЖЕКТ) -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     
     <!-- 🎨 4. ГРАФИКА: Шрифты иконок Font Awesome -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
@@ -375,58 +378,62 @@
             }
         }
 
-        // РЕНДЕРЕР ТЕПЛОВОГО РАДАРА: Генерирует градиентную сетку климата всей Земли
+        // РЕНДЕРЕР БЕСШОВНОГО ТЕПЛОВОГО РАДАРА С ПЛАВНЫМИ ГРАДИЕНТАМИ (APPLE & STEAM STYLE)
         async function renderGlobalWeatherHeatGrid() {
             try {
-                // Включаем красивый SweetAlert лоадер, пока бэк опрашивает Open-Meteo
+                // Включаем лоадер, пока бэк считывает свежую сетку из кэша
                 Swal.fire({
-                    title: "Сканирование атмосферы...",
-                    text: "Считываем температурную матрицу Земли из Open-Meteo",
+                    title: "Анализ атмосферного фронта...",
+                    text: "Генерируем бесшовную метео-матрицу Земли",
                     icon: "info", background: "#0a0f1d", color: "#fff",
-                    showConfirmButton: false, timer: 1500, didOpen: () => { Swal.showLoading(); }
+                    showConfirmButton: false, timer: 1000, didOpen: () => { Swal.showLoading(); }
                 });
 
                 const response = await fetch('/api/ctw2/weather/map');
                 const data = await response.json();
 
                 if (data.status === "success") {
-                    weatherGridGroupLayer.clearLayers(); // Очищаем старые тепловые циклоны
+                    // Очищаем старый климатический слой намертво
+                    weatherGridGroupLayer.clearLayers(); 
 
-                    // РЕНДЕРЕР СИНТИЗИРОВАННОГО ТЕПЛОВОГО РАДАРА (ПЛАВНЫЙ ГРАДИЕНТ-ХАМЕЛЕОН)
+                    // Массив, куда мы соберем точки для плагина тепловой карты
+                    // Формат точки для Leaflet.heat: [lat, lng, intensity]
+                    const heatPointsArray = [];
+
                     data.weather.forEach(point => {
                         const t = point.temp;
-                        let heatColor = "#00f2fe"; 
                         
-                        // Цветовая палитра точь-в-точь как на твоем референсе:
-                        if (t <= -10) {
-                            heatColor = "#4a00e0"; // Глубокий фиолетовый циклон (Лютый мороз)
-                        } else if (t > -10 && t <= 5) {
-                            heatColor = "#007aff"; // Холодный фронт (Синий)
-                        } else if (t > 5 && t <= 18) {
-                            heatColor = "#00f2fe"; // Умеренная зона (Бирюзово-зеленый)
-                        } else if (t > 18 && t <= 28) {
-                            heatColor = "#ff9500"; // Теплые материки (Оранжевый)
-                        } else {
-                            heatColor = "#ff3b30"; // Раскаленные пустыни Сахары (Насыщенный красный)
-                        }
+                        // МАТЕМАТИЧЕСКИЙ ШЕЙДЕР ИНТЕНСИВНОСТИ:
+                        // Переводим температуру в коэффициент яркости от 0.1 до 1.0.
+                        // Чем выше температура (жара), тем ярче и краснее точка. Холод уйдет в мягкий сине-фиолетовый неон!
+                        let intensity = (t + 20) / 60; // Нормализуем диапазон от -20°C до +40°C
+                        intensity = Math.max(0.1, Math.min(1.0, intensity)); // Защита от вылета за границы
 
-                        // 🌍 СЕКРЕТ БЕСШОВНОСТИ: Увеличиваем радиус до 950 км и ставим мягкую прозрачность 0.18
-                        // Круги начнут накладываться друг на друга, стирая границы и формируя жидкое синоптическое полотно!
-                        const heatCircle = L.circle([point.lat, point.lng], {
-                            color: heatColor,
-                            fillColor: heatColor,
-                            fillOpacity: 0.18, // 🎯 Мягкое наложение слоев для бесшовного градиента
-                            radius: 950000,    // 🎯 Огромный радиус (950 км), чтобы точки слились в единое поле!
-                            stroke: false      // Выключаем контурную линию намертво
-                        });
-
-                        // Быстрый ярлык при клике на радар
-                        heatCircle.bindPopup(`<b>Локальный сенсор:</b> ${t}°C`, { className: 'weather-popup-neon' });
-                        weatherGridGroupLayer.addLayer(heatCircle);
+                        heatPointsArray.push([point.lat, point.lng, intensity]);
                     });
+
+                    // 🌍 ИНИЦИАЛИЗИРУЕМ БЕСШОВНЫЙ HEATMAP С ПРЕМbackground ПАЛИТРОЙ
+                    const heatmapLayer = L.heatLayer(heatPointsArray, {
+                        radius: 85,          // 🎯 Мощный радиус размытия (85 пикселей), чтобы точки полностью слились!
+                        blur: 50,            // 🎯 Сверхмягкое сглаживание краев градиента
+                        maxZoom: 5,          // Максимальный зум для расчета плотности
+                        
+                        // НАСТРОЙКА ПАЛИТРЫ ТОЧЬ-В-ТОЧЬ КАК НА ТВОЕМ РЕФЕРЕНСЕ:
+                        // Ключ - это процент интенсивности, значение - цвет неонового перелива
+                        gradient: {
+                            0.1: '#4a00e0',  // Полюса / Лютый холод (Глубокий фиолетовый)
+                            0.3: '#007aff',  // Прохлада (Насыщенный синий)
+                            0.5: '#00f2fe',  // Комфорт (Бирюзовый неон)
+                            0.7: '#ff9500',  // Теплые зоны материков (Оранжевый)
+                            1.0: '#ff3b30'   // Пустыни / Пекло экватора (Ярко-красный)
+                        }
+                    });
+
+                    // Закидываем готовый бесшовный слой на карту мира
+                    weatherGridGroupLayer.addLayer(heatmapLayer);
                 }
             } catch (err) {
-                console.error("Ошибка рендеринга климатической сетки Земли:", err);
+                console.error("Ошибка генерации бесшовной тепловой карты:", err);
             }
         }
 
