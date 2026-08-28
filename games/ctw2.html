@@ -386,33 +386,39 @@
             }
         }
 
-        // НЕУБИВАЕМЫЙ МЕТЕОЗОНД ПО ПРЯМОМУ КЛИКУ НА КАРТЕ (ЯРЛЫК ТЕПЕРЬ СТРЕЛЯЕТ СРАЗУ!)
+        // НЕУБИВАЕМЫЙ МЕТЕОЗОНД (ИСПРАВЛЕНО: РУЧНОЕ ЗАКРЫТИЕ ЛОАДЕРА И ВЫВОД ЯРЛЫКА)
         function initWeatherPointSensor() {
-            // 🎯 СУПЕР-ФИКС: Пересадили зонд с забагованного contextmenu на классический 'click'.
-            // Теперь достаточно просто один раз нажать на любую точку глобуса — и ярлык вылетит пулей!
+            // Вешаем обработчик на классический клик по карте (для режима погоды)
             map.on('click', async function (e) {
-                // Если мы сейчас в политическом режиме, метеозонд не должен мешать кликать по странам
+                // Если мы не в режиме теплового радара — выходим, чтобы не мешать кликать по странам
                 if (currentMapMode !== 'weather') return;
 
                 const gpsCoords = e.latlng;
                 
                 if (navigator.vibrate) navigator.vibrate(30);
 
+                // Включаем красивый неоновый лоадер зондирования
                 Swal.fire({
                     title: "Зондирование...",
-                    text: `Запрос климата: [${gpsCoords.lat.toFixed(2)}, ${gpsCoords.lng.toFixed(2)}]`,
+                    text: `Запрос климата для координат: [${gpsCoords.lat.toFixed(2)}, ${gpsCoords.lng.toFixed(2)}]`,
                     icon: "success", background: "#0a0f1d", color: "#fff",
-                    showConfirmButton: false, timer: 500
+                    showConfirmButton: false, allowOutsideClick: false,
+                    didOpen: () => { Swal.showLoading(); }
                 });
 
                 try {
+                    // Штурмуем наш обновленный и откалиброванный роут в server.py
                     const url = `/api/ctw2/weather/point?lat=${gpsCoords.lat}&lng=${gpsCoords.lng}`;
                     const response = await fetch(url);
                     const resData = await response.json();
 
+                    // 🎯 КРИТИЧЕСКИЙ ФИКС: Принудительно закрываем окно лоадера SweetAlert,
+                    // чтобы освободить экран для всплывающего ярлыка Leaflet!
+                    Swal.close();
+
                     if (resData.status === "success" || resData.temp !== undefined) {
-                        // Материализуем неоновый метео-паспорт прямо над точкой клика!
-                        L.popup({ className: 'weather-popup-neon', offset: [0, -5] })
+                        // Материализуем роскошный неоновый метео-паспорт прямо над точкой клика!
+                        L.popup({ className: 'weather-popup-neon', offset: [0, -5], closeOnClick: true })
                             .setLatLng(gpsCoords)
                             .setContent(`
                                 <div class="weather-data-box">
@@ -425,10 +431,12 @@
                             .openOn(map);
                     }
                 } catch (err) {
-                    console.error("Ошибка точечного сканирования погоды: ", err);
+                    Swal.close();
+                    console.error("Ошибка точечного сканирования погоды на фронтенде: ", err);
                 }
             });
         }
+
     </script>
 </body>
 </html>
