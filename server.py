@@ -6222,7 +6222,7 @@ async def ctw2_get_weather_map():
 @app.get("/api/ctw2/weather/point")
 async def ctw2_get_point_weather(lat: float, lng: float):
     try:
-        url = f"https://open-meteo.com{lat}&longitude={lng}&current_weather=true"
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat_param}&longitude={lng_param}&current_weather=true"
         async with httpx.AsyncClient() as client:
             res = await client.get(url, timeout=5.0)
             if res.status_code == 200:
