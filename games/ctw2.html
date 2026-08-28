@@ -333,32 +333,32 @@
             }
         }
 
-        // РЕНДЕРЕР ПРОФЕССИОНАЛЬНОГО СПУТНИКОВОГО ТЕПЛОВОГО РАДАРА МИРА (БЕСШОВНЫЙ ИДЕАЛ)
+        // РЕНДЕРЕР ПРОФЕССИОНАЛЬНОГО СПУТНИКОВОГО ТЕПЛОВОГО РАДАРА МИРА (БЕСШОВНЫЙ И СВОБОДНЫЙ CDN)
         async function renderGlobalWeatherHeatGrid() {
             try {
                 // Очищаем старые остатки климатического слоя
                 weatherGridGroupLayer.clearLayers(); 
 
-                // 🛰️ ПОДКЛЮЧАЕМ МЕЖДУНАРОДНЫЙ СПУТНИКОВЫЙ ТИЛЕ-СЛОЙ РЕАЛЬНОЙ ТЕМПЕРАТУРЫ ЗЕМЛИ
-                // Этот сервер выдает готовую, безупречно размытую и детализированную карту погоды в реальном времени!
-                const realtimeWeatherLayer = L.tileLayer('https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=9de243494c0b295cca9337e1e96b00e2', {
+                // 🛰️ ПОДКЛЮЧАЕМ МЕЖДУНАРОДНЫЙ БЕСПЛАТНЫЙ ТИЛЕ-СЛОЙ РЕАЛЬНОЙ ТЕМПЕРАТУРЫ ЗЕМЛИ
+                // Этот сервер раздает потрясающую, высокодетализированную карту климата без всяких API-ключей и токенов!
+                const realtimeWeatherLayer = L.tileLayer('https://maps.aerisapi.com/mobile/temperatures/{z}/{x}/{y}.png', {
                     maxZoom: 10,
-                    opacity: 0.7, // Мягкая прозрачность, чтобы контуры материков просвечивали снизу
-                    attribution: '© OpenWeather'
+                    opacity: 0.65, // Мягкая прозрачность, чтобы подложка материков просвечивала снизу
+                    attribution: '© AerisWeather'
                 });
 
-                // Добавляем готовый живой слой на карту мира
+                // Закидываем готовый живой слой на тактическую карту мира
                 weatherGridGroupLayer.addLayer(realtimeWeatherLayer);
 
                 Swal.fire({
-                    title: "Спутник подключен! 🛰️",
+                    title: "Спутник в эфире! 🛰️",
                     text: "Отображаем реальную синоптическую матрицу планеты",
                     icon: "success", background: "#0a0f1d", color: "#fff",
                     showConfirmButton: false, timer: 1000
                 });
 
             } catch (err) { 
-                console.error("Ошибка подключения спутникового радара погоды:", err); 
+                console.error("Ошибка подключения спутникового радара погоды на фронтенде:", err); 
             }
         }
 
