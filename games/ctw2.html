@@ -151,19 +151,16 @@
         let currentMapMode = 'politic'; // 'politic' или 'weather'
         let currentUser = localStorage.getItem('geraUsername') || 'Anonymous';
         
-        // Временный кэш для создания страны
         let newCountryPassport = { name: "", lang: "", flag: "" };
         
-        // Слои для карты Leaflet
         let baseTileLayer;
-        let countriesGroupLayer; // Политический слой государств
-        let weatherGridGroupLayer; // Жидкий климатический радар
+        let countriesGroupLayer; 
+        let weatherGridGroupLayer; 
         
-        // Инструменты Leaflet.draw
         let drawControl;
         let drawnItems;
 
-        // 🎯 СУПЕР-ХАК: Подтягиваем сессию пилота из кук GeraGram
+        // Авторизация по кукам сессии мессенджера GeraGram
         const cookies = document.cookie.split(';');
         for (let i = 0; i < cookies.length; i++) {
             const cookie = cookies[i].trim();
@@ -174,35 +171,29 @@
             }
         }
 
-        // Стартовый запуск Leaflet при загрузке DOM
         window.addEventListener('DOMContentLoaded', () => {
             initTacticalGlobeMap();
         });
 
         function initTacticalGlobeMap() {
-            // Центрируем карту мира на средних координатах Европы/Азии с оптимальным зумом
             map = L.map('map', {
                 center: [30.0, 15.0],
                 zoom: 2.5,
                 minZoom: 2,
                 maxZoom: 10,
-                zoomControl: false // Скрываем дефолтный зум для хакерского UI
+                zoomControl: false 
             });
 
-            // Накатываем стильную контурную ночную карту мира OpenStreetMap
             baseTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
 
-            // Инициализируем контейнеры слоев
             countriesGroupLayer = L.layerGroup().addTo(map);
-            weatherGridGroupLayer = L.layerGroup(); // Погода пока спит
+            weatherGridGroupLayer = L.layerGroup(); 
 
-            // Подключаем движок Leaflet.draw для рисования многоугольников-границ
             drawnItems = new L.FeatureGroup();
             map.addLayer(drawnItems);
 
-            // Настраиваем панель рисования (нам нужны только полигоны!)
             drawControl = new L.Control.Draw({
                 edit: { featureGroup: drawnItems, edit: false, remove: false },
                 draw: {
@@ -211,13 +202,12 @@
                 }
             });
 
-            // Активируем лонг-тап метеозонды
+            // Запускаем неубиваемый лонг-тап метеозонд
             initWeatherPointSensor();
             
-            // Проверяем, создавал ли игрок страну ранее
+            // Загружаем политическую арену из MongoDB
             loadGlobalEmpireMapData();
         }
-
         // =====================================================================
         // 📊 2. ВАЛИДАЦИЯ ПАСПОРТА ГОСУДАРСТВА
         // =====================================================================
@@ -232,29 +222,21 @@
             }
 
             newCountryPassport = { name, lang, flag };
-            
-            // Плавно скрываем модалку и запускаем режим рисования границ
             document.getElementById('registerModal').style.display = 'none';
             
             Swal.fire({
                 title: "Паспорт утвержден! 📐",
                 text: "Теперь обведите границы вашей страны на глобусе с помощью неонового инструмента многоугольника в левом верхнем углу!",
-                icon: "success",
-                background: "#0a0f1d", color: "#fff", confirmButtonColor: "#00f2fe"
+                icon: "success", background: "#0a0f1d", color: "#fff", confirmButtonColor: "#00f2fe"
             });
 
-            // Активируем панель Leaflet.draw на карте
             map.addControl(drawControl);
-            
-            // Принудительно включаем режим рисования полигона, чтобы пользователю не нужно было искать кнопку
             new L.Draw.Polygon(map, drawControl.options.draw.polygon).enable();
         }
 
         // =====================================================================
         // 📡 3. АСИНХРОННЫЙ ПЕРЕХВАТ РИСОВАНИЯ И СВЯЗЬ С MONGODB ATLAS
         // =====================================================================
-        
-        // ЛИСТЕНЕР LEAFLET.DRAW: Срабатывает, когда игрок замыкает контур страны
         window.addEventListener('DOMContentLoaded', () => {
             if (!map) return;
             
@@ -262,11 +244,9 @@
                 const layer = e.layer;
                 drawnItems.addLayer(layer);
 
-                // Вытаскиваем GPS-координаты всех вершин нарисованного многоугольника
-                const latLngs = layer.getLatLngs()[0];
+                const latLngs = layer.getLatLngs();
                 const cleanCoordsArray = latLngs.map(pt => [pt.lat, pt.lng]);
 
-                // Сборка пакета для MongoDB Atlas
                 const payload = {
                     username: currentUser,
                     name: newCountryPassport.name,
@@ -284,14 +264,7 @@
                     const data = await response.json();
 
                     if (data.status === "success") {
-                        Swal.fire({
-                            title: "Триумф! 👑",
-                            text: data.message,
-                            icon: "success",
-                            background: "#0a0f1d", color: "#fff", confirmButtonColor: "#4cd964"
-                        });
-                        
-                        // Прячем инструменты рисования и обновляем глобальную карту
+                        Swal.fire({ title: "Триумф! 👑", text: data.message, icon: "success", background: "#0a0f1d", color: "#fff", confirmButtonColor: "#4cd964" });
                         map.removeControl(drawControl);
                         drawnItems.clearLayers();
                         loadGlobalEmpireMapData();
@@ -300,87 +273,67 @@
                         drawnItems.clearLayers();
                     }
                 } catch (err) {
-                    console.error("Ошибка сохранения империи в MongoDB:", err);
+                    console.error("Ошибка保存 империи в MongoDB:", err);
                     drawnItems.clearLayers();
                 }
             });
         });
 
-        // ЗАГРУЗКА ИЗ MONGODB: Рендеринг государств всех игроков на мировой арене
         async function loadGlobalEmpireMapData() {
             try {
                 const response = await fetch('/api/ctw2/countries/list');
                 const data = await response.json();
 
                 if (data.status === "success") {
-                    // Очищаем старые границы
                     countriesGroupLayer.clearLayers();
-                    
                     let userHasCountry = false;
 
                     data.countries.forEach(country => {
-                        if (country.username === currentUser) {
-                            userHasCountry = true;
-                        }
+                        if (country.username === currentUser) userHasCountry = true;
 
-                        // Рисуем неоновый полигон государства на карте мира Leaflet
                         const polygon = L.polygon(country.coordinates, {
-                            color: country.username === currentUser ? '#4cd964' : '#ff007f', // Твоя — зеленая, чужие — розовые
+                            color: country.username === currentUser ? '#4cd964' : '#ff007f', 
                             fillColor: country.username === currentUser ? '#4cd964' : '#ff007f',
-                            fillOpacity: 0.15,
-                            weight: country.username === currentUser ? 4 : 2
+                            fillOpacity: 0.15, weight: country.username === currentUser ? 4 : 2
                         });
 
-                        // Паспорт-всплывашка при клике на территорию
                         polygon.bindPopup(`
                             <div style="color:#fff; font-family:sans-serif; font-size:12px; padding:2px;">
                                 <div style="font-size:16px; font-weight:bold; margin-bottom:4px;">${country.flag} ${country.name.toUpperCase()}</div>
                                 <div><b>Правитель:</b> @${country.username}</div>
                                 <div><b>Официальный язык:</b> ${country.lang}</div>
-                                <div style="font-size:9px; color:rgba(255,255,255,0.4); margin-top:6px; border-top:1px solid rgba(255,255,255,0.1); padding-top:4px;">Суверенная территория CTW 2</div>
                             </div>
                         `, { className: 'weather-popup-neon' });
 
                         countriesGroupLayer.addLayer(polygon);
                     });
 
-                    // Если игрок зашел первый раз и у него нет страны в MongoDB — выводим окно паспорта!
                     const modal = document.getElementById('registerModal');
-                    if (modal) {
-                        modal.style.display = userHasCountry ? 'none' : 'flex';
-                    }
+                    if (modal) modal.style.display = userHasCountry ? 'none' : 'flex';
                 }
-            } catch (err) {
-                console.error("Ошибка загрузки карты империй: ", err);
-            }
+            } catch (err) { console.error("Ошибка загрузки карты империй: ", err); }
         }
         // =====================================================================
-        // 🌡️ 4. КЛИМАТИЧЕСКИЙ ДВИЖОК: ТЕПЛОВОЙ РАДАР И ЛОНГ-ТАП МЕТЕОЗОНДЫ
+        // 🌡️ 4. КЛИМАТИЧЕСКИЙ ДВИЖОК: СВЕРХПЛАВНЫЙ HEATMAP И МЕТЕОЗОНДЫ
         // =====================================================================
-        
-        // ТУМБЛЕР ПЕРЕКЛЮЧЕНИЯ РЕЖИМОВ: Политическая карта ↔️ Климатический радар
         async function switchMapMode(mode) {
             currentMapMode = mode;
-            
-            // Снимаем класс активности с кнопок переключателя
             document.getElementById('btn-mode-politic').classList.remove('btn-active');
             document.getElementById('btn-mode-weather').classList.remove('btn-active');
             
             if (mode === 'politic') {
                 document.getElementById('btn-mode-politic').classList.add('btn-active');
-                map.removeLayer(weatherGridGroupLayer); // Отключаем погоду
-                map.addLayer(countriesGroupLayer);    // Включаем империи
+                map.removeLayer(weatherGridGroupLayer); 
+                map.addLayer(countriesGroupLayer);    
             } else if (mode === 'weather') {
                 document.getElementById('btn-mode-weather').classList.add('btn-active');
-                map.removeLayer(countriesGroupLayer); // Отключаем империи
-                map.addLayer(weatherGridGroupLayer);    // Включаем тепловой радар
-                
-                // Запускаем асинхронный рендеринг температурной сетки планеты
+                map.removeLayer(countriesGroupLayer); 
+                map.addLayer(weatherGridGroupLayer);    
                 await renderGlobalWeatherHeatGrid();
             }
         }
 
-        // РЕНДЕРЕР СВЕРХПЛАВНОГО ТЕПЛОВОГО РАДАРА (ИСПРАВЛЕНО: БЕЗУПРЕЧНЫЙ ГРАДИЕНТ)
+        // РЕНДЕРЕР БЕСШОВНОГО ТЕПЛОВОГО РАДАРА С ЭФФЕКТОМ ЖИДКОГО ГАЗА (ФИКСИРУЕТ ПЯТНА)
         async function renderGlobalWeatherHeatGrid() {
             try {
                 Swal.fire({
@@ -405,21 +358,19 @@
                         heatPointsArray.push([point.lat, point.lng, intensity]);
                     });
 
-                    // 🌍 ИНИЦИАЛИЗИРУЕМ СВЕРХМЯГКИЙ HEATMAP С ОГРОМНЫМ РАДИУСОМ СГЛАЖИВАНИЯ
+                    // Инициализируем плагин бесшовного холста Leaflet.heat
                     const heatmapLayer = L.heatLayer(heatPointsArray, {
-                        radius: 130,         // 🎯 ИСПРАВЛЕНО: Увеличили радиус до 130, чтобы полностью стереть стыки и пятна!
-                        blur: 75,            // 🎯 ИСПРАВЛЕНО: Максимальное размытие краев для эффекта жидкого газа
+                        radius: 130, // Увеличили радиус до 130, чтобы полностью стереть круги и пятна!
+                        blur: 75,    // Максимальное размытие границ градиента для эффекта жидкого полотна
                         maxZoom: 4,
-                        
-                        // ПЛОТНАЯ ПАЛИТРА ДЛЯ ИДЕАЛЬНОГО ПЕРЕЛИВА (КАК НА РЕФЕРЕНСЕ):
                         gradient: {
-                            0.05: '#3a00b0', // Глубокий антарктический фиолетовый
-                            0.15: '#0044ff', // Морозный синий
-                            0.35: '#00ccff', // Умеренная прохлада (светлая бирюза)
+                            0.05: '#3a00b0', // Лютый фиолетовый мороз
+                            0.15: '#0044ff', // Синий холод
+                            0.35: '#00ccff', // Легкая прохлада
                             0.55: '#00f2fe', // Бирюзовый неоновый нектар
-                            0.70: '#34c759', // Зеленая комфортная суша
-                            0.85: '#ff9500', // Оранжевое субтропическое тепло
-                            1.0: '#ff3b30'   // Раскаленное экваториальное пекло
+                            0.70: '#34c759', // Зеленая зона комфорта
+                            0.85: '#ff9500', // Тропическое оранжевое тепло
+                            1.0: '#ff3b30'   // Раскаленное красное пекло Сахары
                         }
                     });
 
@@ -427,41 +378,39 @@
                     setTimeout(() => {
                         const canvas2d = document.querySelector('canvas.leaflet-heatmap-layer');
                         if (canvas2d) {
-                            const ctx2d = canvas2d.getContext('2d', { willReadFrequently: true });
+                            canvas2d.getContext('2d', { willReadFrequently: true });
                         }
                     }, 200);
 
                     weatherGridGroupLayer.addLayer(heatmapLayer);
                 }
-            } catch (err) { console.error("Ошибка генерации бесшовной тепловой карты:", err); }
+            } catch (err) { 
+                console.error("Ошибка генерации бесшовной тепловой карты:", err); 
+            }
         }
 
-        // БРОНИРОВАННЫЙ ИНТЕРАКТИВНЫЙ МЕТЕОЗОНД (РАБОТАЕТ НА ВСЕХ СМАРТФОНАХ И ПК)
+        // БРОНИРОВАННЫЙ ТОЧЕЧНЫЙ МЕТЕОЗОНД ПО ДОЛГОМУ НАЖАТИЮ (CONTEXTMENU)
         function initWeatherPointSensor() {
-            // Вешаем лонг-тап на официальное Leaflet-событие "contextmenu"
-            // (долгий тап на смартфонах / правый клик мыши на ПК)
+            // Привязываем лонг-тап на contextmenu (правый клик мыши на ПК / долгий прижим на смартфонах)
+            // Это эталонный способ, который работает сквозь любые Canvas слои!
             map.on('contextmenu', async function (e) {
                 const gpsCoords = e.latlng;
                 
-                // Мягкий тактильный вибро-сигнал на смартфонах при успешном зондировании
                 if (navigator.vibrate) navigator.vibrate(30);
 
-                // Выводим премиальный лоадер SweetAlert
                 Swal.fire({
                     title: "Зондирование...",
                     text: `Запрос климата: [${gpsCoords.lat.toFixed(2)}, ${gpsCoords.lng.toFixed(2)}]`,
                     icon: "success", background: "#0a0f1d", color: "#fff",
-                    showConfirmButton: false, timer: 700
+                    showConfirmButton: false, timer: 600
                 });
 
                 try {
-                    // Штурмуем наш точечный роут в server.py
                     const url = `/api/ctw2/weather/point?lat=${gpsCoords.lat}&lng=${gpsCoords.lng}`;
                     const response = await fetch(url);
                     const resData = await response.json();
 
                     if (resData.status === "success" || resData.temp !== undefined) {
-                        // Выкидываем сочный неоновый метео-паспорт прямо над точкой зажатия!
                         L.popup({ className: 'weather-popup-neon', offset: [0, -10] })
                             .setLatLng(gpsCoords)
                             .setContent(`
@@ -479,7 +428,6 @@
                 }
             });
         }
-
     </script>
 </body>
 </html>
