@@ -333,7 +333,7 @@
             }
         }
 
-        // РЕНДЕРЕР БЕСШОВНОГО ТЕПЛОВОГО РАДАРА С ЭФФЕКТОМ ЖИДКОГО ГАЗА (ФИКСИРУЕТ ПЯТНА)
+        // РЕНДЕРЕР СВЕРХПЛАВНОГО БЕСШОВНОГО ТЕПЛОВОГО РАДАРА (ИСПРАВЛЕНО: КРУГИ И ПЯТНА СТЁРТЫ НАМЕРТВО)
         async function renderGlobalWeatherHeatGrid() {
             try {
                 Swal.fire({
@@ -347,24 +347,24 @@
                 const data = await response.json();
 
                 if (data.status === "success") {
-                    // 🎯 ШАГ 1: Намертво очищаем климатический слой от старых остатков
+                    // 🔥 ШАГ 1: Полностью очищаем климатический слой от старых остатков
                     weatherGridGroupLayer.clearLayers(); 
                     const heatPointsArray = [];
 
-                    // 🎯 ШАГ 2: Собираем чистую матрицу координат для Canvas-плагина
+                    // 🔥 ШАГ 2: Собираем плотную матрицу координат для Canvas-плагина
                     data.weather.forEach(point => {
                         const t = point.temp;
-                        // Нормализуем яркость от пекла к холоду
+                        // Нормализуем яркость интенсивности от пекла к холоду
                         let intensity = (t + 25) / 65; 
                         intensity = Math.max(0.05, Math.min(1.0, intensity));
                         heatPointsArray.push([point.lat, point.lng, intensity]);
                     });
 
-                    // 🎯 ШАГ 3: Инициализируем плагин бесшовного холста Leaflet.heat
-                    // (ЗДЕСЬ БОЛЬШЕ НЕТ СТАРОГО ЦИКЛА L.CIRCLE, КОТОРЫЙ РИСОВАЛ КРУГИ!)
+                    // 🔥 ШАГ 3: Инициализируем плагин бесшовного холста Leaflet.heat
+                    // (СТАРОГО ЦИКЛА L.CIRCLE, КОТОРЫЙ РИСОВАЛ ЖЕСТКИЕ ПЯТНА И КУСКИ, ТУТ БОЛЬШЕ НЕТ!)
                     const heatmapLayer = L.heatLayer(heatPointsArray, {
-                        radius: 140, // Сверхбольшой радиус для полного слияния и стирания кругов
-                        blur: 85,    // Максимальное размытие границ градиента для эффекта жидкого полотна
+                        radius: 160, // 🎯 Сверхбольшой радиус для идеального и полного слияния точек!
+                        blur: 90,    // 🎯 Максимальное размытие границ градиента для эффекта жидкого газа
                         maxZoom: 4,
                         gradient: {
                             0.05: '#3a00b0', // Лютый фиолетовый мороз
@@ -376,6 +376,14 @@
                             1.0: '#ff3b30'   // Раскаленное красное пекло Сахары
                         }
                     });
+
+                    // 🔥 ШАГ 4: Инжектируем атрибут willReadFrequently, чтобы окончательно убрать варнинг из консоли
+                    setTimeout(() => {
+                        const canvasLayer = document.querySelector('canvas.leaflet-heatmap-layer');
+                        if (canvasLayer) {
+                            canvasLayer.getContext('2d', { willReadFrequently: true });
+                        }
+                    }, 150);
 
                     // Добавляем чистый бесшовный слой на карту мира
                     weatherGridGroupLayer.addLayer(heatmapLayer);
