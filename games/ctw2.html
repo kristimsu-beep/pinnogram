@@ -347,9 +347,11 @@
                 const data = await response.json();
 
                 if (data.status === "success") {
+                    // 🎯 ШАГ 1: Намертво очищаем климатический слой от старых остатков
                     weatherGridGroupLayer.clearLayers(); 
                     const heatPointsArray = [];
 
+                    // 🎯 ШАГ 2: Собираем чистую матрицу координат для Canvas-плагина
                     data.weather.forEach(point => {
                         const t = point.temp;
                         // Нормализуем яркость от пекла к холоду
@@ -358,11 +360,11 @@
                         heatPointsArray.push([point.lat, point.lng, intensity]);
                     });
 
-                    // 🌍 ИНИЦИАЛИЗИРУЕМ БЕСШОВНЫЙ HEATMAP С ПРЕМБЭКЕНД ПАЛИТРОЙ
-                    // 🎯 СУПЕР-ФИКС: Вернули букву "r" на конец L.heatLayer, чтобы плагин запустился без крашей!
+                    // 🎯 ШАГ 3: Инициализируем плагин бесшовного холста Leaflet.heat
+                    // (ЗДЕСЬ БОЛЬШЕ НЕТ СТАРОГО ЦИКЛА L.CIRCLE, КОТОРЫЙ РИСОВАЛ КРУГИ!)
                     const heatmapLayer = L.heatLayer(heatPointsArray, {
-                        radius: 130, // Увеличили радиус до 130, чтобы полностью стереть круги и пятна!
-                        blur: 75,    // Максимальное размытие границ градиента для эффекта жидкого полотна
+                        radius: 140, // Сверхбольшой радиус для полного слияния и стирания кругов
+                        blur: 85,    // Максимальное размытие границ градиента для эффекта жидкого полотна
                         maxZoom: 4,
                         gradient: {
                             0.05: '#3a00b0', // Лютый фиолетовый мороз
@@ -375,14 +377,7 @@
                         }
                     });
 
-                    // Оптимизация Canvas, чтобы убрать желтый варнинг из консоли
-                    setTimeout(() => {
-                        const canvas2d = document.querySelector('canvas.leaflet-heatmap-layer');
-                        if (canvas2d) {
-                            canvas2d.getContext('2d', { willReadFrequently: true });
-                        }
-                    }, 200);
-
+                    // Добавляем чистый бесшовный слой на карту мира
                     weatherGridGroupLayer.addLayer(heatmapLayer);
                 }
             } catch (err) { 
