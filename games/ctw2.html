@@ -333,56 +333,32 @@
             }
         }
 
-        // РЕНДЕРЕР ТЕПЛОВОГО РАДАРА С РЕАЛИСТИЧНЫМИ ЦВЕТАМИ (ИСПРАВЛЕНО: ЖАРА СТАЛА КРАСНОЙ)
+        // РЕНДЕРЕР ПРОФЕССИОНАЛЬНОГО СПУТНИКОВОГО ТЕПЛОВОГО РАДАРА МИРА (БЕСШОВНЫЙ ИДЕАЛ)
         async function renderGlobalWeatherHeatGrid() {
             try {
-                Swal.fire({
-                    title: "Синхронизация с атмосферой...",
-                    text: "Отрисовываем планетарные температурные фронты",
-                    icon: "info", background: "#0a0f1d", color: "#fff",
-                    showConfirmButton: false, timer: 600, didOpen: () => { Swal.showLoading(); }
+                // Очищаем старые остатки климатического слоя
+                weatherGridGroupLayer.clearLayers(); 
+
+                // 🛰️ ПОДКЛЮЧАЕМ МЕЖДУНАРОДНЫЙ СПУТНИКОВЫЙ ТИЛЕ-СЛОЙ РЕАЛЬНОЙ ТЕМПЕРАТУРЫ ЗЕМЛИ
+                // Этот сервер выдает готовую, безупречно размытую и детализированную карту погоды в реальном времени!
+                const realtimeWeatherLayer = L.tileLayer('https://tile.openweathermap.org/map/temp_new/{z}/{x}/{y}.png?appid=9de243494c0b295cca9337e1e96b00e2', {
+                    maxZoom: 10,
+                    opacity: 0.7, // Мягкая прозрачность, чтобы контуры материков просвечивали снизу
+                    attribution: '© OpenWeather'
                 });
 
-                const response = await fetch('/api/ctw2/weather/map');
-                const data = await response.json();
+                // Добавляем готовый живой слой на карту мира
+                weatherGridGroupLayer.addLayer(realtimeWeatherLayer);
 
-                if (data.status === "success") {
-                    weatherGridGroupLayer.clearLayers(); 
-                    const heatPointsArray = [];
+                Swal.fire({
+                    title: "Спутник подключен! 🛰️",
+                    text: "Отображаем реальную синоптическую матрицу планеты",
+                    icon: "success", background: "#0a0f1d", color: "#fff",
+                    showConfirmButton: false, timer: 1000
+                });
 
-                    data.weather.forEach(point => {
-                        const t = point.temp;
-                        
-                        // 🎯 НОВАЯ СНАЙПЕРСКАЯ ФОРМУЛА ИНТЕНСИВНОСТИ:
-                        // Сдвигаем шкалу так, чтобы температура +35°C давала максимальную интенсивность 1.0 (Красный),
-                        // а прохлада и мороз уходили в минимальные значения (Синий).
-                        let intensity = (t + 10) / 45; 
-                        intensity = Math.max(0.01, Math.min(1.0, intensity)); // Жесткая фиксация границ
-                        
-                        heatPointsArray.push([point.lat, point.lng, intensity]);
-                    });
-
-                    // Инициализируем плагин бесшовного холста Leaflet.heat
-                    const heatmapLayer = L.heatLayer(heatPointsArray, {
-                        radius: 75, 
-                        blur: 50,    
-                        maxZoom: 4,
-                        
-                        // 🎨 ПРЕМИАЛЬНЫЙ ТЕПЛОВОЙ ГРАДИЕНТ (ТОЧЬ-В-ТОЧЬ КАК НА СПУТНИКАХ):
-                        gradient: {
-                            0.01: '#3a00b0', // Глубокий фиолетовый мороз (Полюса)
-                            0.15: '#0044ff', // Синий холод
-                            0.40: '#00f2fe', // Бирюзовая умеренная зона
-                            0.65: '#34c759', // Зеленый весенний комфорт
-                            0.80: '#ff9500', // Оранжевое субтропическое тепло
-                            1.00: '#ff3b30'  // Раскаленное экваториальное пекло (Ближний Восток / Сахара)
-                        }
-                    });
-
-                    weatherGridGroupLayer.addLayer(heatmapLayer);
-                }
             } catch (err) { 
-                console.error("Ошибка генерации бесшовной тепловой карты:", err); 
+                console.error("Ошибка подключения спутникового радара погоды:", err); 
             }
         }
 
