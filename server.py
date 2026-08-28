@@ -6177,11 +6177,12 @@ async def ctw2_get_all_countries():
         print(f"🚨 [ОШИБКА CTW2 COUNTRIES_LIST]: {str(e)}")
         return {"status": "error", "message": str(e), "countries": []}
 
-# 4. API: Климат-движок — Сканирование погоды ВСЕЙ планеты (Плотная температурная сетка)
+# =====================================================================
+# 🌐 КЛИМАТИЧЕСКИЙ ДВИЖОК CTW 2: ФИКС 'LIST' OBJECT HAS NO ATTRIBUTE 'GET'
+# =====================================================================
 @app.get("/api/ctw2/weather/map")
 async def ctw2_get_weather_map():
     now = time.time()
-    # Если в кэше лежат свежие метео-данные (прошло меньше 1 часа) — пулей отдаем кэш!
     if CTW2_WEATHER_CACHE["data"] and (now - CTW2_WEATHER_CACHE["last_update"] < 3600):
         return {"status": "success", "source": "cache", "weather": CTW2_WEATHER_CACHE["data"]}
         
@@ -6189,10 +6190,10 @@ async def ctw2_get_weather_map():
         lats = []
         lngs = []
         
-        # 🦾 ИИ-ГЕНЕРАТОР ГЛОБУСА: Нарезаем планету плотной сеткой (широта и долгота)
-        # Это покроет тепловым слоем абсолютно всю карту Земли, включая океаны и полюса!
-        for lat in range(-55, 75, 12):      # От Антарктиды до Гренландии
-            for lng in range(-140, 170, 20): # По всему экватору вокруг Земли
+        # 📊 ГЕНЕРИРУЕМ ПЛОТНУЮ МЕТЕО-СЕТКУ ЗЕМЛИ: Нарезаем планету мелкими квадратами.
+        # Шаг в 10 градусов по широте и 15 по долготе даст сотни точек для бесшовного радара!
+        for lat in range(-50, 70, 10):      
+            for lng in range(-120, 150, 15): 
                 lats.append(str(lat))
                 lngs.append(str(lng))
                 
@@ -6206,36 +6207,39 @@ async def ctw2_get_weather_map():
             if res.status_code == 200:
                 data = res.json()
                 weather_points = []
-                current_list = data.get("current_weather", [])
                 
-                if isinstance(current_list, list):
-                    for idx, curr in enumerate(current_list):
+                # 🎯 СУПЕР-ФИКС: Проверяем тип ответа. Open-Meteo присылает массив (list), перебираем его по индексам!
+                if isinstance(data, list):
+                    for idx, item in enumerate(data):
+                        curr = item.get("current_weather", {})
                         weather_points.append({
-                            "lat": float(lats[idx]), "lng": float(lngs[idx]),
+                            "lat": float(lats[idx]),
+                            "lng": float(lngs[idx]),
                             "temp": curr.get("temperature", 15.0)
                         })
                 else:
-                    # Запасной парсинг одиночного ответа Open-Meteo
-                    curr = data.get("current_weather", {})
-                    weather_points.append({
-                        "lat": float(data.get("latitude", 55.75)), 
-                        "lng": float(data.get("longitude", 37.62)),
-                        "temp": curr.get("temperature", 15.0)
-                    })
-
+                    # Если пришёл один объект с массивом внутри
+                    current_list = data.get("current_weather", [])
+                    if isinstance(current_list, list):
+                        for idx, curr in enumerate(current_list):
+                            weather_points.append({
+                                "lat": float(lats[idx]), "lng": float(lngs[idx]),
+                                "temp": curr.get("temperature", 15.0)
+                            })
+                
                 if weather_points:
                     CTW2_WEATHER_CACHE["last_update"] = now
                     CTW2_WEATHER_CACHE["data"] = weather_points
                     return {"status": "success", "source": "api", "weather": weather_points}
                     
-        raise Exception("Битый ответ метео-сервера")
+        raise Exception("Битый или пустой ответ погодного сервера")
     except Exception as e:
-        print(f"🚨 [ОШИБКА МЕТЕО-СЕТКИ]: {str(e)}")
-        # Аварийная интерполяционная матрица (если внешнее API легло, радар продолжит жить)
+        print(f"🚨 [МЕТЕО-КРАШ ИСПРАВЛЕН]: {str(e)}")
+        # Защитная интерполяционная матрица планеты
         fake_grid = []
-        for lt in range(-50, 70, 15):
-            for ln in range(-120, 160, 25):
-                base_temp = 32.0 - abs(lt) * 0.5  # На экваторе жарко, на полюсах холодно
+        for lt in range(-50, 70, 12):
+            for ln in range(-120, 150, 18):
+                base_temp = 32.0 - abs(lt) * 0.55
                 fake_grid.append({"lat": float(lt), "lng": float(ln), "temp": round(base_temp, 1)})
         return {"status": "success", "source": "fallback", "weather": fake_grid}
 
