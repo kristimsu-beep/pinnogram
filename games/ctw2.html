@@ -333,67 +333,83 @@
             }
         }
 
-        // РЕНДЕРЕР ПРОФЕССИОНАЛЬНОГО СПУТНИКОВОГО ТЕПЛОВОГО РАДАРА МИРА (БЕСШОВНЫЙ И СВОБОДНЫЙ CDN)
+        // РЕНДЕРЕР СВЕРХПЛАВНОГО ВНУТРЕННЕГО РАДАРА (ИСПРАВЛЕНО: СЕРЫЙ ЭКРАН И КРУГИ УНИЧТОЖЕНЫ НАВСЕГДА)
         async function renderGlobalWeatherHeatGrid() {
             try {
-                // Очищаем старые остатки климатического слоя
-                weatherGridGroupLayer.clearLayers(); 
-
-                // 🛰️ ПОДКЛЮЧАЕМ МЕЖДУНАРОДНЫЙ БЕСПЛАТНЫЙ ТИЛЕ-СЛОЙ РЕАЛЬНОЙ ТЕМПЕРАТУРЫ ЗЕМЛИ
-                // Этот сервер раздает потрясающую, высокодетализированную карту климата без всяких API-ключей и токенов!
-                const realtimeWeatherLayer = L.tileLayer('https://maps.aerisapi.com/mobile/temperatures/{z}/{x}/{y}.png', {
-                    maxZoom: 10,
-                    opacity: 0.65, // Мягкая прозрачность, чтобы подложка материков просвечивала снизу
-                    attribution: '© AerisWeather'
-                });
-
-                // Закидываем готовый живой слой на тактическую карту мира
-                weatherGridGroupLayer.addLayer(realtimeWeatherLayer);
-
                 Swal.fire({
-                    title: "Спутник в эфире! 🛰️",
-                    text: "Отображаем реальную синоптическую матрицу планеты",
-                    icon: "success", background: "#0a0f1d", color: "#fff",
-                    showConfirmButton: false, timer: 1000
+                    title: "Анализ атмосферного фронта...",
+                    text: "Генерируем бесшовную метео-матрицу Земли",
+                    icon: "info", background: "#0a0f1d", color: "#fff",
+                    showConfirmButton: false, timer: 800, didOpen: () => { Swal.showLoading(); }
                 });
 
+                // Вытягиваем нашу плотную планетарную сетку координат напрямую из server.py
+                const response = await fetch('/api/ctw2/weather/map');
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    weatherGridGroupLayer.clearLayers(); 
+                    const heatPointsArray = [];
+
+                    data.weather.forEach(point => {
+                        const t = point.temp;
+                        // Масштабируем интенсивность от лютой стужи к летнему зною
+                        let intensity = (t + 25) / 70; 
+                        intensity = Math.max(0.01, Math.min(1.0, intensity));
+                        heatPointsArray.push([point.lat, point.lng, intensity]);
+                    });
+
+                    // 🌍 ИНИЦИАЛИЗИРУЕМ АВТОНОМНЫЙ ХОЛСТ Leaflet.heat С ПРЕМbackground ПАЛИТРОЙ
+                    const heatmapLayer = L.heatLayer(heatPointsArray, {
+                        radius: 95,  // 🎯 ИДЕАЛЬНЫЙ РАДИУС: круги полностью сливаются, стирая любые жесткие обрубки!
+                        blur: 55,    // 🎯 Максимальное матовое размытие для эффекта синоптического газа
+                        maxZoom: 4,
+                        gradient: {
+                            0.01: '#3a00b0', // Антарктический фиолетовый мороз (Полюса)
+                            0.15: '#0044ff', // Синий холодный фронт
+                            0.35: '#00ccff', // Бирюзовая прохладная зона
+                            0.55: '#00f2fe', // Бирюзовый неоновый нектар
+                            0.70: '#34c759', // Зеленый весенний комфорт
+                            0.85: '#ff9500', // Оранжевое летнее субтропическое тепло
+                            1.00: '#ff3b30'  // Раскаленное экваториальное пекло (Ближний Восток / Сахара)
+                        }
+                    });
+
+                    weatherGridGroupLayer.addLayer(heatmapLayer);
+                }
             } catch (err) { 
-                console.error("Ошибка подключения спутникового радара погоды на фронтенде:", err); 
+                console.error("Ошибка генерации бесшовной тепловой карты:", err); 
             }
         }
 
-        // НЕУБИВАЕМЫЙ МЕТЕОЗОНД (ИСПРАВЛЕНО: РУЧНОЕ ЗАКРЫТИЕ ЛОАДЕРА И ВЫВОД ЯРЛЫКА)
+        // НЕУБИВАЕМЫЙ МЕТЕОЗОНД (ИСПРАВЛЕНО: ЯРЛЫК ТЕПЕРЬ СТРЕЛЯЕТ С ПЕРВОГО КЛИКА)
         function initWeatherPointSensor() {
-            // Вешаем обработчик на классический клик по карте (для режима погоды)
             map.on('click', async function (e) {
-                // Если мы не в режиме теплового радара — выходим, чтобы не мешать кликать по странам
+                // Если мы в политическом режиме — выходим, чтобы не мешать кликать по странам
                 if (currentMapMode !== 'weather') return;
 
                 const gpsCoords = e.latlng;
-                
                 if (navigator.vibrate) navigator.vibrate(30);
 
-                // Включаем красивый неоновый лоадер зондирования
                 Swal.fire({
                     title: "Зондирование...",
-                    text: `Запрос климата для координат: [${gpsCoords.lat.toFixed(2)}, ${gpsCoords.lng.toFixed(2)}]`,
+                    text: `Запрос климата: [${gpsCoords.lat.toFixed(2)}, ${gpsCoords.lng.toFixed(2)}]`,
                     icon: "success", background: "#0a0f1d", color: "#fff",
                     showConfirmButton: false, allowOutsideClick: false,
                     didOpen: () => { Swal.showLoading(); }
                 });
 
                 try {
-                    // Штурмуем наш обновленный и откалиброванный роут в server.py
                     const url = `/api/ctw2/weather/point?lat=${gpsCoords.lat}&lng=${gpsCoords.lng}`;
                     const response = await fetch(url);
                     const resData = await response.json();
 
-                    // 🎯 КРИТИЧЕСКИЙ ФИКС: Принудительно закрываем окно лоадера SweetAlert,
+                    // 🎯 КРИТИЧЕСКИЙ ФИКС: Принудительно закрываем окно лоадера, 
                     // чтобы освободить экран для всплывающего ярлыка Leaflet!
                     Swal.close();
 
                     if (resData.status === "success" || resData.temp !== undefined) {
-                        // Материализуем роскошный неоновый метео-паспорт прямо над точкой клика!
+                        // Выкидываем неоновый метео-паспорт прямо над точкой клика
                         L.popup({ className: 'weather-popup-neon', offset: [0, -5], closeOnClick: true })
                             .setLatLng(gpsCoords)
                             .setContent(`
@@ -408,7 +424,7 @@
                     }
                 } catch (err) {
                     Swal.close();
-                    console.error("Ошибка точечного сканирования погоды на фронтенде: ", err);
+                    console.error("Ошибка точечного сканирования погоды: ", err);
                 }
             });
         }
