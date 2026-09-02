@@ -109,6 +109,13 @@
         .leaflet-tile-container {
             filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
         }
+        #map.weather-mode {
+            background: #d9e7d5 !important;
+        }
+        
+        #map.weather-mode .leaflet-tile-container {
+            filter: brightness(0.9) saturate(0.75) contrast(0.95);
+        }
     </style>
 </head>
 <body>
@@ -327,17 +334,33 @@
         // =====================================================================
         async function switchMapMode(mode) {
             currentMapMode = mode;
-            document.getElementById('btn-mode-politic').classList.remove('btn-active');
-            document.getElementById('btn-mode-weather').classList.remove('btn-active');
-            
+        
+            document.getElementById('btn-mode-politic')
+                .classList.remove('btn-active');
+        
+            document.getElementById('btn-mode-weather')
+                .classList.remove('btn-active');
+        
+            const mapElement = document.getElementById('map');
+        
             if (mode === 'politic') {
-                document.getElementById('btn-mode-politic').classList.add('btn-active');
-                map.removeLayer(weatherGridGroupLayer); 
-                map.addLayer(countriesGroupLayer);    
+                document.getElementById('btn-mode-politic')
+                    .classList.add('btn-active');
+        
+                mapElement.classList.remove('weather-mode');
+        
+                map.removeLayer(weatherGridGroupLayer);
+                map.addLayer(countriesGroupLayer);
+        
             } else if (mode === 'weather') {
-                document.getElementById('btn-mode-weather').classList.add('btn-active');
-                map.removeLayer(countriesGroupLayer); 
-                map.addLayer(weatherGridGroupLayer);    
+                document.getElementById('btn-mode-weather')
+                    .classList.add('btn-active');
+        
+                mapElement.classList.add('weather-mode');
+        
+                map.removeLayer(countriesGroupLayer);
+                map.addLayer(weatherGridGroupLayer);
+        
                 await renderGlobalWeatherHeatGrid();
             }
         }
@@ -369,39 +392,61 @@
                     weatherGridGroupLayer.clearLayers(); 
                     const heatPointsArray = [];
 
-                    data.weather.forEach(point => {
-                        const t = point.temp;
-                        
-                        // Нормализуем шкалу под реальные температуры от -35°C до +50°C
-                        let intensity = (t + 35) / 85; 
-                        intensity = Math.max(0.01, Math.min(1.0, intensity));
-                        heatPointsArray.push([point.lat, point.lng, intensity]);
-                    });
+                data.weather.forEach(point => {
+                    const t = Number(point.temp);
+                
+                    // 🌡️ Temperature range: -40°C to +50°C
+                    let intensity = (t + 40) / 90;
+                
+                    // Keep values inside heatmap range
+                    intensity = Math.max(0, Math.min(1, intensity));
+                
+                    heatPointsArray.push([
+                        point.lat,
+                        point.lng,
+                        intensity
+                    ]);
 
                     // Динамическая адаптация радиуса под уровень зума карты
                     let radiusScale = 110;
                     if (currentZoom > 3 && currentZoom <= 5) radiusScale = 75;
                     else if (currentZoom > 5) radiusScale = 45;
 
-                    // 🌍 ИНИЦИАЛИЗИРУЕМ СВЕРХПЛАВНЫЙ CANVAS-ОЛИФТ Leaflet.heat
-                    // Билинейная интерполяция сотрет жесткие пиксели и превратит климат в текучее полотно!
-                    // Инициализируем наш бесшовный Canvas-слой Leaflet.heat
+                    // 🌍 ZOOM EARTH STYLE TEMPERATURE RADAR
                     const heatmapLayer = L.heatLayer(heatPointsArray, {
-                        radius: 80,          // Оптимальный радиус под новый шаг сетки бэкенда
-                        blur: 50,            // 🎯 Мягкое размытие полностью ликвидирует рваные узоры!
+                        // Larger radius = smoother continuous weather field
+                        radius: currentZoom <= 3 ? 100 :
+                                currentZoom <= 5 ? 75 :
+                                currentZoom <= 7 ? 55 : 40,
+                    
+                        // Strong blur for smooth meteorological appearance
+                        blur: currentZoom <= 3 ? 65 :
+                              currentZoom <= 5 ? 55 :
+                              currentZoom <= 7 ? 45 : 35,
+                    
                         maxZoom: 10,
-                        minOpacity: 0.50,    // Мягкая сочная прозрачность
+                    
+                        // Zoom Earth style: the weather layer should be clearly visible
+                        minOpacity: 0.65,
+                    
+                        // 🌡️ Temperature palette inspired by the screenshot
                         gradient: {
-                            0.01: '#3a00b0', // Лютая полярная стужа (Антарктида)
-                            0.18: '#0044ff', // Синий морозный фронт (Сибирь)
-                            0.40: '#00ccff', // Светло-голубая прохлада воды
-                            0.60: '#00f2fe', // Бирюзовый неоновый нектар
-                            0.75: '#34c759', // Зеленый весенний уют материков
-                            0.88: '#ff9500', // Оранжевое летнее тепло
-                            1.00: '#ff3b30'  // 🌋 РАСКАЛЕННОЕ ПУНЦОВОЕ ПЕКЛО (Ближний Восток / Сахара!)
+                            0.00: '#24105f',  // deep purple - extreme cold
+                            0.08: '#3825a8',  // violet
+                            0.16: '#1746c7',  // deep blue
+                            0.26: '#008ee8',  // blue
+                            0.36: '#00cfe8',  // cyan
+                            0.46: '#21d6a3',  // turquoise
+                            0.56: '#63d64f',  // green
+                            0.66: '#b8e43c',  // yellow-green
+                            0.75: '#ffe13b',  // yellow
+                            0.83: '#ffad2f',  // orange
+                            0.91: '#ff6828',  // hot orange
+                            0.97: '#ed3026',  // red
+                            1.00: '#b80f22'   // extreme heat
                         }
                     });
-
+                    
                     weatherGridGroupLayer.addLayer(heatmapLayer);
                 }
             } catch (err) { 
