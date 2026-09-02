@@ -6240,7 +6240,7 @@ def calculate_planetary_temperature(lat: float, lng: float, zoom: float = 2.0):
     return round(max(-65.0, min(57.0, final_temp)), 1)
 
 # =====================================================================
-# 🪐 API 1: ФРАКТАЛЬНЫЙ СИНУС-ШЕЙДЕР ПЛАНЕТЫ (ВЫСОКОТОЧНЫЙ КЛИМАТ СУША/ВОДА)
+# 🪐 API 1: БРОНИРОВАННЫЙ ФРАКТАЛЬНЫЙ ШЕЙДЕР (ИСПРАВЛЕНО ДУБЛИРОВАНИЕ ПАМЯТИ)
 # =====================================================================
 @app.post("/api/ctw2/weather/map")
 async def ctw2_get_dynamic_weather_map(bounds: dict):
@@ -6253,20 +6253,18 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
         north_east = bounds.get("ne", [75.0, 150.0])
         zoom = float(bounds.get("zoom", 2.5))
         
-        # 🎯 СНАЙПЕРСКИЙ LOD ДЛЯ ИДЕАЛЬНОЙ ПЛАВНОСТИ БЕЗ ДЫР И ЛАГОВ:
-        # Регулируем плотность сетки, чтобы бэкенд отдавал оптимальное число точек,
-        # а фронтенд мгновенно растягивал их через Canvas-интерполяцию!
+        # 🎯 СВЕРХТОЧНЫЙ СИНАПТИЧЕСКИЙ ШАГ: Оптимальное число точек для GPU сглаживания
         if zoom <= 3:
-            step_lat, step_lng = 1.5, 2.0  # Ультра-плотное покрытие на общем плане
+            step = 2.0  # Плотная сетка на общем плане Земли
         elif zoom > 3 and zoom <= 5:
-            step_lat, step_lng = 0.8, 1.2  # Повышенная четкость регионов
+            step = 1.0  # Уплотнение при приближении материков
         else:
-            step_lat, step_lng = 0.4, 0.6  # Максимальная попиксельная детализация
+            step = 0.5  # Максимальная попиксельная детализация регионов
             
-        lat_min = max(-65.0, float(south_west[0]))
-        lat_max = min(78.0, float(north_east[0]))
-        lng_min = max(-180.0, float(south_west[1]))
-        lng_max = min(180.0, float(north_east[1]))
+        lat_min = max(-65.0, float(south_west[0] if isinstance(south_west, list) else south_west))
+        lat_max = min(78.0, float(north_east[0] if isinstance(north_east, list) else north_east))
+        lng_min = max(-180.0, float(south_west[1] if isinstance(south_west, list) else south_west))
+        lng_max = min(180.0, float(north_east[1] if isinstance(north_east, list) else north_east))
         
         # Расчет термодинамики под сентябрь 2026 года
         day_of_year = datetime.now().timetuple().tm_yday
@@ -6274,67 +6272,69 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
         
         weather_points = []
         
-        # Генерация многоуровневого погодного шума
-        curr_lat = lat_min
-        while curr_lat <= lat_max:
-            curr_lng = lng_min
-            while curr_lng <= lng_max:
-                
-                # 🌊 1. ФИЗИКА СУШИ И ОКЕАНОВ (Контурный шейдер акваторий)
+        # 🎯 СУПЕР-ФИКС: Используем генераторы диапазонов с фиксированным шагом!
+        # Это гарантирует, что каждая точка получит свои собственные уникальные координаты.
+        lat_ticks = int((lat_max - lat_min) / step) + 1
+        lng_ticks = int((lng_max - lng_min) / step) + 1
+        
+        for i in range(lat_ticks):
+            lat_val = lat_min + (i * step)
+            if lat_val > lat_max: continue
+            
+            for j in range(lng_ticks):
+                lng_val = lng_min + (j * step)
+                if lng_val > lng_max: continue
+
+                # 🌊 ТЕРМОДИНАМИКА ВОДЫ И СУШИ
                 is_water = False
-                if curr_lat > -60 and curr_lat < 70 and (curr_lng < -20 or curr_lng > 140): is_water = True
-                elif curr_lat < 0 and curr_lng > 20 and curr_lng < 110: is_water = True
-                elif curr_lat > 30 and curr_lat < 48 and curr_lng > -5 and curr_lng < 45: is_water = True
-                elif curr_lat > 70: is_water = True
+                if lat_val > -60 and lat_val < 70 and (lng_val < -20 or lng_val > 140): is_water = True
+                elif lat_val < 0 and lng_val > 20 and lng_val < 110: is_water = True
+                elif lat_val > 30 and lat_val < 48 and lng_val > -5 and lng_val < 45: is_water = True
+                elif lat_val > 70: is_water = True
 
-                # Базовая инсоляция полушарий
-                effective_lat = curr_lat - season_shift
+                effective_lat = lat_val - season_shift
                 if is_water:
-                    base_temp = 17.0 - (abs(curr_lat) * 0.45) # Стабильная прохлада морей в сентябре
+                    base_temp = 16.5 - (abs(lat_val) * 0.44)
                 else:
-                    base_temp = 41.5 - (abs(effective_lat) * 0.76) # Суша прогревается сильнее
+                    base_temp = 42.0 - (abs(effective_lat) * 0.76)
 
-                # 🌌 2. ИНТЕРПОЛЯЦИОННЫЙ СИНУС-ШУМ (Многооктавные циклоны):
-                # Накладываем три уровня волн для удаления резких стыков и рваных краев
-                octave_1 = math.sin(curr_lat / 8.0) * math.cos(curr_lng / 12.0) * 6.0
-                octave_2 = math.sin((curr_lat + curr_lng) / 4.0) * math.cos(curr_lat / 3.0) * 3.0
-                octave_3 = math.cos(curr_lng / 20.0) * math.sin(curr_lat / 2.0) * 1.5
-                total_noise = octave_1 + octave_2 + octave_3
+                # Многооктавные волновые завихрения циклонов
+                octave_1 = math.sin(lat_val / 6.0) * math.cos(lng_val / 9.0) * 5.5
+                octave_2 = math.sin((lat_val + lng_val) / 4.0) * 2.5
+                total_noise = octave_1 + octave_2
 
-                # 🌋 3. МАТРИЦА СТРОГИХ ГЕОГРАФИЧЕСКИХ АНОМАЛИЙ МИРА
+                # Матрица строгих географических аномалий
                 anomalies = [
-                    [25.00, 45.00, 22.0, 16.0],   # Ближний Восток (Экстремальное пунцовое пекло)
-                    [25.00, 15.00, 25.0, 14.0],   # Сахара
-                    [36.05, -116.81, 12.0, 18.0], # Долина Смерти (США)
-                    [-75.00, 120.00, 38.0, -35.0],# Ледяной купол Антарктиды
-                    [72.00, -40.00, 18.0, -25.0], # Гренландия
-                    [62.00, 129.00, 22.0, -18.0]  # Якутия / Сибирь
+                    [25.00, 45.00, 22.0, 15.0],   # Ближний Восток (Пучеглазое пунцовое пекло)
+                    [25.00, 15.00, 25.0, 13.0],   # Сахара
+                    [36.05, -116.81, 10.0, 16.0], # Долина Смерти (США)
+                    [-75.00, 120.00, 35.0, -35.0],# Антарктида
+                    [72.00, -40.00, 18.0, -25.0], # Greenland
+                    [62.00, 129.00, 20.0, -16.0]  # Якутия
                 ]
                 
                 bonus_temp = 0.0
                 for anom in anomalies:
-                    d_lat = curr_lat - anom[0]
-                    d_lng = curr_lng - anom[1]
+                    d_lat = lat_val - anom[0]
+                    d_lng = lng_val - anom[1]
                     if d_lng > 180: d_lng -= 360
                     if d_lng < -180: d_lng += 360
                     dist = math.sqrt(d_lat**2 + d_lng**2)
                     if dist < anom[2]:
-                        # Квадратичное затухание для бесшовного слияния аномалии с основным фоном
                         bonus_temp += anom[3] * ((1.0 - (dist / anom[2])) ** 2)
 
                 final_temp = base_temp + total_noise + bonus_temp
                 
+                # 🎯 Отправляем изолированные принудительные float-координаты
                 weather_points.append({
-                    "lat": round(curr_lat, 2),
-                    "lng": round(curr_lng, 2),
-                    "temp": round(max(-62.0, min(56.0, final_temp)), 1)
+                    "lat": float(round(lat_val, 4)),
+                    "lng": float(round(lng_val, 4)),
+                    "temp": float(round(max(-62.0, min(56.0, final_temp)), 1))
                 })
-                curr_lng += step_lng
-            curr_lat += step_lat
-            
-        return {"status": "success", "source": "planetary_shader_core", "weather": weather_points}
+                
+        return {"status": "success", "source": "planetary_fixed_core", "weather": weather_points}
     except Exception as e:
-        print(f"🚨 [ОШИБКА БЭКЕНД ШЕЙДЕРА]: {str(e)}")
+        print(f"🚨 [ОШИБКА ОБНОВЛЕННОЙ СЕТКИ]: {str(e)}")
         return {"status": "success", "weather": []}
 
 # =====================================================================
