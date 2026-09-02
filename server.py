@@ -6239,7 +6239,9 @@ def calculate_planetary_temperature(lat: float, lng: float, zoom: float = 2.0):
     # Финальные рамки температур планеты (от -65 до +57)
     return round(max(-65.0, min(57.0, final_temp)), 1)
 
-# 🗺️ API 1: СВЕРХПЛОТНЫЙ ДИНАМИЧЕСКИЙ РАДАР (ПИКСЕЛЬНОЕ ПОКРЫТИЕ ПО ВИДИМОЙ ЗОНЕ)
+# =====================================================================
+# 🪐 API 1: ПОПИКСЕЛЬНЫЙ СИНАПТИЧЕСКИЙ ШЕЙДЕР (БЕЗУПРЕЧНАЯ СЕТКА КВАРТАРОВ)
+# =====================================================================
 @app.post("/api/ctw2/weather/map")
 async def ctw2_get_dynamic_weather_map(bounds: dict):
     try:
@@ -6247,36 +6249,42 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
         north_east = bounds.get("ne", [75.0, 150.0])
         zoom = float(bounds.get("zoom", 2.5))
         
-        # 🎯 СУПЕР-УПЛОТНЕНИЕ СЕТКИ: Делаем микроскопический шаг, чтобы полностью залить всю карту!
+        # 🎯 СНАЙПЕРСКИЙ ШАГ СЕТКИ (LOD) ДЛЯ ПОПИКСЕЛЬНОГО ЗАПОЛНЕНИЯ:
+        # Рассчитываем размер каждого погодного пикселя, чтобы они идеально стыковались
         if zoom <= 3:
-            step_lat, step_lng = 2, 3    # Базовый зум: генерируем тысячи плотных точек на экран!
+            step = 2.0  # Крупные пиксели на общем плане (размер ячейки 2х2 градуса)
         elif zoom > 3 and zoom <= 5:
-            step_lat, step_lng = 1, 2    # Среднее приближение: ультра-детализация регионов
+            step = 1.0  # Средние пиксели (1х1 градус)
         else:
-            step_lat, step_lng = 1, 1    # Максимальный зум: попиксельный просчет каждого города
+            step = 0.5  # Микро-пиксели при приближении (0.5х0.5 градуса)
             
-        lat_min = int(max(-60, math.floor(south_west[0])))
-        lat_max = int(min(75, math.ceil(north_east[0])))
-        lng_min = int(max(-170, math.floor(south_west[1])))
-        lng_max = int(min(170, math.ceil(north_east[1])))
+        lat_min = float(max(-60.0, math.floor(south_west[0])))
+        lat_max = float(min(75.0, math.ceil(north_east[0])))
+        lng_min = float(max(-180.0, math.floor(south_west[1])))
+        lng_max = float(min(180.0, math.ceil(north_east[1])))
         
         weather_points = []
         
-        # Запускаем генерацию плотного планетарного ковра
-        for lat in range(lat_min, lat_max + 1, step_lat):
-            for lng in range(lng_min, lng_max + 1, step_lng):
-                temp = calculate_planetary_temperature(float(lat), float(lng), zoom)
+        # Шагаем с плавающей точкой, нарезая Землю на идеальные кубики
+        current_lat = lat_min
+        while current_lat <= lat_max:
+            current_lng = lng_min
+            while current_lng <= lng_max:
+                temp = calculate_planetary_temperature(current_lat, current_lng, zoom)
                 weather_points.append({
-                    "lat": float(lat),
-                    "lng": float(lng),
+                    "lat": current_lat,
+                    "lng": current_lng,
+                    "size": step, # Передаем размер кубика на фронтенд
                     "temp": temp
                 })
+                current_lng += step
+            current_lat += step
                 
-        return {"status": "success", "source": "planetary_ultra_lod_engine", "weather": weather_points}
+        return {"status": "success", "source": "pixel_perfect_lod_engine", "weather": weather_points}
     except Exception as e:
-        print(f"🚨 [ОШИБКА СВЕРХПЛОТНОЙ СЕТКИ]: {str(e)}")
+        print(f"🚨 [ОШИБКА ПОПИКСЕЛЬНОЙ СЕТКИ]: {str(e)}")
         return {"status": "success", "weather": []}
-        
+
 # =====================================================================
 # 🛰️ API 2: ТОЧЕЧНЫЙ МЕТЕО-ЗОНД (МГНОВЕННЫЙ РАСЧЕТ В ЛЮБОМ ПИКСЕЛЕ КЛИКА)
 # =====================================================================
