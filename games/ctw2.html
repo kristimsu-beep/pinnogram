@@ -342,7 +342,7 @@
             }
         }
 
-        // РЕНДЕРЕР СПЛОШНОГО ПИКСЕЛЬНОГО ТЕПЛОВОГО РАДАРА (ИСПРАВЛЕНО: БЕЗУПРЕЧНАЯ СЕТКА ЦВЕТА)
+        // РЕНДЕРЕР ПОПИКСЕЛЬНОГО СИНГЛ-ШЕЙДЕРНОГО РАДАРА (КАЖДЫЙ ПИКСЕЛЬ ИМЕЕТ СВОЙ ЦВЕТ)
         async function renderGlobalWeatherHeatGrid() {
             if (currentMapMode !== 'weather') return;
 
@@ -366,45 +366,45 @@
                 const data = await response.json();
 
                 if (data.status === "success") {
+                    // Намертво очищаем старые слои
                     weatherGridGroupLayer.clearLayers(); 
-                    const heatPointsArray = [];
 
                     data.weather.forEach(point => {
                         const t = point.temp;
+                        const size = point.size;
                         
-                        // 🎯 ФОРМУЛА СУПЕР-ЖАРЫ: Сдвигаем шкалу под реальный сентябрь.
-                        // Всё, что выше +32°C (Ближний Восток, Сахара, Долина Смерти), выдаст жесткую 1.0 
-                        // и загорится чистым неоново-красным цветом без просадки в синеву!
-                        let intensity = (t + 10) / 42; 
-                        intensity = Math.max(0.01, Math.min(1.0, intensity));
+                        // 🎯 ИИ-ЦВЕТОВОЙ МАТРИЧНЫЙ ПЕРЕКЛЮЧАТЕЛЬ (ТОЧЬ-В-ТОЧЬ КАК НА ТВОЕМ РЕФЕРЕНСЕ):
+                        let pixelColor = '#00f2fe';
                         
-                        heatPointsArray.push([point.lat, point.lng, intensity]);
-                    });
+                        if (t <= -25) pixelColor = '#4a00e0';      // Глубокий фиолетовый (Полюса)
+                        else if (t > -25 && t <= -10) pixelColor = '#0044ff'; // Насыщенный синий (Лютый холод)
+                        else if (t > -10 && t <= 5) pixelColor = '#00ccff';  // Светло-голубой (Мороз)
+                        else if (t > 5 && t <= 15) pixelColor = '#00f2fe';   // Бирюзовый неон (Прохладные океаны)
+                        else if (t > 15 && t <= 23) pixelColor = '#94efff';  // Блекло-аквамариновый
+                        else if (t > 23 && t <= 28) pixelColor = '#ffee55';  // Сочный желтый (Комфортное тепло)
+                        else if (t > 28 && t <= 34) pixelColor = '#ff9500';  // Субтропический оранжевый
+                        else pixelColor = '#ff3b30';                         //🌋 ЯРКО-КРАСНОЕ ПЕКЛО (Ближний Восток, Сахара!)
 
-                    // 🎯 НАСТРОЙКА СПЛОШНОГО ПИКСЕЛЬНОГО ПОКРЫТИЯ:
-                    // Уменьшаем радиус до 25 и сжимаем blur до 15, чтобы точки ложились 
-                    // плотными сплошными квадратами пиксель-в-пиксель, закрашивая всю карту!
-                    const heatmapLayer = L.heatLayer(heatPointsArray, {
-                        radius: 25,          
-                        blur: 15,            
-                        maxZoom: 10,
-                        minOpacity: 0.85,    // 🎯 Жесткая сплошная заливка вместо блеклой прозрачности!
-                        
-                        // ЧИСТАЯ ТАКТИЧЕСКАЯ НЕОНОВАЯ ШКАЛА ТЕПЛА:
-                        gradient: {
-                            0.01: '#4a00e0', // Глубокий фиолетовый мороз (Полюса)
-                            0.20: '#0044ff', // Синий холод (Север Сибири / Канады)
-                            0.45: '#00f2fe', // Бирюзовый неоновый нектар (Прохлада)
-                            0.65: '#34c759', // Зеленый весенний уют материков
-                            0.82: '#ff9500', // Оранжевое летнее тепло
-                            1.00: '#ff3b30'  // 🌋 РАСКАЛЕННОЕ АЛОЕ ПЕКЛО (Ближний Восток, Сахара, Долина Смерти!)
-                        }
-                    });
+                        // Вычисляем географические границы для конкретного погодного пикселя
+                        const boundsCorner1 = [point.lat, point.lng];
+                        const boundsCorner2 = [point.lat + size, point.lng + size];
 
-                    weatherGridGroupLayer.addLayer(heatmapLayer);
+                        // 🎯 СЕКРЕТ ПОПИКСЕЛЬНОСТИ: Строим сплошные прямоугольники встык друг к другу!
+                        const pixelSquare = L.rectangle([boundsCorner1, boundsCorner2], {
+                            color: pixelColor,       // Цвет контура совпадает с заливкой
+                            weight: 0,               // Полностью убираем обводку для бесшовности
+                            fillColor: pixelColor,
+                            fillOpacity: 0.55,       // 🎯 Матовая полупрозрачность 0.55, чтобы материки OpenStreetMap просвечивали из-под пикселей!
+                            interactive: true        // Разрешаем кликать прямо по пикселям метеозонду
+                        });
+
+                        // Быстрый ярлык при обычном клике на пиксель радара
+                        pixelSquare.bindPopup(`<b>Региональный сенсор:</b> ${t}°C`, { className: 'weather-popup-neon' });
+                        weatherGridGroupLayer.addLayer(pixelSquare);
+                    });
                 }
             } catch (err) { 
-                console.error("Ошибка динамической генерации тепловой карты:", err); 
+                console.error("Ошибка генерации попиксельного радара:", err); 
             }
         }
 
