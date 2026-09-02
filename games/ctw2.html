@@ -337,15 +337,20 @@
         
             if (mode === 'politic') {
                 document.getElementById('btn-mode-politic').classList.add('btn-active');
-        
+            
                 weatherRenderId++;
-        
+            
                 if (weatherRenderController) {
                     weatherRenderController.abort();
                 }
-        
+            
                 weatherGridGroupLayer.clearLayers();
-        
+            
+                // Remove temperature overlay
+                if (map.hasLayer(weatherGridGroupLayer)) {
+                    map.removeLayer(weatherGridGroupLayer);
+                }
+            
                 if (!map.hasLayer(countriesGroupLayer)) {
                     map.addLayer(countriesGroupLayer);
                 }
@@ -353,11 +358,15 @@
         
             if (mode === 'weather') {
                 document.getElementById('btn-mode-weather').classList.add('btn-active');
-        
+            
                 if (map.hasLayer(countriesGroupLayer)) {
                     map.removeLayer(countriesGroupLayer);
                 }
-        
+            
+                if (!map.hasLayer(weatherGridGroupLayer)) {
+                    map.addLayer(weatherGridGroupLayer);
+                }
+            
                 await renderGlobalWeatherHeatGrid();
             }
         }
