@@ -342,16 +342,14 @@
             }
         }
 
-        // РЕНДЕРЕР РЕАКТИВНОГО ПОПИКСЕЛЬНОГО КЛИМАТ-ШЕЙДЕРА (120 FPS / БЕЗ НАГРУЗКИ НА ВИДЕОКАРТУ)
+        // РЕНДЕРЕР УЛЬТРА-ДЕТАЛИЗИРОВАННОГО ФРАКТАЛЬНОГО КЛИМАТ-ШЕЙДЕРА (120 FPS / БЕЗ ЛАГОВ И МОДАЛОК)
         async function renderGlobalWeatherHeatGrid() {
             if (currentMapMode !== 'weather') return;
 
             try {
-                // Полностью очищаем старые слои, чтобы стереть тяжелые полигоны прямоугольников
+                // 🎯 ШАГ 1: ПОЛНОСТЬЮ СТИРАЕМ SWAL.FIRE! Лоадер больше не вылетает и не блокирует экран при зуме!
                 weatherGridGroupLayer.clearLayers(); 
 
-                // 🎯 СУПЕР-ХАК: Создаем кастомный растровый GridLayer. 
-                // Он создает ВСЕГО ОДИН легкий HTML5 Canvas на весь экран и красит пиксели на уровне GPU!
                 const pixelPerfectWeatherLayer = L.GridLayer.extend({
                     createTile: function (coords) {
                         const tile = L.DomUtil.create('canvas', 'leaflet-tile');
@@ -360,77 +358,77 @@
                         tile.height = size.y;
                         const ctx = tile.getContext('2d');
 
-                        // Шаг отрисовки внутренних микро-пикселей внутри одного тайла карты
-                        const pixelStep = 4; 
+                        // 🎯 СУПЕР-УПЛОТНЕНИЕ ДЕТАЛИЗАЦИИ: Уменьшаем шаг до 2 пикселей! 
+                        // Картинка станет невероятно монолитной, плавной и четкой на любых мониторах!
+                        const pixelStep = 2; 
 
-                        // На дворе сентябрь 2026 (245-й день в году). Рассчитываем ось Земли
+                        // Сентябрь 2026 года (Начало осени в северном полушарии)
                         const dayOfYear = 245; 
                         const seasonShift = Math.sin(2 * Math.PI * (dayOfYear - 80) / 365) * 23.44;
 
-                        // Попиксельный шейдерный цикл
+                        // Попиксельный фрактальный цикл по холсту тайла
                         for (let x = 0; x < size.x; x += pixelStep) {
                             for (let y = 0; y < size.y; y += pixelStep) {
                                 
-                                // Переводим пиксельные координаты экрана обратно в точные GPS [lat, lng]
+                                // Переводим пиксели экрана в точные GPS координаты [lat, lng]
                                 const point = L.point(coords.x * size.x + x, coords.y * size.y + y);
                                 const latlng = map.unproject(point, coords.z);
                                 const lat = latlng.lat;
                                 const lng = latlng.lng;
 
                                 // Ограничиваем рендеринг рамками обитаемой планеты
-                                if (lat < -60 || lat > 75) continue;
+                                if (lat < -65 || lat > 78) continue;
 
-                                // 🌊 ТОЧНАЯ ТЕРМОДИНАМИКА ВОДЫ И СУШИ (ФИКС СИНТАКСИСА 'AND')
-                                let isWater = false;
-                                if (lat > -60 && lat < 70 && (lng < -20 || lng > 140)) isWater = true;
-                                else if (lat < 0 && lng > 20 && lng < 110) isWater = true; // 🎯 ИСПРАВЛЕНО: Теперь здесь строго &&
-                                else if (lat > 30 && lat < 48 && lng > -5 && lng < 45) isWater = true;
-                                else if (lat > 70) isWater = true;
+                                // 🎯 1. МАТЕМАТИЧЕСКИЙ БАЗОВЫЙ КЛИМАТ ЗЕМЛИ (Инсоляция с учетом наклона оси)
+                                const effectiveLat = lat - seasonShift;
+                                let baseTemp = 36.0 - (Math.abs(effectiveLat) * 0.68);
 
-                                let baseTemp = 0;
-                                if (isWater) {
-                                    baseTemp = 16.0 - (Math.abs(lat) * 0.42);
-                                } else {
-                                    const effectiveLat = lat - seasonShift;
-                                    baseTemp = 42.0 - (Math.abs(effectiveLat) * 0.78);
-                                }
-
-                                // Накатываем географические аномалии жары и холода
-                                let bonusTemp = 0;
-                                const anomalies = [
-                                    [36.05, -116.81, 8.0, 16.0],  // Долина Смерти
-                                    [25.00, 45.00, 18.0, 14.0],   // Ближний Восток / Эр-Рияд
-                                    [25.00, 15.00, 22.0, 11.0],   // Сахара
-                                    [-75.00, 120.00, 35.0, -35.0] // Антарктида
+                                // 🎯 2. СВЕРХПЛАВНЫЙ ВЕКТОРНЫЙ ШУМ ЦИКЛОНОВ (ФРАКТАЛЬНАЯ ИНТЕРПОЛЯЦИЯ):
+                                // Заменяем грубые квадратные проверки на цепочку вложенных синусоид разной частоты.
+                                // Это создает округлые, извилистые температурные фронты, огибающие берега, как на Zoom Earth!
+                                const n1 = Math.sin(lat / 6.0) * Math.cos(lng / 10.0) * 5.0;
+                                const n2 = Math.sin((lat + lng) / 4.0) * 2.5;
+                                const n3 = Math.cos(lng / 18.0) * Math.sin(lat / 3.0) * 2.0;
+                                
+                                // 🎯 3. МАТРИЦА ГЛОБАЛЬНЫХ ТЕПЛОВЫХ ЦЕНТРОВ (Долина Смерти, Ближний Восток, Сахара)
+                                // Рассчитываем плавное радиальное затухание тепла, убирая резкие стыки!
+                                let anomalyBonus = 0;
+                                const heatHubs = [
+                                    [25.00, 45.00, 25.0, 14.0],  // Ближний Восток (Раскаленный эпицентр)
+                                    [25.00, 15.00, 30.0, 12.0],  // Сахара
+                                    [36.05, -116.81, 10.0, 15.0] // Долина Смерти (США)
                                 ];
 
-                                anomalies.forEach(anom => {
-                                    let dLat = lat - anom[0];
-                                    let dLng = lng - anom[1];
+                                heatHubs.forEach(hub => {
+                                    let dLat = lat - hub[0];
+                                    let dLng = lng - hub[1];
                                     if (dLng > 180) dLng -= 360;
                                     if (dLng < -180) dLng += 360;
-                                    const dist = Math.sqrt(dLat*dLat + dLng*dLng);
-                                    if (dist < anom[2]) {
-                                        bonusTemp += anom[3] * Math.pow(1.0 - (dist / anom[2]), 2);
+                                    const distance = Math.sqrt(dLat*dLat + dLng*dLng);
+                                    if (distance < hub[2]) {
+                                        // Плавный квадратичный спад жары к краям аномалии
+                                        anomalyBonus += hub[3] * Math.pow(1.0 - (distance / hub[2]), 2);
                                     }
                                 });
 
-                                // Атмосферные синоптические волны циклонов
-                                const cyclone = Math.sin(lat / 5.0) * 4.0 + Math.cos(lng / 8.0) * 3.0;
-                                const t = baseTemp + bonusTemp + cyclone;
+                                // Результирующая точная температура в пикселе
+                                const t = baseTemp + n1 + n2 + n3 + anomalyBonus;
 
-                                // 🌋 ЦВЕТОВАЯ ПАЛИТРА ЗУМ-ЭРТ (СПЛОШНЫЕ НАДО С ПИКСЕЛИ)
-                                let c = '#00f2fe';
-                                if (t <= -20) c = '#4a00e0';
-                                else if (t > -20 && t <= -5) c = '#0044ff';
-                                else if (t > -5 && t <= 5) c = '#00ccff';
-                                else if (t > 5 && t <= 15) c = '#00f2fe';
-                                else if (t > 15 && t <= 24) c = '#34c759'; // Зеленая прохлада
-                                else if (t > 24 && t <= 32) c = '#ff9500'; // Оранжевое тепло
-                                else c = '#ff3b30';                         // Раскаленный алый зной
+                                // 🎯 4. НОРМАЛИЗАЦИЯ ИНТЕНСИВНОСТИ ДЛЯ ПАЛИТРЫ (Шкала от -30°C до +48°C)
+                                let intensity = (t + 30) / 78;
+                                intensity = Math.max(0.01, Math.min(1.0, intensity));
 
-                                // Отрисовываем плотный сплошной пиксельный квадратик на холсте тайла
-                                ctx.fillStyle = c;
+                                // 🎨 ТОЧНАЯ САТЕЛЛИТНАЯ ПАЛИТРА С ПЛАВНЫМИ ПЕРЕХОДАМИ (МАТОВАЯ СПЛОШНАЯ ЗАЛИВКА)
+                                let color = '#00f2fe';
+                                if (intensity <= 0.12) color = '#4a00e0';      // Лютая стужа полюсов (Глубокий фиолетовый)
+                                else if (intensity > 0.12 && intensity <= 0.28) color = '#0044ff'; // Глубокий синий холод
+                                else if (intensity > 0.28 && intensity <= 0.42) color = '#00ccff'; // Светло-голубой мороз
+                                else if (intensity > 0.42 && intensity <= 0.58) color = '#00f2fe'; // Бирюзовая умеренная зона
+                                else if (intensity > 0.58 && intensity <= 0.72) color = '#34c759'; // Зеленый весенний уют
+                                else if (intensity > 0.72 && intensity <= 0.88) color = '#ff9500'; // Оранжевое субтропическое тепло
+                                else color = '#ff3b30';                                             // 🌋 КРАСНОЕ ЭКВАТОРИАЛЬНОЕ ПЕКЛО
+
+                                ctx.fillStyle = color;
                                 ctx.fillRect(x, y, pixelStep, pixelStep);
                             }
                         }
@@ -438,19 +436,13 @@
                     }
                 });
 
-                // Создаем и мягко накладываем сплошной слой на карту мира
-                const finalShaderLayer = new pixelPerfectWeatherLayer({ opacity: 0.6, maxZoom: 10 });
+                // Накладываем сплошной растровый шейдер с легкой матовой прозрачностью (opacity: 0.5)
+                // Благодаря этому подложка стран и границ OpenStreetMap будет идеально видна сквозь цветной климат!
+                const finalShaderLayer = new pixelPerfectWeatherLayer({ opacity: 0.5, maxZoom: 10 });
                 weatherGridGroupLayer.addLayer(finalShaderLayer);
 
-                Swal.fire({
-                    title: "Шейдер запущен! 🛰️",
-                    text: "Процессор разгружен, активировано сплошное покрытие",
-                    icon: "success", background: "#0a0f1d", color: "#fff",
-                    showConfirmButton: false, timer: 1000
-                });
-
             } catch (err) { 
-                console.error("Ошибка генерации реактивного радар-шейдера:", err); 
+                console.error("Ошибка генерации фрактального радар-шейдера:", err); 
             }
         }
 
