@@ -21,9 +21,7 @@
     <!-- 🎨 4. ГРАФИКА: Шрифты иконок Font Awesome -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
-    <!-- 🔥 5. КЛИМАТИЧЕСКИЙ ШЕЙДЕР: Плагин бесшовного теплового радара -->
-    <!-- 🎯 ИСПРАВЛЕНО: Дописали точный адрес плагина Leaflet.heat через HTML5 Canvas для жидких переливов погоды! -->
-    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
 
     <style>
         body, html {
@@ -34,10 +32,14 @@
 
         /* 🗺️ ПОЛНОЭКРАННЫЙ ТАКТИЧЕСКИЙ РАДАР LEAFLET */
         #map {
-            width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1;
-            background: #070b19 !important;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            background: #b8d9e8 !important;
         }
-
         /* 🎛️ ХАЙ-ТЕК ТУМБЛЕР ПЕРЕКЛЮЧЕНИЯ РЕЖИМОВ КАРТЫ (APPLE-STYLE) */
         .map-mode-control {
             position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
@@ -104,11 +106,6 @@
             transition: all 0.2s;
         }
         .ctw2-btn:active { transform: scale(0.98); }
-
-        /* Ночной оверлей на Leaflet-картах, чтобы придать им хакерский темный вид */
-        .leaflet-tile-container {
-            filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
-        }
         #map.weather-mode {
             background: #d9e7d5 !important;
         }
@@ -335,204 +332,279 @@
         async function switchMapMode(mode) {
             currentMapMode = mode;
         
-            document.getElementById('btn-mode-politic')
-                .classList.remove('btn-active');
-        
-            document.getElementById('btn-mode-weather')
-                .classList.remove('btn-active');
-        
-            const mapElement = document.getElementById('map');
+            document.getElementById('btn-mode-politic').classList.remove('btn-active');
+            document.getElementById('btn-mode-weather').classList.remove('btn-active');
         
             if (mode === 'politic') {
-                document.getElementById('btn-mode-politic')
-                    .classList.add('btn-active');
+                document.getElementById('btn-mode-politic').classList.add('btn-active');
         
-                mapElement.classList.remove('weather-mode');
+                weatherRenderId++;
         
-                map.removeLayer(weatherGridGroupLayer);
-                map.addLayer(countriesGroupLayer);
+                if (weatherRenderController) {
+                    weatherRenderController.abort();
+                }
         
-            } else if (mode === 'weather') {
-                document.getElementById('btn-mode-weather')
-                    .classList.add('btn-active');
+                weatherGridGroupLayer.clearLayers();
         
-                mapElement.classList.add('weather-mode');
+                if (!map.hasLayer(countriesGroupLayer)) {
+                    map.addLayer(countriesGroupLayer);
+                }
+            }
         
-                map.removeLayer(countriesGroupLayer);
-                map.addLayer(weatherGridGroupLayer);
+            if (mode === 'weather') {
+                document.getElementById('btn-mode-weather').classList.add('btn-active');
+        
+                if (map.hasLayer(countriesGroupLayer)) {
+                    map.removeLayer(countriesGroupLayer);
+                }
         
                 await renderGlobalWeatherHeatGrid();
             }
         }
 
-        // 🌍 РЕНДЕРЕР МЯГКОГО СПУТНИКОВОГО ШЕЙДЕРА
-        // ⚡ Плавный зум / минимум лагов / без "кубиков"
+        function getTemperatureColor(temp) {
+            const stops = [
+                [-40, [35, 18, 95]],
+                [-30, [55, 35, 170]],
+                [-20, [25, 70, 200]],
+                [-10, [0, 145, 230]],
+                [0, [0, 205, 230]],
+                [10, [30, 210, 165]],
+                [20, [95, 215, 80]],
+                [25, [180, 225, 60]],
+                [30, [255, 225, 55]],
+                [35, [255, 175, 45]],
+                [40, [255, 105, 40]],
+                [45, [235, 45, 38]],
+                [50, [185, 15, 35]]
+            ];
+        
+            temp = Math.max(-40, Math.min(50, temp));
+        
+            for (let i = 0; i < stops.length - 1; i++) {
+                const [t1, c1] = stops[i];
+                const [t2, c2] = stops[i + 1];
+        
+                if (temp >= t1 && temp <= t2) {
+                    const f = (temp - t1) / (t2 - t1);
+        
+                    return [
+                        Math.round(c1[0] + (c2[0] - c1[0]) * f),
+                        Math.round(c1[1] + (c2[1] - c1[1]) * f),
+                        Math.round(c1[2] + (c2[2] - c1[2]) * f)
+                    ];
+                }
+            }
+        
+            return stops[stops.length - 1][1];
+        }
+
+        function findGridPosition(values, value) {
+            if (values.length < 2 || value < values[0] || value > values[values.length - 1]) {
+                return null;
+            }
+        
+            let low = 0;
+            let high = values.length - 1;
+        
+            while (low <= high) {
+                const mid = (low + high) >> 1;
+        
+                if (values[mid] === value) {
+                    return { i0: mid, i1: mid, f: 0 };
+                }
+        
+                if (values[mid] < value) {
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
+            }
+        
+            const i0 = low - 1;
+            const i1 = low;
+        
+            if (i0 < 0 || i1 >= values.length) {
+                return null;
+            }
+        
+            const range = values[i1] - values[i0];
+        
+            return {
+                i0,
+                i1,
+                f: range === 0 ? 0 : (value - values[i0]) / range
+            };
+        }
+
+        function bilinearInterpolate(q11, q21, q12, q22, fx, fy) {
+            if (![q11, q21, q12, q22].every(Number.isFinite)) {
+                return null;
+            }
+        
+            const top = q11 + (q21 - q11) * fx;
+            const bottom = q12 + (q22 - q12) * fx;
+        
+            return top + (bottom - top) * fy;
+        }
+        
+        let weatherRenderId = 0;
+        let weatherRenderController = null;
+        
         async function renderGlobalWeatherHeatGrid() {
             if (currentMapMode !== 'weather') return;
         
+            const renderId = ++weatherRenderId;
+        
+            if (weatherRenderController) {
+                weatherRenderController.abort();
+            }
+        
+            weatherRenderController = new AbortController();
+        
             try {
                 const bounds = map.getBounds();
-                const southWest = bounds.getSouthWest();
-                const northEast = bounds.getNorthEast();
-                const currentZoom = map.getZoom();
-        
-                const boundsPayload = {
-                    sw: [southWest.lat, southWest.lng],
-                    ne: [northEast.lat, northEast.lng],
-                    zoom: currentZoom
-                };
+                const sw = bounds.getSouthWest();
+                const ne = bounds.getNorthEast();
+                const zoom = map.getZoom();
         
                 const response = await fetch('/api/ctw2/weather/map', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(boundsPayload)
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sw: [sw.lat, sw.lng],
+                        ne: [ne.lat, ne.lng],
+                        zoom
+                    }),
+                    signal: weatherRenderController.signal
                 });
         
                 if (!response.ok) {
-                    throw new Error(`Weather API error: ${response.status}`);
+                    throw new Error(`Weather API: ${response.status}`);
                 }
         
                 const data = await response.json();
         
-                if (data.status !== "success" || !Array.isArray(data.weather)) {
-                    console.warn("Некорректные данные погоды:", data);
+                if (renderId !== weatherRenderId || currentMapMode !== 'weather') {
                     return;
                 }
         
-                // Удаляем старый слой
+                if (data.status !== 'success' || !Array.isArray(data.weather) || !data.weather.length) {
+                    return;
+                }
+        
+                const points = data.weather
+                    .map(p => ({
+                        lat: Number(p.lat),
+                        lng: Number(p.lng),
+                        temp: Number(p.temp)
+                    }))
+                    .filter(p =>
+                        Number.isFinite(p.lat) &&
+                        Number.isFinite(p.lng) &&
+                        Number.isFinite(p.temp)
+                    );
+        
+                if (points.length < 4) return;
+        
+                const latitudes = [...new Set(points.map(p => p.lat))].sort((a, b) => a - b);
+                const longitudes = [...new Set(points.map(p => p.lng))].sort((a, b) => a - b);
+        
+                if (latitudes.length < 2 || longitudes.length < 2) {
+                    console.warn('Weather data is not a regular grid.');
+                    return;
+                }
+        
+                const grid = new Map();
+        
+                for (const p of points) {
+                    grid.set(`${p.lat}|${p.lng}`, p.temp);
+                }
+        
+                const getGridValue = (lat, lng) => grid.get(`${lat}|${lng}`);
+        
                 weatherGridGroupLayer.clearLayers();
         
-                // --------------------------------------------------
-                // 🌡️ СОБИРАЕМ ВСЕ ТОЧКИ
-                // --------------------------------------------------
+                const size = map.getSize();
+                const width = Math.min(Math.max(size.x, 512), zoom <= 3 ? 768 : 1024);
+                const height = Math.max(256, Math.round(width * size.y / size.x));
         
-                const heatPointsArray = [];
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
         
-                data.weather.forEach(point => {
-                    const lat = Number(point.lat);
-                    const lng = Number(point.lng);
-                    const temp = Number(point.temp);
+                const ctx = canvas.getContext('2d');
+                const image = ctx.createImageData(width, height);
+                const pixels = image.data;
         
-                    // Защита от плохих данных
-                    if (!Number.isFinite(lat) ||
-                        !Number.isFinite(lng) ||
-                        !Number.isFinite(temp)) {
-                        return;
+                const latRange = ne.lat - sw.lat;
+                const lngRange = ne.lng - sw.lng;
+        
+                for (let y = 0; y < height; y++) {
+                    const lat = ne.lat - (y / (height - 1)) * latRange;
+                    const latPos = findGridPosition(latitudes, lat);
+        
+                    if (!latPos) continue;
+        
+                    for (let x = 0; x < width; x++) {
+                        const lng = sw.lng + (x / (width - 1)) * lngRange;
+                        const lngPos = findGridPosition(longitudes, lng);
+        
+                        if (!lngPos) continue;
+        
+                        const q11 = getGridValue(latitudes[latPos.i0], longitudes[lngPos.i0]);
+                        const q21 = getGridValue(latitudes[latPos.i0], longitudes[lngPos.i1]);
+                        const q12 = getGridValue(latitudes[latPos.i1], longitudes[lngPos.i0]);
+                        const q22 = getGridValue(latitudes[latPos.i1], longitudes[lngPos.i1]);
+        
+                        let temp = bilinearInterpolate(
+                            q11,
+                            q21,
+                            q12,
+                            q22,
+                            lngPos.f,
+                            latPos.f
+                        );
+        
+                        if (temp === null) continue;
+        
+                        const color = getTemperatureColor(temp);
+                        const index = (y * width + x) * 4;
+        
+                        pixels[index] = color[0];
+                        pixels[index + 1] = color[1];
+                        pixels[index + 2] = color[2];
+        
+                        // Transparent enough to see the map underneath
+                        pixels[index + 3] = 165;
                     }
-        
-                    // 🌡️ Температурный диапазон:
-                    // -40°C = 0
-                    // +50°C = 1
-                    let intensity = (temp + 40) / 90;
-        
-                    // Ограничиваем диапазон
-                    intensity = Math.max(0, Math.min(1, intensity));
-        
-                    heatPointsArray.push([
-                        lat,
-                        lng,
-                        intensity
-                    ]);
-                });
-        
-                // Если точек нет — ничего не рисуем
-                if (heatPointsArray.length === 0) {
-                    console.warn("Нет точек погоды для отображения");
-                    return;
                 }
         
-                // --------------------------------------------------
-                // 🔍 АДАПТАЦИЯ К ZOOM
-                // --------------------------------------------------
+                ctx.putImageData(image, 0, 0);
         
-                let radius;
-                let blur;
+                const imageUrl = canvas.toDataURL('image/png');
         
-                if (currentZoom <= 3) {
-                    // 🌍 Весь мир
-                    radius = 110;
-                    blur = 70;
-        
-                } else if (currentZoom <= 5) {
-                    // 🌎 Континенты
-                    radius = 80;
-                    blur = 55;
-        
-                } else if (currentZoom <= 7) {
-                    // 🗺️ Страны
-                    radius = 55;
-                    blur = 42;
-        
-                } else {
-                    // 🔎 Города / регионы
-                    radius = 40;
-                    blur = 32;
-                }
-        
-                // --------------------------------------------------
-                // 🌡️ ZOOM EARTH STYLE TEMPERATURE GRADIENT
-                // --------------------------------------------------
-        
-                const heatmapLayer = L.heatLayer(heatPointsArray, {
-        
-                    radius: radius,
-        
-                    blur: blur,
-        
-                    maxZoom: 10,
-        
-                    minOpacity: 0.65,
-        
-                    gradient: {
-                        // 🟣 EXTREME COLD
-                        0.00: '#24105f',
-        
-                        // 🔵 VERY COLD
-                        0.08: '#3825a8',
-                        0.16: '#1746c7',
-        
-                        // 🩵 COLD
-                        0.26: '#008ee8',
-        
-                        // 🩵 COOL
-                        0.36: '#00cfe8',
-        
-                        // 🟢 MILD
-                        0.46: '#21d6a3',
-                        0.56: '#63d64f',
-        
-                        // 🟡 WARM
-                        0.66: '#b8e43c',
-                        0.75: '#ffe13b',
-        
-                        // 🟠 HOT
-                        0.83: '#ffad2f',
-                        0.91: '#ff6828',
-        
-                        // 🔴 VERY HOT
-                        0.97: '#ed3026',
-        
-                        // 🔴 EXTREME HEAT
-                        1.00: '#b80f22'
+                const rasterLayer = L.imageOverlay(
+                    imageUrl,
+                    [
+                        [sw.lat, sw.lng],
+                        [ne.lat, ne.lng]
+                    ],
+                    {
+                        opacity: 1,
+                        interactive: false,
+                        zIndex: 20
                     }
-                });
+                );
         
-                // --------------------------------------------------
-                // ➕ ДОБАВЛЯЕМ ОДИН HEATMAP LAYER
-                // --------------------------------------------------
-        
-                weatherGridGroupLayer.addLayer(heatmapLayer);
+                weatherGridGroupLayer.addLayer(rasterLayer);
         
             } catch (err) {
-                console.error(
-                    "Ошибка генерации погодного радара:",
-                    err
-                );
+                if (err.name !== 'AbortError') {
+                    console.error('Weather raster error:', err);
+                }
             }
         }
-
 
         // НЕУБИВАЕМЫЙ МЕТЕОЗОНД (ИСПРАВЛЕНО: ЯРЛЫК ТЕПЕРЬ СТРЕЛЯЕТ С ПЕРВОГО КЛИКА)
         function initWeatherPointSensor() {
