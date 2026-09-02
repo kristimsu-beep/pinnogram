@@ -398,55 +398,11 @@
         
             return stops[stops.length - 1][1];
         }
-
-        function findGridPosition(values, value) {
-            if (values.length < 2 || value < values[0] || value > values[values.length - 1]) {
-                return null;
-            }
         
-            let low = 0;
-            let high = values.length - 1;
-        
-            while (low <= high) {
-                const mid = (low + high) >> 1;
-        
-                if (values[mid] === value) {
-                    return { i0: mid, i1: mid, f: 0 };
-                }
-        
-                if (values[mid] < value) {
-                    low = mid + 1;
-                } else {
-                    high = mid - 1;
-                }
-            }
-        
-            const i0 = low - 1;
-            const i1 = low;
-        
-            if (i0 < 0 || i1 >= values.length) {
-                return null;
-            }
-        
-            const range = values[i1] - values[i0];
-        
-            return {
-                i0,
-                i1,
-                f: range === 0 ? 0 : (value - values[i0]) / range
-            };
+        function normalizeLongitude(lng) {
+            return ((lng + 180) % 360 + 360) % 360 - 180;
         }
 
-        function bilinearInterpolate(q11, q21, q12, q22, fx, fy) {
-            if (![q11, q21, q12, q22].every(Number.isFinite)) {
-                return null;
-            }
-        
-            const top = q11 + (q21 - q11) * fx;
-            const bottom = q12 + (q22 - q12) * fx;
-        
-            return top + (bottom - top) * fy;
-        }
         
         let weatherRenderId = 0;
         let weatherRenderController = null;
@@ -489,14 +445,15 @@
                     return;
                 }
         
-                if (data.status !== 'success' || !Array.isArray(data.weather) || !data.weather.length) {
+                if (!data.weather || !Array.isArray(data.weather)) {
+                    console.error('Weather API returned invalid data:', data);
                     return;
                 }
         
                 const points = data.weather
                     .map(p => ({
                         lat: Number(p.lat),
-                        lng: Number(p.lng),
+                        lng: normalizeLongitude(Number(p.lng)),
                         temp: Number(p.temp)
                     }))
                     .filter(p =>
@@ -505,31 +462,28 @@
                         Number.isFinite(p.temp)
                     );
         
-                if (points.length < 4) return;
+                console.log(`🌡️ Weather points: ${points.length}`);
         
-                const latitudes = [...new Set(points.map(p => p.lat))].sort((a, b) => a - b);
-                const longitudes = [...new Set(points.map(p => p.lng))].sort((a, b) => a - b);
-        
-                if (latitudes.length < 2 || longitudes.length < 2) {
-                    console.warn('Weather data is not a regular grid.');
+                if (!points.length) {
+                    console.warn('No valid weather points.');
                     return;
                 }
         
-                const grid = new Map();
-        
-                for (const p of points) {
-                    grid.set(`${p.lat}|${p.lng}`, p.temp);
-                }
-        
-                const getGridValue = (lat, lng) => grid.get(`${lat}|${lng}`);
-        
                 weatherGridGroupLayer.clearLayers();
         
-                const size = map.getSize();
-                const width = Math.min(Math.max(size.x, 512), zoom <= 3 ? 768 : 1024);
-                const height = Math.max(256, Math.round(width * size.y / size.x));
+                const mapSize = map.getSize();
+        
+                const width = Math.min(
+                    900,
+                    Math.max(500, mapSize.x)
+                );
+        
+                const height = Math.round(
+                    width * mapSize.y / mapSize.x
+                );
         
                 const canvas = document.createElement('canvas');
+        
                 canvas.width = width;
                 canvas.height = height;
         
@@ -537,46 +491,84 @@
                 const image = ctx.createImageData(width, height);
                 const pixels = image.data;
         
-                const latRange = ne.lat - sw.lat;
-                const lngRange = ne.lng - sw.lng;
+                const west = sw.lng;
+                const east = ne.lng;
+                const south = sw.lat;
+                const north = ne.lat;
+        
+                const lngRange = east - west;
+                const latRange = north - south;
+        
+                /*
+                 * IMPORTANT:
+                 * We don't assume that the API is a perfect grid anymore.
+                 *
+                 * For every raster pixel we find nearby weather points.
+                 * The closest few points are weighted by distance.
+                 *
+                 * This produces a smooth field even when the API grid
+                 * isn't perfectly rectangular.
+                 */
+        
+                const searchRadius = zoom <= 3 ? 18 :
+                    zoom <= 5 ? 12 :
+                    zoom <= 7 ? 8 :
+                    5;
         
                 for (let y = 0; y < height; y++) {
-                    const lat = ne.lat - (y / (height - 1)) * latRange;
-                    const latPos = findGridPosition(latitudes, lat);
-        
-                    if (!latPos) continue;
+                    const lat = north - (y / (height - 1)) * latRange;
         
                     for (let x = 0; x < width; x++) {
-                        const lng = sw.lng + (x / (width - 1)) * lngRange;
-                        const lngPos = findGridPosition(longitudes, lng);
+                        const lng = west + (x / (width - 1)) * lngRange;
         
-                        if (!lngPos) continue;
+                        let weightedTemp = 0;
+                        let totalWeight = 0;
+                        let nearestDistance = Infinity;
+                        let nearestTemp = null;
         
-                        const q11 = getGridValue(latitudes[latPos.i0], longitudes[lngPos.i0]);
-                        const q21 = getGridValue(latitudes[latPos.i0], longitudes[lngPos.i1]);
-                        const q12 = getGridValue(latitudes[latPos.i1], longitudes[lngPos.i0]);
-                        const q22 = getGridValue(latitudes[latPos.i1], longitudes[lngPos.i1]);
+                        for (const point of points) {
+                            const dx = point.lng - lng;
+                            const dy = point.lat - lat;
         
-                        let temp = bilinearInterpolate(
-                            q11,
-                            q21,
-                            q12,
-                            q22,
-                            lngPos.f,
-                            latPos.f
-                        );
+                            const distance = Math.sqrt(
+                                dx * dx + dy * dy
+                            );
         
-                        if (temp === null) continue;
+                            if (distance < nearestDistance) {
+                                nearestDistance = distance;
+                                nearestTemp = point.temp;
+                            }
+        
+                            if (distance <= searchRadius) {
+                                const weight = 1 / Math.max(
+                                    distance * distance,
+                                    0.0001
+                                );
+        
+                                weightedTemp += point.temp * weight;
+                                totalWeight += weight;
+                            }
+                        }
+        
+                        let temp;
+        
+                        if (totalWeight > 0) {
+                            temp = weightedTemp / totalWeight;
+                        } else if (nearestTemp !== null) {
+                            temp = nearestTemp;
+                        } else {
+                            continue;
+                        }
         
                         const color = getTemperatureColor(temp);
+        
                         const index = (y * width + x) * 4;
         
                         pixels[index] = color[0];
                         pixels[index + 1] = color[1];
                         pixels[index + 2] = color[2];
         
-                        // Transparent enough to see the map underneath
-                        pixels[index + 3] = 165;
+                        pixels[index + 3] = 145;
                     }
                 }
         
@@ -587,8 +579,8 @@
                 const rasterLayer = L.imageOverlay(
                     imageUrl,
                     [
-                        [sw.lat, sw.lng],
-                        [ne.lat, ne.lng]
+                        [south, west],
+                        [north, east]
                     ],
                     {
                         opacity: 1,
@@ -599,10 +591,17 @@
         
                 weatherGridGroupLayer.addLayer(rasterLayer);
         
+                console.log(
+                    `🌡️ Raster rendered: ${width}x${height}`
+                );
+        
             } catch (err) {
-                if (err.name !== 'AbortError') {
-                    console.error('Weather raster error:', err);
-                }
+                if (err.name === 'AbortError') return;
+        
+                console.error(
+                    '❌ Weather raster error:',
+                    err
+                );
             }
         }
 
