@@ -214,10 +214,16 @@
 
             // 🎯 СУПЕР-ТРЕКЕР: Карта начинает непрерывно следить за зумом и движением камеры!
             // Как только пользователь закончит двигать или приближать глобус — радар мгновенно уплотнит сетку!
+            let weatherRenderTimer = null;
+            
             map.on('moveend', () => {
-                if (currentMapMode === 'weather') {
+                if (currentMapMode !== 'weather') return;
+            
+                clearTimeout(weatherRenderTimer);
+            
+                weatherRenderTimer = setTimeout(() => {
                     renderGlobalWeatherHeatGrid();
-                }
+                }, 250);
             });
         }
 
@@ -483,7 +489,7 @@
                 const mapSize = map.getSize();
         
                 const width = Math.min(
-                    900,
+                    700,
                     Math.max(500, mapSize.x)
                 );
         
@@ -524,43 +530,77 @@
                     zoom <= 7 ? 8 :
                     5;
         
+                // Build a spatial grid so each pixel only checks nearby weather points.
+                const cellSize = searchRadius;
+                
+                const spatialGrid = new Map();
+                
+                for (const point of points) {
+                    const gx = Math.floor(point.lng / cellSize);
+                    const gy = Math.floor(point.lat / cellSize);
+                
+                    const key = `${gx},${gy}`;
+                
+                    if (!spatialGrid.has(key)) {
+                        spatialGrid.set(key, []);
+                    }
+                
+                    spatialGrid.get(key).push(point);
+                }
+                
                 for (let y = 0; y < height; y++) {
+                
                     const lat = north - (y / (height - 1)) * latRange;
-        
+                
                     for (let x = 0; x < width; x++) {
+                
                         const lng = west + (x / (width - 1)) * lngRange;
-        
+                
+                        const gx = Math.floor(lng / cellSize);
+                        const gy = Math.floor(lat / cellSize);
+                
                         let weightedTemp = 0;
                         let totalWeight = 0;
                         let nearestDistance = Infinity;
                         let nearestTemp = null;
-        
-                        for (const point of points) {
-                            const dx = point.lng - lng;
-                            const dy = point.lat - lat;
-        
-                            const distance = Math.sqrt(
-                                dx * dx + dy * dy
-                            );
-        
-                            if (distance < nearestDistance) {
-                                nearestDistance = distance;
-                                nearestTemp = point.temp;
-                            }
-        
-                            if (distance <= searchRadius) {
-                                const weight = 1 / Math.max(
-                                    distance * distance,
-                                    0.0001
-                                );
-        
-                                weightedTemp += point.temp * weight;
-                                totalWeight += weight;
+                
+                        // Only inspect nearby grid cells.
+                        for (let oy = -1; oy <= 1; oy++) {
+                            for (let ox = -1; ox <= 1; ox++) {
+                
+                                const key = `${gx + ox},${gy + oy}`;
+                                const nearbyPoints = spatialGrid.get(key);
+                
+                                if (!nearbyPoints) continue;
+                
+                                for (const point of nearbyPoints) {
+                
+                                    const dx = point.lng - lng;
+                                    const dy = point.lat - lat;
+                
+                                    const distanceSq = dx * dx + dy * dy;
+                
+                                    if (distanceSq < nearestDistance) {
+                                        nearestDistance = distanceSq;
+                                        nearestTemp = point.temp;
+                                    }
+                
+                                    if (distanceSq <= searchRadius * searchRadius) {
+                
+                                        const weight = Math.exp(
+                                            -distanceSq /
+                                            (2 * searchRadius * searchRadius * 0.20)
+                                        );
+                
+                                        weightedTemp += point.temp * weight;
+                                        totalWeight += weight;
+                                    }
+                                }
                             }
                         }
-        
+                
                         let temp;
-        
+                
                         if (totalWeight > 0) {
                             temp = weightedTemp / totalWeight;
                         } else if (nearestTemp !== null) {
@@ -568,16 +608,16 @@
                         } else {
                             continue;
                         }
-        
+                
                         const color = getTemperatureColor(temp);
-        
+                
                         const index = (y * width + x) * 4;
-        
+                
                         pixels[index] = color[0];
                         pixels[index + 1] = color[1];
                         pixels[index + 2] = color[2];
-        
-                        pixels[index + 3] = 145;
+                
+                        pixels[index + 3] = 220;
                     }
                 }
         
