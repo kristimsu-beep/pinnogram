@@ -6240,49 +6240,101 @@ def calculate_planetary_temperature(lat: float, lng: float, zoom: float = 2.0):
     return round(max(-65.0, min(57.0, final_temp)), 1)
 
 # =====================================================================
-# 🪐 API 1: ПОПИКСЕЛЬНЫЙ СИНАПТИЧЕСКИЙ ШЕЙДЕР (БЕЗУПРЕЧНАЯ СЕТКА КВАРТАРОВ)
+# 🪐 API 1: ФРАКТАЛЬНЫЙ СИНУС-ШЕЙДЕР ПЛАНЕТЫ (ВЫСОКОТОЧНЫЙ КЛИМАТ СУША/ВОДА)
 # =====================================================================
 @app.post("/api/ctw2/weather/map")
 async def ctw2_get_dynamic_weather_map(bounds: dict):
+    import math
+    import random
+    from datetime import datetime
+    
     try:
         south_west = bounds.get("sw", [-60.0, -120.0])
         north_east = bounds.get("ne", [75.0, 150.0])
         zoom = float(bounds.get("zoom", 2.5))
         
-        # 🎯 СНАЙПЕРСКИЙ ШАГ СЕТКИ (LOD) ДЛЯ ПОПИКСЕЛЬНОГО ЗАПОЛНЕНИЯ:
-        # Рассчитываем размер каждого погодного пикселя, чтобы они идеально стыковались
+        # 🎯 СНАЙПЕРСКИЙ LOD ДЛЯ ИДЕАЛЬНОЙ ПЛАВНОСТИ БЕЗ ДЫР И ЛАГОВ:
+        # Регулируем плотность сетки, чтобы бэкенд отдавал оптимальное число точек,
+        # а фронтенд мгновенно растягивал их через Canvas-интерполяцию!
         if zoom <= 3:
-            step = 2.0  # Крупные пиксели на общем плане (размер ячейки 2х2 градуса)
+            step_lat, step_lng = 1.5, 2.0  # Ультра-плотное покрытие на общем плане
         elif zoom > 3 and zoom <= 5:
-            step = 1.0  # Средние пиксели (1х1 градус)
+            step_lat, step_lng = 0.8, 1.2  # Повышенная четкость регионов
         else:
-            step = 0.5  # Микро-пиксели при приближении (0.5х0.5 градуса)
+            step_lat, step_lng = 0.4, 0.6  # Максимальная попиксельная детализация
             
-        lat_min = float(max(-60.0, math.floor(south_west[0])))
-        lat_max = float(min(75.0, math.ceil(north_east[0])))
-        lng_min = float(max(-180.0, math.floor(south_west[1])))
-        lng_max = float(min(180.0, math.ceil(north_east[1])))
+        lat_min = max(-65.0, float(south_west[0]))
+        lat_max = min(78.0, float(north_east[0]))
+        lng_min = max(-180.0, float(south_west[1]))
+        lng_max = min(180.0, float(north_east[1]))
+        
+        # Расчет термодинамики под сентябрь 2026 года
+        day_of_year = datetime.now().timetuple().tm_yday
+        season_shift = math.sin(2 * math.pi * (day_of_year - 80) / 365) * 23.44
         
         weather_points = []
         
-        # Шагаем с плавающей точкой, нарезая Землю на идеальные кубики
-        current_lat = lat_min
-        while current_lat <= lat_max:
-            current_lng = lng_min
-            while current_lng <= lng_max:
-                temp = calculate_planetary_temperature(current_lat, current_lng, zoom)
-                weather_points.append({
-                    "lat": current_lat,
-                    "lng": current_lng,
-                    "size": step, # Передаем размер кубика на фронтенд
-                    "temp": temp
-                })
-                current_lng += step
-            current_lat += step
+        # Генерация многоуровневого погодного шума
+        curr_lat = lat_min
+        while curr_lat <= lat_max:
+            curr_lng = lng_min
+            while curr_lng <= lng_max:
                 
-        return {"status": "success", "source": "pixel_perfect_lod_engine", "weather": weather_points}
+                # 🌊 1. ФИЗИКА СУШИ И ОКЕАНОВ (Контурный шейдер акваторий)
+                is_water = False
+                if curr_lat > -60 and curr_lat < 70 and (curr_lng < -20 or curr_lng > 140): is_water = True
+                elif curr_lat < 0 and curr_lng > 20 and curr_lng < 110: is_water = True
+                elif curr_lat > 30 and curr_lat < 48 and curr_lng > -5 and curr_lng < 45: is_water = True
+                elif curr_lat > 70: is_water = True
+
+                # Базовая инсоляция полушарий
+                effective_lat = curr_lat - season_shift
+                if is_water:
+                    base_temp = 17.0 - (abs(curr_lat) * 0.45) # Стабильная прохлада морей в сентябре
+                else:
+                    base_temp = 41.5 - (abs(effective_lat) * 0.76) # Суша прогревается сильнее
+
+                # 🌌 2. ИНТЕРПОЛЯЦИОННЫЙ СИНУС-ШУМ (Многооктавные циклоны):
+                # Накладываем три уровня волн для удаления резких стыков и рваных краев
+                octave_1 = math.sin(curr_lat / 8.0) * math.cos(curr_lng / 12.0) * 6.0
+                octave_2 = math.sin((curr_lat + curr_lng) / 4.0) * math.cos(curr_lat / 3.0) * 3.0
+                octave_3 = math.cos(curr_lng / 20.0) * math.sin(curr_lat / 2.0) * 1.5
+                total_noise = octave_1 + octave_2 + octave_3
+
+                # 🌋 3. МАТРИЦА СТРОГИХ ГЕОГРАФИЧЕСКИХ АНОМАЛИЙ МИРА
+                anomalies = [
+                    [25.00, 45.00, 22.0, 16.0],   # Ближний Восток (Экстремальное пунцовое пекло)
+                    [25.00, 15.00, 25.0, 14.0],   # Сахара
+                    [36.05, -116.81, 12.0, 18.0], # Долина Смерти (США)
+                    [-75.00, 120.00, 38.0, -35.0],# Ледяной купол Антарктиды
+                    [72.00, -40.00, 18.0, -25.0], # Гренландия
+                    [62.00, 129.00, 22.0, -18.0]  # Якутия / Сибирь
+                ]
+                
+                bonus_temp = 0.0
+                for anom in anomalies:
+                    d_lat = curr_lat - anom[0]
+                    d_lng = curr_lng - anom[1]
+                    if d_lng > 180: d_lng -= 360
+                    if d_lng < -180: d_lng += 360
+                    dist = math.sqrt(d_lat**2 + d_lng**2)
+                    if dist < anom[2]:
+                        # Квадратичное затухание для бесшовного слияния аномалии с основным фоном
+                        bonus_temp += anom[3] * ((1.0 - (dist / anom[2])) ** 2)
+
+                final_temp = base_temp + total_noise + bonus_temp
+                
+                weather_points.append({
+                    "lat": round(curr_lat, 2),
+                    "lng": round(curr_lng, 2),
+                    "temp": round(max(-62.0, min(56.0, final_temp)), 1)
+                })
+                curr_lng += step_lng
+            curr_lat += step_lat
+            
+        return {"status": "success", "source": "planetary_shader_core", "weather": weather_points}
     except Exception as e:
-        print(f"🚨 [ОШИБКА ПОПИКСЕЛЬНОЙ СЕТКИ]: {str(e)}")
+        print(f"🚨 [ОШИБКА БЭКЕНД ШЕЙДЕРА]: {str(e)}")
         return {"status": "success", "weather": []}
 
 # =====================================================================
