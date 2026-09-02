@@ -207,7 +207,16 @@
             
             // Загружаем политическую арену из MongoDB
             loadGlobalEmpireMapData();
+
+            // 🎯 СУПЕР-ТРЕКЕР: Карта начинает непрерывно следить за зумом и движением камеры!
+            // Как только пользователь закончит двигать или приближать глобус — радар мгновенно уплотнит сетку!
+            map.on('moveend', () => {
+                if (currentMapMode === 'weather') {
+                    renderGlobalWeatherHeatGrid();
+                }
+            });
         }
+
         // =====================================================================
         // 📊 2. ВАЛИДАЦИЯ ПАСПОРТА ГОСУДАРСТВА
         // =====================================================================
@@ -333,50 +342,83 @@
             }
         }
 
-        // РЕНДЕРЕР ТЕПЛОВОГО РАДАРА (СИНХРОНИЗАЦИЯ С РЕАЛЬНЫМИ СПУТНИКОВЫМИ ДАННЫМИ)
+        // РЕНДЕРЕР ТЕПЛОВОГО РАДАРА С АДАПТИВНОЙ ДИНАМИЧЕСКОЙ ПОДГРУЗКОЙ ТОЧЕК (LOD)
         async function renderGlobalWeatherHeatGrid() {
-            try {
-                Swal.fire({
-                    title: "Запрос спутниковых сводок...",
-                    text: "Получаем живую температуру планеты",
-                    icon: "info", background: "#0a0f1d", color: "#fff",
-                    showConfirmButton: false, timer: 800, didOpen: () => { Swal.showLoading(); }
-                });
+            // Если мы сейчас НЕ в режиме теплового радара — мгновенно выходим, чтобы не тратить трафик
+            if (currentMapMode !== 'weather') return;
 
-                const response = await fetch('/api/ctw2/weather/map');
+            try {
+                // 🎯 ШАГ 1: Сканируем видимые границы экрана игрока прямо сейчас
+                const bounds = map.getBounds();
+                const southWest = bounds.getSouthWest();
+                const northEast = bounds.getNorthEast();
+                const currentZoom = map.getZoom();
+
+                // Сборка тактического пакета координат для отправки в Python
+                const boundsPayload = {
+                    sw: [southWest.lat, southWest.lng],
+                    ne: [northEast.lat, northEast.lng],
+                    zoom: currentZoom
+                };
+
+                // Отправляем POST-запрос на наш новый автономный движок в server.py
+                const response = await fetch('/api/ctw2/weather/map', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(boundsPayload)
+                });
                 const data = await response.json();
 
                 if (data.status === "success") {
+                    // Очищаем старые тепловые точки
                     weatherGridGroupLayer.clearLayers(); 
                     const heatPointsArray = [];
 
                     data.weather.forEach(point => {
                         const t = point.temp;
-                        // Формула интенсивности: реальные +38°C дадут мощнейший алый цвет!
-                        let intensity = (t + 15) / 60; 
+                        
+                        // Формула интенсивности: сдвигаем шкалу под реальные температуры от -30°C до +50°C
+                        let intensity = (t + 30) / 80; 
                         intensity = Math.max(0.01, Math.min(1.0, intensity));
+                        
                         heatPointsArray.push([point.lat, point.lng, intensity]);
                     });
 
-                    // Инициализируем плагин бесшовного холста Leaflet.heat
+                    // ДИНАМИЧЕСКИЙ РАДИУС СГЛАЖИВАНИЯ:
+                    // Чем ближе пользователь приближает карту — тем меньше радиус размытия в пикселях,
+                    // чтобы микро-сетка прорисовывалась с ювелирной, детальной четкостью!
+                    let dynamicRadius = 130;
+                    let dynamicBlur = 75;
+
+                    if (currentZoom > 3 && currentZoom <= 5) {
+                        dynamicRadius = 85; dynamicBlur = 50;
+                    } else if (currentZoom > 5) {
+                        dynamicRadius = 50; dynamicBlur = 30;
+                    }
+
+                    // Инициализируем наш бесшовный Canvas-слой Leaflet.heat
                     const heatmapLayer = L.heatLayer(heatPointsArray, {
-                        radius: 220, // 🎯 Увеличили радиус размытия до 220, чтобы точки плавно накрыли всю карту мира!
-                        blur: 110,   // Мягкое сглаживание для эффекта синоптического газа
-                        maxZoom: 3,
+                        radius: dynamicRadius, 
+                        blur: dynamicBlur,    
+                        maxZoom: 10,
                         gradient: {
-                            0.01: '#3a00b0', // Лютый фиолетовый мороз
-                            0.15: '#0044ff', // Синий холод
-                            0.40: '#00f2fe', // Бирюзовая прохлада
-                            0.65: '#34c759', // Зеленый весенний комфорт
-                            0.80: '#ff9500', // Оранжевое летнее тепло
-                            1.00: '#ff3b30'  // 🎯 РАСКАЛЕННОЕ КРАСНОЕ ПЕКЛО (Дубай, Сахара, Каир!)
+                            0.01: '#3a00b0', // Глубокий антарктический фиолетовый (Полюса)
+                            0.18: '#0044ff', // Синий лютый холод (Север России/Канады зимой)
+                            0.38: '#00ccff', // Бирюзовая умеренная зона (Гренландия летом)
+                            0.58: '#00f2fe', // Неоновый комфортный нектар
+                            0.73: '#34c759', // Зеленый весенний уют материков
+                            0.88: '#ff9500', // Оранжевое субтропическое тепло
+                            1.00: '#ff3b30'  // РАСКАЛЕННОЕ КРАСНОЕ ПЕКЛО (Долина Смерти, Ближний Восток, Сахара!)
                         }
                     });
 
                     weatherGridGroupLayer.addLayer(heatmapLayer);
                 }
-            } catch (err) { console.error("Ошибка генерации реальной тепловой карты:", err); }
+            } catch (err) { 
+                console.error("Ошибка динамической генерации тепловой карты:", err); 
+            }
         }
+
 
         // НЕУБИВАЕМЫЙ МЕТЕОЗОНД (ИСПРАВЛЕНО: ЯРЛЫК ТЕПЕРЬ СТРЕЛЯЕТ С ПЕРВОГО КЛИКА)
         function initWeatherPointSensor() {
