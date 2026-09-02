@@ -6239,23 +6239,21 @@ def calculate_planetary_temperature(lat: float, lng: float, zoom: float = 2.0):
     # Финальные рамки температур планеты (от -65 до +57)
     return round(max(-65.0, min(57.0, final_temp)), 1)
 
-# 🗺️ API 1: ДИНАМИЧЕСКИЙ ТЕПЛОВОЙ РАДАР (ГЕНЕРАЦИЯ СЕТКИ ПО ВИДИМОЙ ЗОНЕ И ЗУМУ)
+# 🗺️ API 1: СВЕРХПЛОТНЫЙ ДИНАМИЧЕСКИЙ РАДАР (ПИКСЕЛЬНОЕ ПОКРЫТИЕ ПО ВИДИМОЙ ЗОНЕ)
 @app.post("/api/ctw2/weather/map")
 async def ctw2_get_dynamic_weather_map(bounds: dict):
     try:
-        # Вытаскиваем координаты видимого экрана игрока, прилетевшие с фронтенда
         south_west = bounds.get("sw", [-60.0, -120.0])
         north_east = bounds.get("ne", [75.0, 150.0])
         zoom = float(bounds.get("zoom", 2.5))
         
-        # 🎯 УМНЫЙ АДАПТИВНЫЙ ШАГ СЕТКИ (LOD):
-        # Чем выше зум (пользователь приближает) — тем меньше шаг, тем плотнее и детальнее сетка!
+        # 🎯 СУПЕР-УПЛОТНЕНИЕ СЕТКИ: Делаем микроскопический шаг, чтобы полностью залить всю карту!
         if zoom <= 3:
-            step_lat, step_lng = 8, 12   # Базовый зум: около 400 точек на всю планету
+            step_lat, step_lng = 2, 3    # Базовый зум: генерируем тысячи плотных точек на экран!
         elif zoom > 3 and zoom <= 5:
-            step_lat, step_lng = 4, 6    # Среднее приближение: высокая плотность
+            step_lat, step_lng = 1, 2    # Среднее приближение: ультра-детализация регионов
         else:
-            step_lat, step_lng = 2, 3    # Максимальный зум: ультра-детализация видимого квадрата
+            step_lat, step_lng = 1, 1    # Максимальный зум: попиксельный просчет каждого города
             
         lat_min = int(max(-60, math.floor(south_west[0])))
         lat_max = int(min(75, math.ceil(north_east[0])))
@@ -6264,7 +6262,7 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
         
         weather_points = []
         
-        # Генерируем точки строго в рамках того окна, которое сейчас видит пользователь!
+        # Запускаем генерацию плотного планетарного ковра
         for lat in range(lat_min, lat_max + 1, step_lat):
             for lng in range(lng_min, lng_max + 1, step_lng):
                 temp = calculate_planetary_temperature(float(lat), float(lng), zoom)
@@ -6274,28 +6272,10 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                     "temp": temp
                 })
                 
-        return {"status": "success", "source": "planetary_lod_engine", "weather": weather_points}
+        return {"status": "success", "source": "planetary_ultra_lod_engine", "weather": weather_points}
     except Exception as e:
-        print(f"🚨 [ОШИБКА ДИНАМИЧЕСКОЙ СЕТКИ]: {str(e)}")
+        print(f"🚨 [ОШИБКА СВЕРХПЛОТНОЙ СЕТКИ]: {str(e)}")
         return {"status": "success", "weather": []}
-
-# 🗺️ API 2: ТОЧЕЧНЫЙ МЕТЕО-ЗОНД (МГНОВЕННЫЙ РАСЧЕТ В ЛЮБОМ ПИКСЕЛЕ КЛИКА)
-@app.get("/api/ctw2/weather/point")
-async def ctw2_get_point_weather(lat: float, lng: float):
-    try:
-        # Мгновенно рассчитываем кристально точную погоду по формуле для точки клика
-        temp = calculate_planetary_temperature(lat, lng, zoom=5.0)
-        
-        # Скорость ветра зависит от близости к циклонам (математическая симуляция)
-        windspeed = round(5.0 + abs(math.sin(lat) * 12.0) + random.uniform(-2.0, 2.0), 1)
-        
-        return {
-            "status": "success",
-            "temp": temp,
-            "windspeed": windspeed
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
 
 # =====================================================================
 # 🌐 СУВЕРЕННЫЙ БРАУЗЕР PINNET (БЭКЕНД-ДВИЖОК ДЛЯ ДОМЕНОВ .PIN)
