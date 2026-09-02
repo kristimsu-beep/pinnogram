@@ -380,10 +380,10 @@
                                 // Ограничиваем рендеринг рамками обитаемой планеты
                                 if (lat < -60 || lat > 75) continue;
 
-                                // 🌊 ТОЧНАЯ ТЕРМОДИНАМИКА ВОДЫ И СУШИ (Синхронизировано с бэкендом)
+                                // 🌊 ТОЧНАЯ ТЕРМОДИНАМИКА ВОДЫ И СУШИ (ФИКС СИНТАКСИСА 'AND')
                                 let isWater = false;
                                 if (lat > -60 && lat < 70 && (lng < -20 || lng > 140)) isWater = true;
-                                else if (lat < 0 && lng > 20 and lng < 110) isWater = true;
+                                else if (lat < 0 && lng > 20 && lng < 110) isWater = true; // 🎯 ИСПРАВЛЕНО: Теперь здесь строго &&
                                 else if (lat > 30 && lat < 48 && lng > -5 && lng < 45) isWater = true;
                                 else if (lat > 70) isWater = true;
 
