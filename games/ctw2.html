@@ -365,94 +365,174 @@
             }
         }
 
-        // РЕНДЕРЕР МЯГКОГО СПУТНИКОВОГО ШЕЙДЕРА (МГНОВЕННЫЙ ЗУМ 120 FPS / БЕЗ КУБИКОВ И ЛАГОВ)
+        // 🌍 РЕНДЕРЕР МЯГКОГО СПУТНИКОВОГО ШЕЙДЕРА
+        // ⚡ Плавный зум / минимум лагов / без "кубиков"
         async function renderGlobalWeatherHeatGrid() {
             if (currentMapMode !== 'weather') return;
-
+        
             try {
                 const bounds = map.getBounds();
                 const southWest = bounds.getSouthWest();
                 const northEast = bounds.getNorthEast();
                 const currentZoom = map.getZoom();
-
+        
                 const boundsPayload = {
                     sw: [southWest.lat, southWest.lng],
                     ne: [northEast.lat, northEast.lng],
                     zoom: currentZoom
                 };
-
+        
                 const response = await fetch('/api/ctw2/weather/map', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify(boundsPayload)
                 });
+        
+                if (!response.ok) {
+                    throw new Error(`Weather API error: ${response.status}`);
+                }
+        
                 const data = await response.json();
-
-                if (data.status === "success") {
-                    weatherGridGroupLayer.clearLayers(); 
-                    const heatPointsArray = [];
-
+        
+                if (data.status !== "success" || !Array.isArray(data.weather)) {
+                    console.warn("Некорректные данные погоды:", data);
+                    return;
+                }
+        
+                // Удаляем старый слой
+                weatherGridGroupLayer.clearLayers();
+        
+                // --------------------------------------------------
+                // 🌡️ СОБИРАЕМ ВСЕ ТОЧКИ
+                // --------------------------------------------------
+        
+                const heatPointsArray = [];
+        
                 data.weather.forEach(point => {
-                    const t = Number(point.temp);
-                
-                    // 🌡️ Temperature range: -40°C to +50°C
-                    let intensity = (t + 40) / 90;
-                
-                    // Keep values inside heatmap range
+                    const lat = Number(point.lat);
+                    const lng = Number(point.lng);
+                    const temp = Number(point.temp);
+        
+                    // Защита от плохих данных
+                    if (!Number.isFinite(lat) ||
+                        !Number.isFinite(lng) ||
+                        !Number.isFinite(temp)) {
+                        return;
+                    }
+        
+                    // 🌡️ Температурный диапазон:
+                    // -40°C = 0
+                    // +50°C = 1
+                    let intensity = (temp + 40) / 90;
+        
+                    // Ограничиваем диапазон
                     intensity = Math.max(0, Math.min(1, intensity));
-                
+        
                     heatPointsArray.push([
-                        point.lat,
-                        point.lng,
+                        lat,
+                        lng,
                         intensity
                     ]);
-
-                    // Динамическая адаптация радиуса под уровень зума карты
-                    let radiusScale = 110;
-                    if (currentZoom > 3 && currentZoom <= 5) radiusScale = 75;
-                    else if (currentZoom > 5) radiusScale = 45;
-
-                    // 🌍 ZOOM EARTH STYLE TEMPERATURE RADAR
-                    const heatmapLayer = L.heatLayer(heatPointsArray, {
-                        // Larger radius = smoother continuous weather field
-                        radius: currentZoom <= 3 ? 100 :
-                                currentZoom <= 5 ? 75 :
-                                currentZoom <= 7 ? 55 : 40,
-                    
-                        // Strong blur for smooth meteorological appearance
-                        blur: currentZoom <= 3 ? 65 :
-                              currentZoom <= 5 ? 55 :
-                              currentZoom <= 7 ? 45 : 35,
-                    
-                        maxZoom: 10,
-                    
-                        // Zoom Earth style: the weather layer should be clearly visible
-                        minOpacity: 0.65,
-                    
-                        // 🌡️ Temperature palette inspired by the screenshot
-                        gradient: {
-                            0.00: '#24105f',  // deep purple - extreme cold
-                            0.08: '#3825a8',  // violet
-                            0.16: '#1746c7',  // deep blue
-                            0.26: '#008ee8',  // blue
-                            0.36: '#00cfe8',  // cyan
-                            0.46: '#21d6a3',  // turquoise
-                            0.56: '#63d64f',  // green
-                            0.66: '#b8e43c',  // yellow-green
-                            0.75: '#ffe13b',  // yellow
-                            0.83: '#ffad2f',  // orange
-                            0.91: '#ff6828',  // hot orange
-                            0.97: '#ed3026',  // red
-                            1.00: '#b80f22'   // extreme heat
-                        }
-                    });
-                    
-                    weatherGridGroupLayer.addLayer(heatmapLayer);
+                });
+        
+                // Если точек нет — ничего не рисуем
+                if (heatPointsArray.length === 0) {
+                    console.warn("Нет точек погоды для отображения");
+                    return;
                 }
-            } catch (err) { 
-                console.error("Ошибка генерации фрактального радара:", err); 
+        
+                // --------------------------------------------------
+                // 🔍 АДАПТАЦИЯ К ZOOM
+                // --------------------------------------------------
+        
+                let radius;
+                let blur;
+        
+                if (currentZoom <= 3) {
+                    // 🌍 Весь мир
+                    radius = 110;
+                    blur = 70;
+        
+                } else if (currentZoom <= 5) {
+                    // 🌎 Континенты
+                    radius = 80;
+                    blur = 55;
+        
+                } else if (currentZoom <= 7) {
+                    // 🗺️ Страны
+                    radius = 55;
+                    blur = 42;
+        
+                } else {
+                    // 🔎 Города / регионы
+                    radius = 40;
+                    blur = 32;
+                }
+        
+                // --------------------------------------------------
+                // 🌡️ ZOOM EARTH STYLE TEMPERATURE GRADIENT
+                // --------------------------------------------------
+        
+                const heatmapLayer = L.heatLayer(heatPointsArray, {
+        
+                    radius: radius,
+        
+                    blur: blur,
+        
+                    maxZoom: 10,
+        
+                    minOpacity: 0.65,
+        
+                    gradient: {
+                        // 🟣 EXTREME COLD
+                        0.00: '#24105f',
+        
+                        // 🔵 VERY COLD
+                        0.08: '#3825a8',
+                        0.16: '#1746c7',
+        
+                        // 🩵 COLD
+                        0.26: '#008ee8',
+        
+                        // 🩵 COOL
+                        0.36: '#00cfe8',
+        
+                        // 🟢 MILD
+                        0.46: '#21d6a3',
+                        0.56: '#63d64f',
+        
+                        // 🟡 WARM
+                        0.66: '#b8e43c',
+                        0.75: '#ffe13b',
+        
+                        // 🟠 HOT
+                        0.83: '#ffad2f',
+                        0.91: '#ff6828',
+        
+                        // 🔴 VERY HOT
+                        0.97: '#ed3026',
+        
+                        // 🔴 EXTREME HEAT
+                        1.00: '#b80f22'
+                    }
+                });
+        
+                // --------------------------------------------------
+                // ➕ ДОБАВЛЯЕМ ОДИН HEATMAP LAYER
+                // --------------------------------------------------
+        
+                weatherGridGroupLayer.addLayer(heatmapLayer);
+        
+            } catch (err) {
+                console.error(
+                    "Ошибка генерации погодного радара:",
+                    err
+                );
             }
         }
+
 
         // НЕУБИВАЕМЫЙ МЕТЕОЗОНД (ИСПРАВЛЕНО: ЯРЛЫК ТЕПЕРЬ СТРЕЛЯЕТ С ПЕРВОГО КЛИКА)
         function initWeatherPointSensor() {
