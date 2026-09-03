@@ -784,26 +784,66 @@
 
         function resizeWeatherGL() {
             if (!weatherGL || !map) return;
-            const size = map.getSize();
-            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        
             const canvas = weatherGL.canvas;
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
         
-            canvas.width = Math.floor(size.x * dpr);
-            canvas.height = Math.floor(size.y * dpr);
+            let width = parseFloat(canvas.style.width);
+            let height = parseFloat(canvas.style.height);
         
-            weatherGL.gl.viewport(0, 0, canvas.width, canvas.height);
+            if (!Number.isFinite(width) || width <= 0) {
+                width = map.getSize().x;
+            }
+        
+            if (!Number.isFinite(height) || height <= 0) {
+                height = map.getSize().y;
+            }
+        
+            const pixelWidth = Math.max(1, Math.floor(width * dpr));
+            const pixelHeight = Math.max(1, Math.floor(height * dpr));
+        
+            if (
+                canvas.width !== pixelWidth ||
+                canvas.height !== pixelHeight
+            ) {
+                canvas.width = pixelWidth;
+                canvas.height = pixelHeight;
+            }
+        
+            weatherGL.gl.viewport(
+                0,
+                0,
+                canvas.width,
+                canvas.height
+            );
         }
 
-        function positionWeatherGL(){
-            if(!weatherGL||!map||!weatherGL.bounds)return;
-            const b=weatherGL.bounds;
-            const nw=map.latLngToContainerPoint([b.north,b.west]);
-            const se=map.latLngToContainerPoint([b.south,b.east]);
-            const x=nw.x,y=nw.y,w=se.x-nw.x,h=se.y-nw.y;
-            weatherGL.canvas.style.left=x+'px';
-            weatherGL.canvas.style.top=y+'px';
-            weatherGL.canvas.style.width=Math.max(1,w)+'px';
-            weatherGL.canvas.style.height=Math.max(1,h)+'px';
+        function positionWeatherGL() {
+            if (!weatherGL || !map || !weatherGL.bounds) return;
+        
+            const b = weatherGL.bounds;
+        
+            const nw = map.latLngToContainerPoint([
+                b.north,
+                b.west
+            ]);
+        
+            const se = map.latLngToContainerPoint([
+                b.south,
+                b.east
+            ]);
+        
+            const width = Math.max(1, se.x - nw.x);
+            const height = Math.max(1, se.y - nw.y);
+        
+            const canvas = weatherGL.canvas;
+        
+            canvas.style.left = nw.x + 'px';
+            canvas.style.top = nw.y + 'px';
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+        
+            resizeWeatherGL();
         }
 
         let weatherRenderId = 0;
