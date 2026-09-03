@@ -217,7 +217,7 @@
             let weatherRenderTimer = null;
             
             map.on('moveend', () => {
-                if (currentMapMode !== 'weather') return;
+                if (mapMode !== 'weather') return;
             
                 clearTimeout(weatherRenderTimer);
             
@@ -423,237 +423,228 @@
         let weatherRenderController = null;
         
         async function renderGlobalWeatherHeatGrid() {
-            if (currentMapMode !== 'weather') return;
+            if (!map || mapMode !== 'weather') return;
         
-            const renderId = ++weatherRenderId;
-        
-            if (weatherRenderController) {
-                weatherRenderController.abort();
-            }
-        
-            weatherRenderController = new AbortController();
+            // Prevent multiple renders from stacking up.
+            if (window.weatherRenderInProgress) return;
+            window.weatherRenderInProgress = true;
         
             try {
                 const bounds = map.getBounds();
-                const sw = bounds.getSouthWest();
-                const ne = bounds.getNorthEast();
                 const zoom = map.getZoom();
+        
+                const requestBody = {
+                    sw: [
+                        bounds.getSouth(),
+                        bounds.getWest()
+                    ],
+                    ne: [
+                        bounds.getNorth(),
+                        bounds.getEast()
+                    ],
+                    zoom: zoom
+                };
         
                 const response = await fetch('/api/ctw2/weather/map', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        sw: [sw.lat, sw.lng],
-                        ne: [ne.lat, ne.lng],
-                        zoom
-                    }),
-                    signal: weatherRenderController.signal
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
                 });
         
                 if (!response.ok) {
-                    throw new Error(`Weather API: ${response.status}`);
+                    throw new Error(`Weather API HTTP ${response.status}`);
                 }
         
                 const data = await response.json();
         
-                if (renderId !== weatherRenderId || currentMapMode !== 'weather') {
-                    return;
+                if (
+                    !data ||
+                    data.status !== 'success' ||
+                    !Array.isArray(data.values) ||
+                    !data.width ||
+                    !data.height ||
+                    !data.bounds
+                ) {
+                    throw new Error('Invalid weather raster response');
                 }
         
-                if (!data.weather || !Array.isArray(data.weather)) {
-                    console.error('Weather API returned invalid data:', data);
-                    return;
+                const width = Number(data.width);
+                const height = Number(data.height);
+        
+                if (
+                    !Number.isFinite(width) ||
+                    !Number.isFinite(height) ||
+                    width < 2 ||
+                    height < 2 ||
+                    data.values.length !== width * height
+                ) {
+                    throw new Error('Invalid weather raster dimensions');
                 }
         
-                const points = data.weather
-                    .map(p => ({
-                        lat: Number(p.lat),
-                        lng: normalizeLongitude(Number(p.lng)),
-                        temp: Number(p.temp)
-                    }))
-                    .filter(p =>
-                        Number.isFinite(p.lat) &&
-                        Number.isFinite(p.lng) &&
-                        Number.isFinite(p.temp)
-                    );
+                /*
+                 * ---------------------------------------------------------
+                 * TEMPERATURE → RGB
+                 * ---------------------------------------------------------
+                 */
         
-                console.log(`🌡️ Weather points: ${points.length}`);
+                function temperatureColor(temp) {
+                    const stops = [
+                        [-40, [35, 18, 95]],
+                        [-30, [55, 35, 170]],
+                        [-20, [25, 70, 200]],
+                        [-10, [0, 145, 230]],
+                        [0,   [0, 205, 230]],
+                        [10,  [30, 210, 165]],
+                        [20,  [95, 215, 80]],
+                        [25,  [180, 225, 60]],
+                        [30,  [255, 225, 55]],
+                        [35,  [255, 175, 45]],
+                        [40,  [255, 105, 40]],
+                        [45,  [235, 45, 38]],
+                        [50,  [185, 15, 35]]
+                    ];
         
-                if (!points.length) {
-                    console.warn('No valid weather points.');
-                    return;
+                    temp = Math.max(-40, Math.min(50, temp));
+        
+                    for (let i = 0; i < stops.length - 1; i++) {
+                        const [t1, c1] = stops[i];
+                        const [t2, c2] = stops[i + 1];
+        
+                        if (temp >= t1 && temp <= t2) {
+                            const f = (temp - t1) / (t2 - t1);
+        
+                            return [
+                                Math.round(c1[0] + (c2[0] - c1[0]) * f),
+                                Math.round(c1[1] + (c2[1] - c1[1]) * f),
+                                Math.round(c1[2] + (c2[2] - c1[2]) * f)
+                            ];
+                        }
+                    }
+        
+                    return stops[stops.length - 1][1];
                 }
         
-                weatherGridGroupLayer.clearLayers();
-        
-                const mapSize = map.getSize();
-        
-                const width = Math.min(
-                    700,
-                    Math.max(500, mapSize.x)
-                );
-        
-                const height = Math.round(
-                    width * mapSize.y / mapSize.x
-                );
+                /*
+                 * ---------------------------------------------------------
+                 * CREATE RASTER
+                 * ---------------------------------------------------------
+                 *
+                 * We render the backend grid directly.
+                 *
+                 * No:
+                 *   - nearest-point searching
+                 *   - distance calculations
+                 *   - inverse-distance weighting
+                 *   - per-pixel iteration over thousands of weather points
+                 *
+                 * This is dramatically cheaper than the old renderer.
+                 */
         
                 const canvas = document.createElement('canvas');
         
                 canvas.width = width;
                 canvas.height = height;
         
-                const ctx = canvas.getContext('2d');
+                const ctx = canvas.getContext('2d', {
+                    alpha: true
+                });
+        
+                if (!ctx) {
+                    throw new Error('Could not create canvas context');
+                }
+        
                 const image = ctx.createImageData(width, height);
                 const pixels = image.data;
-        
-                const west = sw.lng;
-                const east = ne.lng;
-                const south = sw.lat;
-                const north = ne.lat;
-        
-                const lngRange = east - west;
-                const latRange = north - south;
+                const values = data.values;
         
                 /*
-                 * IMPORTANT:
-                 * We don't assume that the API is a perfect grid anymore.
+                 * Backend sends:
                  *
-                 * For every raster pixel we find nearby weather points.
-                 * The closest few points are weighted by distance.
+                 * row 0    = north
+                 * last row = south
                  *
-                 * This produces a smooth field even when the API grid
-                 * isn't perfectly rectangular.
+                 * Therefore the raster can be drawn directly.
                  */
         
-                const searchRadius = zoom <= 3 ? 18 :
-                    zoom <= 5 ? 12 :
-                    zoom <= 7 ? 8 :
-                    5;
+                for (let i = 0; i < values.length; i++) {
+                    let temp = Number(values[i]);
         
-                // Build a spatial grid so each pixel only checks nearby weather points.
-                const cellSize = searchRadius;
-                
-                const spatialGrid = new Map();
-                
-                for (const point of points) {
-                    const gx = Math.floor(point.lng / cellSize);
-                    const gy = Math.floor(point.lat / cellSize);
-                
-                    const key = `${gx},${gy}`;
-                
-                    if (!spatialGrid.has(key)) {
-                        spatialGrid.set(key, []);
+                    if (!Number.isFinite(temp)) {
+                        temp = 0;
                     }
-                
-                    spatialGrid.get(key).push(point);
-                }
-                
-                for (let y = 0; y < height; y++) {
-                
-                    const lat = north - (y / (height - 1)) * latRange;
-                
-                    for (let x = 0; x < width; x++) {
-                
-                        const lng = west + (x / (width - 1)) * lngRange;
-                
-                        const gx = Math.floor(lng / cellSize);
-                        const gy = Math.floor(lat / cellSize);
-                
-                        let weightedTemp = 0;
-                        let totalWeight = 0;
-                        let nearestDistance = Infinity;
-                        let nearestTemp = null;
-                
-                        // Only inspect nearby grid cells.
-                        for (let oy = -1; oy <= 1; oy++) {
-                            for (let ox = -1; ox <= 1; ox++) {
-                
-                                const key = `${gx + ox},${gy + oy}`;
-                                const nearbyPoints = spatialGrid.get(key);
-                
-                                if (!nearbyPoints) continue;
-                
-                                for (const point of nearbyPoints) {
-                
-                                    const dx = point.lng - lng;
-                                    const dy = point.lat - lat;
-                
-                                    const distanceSq = dx * dx + dy * dy;
-                
-                                    if (distanceSq < nearestDistance) {
-                                        nearestDistance = distanceSq;
-                                        nearestTemp = point.temp;
-                                    }
-                
-                                    if (distanceSq <= searchRadius * searchRadius) {
-                
-                                        const weight = Math.exp(
-                                            -distanceSq /
-                                            (2 * searchRadius * searchRadius * 0.20)
-                                        );
-                
-                                        weightedTemp += point.temp * weight;
-                                        totalWeight += weight;
-                                    }
-                                }
-                            }
-                        }
-                
-                        let temp;
-                
-                        if (totalWeight > 0) {
-                            temp = weightedTemp / totalWeight;
-                        } else if (nearestTemp !== null) {
-                            temp = nearestTemp;
-                        } else {
-                            continue;
-                        }
-                
-                        const color = getTemperatureColor(temp);
-                
-                        const index = (y * width + x) * 4;
-                
-                        pixels[index] = color[0];
-                        pixels[index + 1] = color[1];
-                        pixels[index + 2] = color[2];
-                
-                        pixels[index + 3] = 220;
-                    }
+        
+                    const color = temperatureColor(temp);
+        
+                    const p = i * 4;
+        
+                    pixels[p]     = color[0];
+                    pixels[p + 1] = color[1];
+                    pixels[p + 2] = color[2];
+        
+                    // Slight transparency allows the underlying map to remain visible.
+                    pixels[p + 3] = 220;
                 }
         
                 ctx.putImageData(image, 0, 0);
         
+                /*
+                 * ---------------------------------------------------------
+                 * REMOVE PREVIOUS WEATHER LAYER
+                 * ---------------------------------------------------------
+                 */
+        
+                weatherGridGroupLayer.clearLayers();
+        
+                /*
+                 * ---------------------------------------------------------
+                 * LEAFLET IMAGE OVERLAY
+                 * ---------------------------------------------------------
+                 */
+        
+                const south = Number(data.bounds.south);
+                const north = Number(data.bounds.north);
+                const west  = Number(data.bounds.west);
+                const east  = Number(data.bounds.east);
+        
                 const imageUrl = canvas.toDataURL('image/png');
         
-                const rasterLayer = L.imageOverlay(
+                const imageBounds = [
+                    [south, west],
+                    [north, east]
+                ];
+        
+                const weatherOverlay = L.imageOverlay(
                     imageUrl,
-                    [
-                        [south, west],
-                        [north, east]
-                    ],
+                    imageBounds,
                     {
                         opacity: 1,
                         interactive: false,
+                        crossOrigin: true,
                         zIndex: 20
                     }
                 );
         
-                weatherGridGroupLayer.addLayer(rasterLayer);
+                weatherGridGroupLayer.addLayer(weatherOverlay);
         
-                console.log(
-                    `🌡️ Raster rendered: ${width}x${height}`
-                );
+                /*
+                 * ---------------------------------------------------------
+                 * FORCE WEATHER LAYER ON MAP
+                 * ---------------------------------------------------------
+                 */
         
-            } catch (err) {
-                if (err.name === 'AbortError') return;
+                if (!map.hasLayer(weatherGridGroupLayer)) {
+                    map.addLayer(weatherGridGroupLayer);
+                }
         
-                console.error(
-                    '❌ Weather raster error:',
-                    err
-                );
+            } catch (error) {
+                console.error('🌡️ Weather raster render error:', error);
+        
+            } finally {
+                window.weatherRenderInProgress = false;
             }
         }
-
         // НЕУБИВАЕМЫЙ МЕТЕОЗОНД (ИСПРАВЛЕНО: ЯРЛЫК ТЕПЕРЬ СТРЕЛЯЕТ С ПЕРВОГО КЛИКА)
         function initWeatherPointSensor() {
             map.on('click', async function (e) {
