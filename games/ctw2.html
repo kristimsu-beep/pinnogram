@@ -246,11 +246,12 @@
             // WEATHER MAP REFRESH
             // ========================================================
         
-            let weatherRenderTimer = null;
-
+            let weatherRenderTimer=null;
+            
             map.on('move',()=>{
                 if(currentMapMode!=='weather')return;
-                if(weatherGL)resizeWeatherGL();
+            
+                positionWeatherGL();
             });
             
             map.on('moveend',()=>{
@@ -263,16 +264,21 @@
                 },300);
             });
             
-            map.on('resize',resizeWeatherGL);
-        
-            // When zoom finishes
-            map.on('zoomend', () => {
-        
-                if (currentMapMode !== 'weather') {
-                    return;
-                }
-        
-                renderGlobalWeatherHeatGrid();
+            map.on('zoomend',()=>{
+                if(currentMapMode!=='weather')return;
+            
+                positionWeatherGL();
+            
+                clearTimeout(weatherRenderTimer);
+            
+                weatherRenderTimer=setTimeout(()=>{
+                    renderGlobalWeatherHeatGrid();
+                },300);
+            });
+            
+            map.on('resize',()=>{
+                resizeWeatherGL();
+                positionWeatherGL();
             });
         }
 
@@ -701,13 +707,12 @@
         function resizeWeatherGL(){
             if(!weatherGL||!map)return;
         
+            const canvas=weatherGL.canvas;
             const size=map.getSize();
             const dpr=Math.min(window.devicePixelRatio||1,2);
-            const canvas=weatherGL.canvas;
         
             canvas.width=Math.floor(size.x*dpr);
             canvas.height=Math.floor(size.y*dpr);
-        
             canvas.style.width=size.x+'px';
             canvas.style.height=size.y+'px';
         
@@ -717,6 +722,33 @@
                 canvas.width,
                 canvas.height
             );
+        }
+
+        function positionWeatherGL(){
+            if(!weatherGL||!map||!weatherGL.bounds)return;
+        
+            const b=weatherGL.bounds;
+        
+            const nw=map.latLngToLayerPoint([
+                b.north,
+                b.west
+            ]);
+        
+            const se=map.latLngToLayerPoint([
+                b.south,
+                b.east
+            ]);
+        
+            const width=Math.max(1,se.x-nw.x);
+            const height=Math.max(1,se.y-nw.y);
+        
+            L.DomUtil.setPosition(
+                weatherGL.canvas,
+                nw
+            );
+        
+            weatherGL.canvas.style.width=width+'px';
+            weatherGL.canvas.style.height=height+'px';
         }
 
         let weatherRenderId = 0;
@@ -835,9 +867,9 @@
                     west:Number(data.bounds.west),
                     east:Number(data.bounds.east)
                 };
-        
-                resizeWeatherGL();
-        
+                
+                positionWeatherGL();
+                
                 layer.canvas.style.display='block';
         
                 gl.clearColor(0,0,0,0);
