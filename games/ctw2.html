@@ -217,7 +217,7 @@
             let weatherRenderTimer = null;
             
             map.on('moveend', () => {
-                if (mapMode !== 'weather') return;
+                if (currentMapMode !== 'weather') return;
             
                 clearTimeout(weatherRenderTimer);
             
@@ -423,10 +423,11 @@
         let weatherRenderController = null;
         
         async function renderGlobalWeatherHeatGrid() {
-            if (!map || mapMode !== 'weather') return;
+            if (!map || currentMapMode !== 'weather') return;
         
-            // Prevent multiple renders from stacking up.
+            // Prevent multiple weather renders from running simultaneously
             if (window.weatherRenderInProgress) return;
+        
             window.weatherRenderInProgress = true;
         
             try {
@@ -454,10 +455,16 @@
                 });
         
                 if (!response.ok) {
-                    throw new Error(`Weather API HTTP ${response.status}`);
+                    throw new Error(
+                        `Weather API HTTP ${response.status}`
+                    );
                 }
         
                 const data = await response.json();
+        
+                // ---------------------------------------------------------
+                // VALIDATE BACKEND RESPONSE
+                // ---------------------------------------------------------
         
                 if (
                     !data ||
@@ -467,7 +474,9 @@
                     !data.height ||
                     !data.bounds
                 ) {
-                    throw new Error('Invalid weather raster response');
+                    throw new Error(
+                        'Invalid weather raster response'
+                    );
                 }
         
                 const width = Number(data.width);
@@ -477,19 +486,26 @@
                     !Number.isFinite(width) ||
                     !Number.isFinite(height) ||
                     width < 2 ||
-                    height < 2 ||
-                    data.values.length !== width * height
+                    height < 2
                 ) {
-                    throw new Error('Invalid weather raster dimensions');
+                    throw new Error(
+                        'Invalid weather raster dimensions'
+                    );
                 }
         
-                /*
-                 * ---------------------------------------------------------
-                 * TEMPERATURE → RGB
-                 * ---------------------------------------------------------
-                 */
+                if (data.values.length !== width * height) {
+                    throw new Error(
+                        `Weather raster size mismatch: ` +
+                        `${data.values.length} values, expected ${width * height}`
+                    );
+                }
         
-                function temperatureColor(temp) {
+                // ---------------------------------------------------------
+                // TEMPERATURE COLOR SCALE
+                // ---------------------------------------------------------
+        
+                function getRasterTemperatureColor(temp) {
+        
                     const stops = [
                         [-40, [35, 18, 95]],
                         [-30, [55, 35, 170]],
@@ -509,16 +525,34 @@
                     temp = Math.max(-40, Math.min(50, temp));
         
                     for (let i = 0; i < stops.length - 1; i++) {
-                        const [t1, c1] = stops[i];
-                        const [t2, c2] = stops[i + 1];
+        
+                        const t1 = stops[i][0];
+                        const c1 = stops[i][1];
+        
+                        const t2 = stops[i + 1][0];
+                        const c2 = stops[i + 1][1];
         
                         if (temp >= t1 && temp <= t2) {
-                            const f = (temp - t1) / (t2 - t1);
+        
+                            const factor =
+                                (temp - t1) /
+                                (t2 - t1);
         
                             return [
-                                Math.round(c1[0] + (c2[0] - c1[0]) * f),
-                                Math.round(c1[1] + (c2[1] - c1[1]) * f),
-                                Math.round(c1[2] + (c2[2] - c1[2]) * f)
+                                Math.round(
+                                    c1[0] +
+                                    (c2[0] - c1[0]) * factor
+                                ),
+        
+                                Math.round(
+                                    c1[1] +
+                                    (c2[1] - c1[1]) * factor
+                                ),
+        
+                                Math.round(
+                                    c1[2] +
+                                    (c2[2] - c1[2]) * factor
+                                )
                             ];
                         }
                     }
@@ -526,21 +560,9 @@
                     return stops[stops.length - 1][1];
                 }
         
-                /*
-                 * ---------------------------------------------------------
-                 * CREATE RASTER
-                 * ---------------------------------------------------------
-                 *
-                 * We render the backend grid directly.
-                 *
-                 * No:
-                 *   - nearest-point searching
-                 *   - distance calculations
-                 *   - inverse-distance weighting
-                 *   - per-pixel iteration over thousands of weather points
-                 *
-                 * This is dramatically cheaper than the old renderer.
-                 */
+                // ---------------------------------------------------------
+                // CREATE RASTER CANVAS
+                // ---------------------------------------------------------
         
                 const canvas = document.createElement('canvas');
         
@@ -552,96 +574,142 @@
                 });
         
                 if (!ctx) {
-                    throw new Error('Could not create canvas context');
+                    throw new Error(
+                        'Unable to create weather canvas'
+                    );
                 }
         
-                const image = ctx.createImageData(width, height);
-                const pixels = image.data;
+                const imageData =
+                    ctx.createImageData(width, height);
+        
+                const pixels = imageData.data;
                 const values = data.values;
         
-                /*
-                 * Backend sends:
-                 *
-                 * row 0    = north
-                 * last row = south
-                 *
-                 * Therefore the raster can be drawn directly.
-                 */
+                // ---------------------------------------------------------
+                // WRITE TEMPERATURES DIRECTLY INTO PIXELS
+                //
+                // Backend already gives us a regular grid.
+                //
+                // No nearest-point search.
+                // No distance calculations.
+                // No inverse-distance weighting.
+                // ---------------------------------------------------------
         
                 for (let i = 0; i < values.length; i++) {
+        
                     let temp = Number(values[i]);
         
                     if (!Number.isFinite(temp)) {
                         temp = 0;
                     }
         
-                    const color = temperatureColor(temp);
+                    const rgb =
+                        getRasterTemperatureColor(temp);
         
-                    const p = i * 4;
+                    const pixelIndex = i * 4;
         
-                    pixels[p]     = color[0];
-                    pixels[p + 1] = color[1];
-                    pixels[p + 2] = color[2];
+                    pixels[pixelIndex] =
+                        rgb[0];
         
-                    // Slight transparency allows the underlying map to remain visible.
-                    pixels[p + 3] = 220;
+                    pixels[pixelIndex + 1] =
+                        rgb[1];
+        
+                    pixels[pixelIndex + 2] =
+                        rgb[2];
+        
+                    // Transparency
+                    pixels[pixelIndex + 3] = 220;
                 }
         
-                ctx.putImageData(image, 0, 0);
+                ctx.putImageData(
+                    imageData,
+                    0,
+                    0
+                );
         
-                /*
-                 * ---------------------------------------------------------
-                 * REMOVE PREVIOUS WEATHER LAYER
-                 * ---------------------------------------------------------
-                 */
+                // ---------------------------------------------------------
+                // GET RASTER BOUNDS
+                // ---------------------------------------------------------
         
-                weatherGridGroupLayer.clearLayers();
+                const south =
+                    Number(data.bounds.south);
         
-                /*
-                 * ---------------------------------------------------------
-                 * LEAFLET IMAGE OVERLAY
-                 * ---------------------------------------------------------
-                 */
+                const north =
+                    Number(data.bounds.north);
         
-                const south = Number(data.bounds.south);
-                const north = Number(data.bounds.north);
-                const west  = Number(data.bounds.west);
-                const east  = Number(data.bounds.east);
+                const west =
+                    Number(data.bounds.west);
         
-                const imageUrl = canvas.toDataURL('image/png');
+                const east =
+                    Number(data.bounds.east);
+        
+                if (
+                    !Number.isFinite(south) ||
+                    !Number.isFinite(north) ||
+                    !Number.isFinite(west) ||
+                    !Number.isFinite(east)
+                ) {
+                    throw new Error(
+                        'Invalid weather raster bounds'
+                    );
+                }
+        
+                // ---------------------------------------------------------
+                // CONVERT CANVAS TO IMAGE
+                // ---------------------------------------------------------
+        
+                const imageUrl =
+                    canvas.toDataURL('image/png');
         
                 const imageBounds = [
                     [south, west],
                     [north, east]
                 ];
         
-                const weatherOverlay = L.imageOverlay(
-                    imageUrl,
-                    imageBounds,
-                    {
-                        opacity: 1,
-                        interactive: false,
-                        crossOrigin: true,
-                        zIndex: 20
-                    }
+                // ---------------------------------------------------------
+                // REMOVE OLD WEATHER RASTER
+                // ---------------------------------------------------------
+        
+                weatherGridGroupLayer.clearLayers();
+        
+                // ---------------------------------------------------------
+                // CREATE LEAFLET OVERLAY
+                // ---------------------------------------------------------
+        
+                const weatherOverlay =
+                    L.imageOverlay(
+                        imageUrl,
+                        imageBounds,
+                        {
+                            opacity: 1,
+                            interactive: false,
+                            zIndex: 20
+                        }
+                    );
+        
+                weatherGridGroupLayer.addLayer(
+                    weatherOverlay
                 );
         
-                weatherGridGroupLayer.addLayer(weatherOverlay);
-        
-                /*
-                 * ---------------------------------------------------------
-                 * FORCE WEATHER LAYER ON MAP
-                 * ---------------------------------------------------------
-                 */
+                // ---------------------------------------------------------
+                // MAKE SURE WEATHER LAYER IS VISIBLE
+                // ---------------------------------------------------------
         
                 if (!map.hasLayer(weatherGridGroupLayer)) {
-                    map.addLayer(weatherGridGroupLayer);
+                    map.addLayer(
+                        weatherGridGroupLayer
+                    );
                 }
         
             } catch (error) {
-                console.error('🌡️ Weather raster render error:', error);
+        
+                console.error(
+                    '🌡️ Weather raster render error:',
+                    error
+                );
         
             } finally {
+        
                 window.weatherRenderInProgress = false;
             }
         }
