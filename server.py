@@ -6248,17 +6248,47 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
     from datetime import datetime
 
     try:
-        sw = bounds.get("sw", [-60.0, -120.0])
-        ne = bounds.get("ne", [75.0, 150.0])
+        # =========================================================
+        # READ MAP BOUNDS
+        # =========================================================
+
+        south_west = bounds.get("sw", [-60.0, -120.0])
+        north_east = bounds.get("ne", [75.0, 150.0])
         zoom = float(bounds.get("zoom", 2.5))
 
-        lat_min = max(-65.0, float(sw[0]))
-        lat_max = min(78.0, float(ne[0]))
-        lng_min = max(-180.0, float(sw[1]))
-        lng_max = min(180.0, float(ne[1]))
+        lat_min = max(
+            -65.0,
+            float(south_west[0])
+        )
 
-        # Resolution of the weather raster.
-        # Lower zoom = lower resolution = less data.
+        lat_max = min(
+            78.0,
+            float(north_east[0])
+        )
+
+        lng_min = max(
+            -180.0,
+            float(south_west[1])
+        )
+
+        lng_max = min(
+            180.0,
+            float(north_east[1])
+        )
+
+        # =========================================================
+        # ADAPTIVE GRID RESOLUTION
+        # =========================================================
+        #
+        # Zoomed out:
+        #   smaller amount of data
+        #
+        # Zoomed in:
+        #   more detailed raster
+        #
+        # This is intentionally not extremely high resolution yet.
+        # =========================================================
+
         if zoom <= 3:
             step = 1.0
         elif zoom <= 5:
@@ -6266,102 +6296,243 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
         else:
             step = 0.25
 
-        width = int(math.ceil((lng_max - lng_min) / step)) + 1
-        height = int(math.ceil((lat_max - lat_min) / step)) + 1
+        width = int(
+            math.ceil(
+                (lng_max - lng_min) / step
+            )
+        ) + 1
 
-        # Keep response size sane.
+        height = int(
+            math.ceil(
+                (lat_max - lat_min) / step
+            )
+        ) + 1
+
+        # Safety limits so a very large request cannot create
+        # an enormous response.
         width = min(width, 1200)
         height = min(height, 700)
 
-        day_of_year = datetime.now().timetuple().tm_yday
+        # =========================================================
+        # SEASON
+        # =========================================================
+
+        day_of_year = (
+            datetime.now()
+            .timetuple()
+            .tm_yday
+        )
+
         season_shift = (
-            math.sin(2 * math.pi * (day_of_year - 80) / 365)
+            math.sin(
+                2.0 *
+                math.pi *
+                (day_of_year - 80) /
+                365.0
+            )
             * 23.44
         )
 
+        # =========================================================
+        # RASTER
+        # =========================================================
+        #
+        # Row 0 = NORTH
+        # Last row = SOUTH
+        #
+        # This is important because the frontend renders the
+        # array directly as an image.
+        # =========================================================
+
         values = []
 
-        # Regular raster:
-        # row 0 = north
-        # last row = south
         for y in range(height):
+
+            # North → South
             lat = lat_max - (
-                y * (lat_max - lat_min) / max(height - 1, 1)
+                y *
+                (lat_max - lat_min) /
+                max(height - 1, 1)
             )
 
             for x in range(width):
+
+                # West → East
                 lng = lng_min + (
-                    x * (lng_max - lng_min) / max(width - 1, 1)
+                    x *
+                    (lng_max - lng_min) /
+                    max(width - 1, 1)
                 )
 
-                # -----------------------------------------
-                # TEMPORARY SYNTHETIC TEMPERATURE MODEL
-                # -----------------------------------------
+                # =================================================
+                # LAND / WATER MASK
+                # =================================================
 
                 is_water = False
 
+                # Pacific / Atlantic approximation
+                if -60.0 < lat < 70.0:
+
+                    if lng < -25.0:
+                        is_water = True
+
+                    elif lng > 140.0:
+                        is_water = True
+
+                # Indian Ocean
                 if (
-                    -60 < lat < 70
-                    and (lng < -20 or lng > 140)
+                    lat < 30.0
+                    and 20.0 < lng < 120.0
                 ):
                     is_water = True
 
-                elif (
-                    lat < 0
-                    and 20 < lng < 110
-                ):
+                # Southern Ocean
+                if lat < -45.0:
                     is_water = True
 
-                elif (
-                    30 < lat < 48
-                    and -5 < lng < 45
-                ):
+                # Arctic Ocean
+                if lat > 70.0:
                     is_water = True
 
-                elif lat > 70:
-                    is_water = True
+                # =================================================
+                # LAND TEMPERATURE
+                # =================================================
 
-                effective_lat = lat - season_shift
+                effective_lat = (
+                    lat -
+                    season_shift
+                )
 
-                if is_water:
-                    base_temp = 16.5 - abs(lat) * 0.44
+                if not is_water:
+
+                    # Land has strong temperature variation.
+                    base_temp = (
+                        42.0 -
+                        abs(effective_lat) *
+                        0.76
+                    )
+
+                # =================================================
+                # OCEAN TEMPERATURE
+                # =================================================
+
                 else:
-                    base_temp = 42.0 - abs(effective_lat) * 0.76
 
-                # Smooth large-scale variation
+                    # Strong tropical ocean cooling.
+                    tropical_cooling = (
+                        7.0 *
+                        math.exp(
+                            -(
+                                lat * lat
+                            ) /
+                            (
+                                2.0 *
+                                22.0 *
+                                22.0
+                            )
+                        )
+                    )
+
+                    # Ocean changes temperature more slowly
+                    # with latitude than land.
+                    ocean_base = (
+                        25.0 -
+                        abs(lat) *
+                        0.20
+                    )
+
+                    # High-latitude ocean retains more heat.
+                    polar_moderation = (
+                        5.0 *
+                        (
+                            abs(lat) /
+                            90.0
+                        ) ** 2
+                    )
+
+                    base_temp = (
+                        ocean_base -
+                        tropical_cooling +
+                        polar_moderation
+                    )
+
+                # =================================================
+                # LARGE-SCALE ATMOSPHERIC VARIATION
+                # =================================================
+
                 wave1 = (
-                    math.sin(lat / 8.0)
-                    * math.cos(lng / 12.0)
+                    math.sin(
+                        lat / 8.0
+                    )
+                    *
+                    math.cos(
+                        lng / 12.0
+                    )
                     * 4.0
                 )
 
                 wave2 = (
-                    math.sin((lat + lng) / 7.0)
+                    math.sin(
+                        (lat + lng) / 7.0
+                    )
                     * 1.5
                 )
 
-                temp = base_temp + wave1 + wave2
+                temp = (
+                    base_temp +
+                    wave1 +
+                    wave2
+                )
 
-                # Major temperature anomalies
+                # =================================================
+                # TEMPERATURE ANOMALIES
+                # =================================================
+
                 anomalies = [
+                    # latitude, longitude, radius, strength
+
+                    # Middle East
                     (25.0, 45.0, 22.0, 15.0),
+
+                    # Sahara
                     (25.0, 15.0, 25.0, 13.0),
+
+                    # Death Valley
                     (36.05, -116.81, 10.0, 16.0),
+
+                    # Antarctica
                     (-75.0, 120.0, 35.0, -35.0),
+
+                    # Greenland
                     (72.0, -40.0, 18.0, -25.0),
-                    (62.0, 129.0, 20.0, -16.0),
+
+                    # Yakutia
+                    (62.0, 129.0, 20.0, -16.0)
                 ]
 
-                for a_lat, a_lng, radius, strength in anomalies:
+                for (
+                    anomaly_lat,
+                    anomaly_lng,
+                    radius,
+                    strength
+                ) in anomalies:
 
-                    d_lat = lat - a_lat
-                    d_lng = lng - a_lng
+                    d_lat = (
+                        lat -
+                        anomaly_lat
+                    )
 
-                    if d_lng > 180:
-                        d_lng -= 360
+                    d_lng = (
+                        lng -
+                        anomaly_lng
+                    )
 
-                    if d_lng < -180:
-                        d_lng += 360
+                    # Handle longitude wrapping.
+                    if d_lng > 180.0:
+                        d_lng -= 360.0
+
+                    if d_lng < -180.0:
+                        d_lng += 360.0
 
                     distance = math.sqrt(
                         d_lat * d_lat +
@@ -6369,30 +6540,58 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                     )
 
                     if distance < radius:
-                        factor = 1.0 - distance / radius
-                        temp += strength * factor * factor
 
-                temp = max(-62.0, min(56.0, temp))
+                        factor = (
+                            1.0 -
+                            distance / radius
+                        )
 
-                values.append(round(temp, 1))
+                        temp += (
+                            strength *
+                            factor *
+                            factor
+                        )
+
+                # =================================================
+                # FINAL TEMPERATURE
+                # =================================================
+
+                temp = max(
+                    -62.0,
+                    min(56.0, temp)
+                )
+
+                values.append(
+                    round(temp, 1)
+                )
+
+        # =========================================================
+        # RETURN REGULAR TEMPERATURE RASTER
+        # =========================================================
 
         return {
             "status": "success",
             "source": "planetary_fixed_core",
+
             "bounds": {
                 "south": lat_min,
                 "north": lat_max,
                 "west": lng_min,
                 "east": lng_max
             },
+
             "width": width,
             "height": height,
             "step": step,
+
             "values": values
         }
 
     except Exception as e:
-        print(f"🚨 Weather raster error: {str(e)}")
+
+        print(
+            f"🚨 Weather raster error: {str(e)}"
+        )
 
         return {
             "status": "error",
