@@ -454,7 +454,7 @@
         // ============================================================
         // ZOOM-EARTH STYLE WEATHER WEBGL LAYER
         // ============================================================
-        let weatherGL=null;
+        let weatherGL = null;
         
         function createWeatherWebGLLayer() {
             if (weatherGL) {
@@ -466,13 +466,16 @@
             canvas.style.position = 'absolute';
             canvas.style.left = '0';
             canvas.style.top = '0';
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
             canvas.style.pointerEvents = 'none';
-            canvas.style.zIndex = '350';
+            canvas.style.zIndex = '450';
             canvas.style.display = 'none';
         
-            // Put the canvas directly inside the map container.
-            // This makes latLngToContainerPoint() line up correctly
-            // with the canvas position.
+            // IMPORTANT:
+            // Keep the WebGL canvas directly inside the map container.
+            // We do not put it inside Leaflet's overlayPane because
+            // overlayPane itself is transformed during map movement.
             map.getContainer().appendChild(canvas);
         
             const gl = canvas.getContext('webgl', {
@@ -482,109 +485,170 @@
             });
         
             if (!gl) {
-                console.error('WebGL is not available');
+                console.error('WebGL is not supported');
                 return null;
             }
         
             const vertexShaderSource = `
                 attribute vec2 a_position;
-                varying vec2 v_uv;
         
                 void main() {
-                    v_uv = (a_position + 1.0) * 0.5;
                     gl_Position = vec4(a_position, 0.0, 1.0);
                 }
             `;
         
             const fragmentShaderSource = `
-                precision mediump float;
-        
-                varying vec2 v_uv;
+                precision highp float;
         
                 uniform sampler2D u_temperature;
                 uniform float u_opacity;
         
-                float getTemp(vec2 uv) {
-                    float value = texture2D(u_temperature, uv).r;
-                    return value * 90.0 - 40.0;
-                }
+                // Rectangle of the weather raster in PHYSICAL pixels.
+                // x, y, width, height
+                uniform vec4 u_rasterRect;
         
-                vec3 tempColor(float temperature) {
+                // Full WebGL canvas size in PHYSICAL pixels.
+                uniform vec2 u_canvasSize;
+        
+                vec3 tempColor(float t) {
+                    t = clamp(t, -40.0, 50.0);
+        
                     vec3 c;
         
-                    if (temperature < -20.0) {
-                        float t = smoothstep(-40.0, -20.0, temperature);
+                    if (t < -30.0) {
                         c = mix(
-                            vec3(0.05, 0.10, 0.75),
-                            vec3(0.00, 0.45, 1.00),
-                            t
+                            vec3(.08, .02, .30),
+                            vec3(.15, .06, .65),
+                            smoothstep(-40.0, -30.0, t)
                         );
-                    } else if (temperature < -5.0) {
-                        float t = smoothstep(-20.0, -5.0, temperature);
+                    } else if (t < -20.0) {
                         c = mix(
-                            vec3(0.00, 0.45, 1.00),
-                            vec3(0.00, 0.85, 0.95),
-                            t
+                            vec3(.15, .06, .65),
+                            vec3(.03, .22, .90),
+                            smoothstep(-30.0, -20.0, t)
                         );
-                    } else if (temperature < 5.0) {
-                        float t = smoothstep(-5.0, 5.0, temperature);
+                    } else if (t < -10.0) {
                         c = mix(
-                            vec3(0.00, 0.85, 0.95),
-                            vec3(0.10, 0.90, 0.45),
-                            t
+                            vec3(.03, .22, .90),
+                            vec3(0.0, .65, 1.0),
+                            smoothstep(-20.0, -10.0, t)
                         );
-                    } else if (temperature < 15.0) {
-                        float t = smoothstep(5.0, 15.0, temperature);
+                    } else if (t < 0.0) {
                         c = mix(
-                            vec3(0.10, 0.90, 0.45),
-                            vec3(0.95, 0.90, 0.05),
-                            t
+                            vec3(0.0, .65, 1.0),
+                            vec3(0.0, .88, .75),
+                            smoothstep(-10.0, 0.0, t)
                         );
-                    } else if (temperature < 25.0) {
-                        float t = smoothstep(15.0, 25.0, temperature);
+                    } else if (t < 10.0) {
                         c = mix(
-                            vec3(0.95, 0.90, 0.05),
-                            vec3(1.00, 0.50, 0.00),
-                            t
+                            vec3(0.0, .88, .75),
+                            vec3(.18, .86, .38),
+                            smoothstep(0.0, 10.0, t)
                         );
-                    } else if (temperature < 35.0) {
-                        float t = smoothstep(25.0, 35.0, temperature);
+                    } else if (t < 20.0) {
                         c = mix(
-                            vec3(1.00, 0.50, 0.00),
-                            vec3(1.00, 0.10, 0.00),
-                            t
+                            vec3(.18, .86, .38),
+                            vec3(.65, .90, .12),
+                            smoothstep(10.0, 20.0, t)
+                        );
+                    } else if (t < 25.0) {
+                        c = mix(
+                            vec3(.65, .90, .12),
+                            vec3(1.0, .91, .02),
+                            smoothstep(20.0, 25.0, t)
+                        );
+                    } else if (t < 30.0) {
+                        c = mix(
+                            vec3(1.0, .91, .02),
+                            vec3(1.0, .57, .02),
+                            smoothstep(25.0, 30.0, t)
+                        );
+                    } else if (t < 35.0) {
+                        c = mix(
+                            vec3(1.0, .57, .02),
+                            vec3(1.0, .20, .02),
+                            smoothstep(30.0, 35.0, t)
+                        );
+                    } else if (t < 40.0) {
+                        c = mix(
+                            vec3(1.0, .20, .02),
+                            vec3(.82, .02, .03),
+                            smoothstep(35.0, 40.0, t)
                         );
                     } else {
-                        float t = smoothstep(35.0, 50.0, temperature);
                         c = mix(
-                            vec3(1.00, 0.10, 0.00),
-                            vec3(0.65, 0.00, 0.20),
-                            t
+                            vec3(.82, .02, .03),
+                            vec3(.42, 0.0, .015),
+                            smoothstep(40.0, 50.0, t)
                         );
                     }
         
                     return c;
                 }
         
-                void main() {
-                    vec2 uv = clamp(v_uv, 0.0, 1.0);
+                float getTemp(vec2 uv) {
+                    float value = texture2D(
+                        u_temperature,
+                        uv
+                    ).r;
         
-                    float t0 = getTemp(uv);
+                    return value * 90.0 - 40.0;
+                }
+        
+                void main() {
+                    // gl_FragCoord is measured from the bottom-left.
+                    vec2 pixel = gl_FragCoord.xy;
+        
+                    float rasterLeft = u_rasterRect.x;
+                    float rasterTop = u_rasterRect.y;
+                    float rasterWidth = u_rasterRect.z;
+                    float rasterHeight = u_rasterRect.w;
+        
+                    // Convert the CSS-style top-left rectangle into
+                    // WebGL bottom-left coordinates.
+                    float rasterBottom =
+                        u_canvasSize.y -
+                        rasterTop -
+                        rasterHeight;
+        
+                    // Completely transparent outside the weather raster.
+                    if (
+                        pixel.x < rasterLeft ||
+                        pixel.x > rasterLeft + rasterWidth ||
+                        pixel.y < rasterBottom ||
+                        pixel.y > rasterBottom + rasterHeight
+                    ) {
+                        discard;
+                    }
+        
+                    float u =
+                        (pixel.x - rasterLeft) /
+                        rasterWidth;
+        
+                    float v =
+                        (pixel.y - rasterBottom) /
+                        rasterHeight;
+        
+                    u = clamp(u, 0.0, 1.0);
+                    v = clamp(v, 0.0, 1.0);
+        
+                    // Slight smoothing to reduce the visible grid structure.
+                    float t0 = getTemp(vec2(u, v));
         
                     float t1 = getTemp(
-                        uv + vec2(0.0015, 0.0)
+                        vec2(u + 0.0015, v)
                     );
         
                     float t2 = getTemp(
-                        uv - vec2(0.0015, 0.0)
+                        vec2(u - 0.0015, v)
                     );
         
                     float t3 = getTemp(
-                        uv + vec2(0.0, 0.0015)
+                        vec2(u, v + 0.0015)
                     );
         
                     float t4 = getTemp(
-                        uv - vec2(0.0, 0.0015)
+                        vec2(u, v - 0.0015)
                     );
         
                     float temperature =
@@ -606,16 +670,24 @@
             function compileShader(type, source) {
                 const shader = gl.createShader(type);
         
-                gl.shaderSource(shader, source);
+                gl.shaderSource(
+                    shader,
+                    source
+                );
+        
                 gl.compileShader(shader);
         
-                if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                if (!gl.getShaderParameter(
+                    shader,
+                    gl.COMPILE_STATUS
+                )) {
                     console.error(
                         'Weather WebGL shader error:',
                         gl.getShaderInfoLog(shader)
                     );
         
                     gl.deleteShader(shader);
+        
                     return null;
                 }
         
@@ -638,47 +710,63 @@
         
             const program = gl.createProgram();
         
-            gl.attachShader(program, vertexShader);
-            gl.attachShader(program, fragmentShader);
+            gl.attachShader(
+                program,
+                vertexShader
+            );
+        
+            gl.attachShader(
+                program,
+                fragmentShader
+            );
+        
             gl.linkProgram(program);
         
-            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            if (!gl.getProgramParameter(
+                program,
+                gl.LINK_STATUS
+            )) {
                 console.error(
                     'Weather WebGL program error:',
                     gl.getProgramInfoLog(program)
                 );
         
                 gl.deleteProgram(program);
+        
                 return null;
             }
         
             gl.useProgram(program);
         
-            const positionLocation = gl.getAttribLocation(
-                program,
-                'a_position'
-            );
+            const positionLocation =
+                gl.getAttribLocation(
+                    program,
+                    'a_position'
+                );
         
-            const textureLocation = gl.getUniformLocation(
-                program,
-                'u_temperature'
-            );
+            const textureLocation =
+                gl.getUniformLocation(
+                    program,
+                    'u_temperature'
+                );
         
-            const opacityLocation = gl.getUniformLocation(
-                program,
-                'u_opacity'
-            );
+            const opacityLocation =
+                gl.getUniformLocation(
+                    program,
+                    'u_opacity'
+                );
         
-            // Full-screen quad.
-            const vertices = new Float32Array([
-                -1, -1,
-                 1, -1,
-                -1,  1,
+            const rasterRectLocation =
+                gl.getUniformLocation(
+                    program,
+                    'u_rasterRect'
+                );
         
-                -1,  1,
-                 1, -1,
-                 1,  1
-            ]);
+            const canvasSizeLocation =
+                gl.getUniformLocation(
+                    program,
+                    'u_canvasSize'
+                );
         
             const buffer = gl.createBuffer();
         
@@ -689,7 +777,15 @@
         
             gl.bufferData(
                 gl.ARRAY_BUFFER,
-                vertices,
+                new Float32Array([
+                    -1, -1,
+                     1, -1,
+                    -1,  1,
+        
+                    -1,  1,
+                     1, -1,
+                     1,  1
+                ]),
                 gl.STATIC_DRAW
             );
         
@@ -708,7 +804,9 @@
         
             const texture = gl.createTexture();
         
-            gl.activeTexture(gl.TEXTURE0);
+            gl.activeTexture(
+                gl.TEXTURE0
+            );
         
             gl.bindTexture(
                 gl.TEXTURE_2D,
@@ -756,6 +854,8 @@
                 gl.ONE_MINUS_SRC_ALPHA
             );
         
+            gl.disable(gl.DEPTH_TEST);
+        
             gl.clearColor(
                 0,
                 0,
@@ -768,13 +868,16 @@
                 gl,
                 program,
                 texture,
+                buffer,
+                positionLocation,
                 textureLocation,
                 opacityLocation,
-                positionLocation,
-                buffer,
+                rasterRectLocation,
+                canvasSizeLocation,
                 width: 0,
                 height: 0,
-                bounds: null
+                bounds: null,
+                rasterRect: null
             };
         
             resizeWeatherGL();
@@ -786,21 +889,26 @@
             if (!weatherGL || !map) return;
         
             const canvas = weatherGL.canvas;
-            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            const size = map.getSize();
+            const dpr = Math.min(
+                window.devicePixelRatio || 1,
+                2
+            );
         
-            let width = parseFloat(canvas.style.width);
-            let height = parseFloat(canvas.style.height);
+            canvas.style.left = '0px';
+            canvas.style.top = '0px';
+            canvas.style.width = size.x + 'px';
+            canvas.style.height = size.y + 'px';
         
-            if (!Number.isFinite(width) || width <= 0) {
-                width = map.getSize().x;
-            }
+            const pixelWidth = Math.max(
+                1,
+                Math.floor(size.x * dpr)
+            );
         
-            if (!Number.isFinite(height) || height <= 0) {
-                height = map.getSize().y;
-            }
-        
-            const pixelWidth = Math.max(1, Math.floor(width * dpr));
-            const pixelHeight = Math.max(1, Math.floor(height * dpr));
+            const pixelHeight = Math.max(
+                1,
+                Math.floor(size.y * dpr)
+            );
         
             if (
                 canvas.width !== pixelWidth ||
@@ -810,16 +918,31 @@
                 canvas.height = pixelHeight;
             }
         
+            weatherGL.width = size.x;
+            weatherGL.height = size.y;
+        
             weatherGL.gl.viewport(
                 0,
                 0,
                 canvas.width,
                 canvas.height
             );
+        
+            weatherGL.gl.useProgram(
+                weatherGL.program
+            );
+        
+            weatherGL.gl.uniform2f(
+                weatherGL.canvasSizeLocation,
+                canvas.width,
+                canvas.height
+            );
         }
 
         function positionWeatherGL() {
-            if (!weatherGL || !map || !weatherGL.bounds) return;
+            if (!weatherGL || !map || !weatherGL.bounds) {
+                return;
+            }
         
             const b = weatherGL.bounds;
         
@@ -833,24 +956,117 @@
                 b.east
             ]);
         
-            const width = Math.max(1, se.x - nw.x);
-            const height = Math.max(1, se.y - nw.y);
+            const width = Math.max(
+                1,
+                se.x - nw.x
+            );
         
-            const canvas = weatherGL.canvas;
+            const height = Math.max(
+                1,
+                se.y - nw.y
+            );
         
-            canvas.style.left = nw.x + 'px';
-            canvas.style.top = nw.y + 'px';
-            canvas.style.width = width + 'px';
-            canvas.style.height = height + 'px';
+            const dpr = Math.min(
+                window.devicePixelRatio || 1,
+                2
+            );
         
-            resizeWeatherGL();
+            const rasterLeft = nw.x * dpr;
+            const rasterTop = nw.y * dpr;
+            const rasterWidth = width * dpr;
+            const rasterHeight = height * dpr;
+        
+            weatherGL.rasterRect = {
+                x: rasterLeft,
+                y: rasterTop,
+                width: rasterWidth,
+                height: rasterHeight
+            };
+        
+            const gl = weatherGL.gl;
+        
+            gl.useProgram(
+                weatherGL.program
+            );
+        
+            gl.uniform4f(
+                weatherGL.rasterRectLocation,
+                rasterLeft,
+                rasterTop,
+                rasterWidth,
+                rasterHeight
+            );
+        
+            gl.uniform2f(
+                weatherGL.canvasSizeLocation,
+                weatherGL.canvas.width,
+                weatherGL.canvas.height
+            );
+        }
+
+        function drawWeatherGL() {
+            if (!weatherGL || !map || !weatherGL.bounds) {
+                return;
+            }
+        
+            if (currentMapMode !== 'weather') {
+                return;
+            }
+        
+            const gl = weatherGL.gl;
+        
+            positionWeatherGL();
+        
+            gl.viewport(
+                0,
+                0,
+                weatherGL.canvas.width,
+                weatherGL.canvas.height
+            );
+        
+            gl.useProgram(
+                weatherGL.program
+            );
+        
+            gl.activeTexture(
+                gl.TEXTURE0
+            );
+        
+            gl.bindTexture(
+                gl.TEXTURE_2D,
+                weatherGL.texture
+            );
+        
+            gl.clearColor(
+                0,
+                0,
+                0,
+                0
+            );
+        
+            gl.clear(
+                gl.COLOR_BUFFER_BIT
+            );
+        
+            gl.uniform1f(
+                weatherGL.opacityLocation,
+                0.88
+            );
+        
+            gl.drawArrays(
+                gl.TRIANGLES,
+                0,
+                6
+            );
         }
 
         let weatherRenderId = 0;
         let weatherRenderController = null;
         
         async function renderGlobalWeatherHeatGrid() {
-            if (!map || currentMapMode !== 'weather') return;
+            if (!map || currentMapMode !== 'weather') {
+                return;
+            }
         
             const renderId = ++weatherRenderId;
         
@@ -859,6 +1075,7 @@
             }
         
             const controller = new AbortController();
+        
             weatherRenderController = controller;
         
             try {
@@ -868,29 +1085,38 @@
                     throw new Error('WebGL unavailable');
                 }
         
+                layer.canvas.style.display = 'block';
+        
+                resizeWeatherGL();
+        
                 const bounds = map.getBounds();
         
-                const response = await fetch('/api/ctw2/weather/map', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    signal: controller.signal,
-                    body: JSON.stringify({
-                        sw: [
-                            bounds.getSouth(),
-                            bounds.getWest()
-                        ],
-                        ne: [
-                            bounds.getNorth(),
-                            bounds.getEast()
-                        ],
-                        zoom: map.getZoom()
-                    })
-                });
+                const response = await fetch(
+                    '/api/ctw2/weather/map',
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        signal: controller.signal,
+                        body: JSON.stringify({
+                            sw: [
+                                bounds.getSouth(),
+                                bounds.getWest()
+                            ],
+                            ne: [
+                                bounds.getNorth(),
+                                bounds.getEast()
+                            ],
+                            zoom: map.getZoom()
+                        })
+                    }
+                );
         
                 if (!response.ok) {
-                    throw new Error(`Weather API HTTP ${response.status}`);
+                    throw new Error(
+                        `Weather API HTTP ${response.status}`
+                    );
                 }
         
                 const data = await response.json();
@@ -901,7 +1127,9 @@
                     !Array.isArray(data.values) ||
                     !data.bounds
                 ) {
-                    throw new Error('Invalid weather raster response');
+                    throw new Error(
+                        'Invalid weather raster response'
+                    );
                 }
         
                 const width = Number(data.width);
@@ -912,11 +1140,13 @@
                     height < 2 ||
                     data.values.length !== width * height
                 ) {
-                    throw new Error('Invalid raster dimensions');
+                    throw new Error(
+                        'Invalid raster dimensions'
+                    );
                 }
         
-                // The request may have finished after another render
-                // or after the user switched back to Political mode.
+                // Do not allow an old request to overwrite
+                // a newer weather render.
                 if (
                     renderId !== weatherRenderId ||
                     currentMapMode !== 'weather' ||
@@ -925,10 +1155,32 @@
                     return;
                 }
         
-                const pixels = new Uint8Array(width * height);
+                const south = Number(data.bounds.south);
+                const north = Number(data.bounds.north);
+                const west = Number(data.bounds.west);
+                const east = Number(data.bounds.east);
         
-                for (let i = 0; i < data.values.length; i++) {
-                    let temperature = Number(data.values[i]);
+                if (
+                    !Number.isFinite(south) ||
+                    !Number.isFinite(north) ||
+                    !Number.isFinite(west) ||
+                    !Number.isFinite(east)
+                ) {
+                    throw new Error(
+                        'Invalid weather raster bounds'
+                    );
+                }
+        
+                const pixels =
+                    new Uint8Array(width * height);
+        
+                for (
+                    let i = 0;
+                    i < data.values.length;
+                    i++
+                ) {
+                    let temperature =
+                        Number(data.values[i]);
         
                     if (!Number.isFinite(temperature)) {
                         temperature = 0;
@@ -944,25 +1196,21 @@
                     );
                 }
         
-                const south = Number(data.bounds.south);
-                const north = Number(data.bounds.north);
-                const west = Number(data.bounds.west);
-                const east = Number(data.bounds.east);
-        
-                if (
-                    !Number.isFinite(south) ||
-                    !Number.isFinite(north) ||
-                    !Number.isFinite(west) ||
-                    !Number.isFinite(east)
-                ) {
-                    throw new Error('Invalid weather raster bounds');
-                }
-        
                 const gl = layer.gl;
         
-                gl.activeTexture(gl.TEXTURE0);
-                gl.bindTexture(gl.TEXTURE_2D, layer.texture);
-                gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+                gl.activeTexture(
+                    gl.TEXTURE0
+                );
+        
+                gl.bindTexture(
+                    gl.TEXTURE_2D,
+                    layer.texture
+                );
+        
+                gl.pixelStorei(
+                    gl.UNPACK_ALIGNMENT,
+                    1
+                );
         
                 gl.texImage2D(
                     gl.TEXTURE_2D,
@@ -978,6 +1226,7 @@
         
                 layer.width = width;
                 layer.height = height;
+        
                 layer.bounds = {
                     south,
                     north,
@@ -985,10 +1234,13 @@
                     east
                 };
         
-                positionWeatherGL();
+                // Make sure the canvas still has the correct
+                // viewport size after the async request.
                 resizeWeatherGL();
         
-                // Check one more time before actually drawing.
+                // Calculate the geographic raster rectangle.
+                positionWeatherGL();
+        
                 if (
                     renderId !== weatherRenderId ||
                     currentMapMode !== 'weather' ||
@@ -997,30 +1249,7 @@
                     return;
                 }
         
-                layer.canvas.style.display = 'block';
-        
-                gl.viewport(
-                    0,
-                    0,
-                    layer.canvas.width,
-                    layer.canvas.height
-                );
-        
-                gl.clearColor(0, 0, 0, 0);
-                gl.clear(gl.COLOR_BUFFER_BIT);
-        
-                gl.useProgram(layer.program);
-        
-                gl.uniform1f(
-                    layer.opacityLocation,
-                    0.88
-                );
-        
-                gl.drawArrays(
-                    gl.TRIANGLES,
-                    0,
-                    6
-                );
+                drawWeatherGL();
         
             } catch (error) {
                 if (error.name === 'AbortError') {
@@ -1033,7 +1262,9 @@
                 );
         
             } finally {
-                if (weatherRenderController === controller) {
+                if (
+                    weatherRenderController === controller
+                ) {
                     weatherRenderController = null;
                 }
             }
