@@ -247,24 +247,23 @@
             // ========================================================
         
             let weatherRenderTimer = null;
-        
-        
-            // When the user finishes moving the map
-            map.on('moveend', () => {
-        
-                if (currentMapMode !== 'weather') {
-                    return;
-                }
-        
-                clearTimeout(weatherRenderTimer);
-        
-                weatherRenderTimer = setTimeout(() => {
-        
-                    renderGlobalWeatherHeatGrid();
-        
-                }, 300);
+
+            map.on('move',()=>{
+                if(currentMapMode!=='weather')return;
+                if(weatherGL)resizeWeatherGL();
             });
-        
+            
+            map.on('moveend',()=>{
+                if(currentMapMode!=='weather')return;
+            
+                clearTimeout(weatherRenderTimer);
+            
+                weatherRenderTimer=setTimeout(()=>{
+                    renderGlobalWeatherHeatGrid();
+                },300);
+            });
+            
+            map.on('resize',resizeWeatherGL);
         
             // When zoom finishes
             map.on('zoomend', () => {
@@ -481,7 +480,8 @@
             canvas.style.left='0';
             canvas.style.top='0';
             canvas.style.pointerEvents='none';
-            canvas.style.zIndex='400';
+            canvas.style.zIndex='20';
+            canvas.style.display='none';
         
             map.getPanes().overlayPane.appendChild(canvas);
         
@@ -496,7 +496,7 @@
                 return null;
             }
         
-            const vertexShaderSource=`
+            const vs=`
                 attribute vec2 a_position;
                 varying vec2 v_uv;
                 void main(){
@@ -505,129 +505,87 @@
                 }
             `;
         
-            const fragmentShaderSource=`
+            const fs=`
                 precision highp float;
                 varying vec2 v_uv;
                 uniform sampler2D u_temperature;
                 uniform float u_opacity;
         
-                vec3 temperatureColor(float t){
+                vec3 tempColor(float t){
                     t=clamp(t,-40.0,50.0);
+        
                     vec3 c;
         
-                    if(t<-30.0){
-                        c=mix(
-                            vec3(0.10,0.03,0.35),
-                            vec3(0.16,0.08,0.65),
-                            smoothstep(-40.0,-30.0,t)
-                        );
-                    }else if(t<-20.0){
-                        c=mix(
-                            vec3(0.16,0.08,0.65),
-                            vec3(0.05,0.25,0.85),
-                            smoothstep(-30.0,-20.0,t)
-                        );
-                    }else if(t<-10.0){
-                        c=mix(
-                            vec3(0.05,0.25,0.85),
-                            vec3(0.00,0.62,0.95),
-                            smoothstep(-20.0,-10.0,t)
-                        );
-                    }else if(t<0.0){
-                        c=mix(
-                            vec3(0.00,0.62,0.95),
-                            vec3(0.00,0.82,0.78),
-                            smoothstep(-10.0,0.0,t)
-                        );
-                    }else if(t<10.0){
-                        c=mix(
-                            vec3(0.00,0.82,0.78),
-                            vec3(0.18,0.82,0.42),
-                            smoothstep(0.0,10.0,t)
-                        );
-                    }else if(t<20.0){
-                        c=mix(
-                            vec3(0.18,0.82,0.42),
-                            vec3(0.65,0.88,0.15),
-                            smoothstep(10.0,20.0,t)
-                        );
-                    }else if(t<25.0){
-                        c=mix(
-                            vec3(0.65,0.88,0.15),
-                            vec3(0.98,0.90,0.05),
-                            smoothstep(20.0,25.0,t)
-                        );
-                    }else if(t<30.0){
-                        c=mix(
-                            vec3(0.98,0.90,0.05),
-                            vec3(1.00,0.58,0.04),
-                            smoothstep(25.0,30.0,t)
-                        );
-                    }else if(t<35.0){
-                        c=mix(
-                            vec3(1.00,0.58,0.04),
-                            vec3(0.98,0.25,0.03),
-                            smoothstep(30.0,35.0,t)
-                        );
-                    }else if(t<40.0){
-                        c=mix(
-                            vec3(0.98,0.25,0.03),
-                            vec3(0.82,0.04,0.04),
-                            smoothstep(35.0,40.0,t)
-                        );
-                    }else{
-                        c=mix(
-                            vec3(0.82,0.04,0.04),
-                            vec3(0.45,0.00,0.02),
-                            smoothstep(40.0,50.0,t)
-                        );
-                    }
+                    if(t<-30.0)
+                        c=mix(vec3(.08,.02,.30),vec3(.15,.06,.65),smoothstep(-40.,-30.,t));
+                    else if(t<-20.0)
+                        c=mix(vec3(.15,.06,.65),vec3(.03,.22,.90),smoothstep(-30.,-20.,t));
+                    else if(t<-10.0)
+                        c=mix(vec3(.03,.22,.90),vec3(0.,.65,1.),smoothstep(-20.,-10.,t));
+                    else if(t<0.0)
+                        c=mix(vec3(0.,.65,1.),vec3(0.,.88,.75),smoothstep(-10.,0.,t));
+                    else if(t<10.0)
+                        c=mix(vec3(0.,.88,.75),vec3(.18,.86,.38),smoothstep(0.,10.,t));
+                    else if(t<20.0)
+                        c=mix(vec3(.18,.86,.38),vec3(.65,.90,.12),smoothstep(10.,20.,t));
+                    else if(t<25.0)
+                        c=mix(vec3(.65,.90,.12),vec3(1.,.91,.02),smoothstep(20.,25.,t));
+                    else if(t<30.0)
+                        c=mix(vec3(1.,.91,.02),vec3(1.,.57,.02),smoothstep(25.,30.,t));
+                    else if(t<35.0)
+                        c=mix(vec3(1.,.57,.02),vec3(1.,.20,.02),smoothstep(30.,35.,t));
+                    else if(t<40.0)
+                        c=mix(vec3(1.,.20,.02),vec3(.82,.02,.03),smoothstep(35.,40.,t));
+                    else
+                        c=mix(vec3(.82,.02,.03),vec3(.42,0.,.015),smoothstep(40.,50.,t));
         
                     return c;
                 }
         
+                float getTemp(vec2 uv){
+                    float a=texture2D(u_temperature,uv).r;
+                    return a*90.0-40.0;
+                }
+        
                 void main(){
-                    float encoded=texture2D(
-                        u_temperature,
-                        v_uv
-                    ).r;
+                    vec2 uv=clamp(v_uv,0.0,1.0);
+        
+                    // Multiple samples reduce visible grid structure.
+                    float t0=getTemp(uv);
+                    float t1=getTemp(uv+vec2(.0015,0.0));
+                    float t2=getTemp(uv-vec2(.0015,0.0));
+                    float t3=getTemp(uv+vec2(0.0,.0015));
+                    float t4=getTemp(uv-vec2(0.0,.0015));
         
                     float temperature=
-                        encoded*90.0-40.0;
+                        t0*.40+
+                        t1*.15+
+                        t2*.15+
+                        t3*.15+
+                        t4*.15;
         
-                    vec3 color=
-                        temperatureColor(temperature);
+                    vec3 color=tempColor(temperature);
         
-                    gl_FragColor=
-                        vec4(color,u_opacity);
+                    gl_FragColor=vec4(color,u_opacity);
                 }
             `;
         
-            function compileShader(type,source){
-                const shader=gl.createShader(type);
-                gl.shaderSource(shader,source);
-                gl.compileShader(shader);
+            function shader(type,source){
+                const s=gl.createShader(type);
+                gl.shaderSource(s,source);
+                gl.compileShader(s);
         
-                if(!gl.getShaderParameter(shader,gl.COMPILE_STATUS)){
-                    console.error(gl.getShaderInfoLog(shader));
-                    gl.deleteShader(shader);
+                if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){
+                    console.error(gl.getShaderInfoLog(s));
+                    gl.deleteShader(s);
                     return null;
                 }
         
-                return shader;
+                return s;
             }
         
-            const vertexShader=
-                compileShader(
-                    gl.VERTEX_SHADER,
-                    vertexShaderSource
-                );
-        
-            const fragmentShader=
-                compileShader(
-                    gl.FRAGMENT_SHADER,
-                    fragmentShaderSource
-                );
+            const vertexShader=shader(gl.VERTEX_SHADER,vs);
+            const fragmentShader=shader(gl.FRAGMENT_SHADER,fs);
         
             if(!vertexShader||!fragmentShader)return null;
         
@@ -644,38 +602,32 @@
         
             gl.useProgram(program);
         
-            const positionBuffer=gl.createBuffer();
+            const buffer=gl.createBuffer();
         
             gl.bindBuffer(
                 gl.ARRAY_BUFFER,
-                positionBuffer
+                buffer
             );
         
             gl.bufferData(
                 gl.ARRAY_BUFFER,
                 new Float32Array([
-                    -1,-1,
-                     1,-1,
-                    -1, 1,
-                    -1, 1,
-                     1,-1,
-                     1, 1
+                    -1,-1,1,-1,-1,1,
+                    -1,1,1,-1,1,1
                 ]),
                 gl.STATIC_DRAW
             );
         
-            const positionLocation=
+            const position=
                 gl.getAttribLocation(
                     program,
                     'a_position'
                 );
         
-            gl.enableVertexAttribArray(
-                positionLocation
-            );
+            gl.enableVertexAttribArray(position);
         
             gl.vertexAttribPointer(
-                positionLocation,
+                position,
                 2,
                 gl.FLOAT,
                 false,
@@ -714,11 +666,6 @@
                 gl.CLAMP_TO_EDGE
             );
         
-            gl.pixelStorei(
-                gl.UNPACK_ALIGNMENT,
-                1
-            );
-        
             const textureLocation=
                 gl.getUniformLocation(
                     program,
@@ -731,142 +678,195 @@
                     'u_opacity'
                 );
         
-            gl.uniform1i(
-                textureLocation,
-                0
-            );
-        
-            gl.uniform1f(
-                opacityLocation,
-                0.88
-            );
+            gl.uniform1i(textureLocation,0);
+            gl.uniform1f(opacityLocation,.88);
         
             weatherGL={
-                canvas:canvas,
-                gl:gl,
-                program:program,
-                texture:texture,
-                textureLocation:textureLocation,
-                opacityLocation:opacityLocation
+                canvas,
+                gl,
+                program,
+                texture,
+                textureLocation,
+                opacityLocation,
+                width:0,
+                height:0,
+                bounds:null
             };
-        
-            function resizeWeatherGL(){
-                const size=map.getSize();
-                const dpr=Math.min(
-                    window.devicePixelRatio||1,
-                    2
-                );
-        
-                canvas.width=
-                    Math.floor(size.x*dpr);
-        
-                canvas.height=
-                    Math.floor(size.y*dpr);
-        
-                canvas.style.width=
-                    size.x+'px';
-        
-                canvas.style.height=
-                    size.y+'px';
-        
-                gl.viewport(
-                    0,
-                    0,
-                    canvas.width,
-                    canvas.height
-                );
-            }
         
             resizeWeatherGL();
         
-            map.on(
-                'resize',
-                resizeWeatherGL
-            );
-        
             return weatherGL;
-        }       
+        }
+
+        function resizeWeatherGL(){
+            if(!weatherGL||!map)return;
+        
+            const size=map.getSize();
+            const dpr=Math.min(window.devicePixelRatio||1,2);
+            const canvas=weatherGL.canvas;
+        
+            canvas.width=Math.floor(size.x*dpr);
+            canvas.height=Math.floor(size.y*dpr);
+        
+            canvas.style.width=size.x+'px';
+            canvas.style.height=size.y+'px';
+        
+            weatherGL.gl.viewport(
+                0,
+                0,
+                canvas.width,
+                canvas.height
+            );
+        }
+
         let weatherRenderId = 0;
         let weatherRenderController = null;
         
         async function renderGlobalWeatherHeatGrid(){
-            if(!map||currentMapMode!=='weather'||window.weatherRenderInProgress)return;
+            if(!map||currentMapMode!=='weather')return;
+            if(window.weatherRenderInProgress)return;
+        
             window.weatherRenderInProgress=true;
         
             try{
                 const layer=createWeatherWebGLLayer();
-                if(!layer)throw new Error('WebGL weather layer unavailable');
+        
+                if(!layer)throw new Error('WebGL unavailable');
         
                 const b=map.getBounds();
-                const response=await fetch('/api/ctw2/weather/map',{
-                    method:'POST',
-                    headers:{'Content-Type':'application/json'},
-                    body:JSON.stringify({
-                        sw:[b.getSouth(),b.getWest()],
-                        ne:[b.getNorth(),b.getEast()],
-                        zoom:map.getZoom()
-                    })
-                });
         
-                if(!response.ok)throw new Error(`Weather API HTTP ${response.status}`);
+                const response=await fetch(
+                    '/api/ctw2/weather/map',
+                    {
+                        method:'POST',
+                        headers:{
+                            'Content-Type':'application/json'
+                        },
+                        body:JSON.stringify({
+                            sw:[
+                                b.getSouth(),
+                                b.getWest()
+                            ],
+                            ne:[
+                                b.getNorth(),
+                                b.getEast()
+                            ],
+                            zoom:map.getZoom()
+                        })
+                    }
+                );
+        
+                if(!response.ok)
+                    throw new Error(
+                        `Weather API HTTP ${response.status}`
+                    );
         
                 const data=await response.json();
         
-                if(!data||data.status!=='success'||!Array.isArray(data.values)){
-                    throw new Error('Invalid weather raster response');
+                if(
+                    !data||
+                    data.status!=='success'||
+                    !Array.isArray(data.values)
+                ){
+                    throw new Error(
+                        'Invalid weather raster response'
+                    );
                 }
         
                 const width=Number(data.width);
                 const height=Number(data.height);
         
-                if(width<2||height<2||data.values.length!==width*height){
-                    throw new Error(`Invalid raster: ${data.values.length} / ${width*height}`);
+                if(
+                    width<2||
+                    height<2||
+                    data.values.length!==width*height
+                ){
+                    throw new Error('Invalid raster dimensions');
                 }
         
-                const temperatureData=new Uint8Array(width*height);
+                const pixels=
+                    new Uint8Array(width*height);
         
                 for(let i=0;i<data.values.length;i++){
                     let t=Number(data.values[i]);
-                    if(!Number.isFinite(t))t=0;
+        
+                    if(!Number.isFinite(t))
+                        t=0;
+        
                     t=Math.max(-40,Math.min(50,t));
-                    temperatureData[i]=Math.round(((t+40)/90)*255);
+        
+                    pixels[i]=Math.round(
+                        ((t+40)/90)*255
+                    );
                 }
         
                 const gl=layer.gl;
-                const texture=layer.texture;
-                const canvas=layer.canvas;
         
                 gl.activeTexture(gl.TEXTURE0);
-                gl.bindTexture(gl.TEXTURE_2D,texture);
         
-                gl.texImage2D(
-                    gl.TEXTURE_2D,0,gl.LUMINANCE,
-                    width,height,0,
-                    gl.LUMINANCE,gl.UNSIGNED_BYTE,
-                    temperatureData
+                gl.bindTexture(
+                    gl.TEXTURE_2D,
+                    layer.texture
                 );
         
-                const size=map.getSize();
-                const dpr=Math.min(window.devicePixelRatio||1,2);
+                gl.pixelStorei(
+                    gl.UNPACK_ALIGNMENT,
+                    1
+                );
         
-                canvas.width=Math.floor(size.x*dpr);
-                canvas.height=Math.floor(size.y*dpr);
-                canvas.style.width=size.x+'px';
-                canvas.style.height=size.y+'px';
+                gl.texImage2D(
+                    gl.TEXTURE_2D,
+                    0,
+                    gl.LUMINANCE,
+                    width,
+                    height,
+                    0,
+                    gl.LUMINANCE,
+                    gl.UNSIGNED_BYTE,
+                    pixels
+                );
         
-                gl.viewport(0,0,canvas.width,canvas.height);
+                layer.width=width;
+                layer.height=height;
+        
+                layer.bounds={
+                    south:Number(data.bounds.south),
+                    north:Number(data.bounds.north),
+                    west:Number(data.bounds.west),
+                    east:Number(data.bounds.east)
+                };
+        
+                resizeWeatherGL();
+        
+                layer.canvas.style.display='block';
+        
                 gl.clearColor(0,0,0,0);
-                gl.clear(gl.COLOR_BUFFER_BIT);
         
-                gl.uniform1f(layer.opacityLocation,0.88);
-                gl.drawArrays(gl.TRIANGLES,0,6);
+                gl.clear(
+                    gl.COLOR_BUFFER_BIT
+                );
+        
+                gl.uniform1f(
+                    layer.opacityLocation,
+                    .88
+                );
+        
+                gl.drawArrays(
+                    gl.TRIANGLES,
+                    0,
+                    6
+                );
         
             }catch(error){
-                console.error('🌡️ WebGL weather render error:',error);
+                console.error(
+                    '🌡️ WebGL weather render error:',
+                    error
+                );
             }finally{
                 window.weatherRenderInProgress=false;
             }
         }
+
         // НЕУБИВАЕМЫЙ МЕТЕОЗОНД (ИСПРАВЛЕНО: ЯРЛЫК ТЕПЕРЬ СТРЕЛЯЕТ С ПЕРВОГО КЛИКА)
         function initWeatherPointSensor() {
             map.on('click', async function (e) {
