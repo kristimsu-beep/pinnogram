@@ -6245,97 +6245,160 @@ def calculate_planetary_temperature(lat: float, lng: float, zoom: float = 2.0):
 @app.post("/api/ctw2/weather/map")
 async def ctw2_get_dynamic_weather_map(bounds: dict):
     import math
-    import random
     from datetime import datetime
-    
+
     try:
-        south_west = bounds.get("sw", [-60.0, -120.0])
-        north_east = bounds.get("ne", [75.0, 150.0])
+        sw = bounds.get("sw", [-60.0, -120.0])
+        ne = bounds.get("ne", [75.0, 150.0])
         zoom = float(bounds.get("zoom", 2.5))
-        
-        # 🎯 СВЕРХТОЧНЫЙ СИНАПТИЧЕСКИЙ ШАГ: Оптимальное число точек для GPU сглаживания
+
+        lat_min = max(-65.0, float(sw[0]))
+        lat_max = min(78.0, float(ne[0]))
+        lng_min = max(-180.0, float(sw[1]))
+        lng_max = min(180.0, float(ne[1]))
+
+        # Resolution of the weather raster.
+        # Lower zoom = lower resolution = less data.
         if zoom <= 3:
-            step = 2.0  # Плотная сетка на общем плане Земли
-        elif zoom > 3 and zoom <= 5:
-            step = 1.0  # Уплотнение при приближении материков
+            step = 1.0
+        elif zoom <= 5:
+            step = 0.5
         else:
-            step = 0.5  # Максимальная попиксельная детализация регионов
-            
-        lat_min = max(-65.0, float(south_west[0] if isinstance(south_west, list) else south_west))
-        lat_max = min(78.0, float(north_east[0] if isinstance(north_east, list) else north_east))
-        lng_min = max(-180.0, float(south_west[1] if isinstance(south_west, list) else south_west))
-        lng_max = min(180.0, float(north_east[1] if isinstance(north_east, list) else north_east))
-        
-        # Расчет термодинамики под сентябрь 2026 года
+            step = 0.25
+
+        width = int(math.ceil((lng_max - lng_min) / step)) + 1
+        height = int(math.ceil((lat_max - lat_min) / step)) + 1
+
+        # Keep response size sane.
+        width = min(width, 1200)
+        height = min(height, 700)
+
         day_of_year = datetime.now().timetuple().tm_yday
-        season_shift = math.sin(2 * math.pi * (day_of_year - 80) / 365) * 23.44
-        
-        weather_points = []
-        
-        # 🎯 СУПЕР-ФИКС: Используем генераторы диапазонов с фиксированным шагом!
-        # Это гарантирует, что каждая точка получит свои собственные уникальные координаты.
-        lat_ticks = int((lat_max - lat_min) / step) + 1
-        lng_ticks = int((lng_max - lng_min) / step) + 1
-        
-        for i in range(lat_ticks):
-            lat_val = lat_min + (i * step)
-            if lat_val > lat_max: continue
-            
-            for j in range(lng_ticks):
-                lng_val = lng_min + (j * step)
-                if lng_val > lng_max: continue
+        season_shift = (
+            math.sin(2 * math.pi * (day_of_year - 80) / 365)
+            * 23.44
+        )
 
-                # 🌊 ТЕРМОДИНАМИКА ВОДЫ И СУШИ
+        values = []
+
+        # Regular raster:
+        # row 0 = north
+        # last row = south
+        for y in range(height):
+            lat = lat_max - (
+                y * (lat_max - lat_min) / max(height - 1, 1)
+            )
+
+            for x in range(width):
+                lng = lng_min + (
+                    x * (lng_max - lng_min) / max(width - 1, 1)
+                )
+
+                # -----------------------------------------
+                # TEMPORARY SYNTHETIC TEMPERATURE MODEL
+                # -----------------------------------------
+
                 is_water = False
-                if lat_val > -60 and lat_val < 70 and (lng_val < -20 or lng_val > 140): is_water = True
-                elif lat_val < 0 and lng_val > 20 and lng_val < 110: is_water = True
-                elif lat_val > 30 and lat_val < 48 and lng_val > -5 and lng_val < 45: is_water = True
-                elif lat_val > 70: is_water = True
 
-                effective_lat = lat_val - season_shift
+                if (
+                    -60 < lat < 70
+                    and (lng < -20 or lng > 140)
+                ):
+                    is_water = True
+
+                elif (
+                    lat < 0
+                    and 20 < lng < 110
+                ):
+                    is_water = True
+
+                elif (
+                    30 < lat < 48
+                    and -5 < lng < 45
+                ):
+                    is_water = True
+
+                elif lat > 70:
+                    is_water = True
+
+                effective_lat = lat - season_shift
+
                 if is_water:
-                    base_temp = 16.5 - (abs(lat_val) * 0.44)
+                    base_temp = 16.5 - abs(lat) * 0.44
                 else:
-                    base_temp = 42.0 - (abs(effective_lat) * 0.76)
+                    base_temp = 42.0 - abs(effective_lat) * 0.76
 
-                # Многооктавные волновые завихрения циклонов
-                octave_1 = math.sin(lat_val / 6.0) * math.cos(lng_val / 9.0) * 5.5
-                octave_2 = math.sin((lat_val + lng_val) / 4.0) * 2.5
-                total_noise = octave_1 + octave_2
+                # Smooth large-scale variation
+                wave1 = (
+                    math.sin(lat / 8.0)
+                    * math.cos(lng / 12.0)
+                    * 4.0
+                )
 
-                # Матрица строгих географических аномалий
+                wave2 = (
+                    math.sin((lat + lng) / 7.0)
+                    * 1.5
+                )
+
+                temp = base_temp + wave1 + wave2
+
+                # Major temperature anomalies
                 anomalies = [
-                    [25.00, 45.00, 22.0, 15.0],   # Ближний Восток (Пучеглазое пунцовое пекло)
-                    [25.00, 15.00, 25.0, 13.0],   # Сахара
-                    [36.05, -116.81, 10.0, 16.0], # Долина Смерти (США)
-                    [-75.00, 120.00, 35.0, -35.0],# Антарктида
-                    [72.00, -40.00, 18.0, -25.0], # Greenland
-                    [62.00, 129.00, 20.0, -16.0]  # Якутия
+                    (25.0, 45.0, 22.0, 15.0),
+                    (25.0, 15.0, 25.0, 13.0),
+                    (36.05, -116.81, 10.0, 16.0),
+                    (-75.0, 120.0, 35.0, -35.0),
+                    (72.0, -40.0, 18.0, -25.0),
+                    (62.0, 129.0, 20.0, -16.0),
                 ]
-                
-                bonus_temp = 0.0
-                for anom in anomalies:
-                    d_lat = lat_val - anom[0]
-                    d_lng = lng_val - anom[1]
-                    if d_lng > 180: d_lng -= 360
-                    if d_lng < -180: d_lng += 360
-                    dist = math.sqrt(d_lat**2 + d_lng**2)
-                    if dist < anom[2]:
-                        bonus_temp += anom[3] * ((1.0 - (dist / anom[2])) ** 2)
 
-                final_temp = base_temp + total_noise + bonus_temp
-                
-                # 🎯 Отправляем изолированные принудительные float-координаты
-                weather_points.append({
-                    "lat": float(round(lat_val, 4)),
-                    "lng": float(round(lng_val, 4)),
-                    "temp": float(round(max(-62.0, min(56.0, final_temp)), 1))
-                })
-                
-        return {"status": "success", "source": "planetary_fixed_core", "weather": weather_points}
+                for a_lat, a_lng, radius, strength in anomalies:
+
+                    d_lat = lat - a_lat
+                    d_lng = lng - a_lng
+
+                    if d_lng > 180:
+                        d_lng -= 360
+
+                    if d_lng < -180:
+                        d_lng += 360
+
+                    distance = math.sqrt(
+                        d_lat * d_lat +
+                        d_lng * d_lng
+                    )
+
+                    if distance < radius:
+                        factor = 1.0 - distance / radius
+                        temp += strength * factor * factor
+
+                temp = max(-62.0, min(56.0, temp))
+
+                values.append(round(temp, 1))
+
+        return {
+            "status": "success",
+            "source": "planetary_fixed_core",
+            "bounds": {
+                "south": lat_min,
+                "north": lat_max,
+                "west": lng_min,
+                "east": lng_max
+            },
+            "width": width,
+            "height": height,
+            "step": step,
+            "values": values
+        }
+
     except Exception as e:
-        print(f"🚨 [ОШИБКА ОБНОВЛЕННОЙ СЕТКИ]: {str(e)}")
-        return {"status": "success", "weather": []}
+        print(f"🚨 Weather raster error: {str(e)}")
+
+        return {
+            "status": "error",
+            "source": "planetary_fixed_core",
+            "values": []
+        }
 
 # =====================================================================
 # 🛰️ API 2: ТОЧЕЧНЫЙ МЕТЕО-ЗОНД (МГНОВЕННЫЙ РАСЧЕТ В ЛЮБОМ ПИКСЕЛЕ КЛИКА)
