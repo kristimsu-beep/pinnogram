@@ -6248,129 +6248,61 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
     from datetime import datetime
 
     try:
-        # =========================================================
-        # READ MAP BOUNDS
-        # =========================================================
+        # ============================================================
+        # GLOBAL WEATHER RASTER
+        # We intentionally ignore the viewport.
+        # There must be ONE geographic raster for the whole planet.
+        # ============================================================
 
-        south_west = bounds.get("sw", [-90.0, -180.0])
-        north_east = bounds.get("ne", [90.0, 180.0])
-        zoom = float(bounds.get("zoom", 2.5))
-        
-        # =========================================================
-        # ALWAYS USE THE COMPLETE PLANET
-        # =========================================================
-        #
-        # The weather field is global.
-        # It must not be generated as separate viewport rectangles.
-        #
-        # This guarantees:
-        #   - Antarctica is included
-        #   - the weather field has one fixed coordinate system
-        #   - panning cannot create overlapping weather rectangles
-        #   - the temperature pattern stays geographically locked
-        #
-        
         lat_min = -90.0
         lat_max = 90.0
-        
         lng_min = -180.0
         lng_max = 180.0
 
-        # =========================================================
-        # ADAPTIVE GRID RESOLUTION
-        # =========================================================
-        #
-        # Zoomed out:
-        #   smaller amount of data
-        #
-        # Zoomed in:
-        #   more detailed raster
-        #
-        # This is intentionally not extremely high resolution yet.
-        # =========================================================
+        # Keep the raster reasonably small.
+        # 0.5° gives 721 x 361 = 260,281 temperature values.
+        # Leaflet will smoothly scale this image while zooming.
+        step = 0.5
 
-        if zoom <= 3:
-            step = 0.5
-        elif zoom <= 5:
-            step = 0.5
-        else:
-            step = 0.25
+        width = int(round((lng_max - lng_min) / step)) + 1
+        height = int(round((lat_max - lat_min) / step)) + 1
 
-        width = int(
-            math.ceil(
-                (lng_max - lng_min) / step
-            )
-        ) + 1
-
-        height = int(
-            math.ceil(
-                (lat_max - lat_min) / step
-            )
-        ) + 1
-
-        # Safety limits so a very large request cannot create
-        # an enormous response.
-        width = min(width, 1200)
-        height = min(height, 700)
-
-        # =========================================================
-        # SEASON
-        # =========================================================
-
-        day_of_year = (
-            datetime.now()
-            .timetuple()
-            .tm_yday
-        )
+        day_of_year = datetime.now().timetuple().tm_yday
 
         season_shift = (
             math.sin(
-                2.0 *
-                math.pi *
-                (day_of_year - 80) /
-                365.0
-            )
-            * 23.44
+                2.0 * math.pi * (day_of_year - 80) / 365.0
+            ) * 23.44
         )
-
-        # =========================================================
-        # RASTER
-        # =========================================================
-        #
-        # Row 0 = NORTH
-        # Last row = SOUTH
-        #
-        # This is important because the frontend renders the
-        # array directly as an image.
-        # =========================================================
 
         values = []
 
+        # ============================================================
+        # TEMPERATURE FIELD
+        # ============================================================
+
         for y in range(height):
 
-            # North → South
-            lat = lat_max - (
-                y *
-                (lat_max - lat_min) /
+            lat = (
+                lat_max -
+                y * (lat_max - lat_min) /
                 max(height - 1, 1)
             )
 
             for x in range(width):
 
-                # West → East
-                lng = lng_min + (
-                    x *
-                    (lng_max - lng_min) /
+                lng = (
+                    lng_min +
+                    x * (lng_max - lng_min) /
                     max(width - 1, 1)
                 )
 
-                # =================================================
-                # LAND / WATER MASK
-                # =================================================
+                # ----------------------------------------------------
+                # Rough land / ocean classification
+                # ----------------------------------------------------
 
                 is_water = False
 
-                # Pacific / Atlantic approximation
                 if -60.0 < lat < 70.0:
 
                     if lng < -25.0:
@@ -6379,75 +6311,73 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                     elif lng > 140.0:
                         is_water = True
 
-                # Indian Ocean
-                if (
-                    lat < 30.0
-                    and 20.0 < lng < 120.0
-                ):
+                if lat < 30.0 and 20.0 < lng < 120.0:
                     is_water = True
 
-                # Southern Ocean
-                if lat < -45.0:
-                    is_water = True
+                # ----------------------------------------------------
+                # POLAR REGIONS
+                #
+                # IMPORTANT:
+                # Antarctica must NEVER receive the normal ocean
+                # temperature formula.
+                # ----------------------------------------------------
 
-                # Arctic Ocean
-                if lat > 70.0:
-                    is_water = True
+                is_antarctica = lat <= -60.0
+                is_arctic = lat >= 70.0
 
-                # =================================================
-                # LAND TEMPERATURE
-                # =================================================
+                # ----------------------------------------------------
+                # Temperature model
+                # ----------------------------------------------------
 
-                effective_lat = (
-                    lat -
-                    season_shift
-                )
+                if is_antarctica:
 
-                if not is_water:
-
-                    # Land has strong temperature variation.
+                    # Very cold Antarctic ice.
+                    # -60° latitude  -> about -28°C
+                    # -90° latitude  -> about -42°C
+                    #
+                    # Small seasonal influence only.
                     base_temp = (
-                        42.0 -
-                        abs(effective_lat) *
-                        0.76
+                        -28.0
+                        - (abs(lat) - 60.0) * 0.45
+                        - season_shift * 0.10
                     )
 
-                # =================================================
-                # OCEAN TEMPERATURE
-                # =================================================
+                elif is_arctic:
+
+                    # Cold Arctic / Greenland region.
+                    base_temp = (
+                        -12.0
+                        - (lat - 70.0) * 0.65
+                        + season_shift * 0.12
+                    )
+
+                elif not is_water:
+
+                    effective_lat = lat - season_shift
+
+                    base_temp = (
+                        42.0 -
+                        abs(effective_lat) * 0.76
+                    )
 
                 else:
 
-                    # Strong tropical ocean cooling.
                     tropical_cooling = (
                         7.0 *
                         math.exp(
-                            -(
-                                lat * lat
-                            ) /
-                            (
-                                2.0 *
-                                22.0 *
-                                22.0
-                            )
+                            -(lat * lat) /
+                            (2.0 * 22.0 * 22.0)
                         )
                     )
 
-                    # Ocean changes temperature more slowly
-                    # with latitude than land.
                     ocean_base = (
                         25.0 -
-                        abs(lat) *
-                        0.20
+                        abs(lat) * 0.20
                     )
 
-                    # High-latitude ocean retains more heat.
                     polar_moderation = (
                         5.0 *
-                        (
-                            abs(lat) /
-                            90.0
-                        ) ** 2
+                        (abs(lat) / 90.0) ** 2
                     )
 
                     base_temp = (
@@ -6456,26 +6386,19 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                         polar_moderation
                     )
 
-                # =================================================
-                # LARGE-SCALE ATMOSPHERIC VARIATION
-                # =================================================
+                # ----------------------------------------------------
+                # Smooth large-scale temperature waves
+                # ----------------------------------------------------
 
                 wave1 = (
-                    math.sin(
-                        lat / 8.0
-                    )
-                    *
-                    math.cos(
-                        lng / 12.0
-                    )
-                    * 4.0
+                    math.sin(lat / 8.0) *
+                    math.cos(lng / 12.0) *
+                    4.0
                 )
 
                 wave2 = (
-                    math.sin(
-                        (lat + lng) / 7.0
-                    )
-                    * 1.5
+                    math.sin((lat + lng) / 7.0) *
+                    1.5
                 )
 
                 temp = (
@@ -6484,50 +6407,24 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                     wave2
                 )
 
-                # =================================================
-                # TEMPERATURE ANOMALIES
-                # =================================================
+                # ----------------------------------------------------
+                # Temperature anomalies
+                # ----------------------------------------------------
 
                 anomalies = [
-                    # latitude, longitude, radius, strength
-
-                    # Middle East
                     (25.0, 45.0, 22.0, 15.0),
-
-                    # Sahara
                     (25.0, 15.0, 25.0, 13.0),
-
-                    # Death Valley
                     (36.05, -116.81, 10.0, 16.0),
-
-                    # Antarctica
                     (-75.0, 120.0, 35.0, -35.0),
-
-                    # Greenland
                     (72.0, -40.0, 18.0, -25.0),
-
-                    # Yakutia
                     (62.0, 129.0, 20.0, -16.0)
                 ]
 
-                for (
-                    anomaly_lat,
-                    anomaly_lng,
-                    radius,
-                    strength
-                ) in anomalies:
+                for anomaly_lat, anomaly_lng, radius, strength in anomalies:
 
-                    d_lat = (
-                        lat -
-                        anomaly_lat
-                    )
+                    d_lat = lat - anomaly_lat
+                    d_lng = lng - anomaly_lng
 
-                    d_lng = (
-                        lng -
-                        anomaly_lng
-                    )
-
-                    # Handle longitude wrapping.
                     if d_lng > 180.0:
                         d_lng -= 360.0
 
@@ -6552,10 +6449,6 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                             factor
                         )
 
-                # =================================================
-                # FINAL TEMPERATURE
-                # =================================================
-
                 temp = max(
                     -62.0,
                     min(56.0, temp)
@@ -6565,25 +6458,20 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                     round(temp, 1)
                 )
 
-        # =========================================================
-        # RETURN REGULAR TEMPERATURE RASTER
-        # =========================================================
-
         return {
             "status": "success",
             "source": "planetary_fixed_core",
 
             "bounds": {
-                "south": lat_min,
-                "north": lat_max,
-                "west": lng_min,
-                "east": lng_max
+                "south": -90.0,
+                "north": 90.0,
+                "west": -180.0,
+                "east": 180.0
             },
 
             "width": width,
             "height": height,
             "step": step,
-
             "values": values
         }
 
