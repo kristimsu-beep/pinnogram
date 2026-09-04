@@ -188,23 +188,6 @@
                 maxZoom: 10,
                 zoomControl: false
             });
-
-            map.on('moveend',()=>{
-            
-                if(currentMapMode!=='weather'){
-                    return;
-                }
-            
-                clearTimeout(
-                    weatherRenderTimer
-                );
-            
-                weatherRenderTimer=
-                    setTimeout(()=>{
-                        renderGlobalWeatherHeatGrid();
-                    },250);
-            });
-            
             
             map.on('zoomend',()=>{
             
@@ -529,8 +512,7 @@
         
             return canvas;
         }
-        
-        
+       
         async function renderGlobalWeatherHeatGrid(){
         
             if(!map || currentMapMode!=='weather'){
@@ -548,9 +530,6 @@
         
             weatherRenderController=controller;
         
-            const mapBounds=
-                map.getBounds();
-        
             try{
         
                 const response=await fetch(
@@ -567,17 +546,6 @@
                             controller.signal,
         
                         body:JSON.stringify({
-        
-                            sw:[
-                                mapBounds.getSouth(),
-                                mapBounds.getWest()
-                            ],
-        
-                            ne:[
-                                mapBounds.getNorth(),
-                                mapBounds.getEast()
-                            ],
-        
                             zoom:map.getZoom()
                         })
                     }
@@ -639,17 +607,34 @@
         
                 const rasterBounds=
                     L.latLngBounds(
-                        [
-                            Number(data.bounds.south),
-                            Number(data.bounds.west)
-                        ],
-                        [
-                            Number(data.bounds.north),
-                            Number(data.bounds.east)
-                        ]
+                        [-90,-180],
+                        [90,180]
                     );
         
-                const newOverlay=
+                /*
+                 * Remove the previous global weather image BEFORE
+                 * creating the new one.
+                 *
+                 * There is now only ever one weather overlay.
+                 */
+        
+                if(weatherOverlay){
+        
+                    map.removeLayer(
+                        weatherOverlay
+                    );
+        
+                    weatherOverlay=null;
+                }
+        
+                if(
+                    renderId!==weatherRenderId ||
+                    currentMapMode!=='weather'
+                ){
+                    return;
+                }
+        
+                weatherOverlay=
                     L.imageOverlay(
                         imageUrl,
                         rasterBounds,
@@ -660,29 +645,7 @@
                         }
                     );
         
-                newOverlay.addTo(map);
-        
-                if(
-                    renderId!==weatherRenderId ||
-                    currentMapMode!=='weather'
-                ){
-        
-                    map.removeLayer(
-                        newOverlay
-                    );
-        
-                    return;
-                }
-        
-                if(weatherOverlay){
-        
-                    map.removeLayer(
-                        weatherOverlay
-                    );
-                }
-        
-                weatherOverlay=
-                    newOverlay;
+                weatherOverlay.addTo(map);
         
             }catch(error){
         
