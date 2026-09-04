@@ -185,7 +185,8 @@
                 zoom: 2.5,
                 minZoom: 2,
                 maxZoom: 10,
-                zoomControl: false
+                zoomControl: false,
+                worldCopyJump: false
             });
             
             baseTileLayer = L.tileLayer(
@@ -439,7 +440,9 @@
             canvas.width=width;
             canvas.height=height;
         
-            const ctx=canvas.getContext('2d');
+            const ctx=canvas.getContext('2d',{
+                alpha:true
+            });
         
             const imageData=
                 ctx.createImageData(
@@ -453,11 +456,11 @@
         
                 for(let x=0;x<width;x++){
         
-                    const value=
+                    const temp=
                         values[y*width+x];
         
                     const color=
-                        getTemperatureColor(value);
+                        getTemperatureColor(temp);
         
                     const index=
                         (y*width+x)*4;
@@ -466,7 +469,6 @@
                     pixels[index+1]=color[1];
                     pixels[index+2]=color[2];
         
-                    // Slight transparency so the political map remains visible.
                     pixels[index+3]=195;
                 }
             }
@@ -546,7 +548,6 @@
                 if(
                     !data ||
                     data.status!=='success' ||
-                    !data.bounds ||
                     !Array.isArray(data.values)
                 ){
         
@@ -581,18 +582,75 @@
                         'image/png'
                     );
         
-                // ALWAYS use the whole planet.
-                const rasterBounds=
-                    L.latLngBounds(
-                        [-90,-180],
-                        [90,180]
-                    );
+                /*
+                 * The weather raster is ALWAYS the entire planet.
+                 */
+                const worldBounds=[
+                    [-90,-180],
+                    [90,180]
+                ];
         
-                // Remove the previous weather image FIRST.
+                /*
+                 * Leaflet does not automatically repeat ImageOverlay
+                 * horizontally like a tile layer.
+                 *
+                 * Therefore we create several copies of the SAME
+                 * global image:
+                 *
+                 *   -540 ... -180
+                 *   -180 ...  180
+                 *    180 ...  540
+                 *
+                 * This makes the weather layer visually endless
+                 * when the user scrolls left or right.
+                 */
+        
+                const overlays=[];
+        
+                for(let world=-2;world<=2;world++){
+        
+                    const west=
+                        -180+
+                        world*360;
+        
+                    const east=
+                        180+
+                        world*360;
+        
+                    const bounds=
+                        L.latLngBounds(
+                            [-90,west],
+                            [90,east]
+                        );
+        
+                    const overlay=
+                        L.imageOverlay(
+                            imageUrl,
+                            bounds,
+                            {
+                                opacity:1,
+                                interactive:false,
+                                zIndex:450
+                            }
+                        );
+        
+                    overlays.push(
+                        overlay
+                    );
+                }
+        
+                /*
+                 * Remove the old weather copies before adding
+                 * the new ones.
+                 */
                 if(weatherOverlay){
         
-                    map.removeLayer(
-                        weatherOverlay
+                    weatherOverlay.forEach(
+                        overlay=>{
+                            if(map.hasLayer(overlay)){
+                                map.removeLayer(overlay);
+                            }
+                        }
                     );
         
                     weatherOverlay=null;
@@ -606,18 +664,17 @@
                     return;
                 }
         
-                weatherOverlay=
-                    L.imageOverlay(
-                        imageUrl,
-                        rasterBounds,
-                        {
-                            opacity:1,
-                            interactive:false,
-                            zIndex:450
-                        }
-                    );
+                /*
+                 * Add all three world copies.
+                 */
+                overlays.forEach(
+                    overlay=>{
+                        overlay.addTo(map);
+                    }
+                );
         
-                weatherOverlay.addTo(map);
+                weatherOverlay=
+                    overlays;
         
             }catch(error){
         
