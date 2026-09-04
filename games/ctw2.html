@@ -188,7 +188,40 @@
                 maxZoom: 10,
                 zoomControl: false
             });
-        
+
+            map.on('moveend',()=>{
+            
+                if(currentMapMode!=='weather'){
+                    return;
+                }
+            
+                clearTimeout(
+                    weatherRenderTimer
+                );
+            
+                weatherRenderTimer=
+                    setTimeout(()=>{
+                        renderGlobalWeatherHeatGrid();
+                    },250);
+            });
+            
+            
+            map.on('zoomend',()=>{
+            
+                if(currentMapMode!=='weather'){
+                    return;
+                }
+            
+                clearTimeout(
+                    weatherRenderTimer
+                );
+            
+                weatherRenderTimer=
+                    setTimeout(()=>{
+                        renderGlobalWeatherHeatGrid();
+                    },250);
+            });
+
             baseTileLayer = L.tileLayer(
                 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
                 {
@@ -663,42 +696,7 @@
                 );
             }
         }
-        
-        
-        map.on('moveend',()=>{
-        
-            if(currentMapMode!=='weather'){
-                return;
-            }
-        
-            clearTimeout(
-                weatherRenderTimer
-            );
-        
-            weatherRenderTimer=
-                setTimeout(()=>{
-                    renderGlobalWeatherHeatGrid();
-                },250);
-        });
-        
-        
-        map.on('zoomend',()=>{
-        
-            if(currentMapMode!=='weather'){
-                return;
-            }
-        
-            clearTimeout(
-                weatherRenderTimer
-            );
-        
-            weatherRenderTimer=
-                setTimeout(()=>{
-                    renderGlobalWeatherHeatGrid();
-                },250);
-        });
-        
-        
+   
         async function switchMapMode(mode){
         
             currentMapMode=mode;
