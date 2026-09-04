@@ -350,462 +350,433 @@
         }
 
 
-    let weatherOverlay=null;
-    let weatherRenderId=0;
-    let weatherRenderController=null;
-    let weatherRenderTimer=null;
-    
-    
-    // ============================================================
-    // TEMPERATURE COLOR
-    // ============================================================
-    
-    function temperatureColor(temp){
-    
-        const stops=[
-            {t:-60,c:[80,0,150]},
-            {t:-40,c:[0,80,220]},
-            {t:-20,c:[0,180,255]},
-            {t:0,c:[0,220,170]},
-            {t:10,c:[80,220,60]},
-            {t:20,c:[230,240,0]},
-            {t:25,c:[255,190,0]},
-            {t:30,c:[255,100,0]},
-            {t:35,c:[255,30,0]},
-            {t:40,c:[210,0,0]},
-            {t:50,c:[130,0,0]},
-            {t:56,c:[90,0,0]}
-        ];
-    
-        if(temp<=stops[0].t){
-            return stops[0].c;
-        }
-    
-        if(temp>=stops[stops.length-1].t){
-            return stops[stops.length-1].c;
-        }
-    
-        for(let i=0;i<stops.length-1;i++){
-    
-            const a=stops[i];
-            const b=stops[i+1];
-    
-            if(temp>=a.t && temp<=b.t){
-    
-                const f=(temp-a.t)/(b.t-a.t);
-    
-                return [
-                    Math.round(a.c[0]+(b.c[0]-a.c[0])*f),
-                    Math.round(a.c[1]+(b.c[1]-a.c[1])*f),
-                    Math.round(a.c[2]+(b.c[2]-a.c[2])*f)
-                ];
-            }
-        }
-    
-        return [0,0,0];
-    }
-    
-    
-    // ============================================================
-    // CREATE WEATHER CANVAS
-    // ============================================================
-    
-    function createWeatherCanvas(data){
-    
-        const width=data.width;
-        const height=data.height;
-        const values=data.values;
-    
-        const canvas=document.createElement('canvas');
-    
-        const scale=2;
-    
-        canvas.width=width*scale;
-        canvas.height=height*scale;
-    
-        const ctx=canvas.getContext('2d',{
-            alpha:true
-        });
-    
-        const imageData=ctx.createImageData(
-            canvas.width,
-            canvas.height
-        );
-    
-        const pixels=imageData.data;
-    
-        for(let py=0;py<canvas.height;py++){
-    
-            const gy=
-                (py/(canvas.height-1))*
-                (height-1);
-    
-            const y0=Math.floor(gy);
-            const y1=Math.min(
-                y0+1,
-                height-1
-            );
-    
-            const fy=gy-y0;
-    
-            for(let px=0;px<canvas.width;px++){
-    
-                const gx=
-                    (px/(canvas.width-1))*
-                    (width-1);
-    
-                const x0=Math.floor(gx);
-                const x1=Math.min(
-                    x0+1,
-                    width-1
-                );
-    
-                const fx=gx-x0;
-    
-                const v00=
-                    values[y0*width+x0];
-    
-                const v10=
-                    values[y0*width+x1];
-    
-                const v01=
-                    values[y1*width+x0];
-    
-                const v11=
-                    values[y1*width+x1];
-    
-                const top=
-                    v00+
-                    (v10-v00)*fx;
-    
-                const bottom=
-                    v01+
-                    (v11-v01)*fx;
-    
-                const temp=
-                    top+
-                    (bottom-top)*fy;
-    
-                const color=
-                    temperatureColor(temp);
-    
-                const index=
-                    (py*canvas.width+px)*4;
-    
-                pixels[index]=color[0];
-                pixels[index+1]=color[1];
-                pixels[index+2]=color[2];
-    
-                pixels[index+3]=175;
-            }
-        }
-    
-        ctx.putImageData(
-            imageData,
-            0,
-            0
-        );
-    
-        return canvas;
-    }
-    
-    
-    // ============================================================
-    // RENDER WEATHER
-    // ============================================================
-    
-    async function renderGlobalWeatherHeatGrid(){
-    
-        if(currentMapMode!=='weather'){
-            return;
-        }
-    
-        const renderId=++weatherRenderId;
-    
-        if(weatherRenderController){
-            weatherRenderController.abort();
-        }
-    
-        weatherRenderController=
-            new AbortController();
-    
-        const mapBounds=
-            map.getBounds();
-    
-        const requestBounds={
-            south:mapBounds.getSouth(),
-            north:mapBounds.getNorth(),
-            west:mapBounds.getWest(),
-            east:mapBounds.getEast()
-        };
-    
-        try{
-    
-            const response=await fetch(
-                '/api/ctw2/weather/map',
-                {
-                    method:'POST',
-    
-                    headers:{
-                        'Content-Type':
-                            'application/json'
-                    },
-    
-                    signal:
-                        weatherRenderController.signal,
-    
-                    body:JSON.stringify({
-                        sw:[
-                            requestBounds.south,
-                            requestBounds.west
-                        ],
-    
-                        ne:[
-                            requestBounds.north,
-                            requestBounds.east
-                        ],
-    
-                        zoom:map.getZoom()
-                    })
+        // =====================================================================
+        // 🌡️ 4. КЛИМАТИЧЕСКИЙ ДВИЖОК
+        // =====================================================================
+        
+        let weatherOverlay=null;
+        let weatherRenderId=0;
+        let weatherRenderController=null;
+        let weatherRenderTimer=null;
+        
+        function getTemperatureColor(temp){
+        
+            const stops=[
+                [-60,[35,18,95]],
+                [-40,[55,35,170]],
+                [-20,[25,70,200]],
+                [-10,[0,145,230]],
+                [0,[0,205,230]],
+                [10,[30,210,165]],
+                [20,[95,215,80]],
+                [25,[180,225,60]],
+                [30,[255,225,55]],
+                [35,[255,175,45]],
+                [40,[255,105,40]],
+                [45,[235,45,38]],
+                [50,[185,15,35]],
+                [56,[130,0,20]]
+            ];
+        
+            temp=Math.max(-60,Math.min(56,temp));
+        
+            for(let i=0;i<stops.length-1;i++){
+        
+                const t1=stops[i][0];
+                const c1=stops[i][1];
+        
+                const t2=stops[i+1][0];
+                const c2=stops[i+1][1];
+        
+                if(temp>=t1 && temp<=t2){
+        
+                    const f=(temp-t1)/(t2-t1);
+        
+                    return [
+                        Math.round(c1[0]+(c2[0]-c1[0])*f),
+                        Math.round(c1[1]+(c2[1]-c1[1])*f),
+                        Math.round(c1[2]+(c2[2]-c1[2])*f)
+                    ];
                 }
-            );
-    
-            if(!response.ok){
-    
-                throw new Error(
-                    'Weather request failed: '+
-                    response.status
-                );
             }
-    
-            const data=
-                await response.json();
-    
-            if(
-                renderId!==weatherRenderId ||
-                currentMapMode!=='weather'
-            ){
+        
+            return stops[stops.length-1][1];
+        }
+        
+        
+        function createWeatherCanvas(data){
+        
+            const width=Number(data.width);
+            const height=Number(data.height);
+            const values=data.values;
+        
+            const scale=2;
+        
+            const canvas=document.createElement('canvas');
+        
+            canvas.width=width*scale;
+            canvas.height=height*scale;
+        
+            const ctx=canvas.getContext('2d');
+        
+            const imageData=ctx.createImageData(
+                canvas.width,
+                canvas.height
+            );
+        
+            const pixels=imageData.data;
+        
+            for(let py=0;py<canvas.height;py++){
+        
+                const gy=
+                    (py/(canvas.height-1))*
+                    (height-1);
+        
+                const y0=Math.floor(gy);
+                const y1=Math.min(
+                    y0+1,
+                    height-1
+                );
+        
+                const fy=gy-y0;
+        
+                for(let px=0;px<canvas.width;px++){
+        
+                    const gx=
+                        (px/(canvas.width-1))*
+                        (width-1);
+        
+                    const x0=Math.floor(gx);
+                    const x1=Math.min(
+                        x0+1,
+                        width-1
+                    );
+        
+                    const fx=gx-x0;
+        
+                    const v00=
+                        values[y0*width+x0];
+        
+                    const v10=
+                        values[y0*width+x1];
+        
+                    const v01=
+                        values[y1*width+x0];
+        
+                    const v11=
+                        values[y1*width+x1];
+        
+                    const top=
+                        v00+(v10-v00)*fx;
+        
+                    const bottom=
+                        v01+(v11-v01)*fx;
+        
+                    const temp=
+                        top+(bottom-top)*fy;
+        
+                    const color=
+                        getTemperatureColor(temp);
+        
+                    const index=
+                        (py*canvas.width+px)*4;
+        
+                    pixels[index]=color[0];
+                    pixels[index+1]=color[1];
+                    pixels[index+2]=color[2];
+                    pixels[index+3]=175;
+                }
+            }
+        
+            ctx.putImageData(
+                imageData,
+                0,
+                0
+            );
+        
+            return canvas;
+        }
+        
+        
+        async function renderGlobalWeatherHeatGrid(){
+        
+            if(!map || currentMapMode!=='weather'){
                 return;
             }
-    
-            if(
-                !data ||
-                data.status!=='success' ||
-                !Array.isArray(data.values) ||
-                !data.width ||
-                !data.height ||
-                !data.bounds
-            ){
-    
-                throw new Error(
-                    'Invalid weather raster'
-                );
+        
+            const renderId=++weatherRenderId;
+        
+            if(weatherRenderController){
+                weatherRenderController.abort();
             }
-    
-            const canvas=
-                createWeatherCanvas(data);
-    
-            const imageUrl=
-                canvas.toDataURL('image/png');
-    
-            const rasterBounds=
-                L.latLngBounds(
-                    [
-                        data.bounds.south,
-                        data.bounds.west
-                    ],
-                    [
-                        data.bounds.north,
-                        data.bounds.east
-                    ]
-                );
-    
-            const newOverlay=
-                L.imageOverlay(
-                    imageUrl,
-                    rasterBounds,
+        
+            const controller=
+                new AbortController();
+        
+            weatherRenderController=controller;
+        
+            const mapBounds=
+                map.getBounds();
+        
+            try{
+        
+                const response=await fetch(
+                    '/api/ctw2/weather/map',
                     {
-                        opacity:1,
-                        interactive:false
+                        method:'POST',
+        
+                        headers:{
+                            'Content-Type':
+                                'application/json'
+                        },
+        
+                        signal:
+                            controller.signal,
+        
+                        body:JSON.stringify({
+        
+                            sw:[
+                                mapBounds.getSouth(),
+                                mapBounds.getWest()
+                            ],
+        
+                            ne:[
+                                mapBounds.getNorth(),
+                                mapBounds.getEast()
+                            ],
+        
+                            zoom:map.getZoom()
+                        })
                     }
                 );
-    
-            newOverlay.addTo(map);
-    
-            if(
-                renderId!==weatherRenderId ||
-                currentMapMode!=='weather'
-            ){
-    
-                map.removeLayer(
-                    newOverlay
+        
+                if(!response.ok){
+        
+                    throw new Error(
+                        'Weather API HTTP '+
+                        response.status
+                    );
+                }
+        
+                const data=
+                    await response.json();
+        
+                if(
+                    renderId!==weatherRenderId ||
+                    currentMapMode!=='weather' ||
+                    controller.signal.aborted
+                ){
+                    return;
+                }
+        
+                if(
+                    !data ||
+                    data.status!=='success' ||
+                    !data.bounds ||
+                    !Array.isArray(data.values)
+                ){
+                    throw new Error(
+                        'Invalid weather raster'
+                    );
+                }
+        
+                const width=
+                    Number(data.width);
+        
+                const height=
+                    Number(data.height);
+        
+                if(
+                    width<2 ||
+                    height<2 ||
+                    data.values.length!==width*height
+                ){
+                    throw new Error(
+                        'Invalid raster dimensions'
+                    );
+                }
+        
+                const canvas=
+                    createWeatherCanvas(data);
+        
+                const imageUrl=
+                    canvas.toDataURL(
+                        'image/png'
+                    );
+        
+                const rasterBounds=
+                    L.latLngBounds(
+                        [
+                            Number(data.bounds.south),
+                            Number(data.bounds.west)
+                        ],
+                        [
+                            Number(data.bounds.north),
+                            Number(data.bounds.east)
+                        ]
+                    );
+        
+                const newOverlay=
+                    L.imageOverlay(
+                        imageUrl,
+                        rasterBounds,
+                        {
+                            opacity:1,
+                            interactive:false,
+                            zIndex:450
+                        }
+                    );
+        
+                newOverlay.addTo(map);
+        
+                if(
+                    renderId!==weatherRenderId ||
+                    currentMapMode!=='weather'
+                ){
+        
+                    map.removeLayer(
+                        newOverlay
+                    );
+        
+                    return;
+                }
+        
+                if(weatherOverlay){
+        
+                    map.removeLayer(
+                        weatherOverlay
+                    );
+                }
+        
+                weatherOverlay=
+                    newOverlay;
+        
+            }catch(error){
+        
+                if(error.name==='AbortError'){
+                    return;
+                }
+        
+                console.error(
+                    'Weather raster error:',
+                    error
                 );
-    
+            }
+        }
+        
+        
+        map.on('moveend',()=>{
+        
+            if(currentMapMode!=='weather'){
                 return;
             }
-    
-            if(weatherOverlay){
-    
-                map.removeLayer(
-                    weatherOverlay
-                );
-            }
-    
-            weatherOverlay=
-                newOverlay;
-    
-        }catch(error){
-    
-            if(error.name==='AbortError'){
-                return;
-            }
-    
-            console.error(
-                'Weather raster error:',
-                error
-            );
-        }
-    }
-    // ============================================================
-    // WEATHER MAP EVENTS
-    // ============================================================
-    
-    map.on('moveend',()=>{
-    
-        if(currentMapMode!=='weather'){
-            return;
-        }
-    
-        clearTimeout(
-            weatherRenderTimer
-        );
-    
-        weatherRenderTimer=
-            setTimeout(()=>{
-                renderGlobalWeatherHeatGrid();
-            },250);
-    });
-    
-    
-    map.on('zoomend',()=>{
-    
-        if(currentMapMode!=='weather'){
-            return;
-        }
-    
-        clearTimeout(
-            weatherRenderTimer
-        );
-    
-        weatherRenderTimer=
-            setTimeout(()=>{
-                renderGlobalWeatherHeatGrid();
-            },250);
-    });
-    
-    
-    map.on('resize',()=>{
-    
-        /*
-         * Leaflet automatically keeps the ImageOverlay
-         * attached to its geographic coordinates.
-         */
-    
-    });
-    
-    
-    // ============================================================
-    // MAP MODE
-    // ============================================================
-    
-    async function switchMapMode(mode){
-    
-        currentMapMode=mode;
-    
-        document
-            .getElementById('btn-mode-politic')
-            .classList
-            .remove('btn-active');
-    
-        document
-            .getElementById('btn-mode-weather')
-            .classList
-            .remove('btn-active');
-    
-    
-        // ========================================================
-        // POLITICAL
-        // ========================================================
-    
-        if(mode==='politic'){
-    
-            document
-                .getElementById('btn-mode-politic')
-                .classList
-                .add('btn-active');
-    
-            weatherRenderId++;
-    
-            if(weatherRenderController){
-    
-                weatherRenderController.abort();
-    
-                weatherRenderController=null;
-            }
-    
+        
             clearTimeout(
                 weatherRenderTimer
             );
-    
-            if(weatherOverlay){
-    
-                map.removeLayer(
-                    weatherOverlay
-                );
-    
-                weatherOverlay=null;
+        
+            weatherRenderTimer=
+                setTimeout(()=>{
+                    renderGlobalWeatherHeatGrid();
+                },250);
+        });
+        
+        
+        map.on('zoomend',()=>{
+        
+            if(currentMapMode!=='weather'){
+                return;
             }
-    
-            if(
-                !map.hasLayer(
-                    countriesGroupLayer
-                )
-            ){
-    
-                map.addLayer(
-                    countriesGroupLayer
+        
+            clearTimeout(
+                weatherRenderTimer
+            );
+        
+            weatherRenderTimer=
+                setTimeout(()=>{
+                    renderGlobalWeatherHeatGrid();
+                },250);
+        });
+        
+        
+        async function switchMapMode(mode){
+        
+            currentMapMode=mode;
+        
+            document
+                .getElementById('btn-mode-politic')
+                .classList
+                .toggle(
+                    'btn-active',
+                    mode==='politic'
                 );
-            }
-    
-            return;
-        }
-    
-    
-        // ========================================================
-        // WEATHER
-        // ========================================================
-    
-        if(mode==='weather'){
-    
+        
             document
                 .getElementById('btn-mode-weather')
                 .classList
-                .add('btn-active');
-    
-            if(
-                map.hasLayer(
-                    countriesGroupLayer
-                )
-            ){
-    
-                map.removeLayer(
-                    countriesGroupLayer
+                .toggle(
+                    'btn-active',
+                    mode==='weather'
                 );
+        
+        
+            weatherRenderId++;
+        
+            if(weatherRenderController){
+        
+                weatherRenderController.abort();
+        
+                weatherRenderController=null;
             }
-    
-            await renderGlobalWeatherHeatGrid();
+        
+            clearTimeout(
+                weatherRenderTimer
+            );
+        
+        
+            if(mode==='politic'){
+        
+                if(weatherOverlay){
+        
+                    map.removeLayer(
+                        weatherOverlay
+                    );
+        
+                    weatherOverlay=null;
+                }
+        
+                if(
+                    !map.hasLayer(
+                        countriesGroupLayer
+                    )
+                ){
+        
+                    map.addLayer(
+                        countriesGroupLayer
+                    );
+                }
+        
+                return;
+            }
+        
+        
+            if(mode==='weather'){
+        
+                if(
+                    map.hasLayer(
+                        countriesGroupLayer
+                    )
+                ){
+        
+                    map.removeLayer(
+                        countriesGroupLayer
+                    );
+                }
+        
+                await renderGlobalWeatherHeatGrid();
+            }
         }
-    }
+
         // НЕУБИВАЕМЫЙ МЕТЕОЗОНД (ИСПРАВЛЕНО: ЯРЛЫК ТЕПЕРЬ СТРЕЛЯЕТ С ПЕРВОГО КЛИКА)
         function initWeatherPointSensor() {
             map.on('click', async function (e) {
