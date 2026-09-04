@@ -6290,11 +6290,11 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
         # =========================================================
 
         if zoom <= 3:
-            step = 1.0
-        elif zoom <= 5:
             step = 0.5
-        else:
+        elif zoom <= 5:
             step = 0.25
+        else:
+            step = 0.125
 
         width = int(
             math.ceil(
