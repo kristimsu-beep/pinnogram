@@ -606,23 +606,23 @@
                  */
         
                 const overlays=[];
-        
+                
                 for(let world=-2;world<=2;world++){
-        
+                
                     const west=
                         -180+
                         world*360;
-        
+                
                     const east=
                         180+
                         world*360;
-        
+                
                     const bounds=
                         L.latLngBounds(
                             [-90,west],
                             [90,east]
                         );
-        
+                
                     const overlay=
                         L.imageOverlay(
                             imageUrl,
@@ -633,7 +633,7 @@
                                 zIndex:450
                             }
                         );
-        
+                
                     overlays.push(
                         overlay
                     );
@@ -731,8 +731,12 @@
         
                 if(weatherOverlay){
         
-                    map.removeLayer(
-                        weatherOverlay
+                    weatherOverlay.forEach(
+                        overlay=>{
+                            if(map.hasLayer(overlay)){
+                                map.removeLayer(overlay);
+                            }
+                        }
                     );
         
                     weatherOverlay=null;
@@ -768,7 +772,6 @@
                 await renderGlobalWeatherHeatGrid();
             }
         }
-
         // НЕУБИВАЕМЫЙ МЕТЕОЗОНД (ИСПРАВЛЕНО: ЯРЛЫК ТЕПЕРЬ СТРЕЛЯЕТ С ПЕРВОГО КЛИКА)
         function initWeatherPointSensor() {
             map.on('click', async function (e) {
