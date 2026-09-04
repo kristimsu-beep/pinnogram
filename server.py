@@ -6252,29 +6252,29 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
         # READ MAP BOUNDS
         # =========================================================
 
-        south_west = bounds.get("sw", [-60.0, -120.0])
-        north_east = bounds.get("ne", [75.0, 150.0])
+        south_west = bounds.get("sw", [-90.0, -180.0])
+        north_east = bounds.get("ne", [90.0, 180.0])
         zoom = float(bounds.get("zoom", 2.5))
-
-        lat_min = max(
-            -65.0,
-            float(south_west[0])
-        )
-
-        lat_max = min(
-            78.0,
-            float(north_east[0])
-        )
-
-        lng_min = max(
-            -180.0,
-            float(south_west[1])
-        )
-
-        lng_max = min(
-            180.0,
-            float(north_east[1])
-        )
+        
+        # =========================================================
+        # ALWAYS USE THE COMPLETE PLANET
+        # =========================================================
+        #
+        # The weather field is global.
+        # It must not be generated as separate viewport rectangles.
+        #
+        # This guarantees:
+        #   - Antarctica is included
+        #   - the weather field has one fixed coordinate system
+        #   - panning cannot create overlapping weather rectangles
+        #   - the temperature pattern stays geographically locked
+        #
+        
+        lat_min = -90.0
+        lat_max = 90.0
+        
+        lng_min = -180.0
+        lng_max = 180.0
 
         # =========================================================
         # ADAPTIVE GRID RESOLUTION
@@ -6292,9 +6292,9 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
         if zoom <= 3:
             step = 0.5
         elif zoom <= 5:
-            step = 0.25
+            step = 0.5
         else:
-            step = 0.125
+            step = 0.25
 
         width = int(
             math.ceil(
