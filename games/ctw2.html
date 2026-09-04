@@ -186,7 +186,12 @@
                 minZoom: 2,
                 maxZoom: 10,
                 zoomControl: false,
-                worldCopyJump: false
+            
+                // Allow the world to repeat horizontally.
+                worldCopyJump: false,
+            
+                // Keep longitude wrapping enabled.
+                crs: L.CRS.EPSG3857
             });
             
             baseTileLayer = L.tileLayer(
@@ -427,51 +432,176 @@
         
             return [80,220,120];
         }
-        
-        
+
+
         function createWeatherCanvas(data){
         
-            const width=Number(data.width);
-            const height=Number(data.height);
-            const values=data.values;
+            const srcWidth = Number(data.width);
+            const srcHeight = Number(data.height);
+            const values = data.values;
         
-            const canvas=document.createElement('canvas');
+            // Render the temperature field at higher resolution.
+            // The actual temperatures are interpolated, not just the colors.
+            const SCALE = 4;
         
-            canvas.width=width;
-            canvas.height=height;
+            const width = srcWidth * SCALE;
+            const height = srcHeight * SCALE;
         
-            const ctx=canvas.getContext('2d',{
-                alpha:true
+            const canvas = document.createElement('canvas');
+        
+            canvas.width = width;
+            canvas.height = height;
+        
+            const ctx = canvas.getContext('2d', {
+                alpha: true
             });
         
-            const imageData=
+            const imageData =
                 ctx.createImageData(
                     width,
                     height
                 );
         
-            const pixels=imageData.data;
+            const pixels = imageData.data;
         
-            for(let y=0;y<height;y++){
         
-                for(let x=0;x<width;x++){
+            // ---------------------------------------------------------
+            // Safely read a temperature from the original grid
+            // ---------------------------------------------------------
+            function getValue(x, y){
         
-                    const temp=
-                        values[y*width+x];
+                x = Math.max(
+                    0,
+                    Math.min(srcWidth - 1, x)
+                );
         
-                    const color=
+                y = Math.max(
+                    0,
+                    Math.min(srcHeight - 1, y)
+                );
+        
+                const value =
+                    Number(values[y * srcWidth + x]);
+        
+                return Number.isFinite(value)
+                    ? value
+                    : null;
+            }
+        
+        
+            // ---------------------------------------------------------
+            // Bilinear interpolation between the four surrounding
+            // temperature values.
+            // ---------------------------------------------------------
+            function interpolateTemperature(x, y){
+        
+                const x0 = Math.floor(x);
+                const y0 = Math.floor(y);
+        
+                const x1 =
+                    Math.min(
+                        x0 + 1,
+                        srcWidth - 1
+                    );
+        
+                const y1 =
+                    Math.min(
+                        y0 + 1,
+                        srcHeight - 1
+                    );
+        
+                const fx = x - x0;
+                const fy = y - y0;
+        
+                const v00 = getValue(x0, y0);
+                const v10 = getValue(x1, y0);
+                const v01 = getValue(x0, y1);
+                const v11 = getValue(x1, y1);
+        
+        
+                // If the weather API contains missing values,
+                // don't create strange interpolation around them.
+                if(
+                    v00 === null ||
+                    v10 === null ||
+                    v01 === null ||
+                    v11 === null
+                ){
+                    return null;
+                }
+        
+        
+                const top =
+                    v00 +
+                    (v10 - v00) * fx;
+        
+                const bottom =
+                    v01 +
+                    (v11 - v01) * fx;
+        
+                return (
+                    top +
+                    (bottom - top) * fy
+                );
+            }
+        
+        
+            // ---------------------------------------------------------
+            // Draw the smooth temperature field
+            // ---------------------------------------------------------
+            for(let y = 0; y < height; y++){
+        
+                const sourceY =
+                    y / SCALE;
+        
+        
+                for(let x = 0; x < width; x++){
+        
+                    const sourceX =
+                        x / SCALE;
+        
+        
+                    const temp =
+                        interpolateTemperature(
+                            sourceX,
+                            sourceY
+                        );
+        
+        
+                    const index =
+                        (y * width + x) * 4;
+        
+        
+                    // Missing temperature
+                    if(temp === null){
+        
+                        pixels[index] = 0;
+                        pixels[index + 1] = 0;
+                        pixels[index + 2] = 0;
+                        pixels[index + 3] = 0;
+        
+                        continue;
+                    }
+        
+        
+                    const color =
                         getTemperatureColor(temp);
         
-                    const index=
-                        (y*width+x)*4;
         
-                    pixels[index]=color[0];
-                    pixels[index+1]=color[1];
-                    pixels[index+2]=color[2];
+                    pixels[index] =
+                        color[0];
         
-                    pixels[index+3]=195;
+                    pixels[index + 1] =
+                        color[1];
+        
+                    pixels[index + 2] =
+                        color[2];
+        
+                    pixels[index + 3] =
+                        195;
                 }
             }
+        
         
             ctx.putImageData(
                 imageData,
@@ -479,34 +609,43 @@
                 0
             );
         
+        
             return canvas;
         }
-       
+
         async function renderGlobalWeatherHeatGrid(){
         
-            if(!map || currentMapMode!=='weather'){
+            if(
+                !map ||
+                currentMapMode !== 'weather'
+            ){
                 return;
             }
         
-            const renderId=
+        
+            const renderId =
                 ++weatherRenderId;
         
+        
+            // Cancel previous weather request
             if(weatherRenderController){
         
                 weatherRenderController.abort();
         
-                weatherRenderController=null;
+                weatherRenderController = null;
             }
         
-            const controller=
+        
+            const controller =
                 new AbortController();
         
-            weatherRenderController=
+            weatherRenderController =
                 controller;
+        
         
             try{
         
-                const response=
+                const response =
                     await fetch(
                         '/api/ctw2/weather/map',
                         {
@@ -526,28 +665,33 @@
                         }
                     );
         
+        
                 if(!response.ok){
         
                     throw new Error(
-                        'Weather API HTTP '+
+                        'Weather API HTTP ' +
                         response.status
                     );
                 }
         
-                const data=
+        
+                const data =
                     await response.json();
         
+        
+                // Ignore old requests
                 if(
-                    renderId!==weatherRenderId ||
-                    currentMapMode!=='weather' ||
+                    renderId !== weatherRenderId ||
+                    currentMapMode !== 'weather' ||
                     controller.signal.aborted
                 ){
                     return;
                 }
         
+        
                 if(
                     !data ||
-                    data.status!=='success' ||
+                    data.status !== 'success' ||
                     !Array.isArray(data.values)
                 ){
         
@@ -556,17 +700,18 @@
                     );
                 }
         
-                const width=
+        
+                const width =
                     Number(data.width);
         
-                const height=
+                const height =
                     Number(data.height);
         
+        
                 if(
-                    width<2 ||
-                    height<2 ||
-                    data.values.length!==
-                        width*height
+                    width < 2 ||
+                    height < 2 ||
+                    data.values.length !== width * height
                 ){
         
                     throw new Error(
@@ -574,130 +719,165 @@
                     );
                 }
         
-                const canvas=
+        
+                // ---------------------------------------------------------
+                // Create the smooth high-resolution weather image
+                // ---------------------------------------------------------
+        
+                const canvas =
                     createWeatherCanvas(data);
         
-                const imageUrl=
+        
+                const imageUrl =
                     canvas.toDataURL(
                         'image/png'
                     );
         
-                /*
-                 * The weather raster is ALWAYS the entire planet.
-                 */
-                const worldBounds=[
-                    [-90,-180],
-                    [90,180]
-                ];
         
-                /*
-                 * Leaflet does not automatically repeat ImageOverlay
-                 * horizontally like a tile layer.
-                 *
-                 * Therefore we create several copies of the SAME
-                 * global image:
-                 *
-                 *   -540 ... -180
-                 *   -180 ...  180
-                 *    180 ...  540
-                 *
-                 * This makes the weather layer visually endless
-                 * when the user scrolls left or right.
-                 */
+                // ---------------------------------------------------------
+                // Remove previous copies
+                // ---------------------------------------------------------
         
-                const overlays=[];
-                
-                for(let world=-2;world<=2;world++){
-                
-                    const west=
-                        -180+
-                        world*360;
-                
-                    const east=
-                        180+
-                        world*360;
-                
-                    const bounds=
+                if(weatherOverlay){
+        
+                    weatherOverlay.forEach(
+                        overlay => {
+        
+                            if(map.hasLayer(overlay)){
+                                map.removeLayer(overlay);
+                            }
+        
+                        }
+                    );
+        
+                    weatherOverlay = null;
+                }
+        
+        
+                // ---------------------------------------------------------
+                // Create MANY copies of the world.
+                //
+                // We use ±10 worlds instead of only ±2.
+                //
+                // This means the user can drag a very long distance
+                // horizontally without reaching the edge of the
+                // weather layer.
+                // ---------------------------------------------------------
+        
+                const overlays = [];
+        
+        
+                const centerWorld =
+                    Math.round(
+                        map.getCenter().lng / 360
+                    );
+        
+        
+                for(
+                    let world =
+                        centerWorld - 10;
+        
+                    world <=
+                        centerWorld + 10;
+        
+                    world++
+                ){
+        
+                    const west =
+                        -180 +
+                        world * 360;
+        
+                    const east =
+                        180 +
+                        world * 360;
+        
+        
+                    const bounds =
                         L.latLngBounds(
-                            [-90,west],
-                            [90,east]
+                            [-90, west],
+                            [90, east]
                         );
-                
-                    const overlay=
+        
+        
+                    const overlay =
                         L.imageOverlay(
                             imageUrl,
                             bounds,
                             {
                                 opacity:1,
+        
                                 interactive:false,
-                                zIndex:450
+        
+                                zIndex:450,
+        
+                                // Prevent Leaflet from trying to
+                                // modify the image itself.
+                                crossOrigin:true
                             }
                         );
-                
+        
+        
                     overlays.push(
                         overlay
                     );
                 }
         
-                /*
-                 * Remove the old weather copies before adding
-                 * the new ones.
-                 */
-                if(weatherOverlay){
         
-                    weatherOverlay.forEach(
-                        overlay=>{
-                            if(map.hasLayer(overlay)){
-                                map.removeLayer(overlay);
-                            }
-                        }
-                    );
-        
-                    weatherOverlay=null;
-                }
+                // ---------------------------------------------------------
+                // Final safety check before adding layers
+                // ---------------------------------------------------------
         
                 if(
-                    renderId!==weatherRenderId ||
-                    currentMapMode!=='weather' ||
+                    renderId !== weatherRenderId ||
+                    currentMapMode !== 'weather' ||
                     controller.signal.aborted
                 ){
                     return;
                 }
         
-                /*
-                 * Add all three world copies.
-                 */
+        
+                // Add all repeated worlds
                 overlays.forEach(
-                    overlay=>{
+                    overlay => {
+        
                         overlay.addTo(map);
+        
                     }
                 );
         
-                weatherOverlay=
+        
+                weatherOverlay =
                     overlays;
+        
         
             }catch(error){
         
-                if(error.name==='AbortError'){
+                if(
+                    error.name === 'AbortError'
+                ){
                     return;
                 }
+        
         
                 console.error(
                     'Weather raster error:',
                     error
                 );
         
+        
             }finally{
         
                 if(
-                    weatherRenderController===
+                    weatherRenderController ===
                     controller
                 ){
-                    weatherRenderController=null;
+        
+                    weatherRenderController =
+                        null;
                 }
             }
         }
-   
+
         async function switchMapMode(mode){
         
             currentMapMode=mode;
