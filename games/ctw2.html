@@ -113,6 +113,10 @@
         #map.weather-mode .leaflet-tile-container {
             filter: brightness(0.9) saturate(0.75) contrast(0.95);
         }
+        .weather-raster {
+            image-rendering: auto !important;
+            image-rendering: smooth !important;
+        }
     </style>
 </head>
 <body>
@@ -186,13 +190,13 @@
                 minZoom: 2,
                 maxZoom: 10,
                 zoomControl: false,
-            
-                // Allow the world to repeat horizontally.
                 worldCopyJump: false,
-            
-                // Keep longitude wrapping enabled.
                 crs: L.CRS.EPSG3857
             });
+            
+            map.on('move', scheduleWeatherCanvasDraw);
+            map.on('zoom', scheduleWeatherCanvasDraw);
+            map.on('resize', scheduleWeatherCanvasDraw);
             
             baseTileLayer = L.tileLayer(
                 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -356,9 +360,14 @@
         // 🌡️ 4. КЛИМАТИЧЕСКИЙ ДВИЖОК
         // =====================================================================
         
-        let weatherOverlay=null;
-        let weatherRenderId=0;
-        let weatherRenderController=null;
+        let weatherCanvas = null;
+        let weatherSourceCanvas = null;
+        let weatherRasterBounds = null;
+        
+        let weatherRenderId = 0;
+        let weatherRenderController = null;
+        let weatherDrawFrame = 0;
+        let weatherLoadedZoom = null;
         
         function getTemperatureColor(temp){
         
@@ -622,19 +631,15 @@
                 return;
             }
         
-        
             const renderId =
                 ++weatherRenderId;
         
-        
-            // Cancel previous weather request
             if(weatherRenderController){
         
                 weatherRenderController.abort();
         
                 weatherRenderController = null;
             }
-        
         
             const controller =
                 new AbortController();
@@ -679,7 +684,6 @@
                     await response.json();
         
         
-                // Ignore old requests
                 if(
                     renderId !== weatherRenderId ||
                     currentMapMode !== 'weather' ||
@@ -692,6 +696,7 @@
                 if(
                     !data ||
                     data.status !== 'success' ||
+                    !data.bounds ||
                     !Array.isArray(data.values)
                 ){
         
@@ -720,9 +725,9 @@
                 }
         
         
-                // ---------------------------------------------------------
-                // Create the smooth high-resolution weather image
-                // ---------------------------------------------------------
+                // =====================================================
+                // Create the temperature image
+                // =====================================================
         
                 const canvas =
                     createWeatherCanvas(data);
@@ -734,9 +739,104 @@
                     );
         
         
-                // ---------------------------------------------------------
-                // Remove previous copies
-                // ---------------------------------------------------------
+                // =====================================================
+                // IMPORTANT:
+                // USE THE REAL BOUNDS FROM THE WEATHER API.
+                //
+                // DO NOT use [-90,-180] -> [90,180].
+                // =====================================================
+        
+                let south;
+                let west;
+                let north;
+                let east;
+        
+        
+                /*
+                 * Support the most common formats:
+                 *
+                 * {
+                 *   south: ...,
+                 *   west: ...,
+                 *   north: ...,
+                 *   east: ...
+                 * }
+                 *
+                 * or:
+                 *
+                 * {
+                 *   minLat: ...,
+                 *   minLng: ...,
+                 *   maxLat: ...,
+                 *   maxLng: ...
+                 * }
+                 *
+                 * or:
+                 *
+                 * [south, west, north, east]
+                 */
+        
+        
+                if(Array.isArray(data.bounds)){
+        
+                    south = Number(data.bounds[0]);
+                    west  = Number(data.bounds[1]);
+                    north = Number(data.bounds[2]);
+                    east  = Number(data.bounds[3]);
+        
+                }else{
+        
+                    south =
+                        Number(
+                            data.bounds.south ??
+                            data.bounds.minLat ??
+                            data.bounds.latMin
+                        );
+        
+                    west =
+                        Number(
+                            data.bounds.west ??
+                            data.bounds.minLng ??
+                            data.bounds.lngMin
+                        );
+        
+                    north =
+                        Number(
+                            data.bounds.north ??
+                            data.bounds.maxLat ??
+                            data.bounds.latMax
+                        );
+        
+                    east =
+                        Number(
+                            data.bounds.east ??
+                            data.bounds.maxLng ??
+                            data.bounds.lngMax
+                        );
+                }
+        
+        
+                if(
+                    !Number.isFinite(south) ||
+                    !Number.isFinite(west) ||
+                    !Number.isFinite(north) ||
+                    !Number.isFinite(east)
+                ){
+        
+                    console.error(
+                        'Invalid weather bounds:',
+                        data.bounds
+                    );
+        
+                    throw new Error(
+                        'Invalid weather bounds'
+                    );
+                }
+        
+        
+                // =====================================================
+                // Remove old weather layer
+                // =====================================================
         
                 if(weatherOverlay){
         
@@ -754,48 +854,58 @@
                 }
         
         
-                // ---------------------------------------------------------
-                // Create MANY copies of the world.
+                if(
+                    renderId !== weatherRenderId ||
+                    currentMapMode !== 'weather' ||
+                    controller.signal.aborted
+                ){
+                    return;
+                }
+        
+        
+                // =====================================================
+                // Create repeated copies of the REAL weather raster
                 //
-                // We use ±10 worlds instead of only ±2.
-                //
-                // This means the user can drag a very long distance
-                // horizontally without reaching the edge of the
-                // weather layer.
-                // ---------------------------------------------------------
+                // This repeats the actual geographic raster rather than
+                // stretching it over the whole Earth.
+                // =====================================================
         
                 const overlays = [];
         
         
+                const centerLng =
+                    map.getCenter().lng;
+        
+        
                 const centerWorld =
-                    Math.round(
-                        map.getCenter().lng / 360
+                    Math.floor(
+                        (centerLng + 180) / 360
                     );
         
         
                 for(
                     let world =
-                        centerWorld - 10;
+                        centerWorld - 5;
         
                     world <=
-                        centerWorld + 10;
+                        centerWorld + 5;
         
                     world++
                 ){
         
-                    const west =
-                        -180 +
+                    const copyWest =
+                        west +
                         world * 360;
         
-                    const east =
-                        180 +
+                    const copyEast =
+                        east +
                         world * 360;
         
         
                     const bounds =
                         L.latLngBounds(
-                            [-90, west],
-                            [90, east]
+                            [south, copyWest],
+                            [north, copyEast]
                         );
         
         
@@ -810,9 +920,10 @@
         
                                 zIndex:450,
         
-                                // Prevent Leaflet from trying to
-                                // modify the image itself.
-                                crossOrigin:true
+                                // Let the browser smoothly scale
+                                // the weather image.
+                                className:
+                                    'weather-raster'
                             }
                         );
         
@@ -823,20 +934,10 @@
                 }
         
         
-                // ---------------------------------------------------------
-                // Final safety check before adding layers
-                // ---------------------------------------------------------
+                // =====================================================
+                // Add all worlds
+                // =====================================================
         
-                if(
-                    renderId !== weatherRenderId ||
-                    currentMapMode !== 'weather' ||
-                    controller.signal.aborted
-                ){
-                    return;
-                }
-        
-        
-                // Add all repeated worlds
                 overlays.forEach(
                     overlay => {
         
@@ -858,7 +959,6 @@
                     return;
                 }
         
-        
                 console.error(
                     'Weather raster error:',
                     error
@@ -875,6 +975,122 @@
                     weatherRenderController =
                         null;
                 }
+            }
+        }
+
+        function rebuildWeatherWorldCopies(){
+        
+            if(
+                currentMapMode !== 'weather' ||
+                !weatherOverlay ||
+                weatherOverlay.length === 0
+            ){
+                return;
+            }
+        
+        
+            const firstOverlay =
+                weatherOverlay[0];
+        
+        
+            if(
+                !firstOverlay ||
+                !firstOverlay._image
+            ){
+                return;
+            }
+        
+        
+            const imageUrl =
+                firstOverlay._image.src;
+        
+        
+            // Get the geographic bounds of the original raster.
+            const originalBounds =
+                firstOverlay.getBounds();
+        
+        
+            const south =
+                originalBounds.getSouth();
+        
+            const north =
+                originalBounds.getNorth();
+        
+        
+            // The first overlay may currently be a shifted copy,
+            // so normalize its longitude back to the original world.
+        
+            const currentWest =
+                originalBounds.getWest();
+        
+            const currentEast =
+                originalBounds.getEast();
+        
+        
+            const currentWorld =
+                Math.floor(
+                    (map.getCenter().lng + 180) / 360
+                );
+        
+        
+            // Remove current copies.
+            weatherOverlay.forEach(
+                overlay => {
+        
+                    if(map.hasLayer(overlay)){
+                        map.removeLayer(overlay);
+                    }
+        
+                }
+            );
+        
+        
+            weatherOverlay = [];
+        
+        
+            // Create plenty of worlds around the user.
+            for(
+                let world =
+                    currentWorld - 6;
+        
+                world <=
+                    currentWorld + 6;
+        
+                world++
+            ){
+        
+                const west =
+                    currentWest +
+                    (world - currentWorld) * 360;
+        
+                const east =
+                    currentEast +
+                    (world - currentWorld) * 360;
+        
+        
+                const overlay =
+                    L.imageOverlay(
+                        imageUrl,
+        
+                        L.latLngBounds(
+                            [south, west],
+                            [north, east]
+                        ),
+        
+                        {
+                            opacity:1,
+                            interactive:false,
+                            zIndex:450,
+                            className:'weather-raster'
+                        }
+                    );
+        
+        
+                overlay.addTo(map);
+        
+                weatherOverlay.push(
+                    overlay
+                );
             }
         }
 
