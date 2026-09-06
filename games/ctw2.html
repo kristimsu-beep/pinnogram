@@ -868,6 +868,150 @@
             return canvas;
         }
 
+        function normalizeWeatherBounds(bounds) {
+        
+            let south;
+            let west;
+            let north;
+            let east;
+        
+        
+            // Format:
+            // [south, west, north, east]
+            if (Array.isArray(bounds)) {
+        
+                // Format:
+                // [[south, west], [north, east]]
+                if (
+                    Array.isArray(bounds[0]) &&
+                    Array.isArray(bounds[1])
+                ) {
+        
+                    south = Number(bounds[0][0]);
+                    west  = Number(bounds[0][1]);
+        
+                    north = Number(bounds[1][0]);
+                    east  = Number(bounds[1][1]);
+        
+                } else {
+        
+                    south = Number(bounds[0]);
+                    west  = Number(bounds[1]);
+                    north = Number(bounds[2]);
+                    east  = Number(bounds[3]);
+                }
+            }
+        
+        
+            // Object format
+            else if (
+                bounds &&
+                typeof bounds === 'object'
+            ) {
+        
+                // { southWest: {lat,lng}, northEast: {lat,lng} }
+                if (
+                    bounds.southWest &&
+                    bounds.northEast
+                ) {
+        
+                    south =
+                        Number(bounds.southWest.lat);
+        
+                    west =
+                        Number(bounds.southWest.lng);
+        
+                    north =
+                        Number(bounds.northEast.lat);
+        
+                    east =
+                        Number(bounds.northEast.lng);
+                }
+        
+        
+                // Leaflet-style private names
+                else if (
+                    bounds._southWest &&
+                    bounds._northEast
+                ) {
+        
+                    south =
+                        Number(bounds._southWest.lat);
+        
+                    west =
+                        Number(bounds._southWest.lng);
+        
+                    north =
+                        Number(bounds._northEast.lat);
+        
+                    east =
+                        Number(bounds._northEast.lng);
+                }
+        
+        
+                // Normal object properties
+                else {
+        
+                    south = Number(
+                        bounds.south ??
+                        bounds.minLat ??
+                        bounds.latMin
+                    );
+        
+                    west = Number(
+                        bounds.west ??
+                        bounds.minLng ??
+                        bounds.lngMin ??
+                        bounds.lonMin
+                    );
+        
+                    north = Number(
+                        bounds.north ??
+                        bounds.maxLat ??
+                        bounds.latMax
+                    );
+        
+                    east = Number(
+                        bounds.east ??
+                        bounds.maxLng ??
+                        bounds.lngMax ??
+                        bounds.lonMax
+                    );
+                }
+            }
+        
+        
+            // Make sure all four values are valid.
+            if (
+                !Number.isFinite(south) ||
+                !Number.isFinite(west) ||
+                !Number.isFinite(north) ||
+                !Number.isFinite(east)
+            ) {
+        
+                console.error(
+                    'Invalid weather bounds:',
+                    bounds
+                );
+        
+                return null;
+            }
+        
+        
+            // Handle a raster crossing the 180° meridian.
+            if (east < west) {
+                east += 360;
+            }
+        
+        
+            return {
+                south: south,
+                west: west,
+                north: north,
+                east: east
+            };
+        }
+
         async function renderGlobalWeatherHeatGrid() {
         
             const renderId = ++weatherRenderId;
