@@ -261,207 +261,7 @@
         
             resizeWeatherCanvas();
         }
-        
-        
-        function drawWeatherCanvas() {
-        
-            if (
-                !weatherCanvas ||
-                !weatherSourceCanvas ||
-                !weatherRasterBounds ||
-                !map
-            ) {
-                return;
-            }
-        
-            const ctx =
-                weatherCanvas.getContext('2d');
-        
-            const size =
-                map.getSize();
-        
-            const dpr =
-                Math.min(
-                    window.devicePixelRatio || 1,
-                    2
-                );
-        
-            const canvasWidth =
-                Math.round(size.x * dpr);
-        
-            const canvasHeight =
-                Math.round(size.y * dpr);
-        
-            if (
-                weatherCanvas.width !== canvasWidth ||
-                weatherCanvas.height !== canvasHeight
-            ) {
-        
-                weatherCanvas.width =
-                    canvasWidth;
-        
-                weatherCanvas.height =
-                    canvasHeight;
-        
-                weatherCanvas.style.width =
-                    size.x + 'px';
-        
-                weatherCanvas.style.height =
-                    size.y + 'px';
-            }
-        
-            ctx.setTransform(
-                dpr,
-                0,
-                0,
-                dpr,
-                0,
-                0
-            );
-        
-            ctx.clearRect(
-                0,
-                0,
-                size.x,
-                size.y
-            );
-        
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-        
-        
-            /*
-             * =========================================================
-             * ONE COMPLETE GLOBAL WEATHER WORLD
-             * =========================================================
-             *
-             * The API raster is:
-             *
-             *      721 x 361
-             *
-             * covering:
-             *
-             *      -180 ... +180
-             *       -90 ...  +90
-             *
-             * Therefore its geographic aspect ratio is exactly 2:1.
-             *
-             * We use Leaflet's projected longitude width for the
-             * horizontal size and derive the vertical size from the
-             * raster's 2:1 aspect ratio.
-             */
-        
-            const zoom =
-                map.getZoom();
-        
-            const worldWidth =
-                map.project(
-                    [0, 180],
-                    zoom
-                ).x -
-                map.project(
-                    [0, -180],
-                    zoom
-                ).x;
-        
-            const worldHeight =
-                worldWidth *
-                (
-                    weatherSourceCanvas.height /
-                    weatherSourceCanvas.width
-                );
-        
-        
-            /*
-             * =========================================================
-             * FIND THE SCREEN POSITION OF THE GLOBAL RASTER
-             * =========================================================
-             *
-             * We anchor the raster at longitude -180.
-             */
-        
-            const anchor =
-                map.latLngToContainerPoint([
-                    0,
-                    -180
-                ]);
-        
-            /*
-             * Because the source raster is centered vertically
-             * around latitude 0, calculate its top from the
-             * map's latitude-0 screen position.
-             */
-        
-            const centerY =
-                map.latLngToContainerPoint([
-                    0,
-                    0
-                ]).y;
-        
-            const top =
-                centerY -
-                worldHeight / 2;
-        
-        
-            /*
-             * =========================================================
-             * ENDLESS HORIZONTAL COPIES
-             * =========================================================
-             */
-        
-            const left =
-                anchor.x;
-        
-            const firstCopy =
-                Math.floor(
-                    -left / worldWidth
-                ) - 1;
-        
-            const lastCopy =
-                Math.ceil(
-                    (size.x - left) /
-                    worldWidth
-                ) + 1;
-        
-        
-            for (
-                let copy = firstCopy;
-                copy <= lastCopy;
-                copy++
-            ) {
-        
-                const x =
-                    left +
-                    copy * worldWidth;
-        
-                /*
-                 * Skip completely invisible copies.
-                 */
-        
-                if (
-                    x + worldWidth <= 0 ||
-                    x >= size.x
-                ) {
-                    continue;
-                }
-        
-                /*
-                 * Draw exactly one raster copy.
-                 *
-                 * No overlap.
-                 */
-        
-                ctx.drawImage(
-                    weatherSourceCanvas,
-                    x,
-                    top,
-                    worldWidth,
-                    worldHeight
-                );
-            }
-        }
-        
-        
+       
         function removeWeatherCanvas() {
         
             if (weatherDrawFrame) {
@@ -753,21 +553,35 @@
             const srcHeight = Number(data.height);
             const values = data.values;
         
-            // Render the temperature field at higher resolution.
-            // The actual temperatures are interpolated, not just the colors.
             const SCALE = 4;
         
-            const width = (srcWidth - 1) * SCALE;
-            const height = (srcHeight - 1) * SCALE;
+            /*
+             * 721 samples represent 720 longitude intervals.
+             * 361 samples represent 360 latitude intervals.
+             *
+             * Therefore the visual canvas represents exactly:
+             *
+             *      360° × 180°
+             *
+             * without stretching the duplicate edge pixel.
+             */
         
-            const canvas = document.createElement('canvas');
+            const width =
+                (srcWidth - 1) * SCALE;
+        
+            const height =
+                (srcHeight - 1) * SCALE;
+        
+            const canvas =
+                document.createElement('canvas');
         
             canvas.width = width;
             canvas.height = height;
         
-            const ctx = canvas.getContext('2d', {
-                alpha: true
-            });
+            const ctx =
+                canvas.getContext('2d', {
+                    alpha: true
+                });
         
             const imageData =
                 ctx.createImageData(
@@ -775,54 +589,12 @@
                     height
                 );
         
-            const pixels = imageData.data;
+            const pixels =
+                imageData.data;
         
         
-            // ---------------------------------------------------------
-            // Safely read a temperature from the original grid
-            // ---------------------------------------------------------
-            // ---------------------------------------------------------
-            // Read temperature from the source grid.
-            //
-            // X wraps horizontally because the temperature map represents
-            // a complete world. The pixel after the last column is column 0.
-            // Y is still clamped because the poles are the actual edges.
-            // ---------------------------------------------------------
             function getValue(x, y){
-            
-                x = Math.max(
-                    0,
-                    Math.min(srcWidth - 1, x)
-                );
-            
-                y = Math.max(
-                    0,
-                    Math.min(srcHeight - 1, y)
-                );
-            
-                const value =
-                    Number(
-                        values[
-                            y * srcWidth + x
-                        ]
-                    );
-            
-                return Number.isFinite(value)
-                    ? value
-                    : null;
-            }
-            
-            
-            function interpolateTemperature(x, y){
-            
-                /*
-                 * The API gives us 721 columns for
-                 * 720 geographic intervals.
-                 *
-                 * Therefore the final column is the
-                 * same geographic edge as the first.
-                 */
-            
+        
                 x =
                     Math.max(
                         0,
@@ -831,7 +603,7 @@
                             x
                         )
                     );
-            
+        
                 y =
                     Math.max(
                         0,
@@ -840,41 +612,59 @@
                             y
                         )
                     );
-            
-            
-                const x0 = Math.floor(x);
-                const y0 = Math.floor(y);
-            
+        
+                const value =
+                    Number(
+                        values[
+                            y * srcWidth + x
+                        ]
+                    );
+        
+                return Number.isFinite(value)
+                    ? value
+                    : null;
+            }
+        
+        
+            function interpolateTemperature(x, y){
+        
+                const x0 =
+                    Math.floor(x);
+        
+                const y0 =
+                    Math.floor(y);
+        
                 const x1 =
                     Math.min(
                         x0 + 1,
                         srcWidth - 1
                     );
-            
+        
                 const y1 =
                     Math.min(
                         y0 + 1,
                         srcHeight - 1
                     );
-            
-            
-                const fx = x - x0;
-                const fy = y - y0;
-            
-            
+        
+                const fx =
+                    x - x0;
+        
+                const fy =
+                    y - y0;
+        
                 const v00 =
                     getValue(x0, y0);
-            
+        
                 const v10 =
                     getValue(x1, y0);
-            
+        
                 const v01 =
                     getValue(x0, y1);
-            
+        
                 const v11 =
                     getValue(x1, y1);
-            
-            
+        
+        
                 if(
                     v00 === null ||
                     v10 === null ||
@@ -883,17 +673,17 @@
                 ){
                     return null;
                 }
-            
-            
+        
+        
                 const top =
                     v00 +
                     (v10 - v00) * fx;
-            
+        
                 const bottom =
                     v01 +
                     (v11 - v01) * fx;
-            
-            
+        
+        
                 return (
                     top +
                     (bottom - top) * fy
@@ -901,16 +691,21 @@
             }
         
         
-            // ---------------------------------------------------------
-            // Draw the smooth temperature field
-            // ---------------------------------------------------------
-            for(let y = 0; y < height; y++){
+            for(
+                let y = 0;
+                y < height;
+                y++
+            ){
         
                 const sourceY =
                     y / SCALE;
         
         
-                for(let x = 0; x < width; x++){
+                for(
+                    let x = 0;
+                    x < width;
+                    x++
+                ){
         
                     const sourceX =
                         x / SCALE;
@@ -927,7 +722,6 @@
                         (y * width + x) * 4;
         
         
-                    // Missing temperature
                     if(temp === null){
         
                         pixels[index] = 0;
@@ -952,7 +746,8 @@
                     pixels[index + 2] =
                         color[2];
         
-                    pixels[index + 3] = 195;
+                    pixels[index + 3] =
+                        195;
                 }
             }
         
@@ -1271,42 +1066,62 @@
             }
         }
 
-        function drawWeatherCanvas() {
+        function drawWeatherCanvas(){
         
-            if (
+            if(
                 !weatherCanvas ||
                 !weatherSourceCanvas ||
-                !weatherRasterBounds ||
                 !map
-            ) {
+            ){
                 return;
             }
         
-            const ctx = weatherCanvas.getContext('2d');
         
-            const size = map.getSize();
+            const ctx =
+                weatherCanvas.getContext('2d');
         
-            const dpr = Math.min(
-                window.devicePixelRatio || 1,
-                2
-            );
         
-            // Make sure the canvas has the correct resolution.
-            const canvasWidth = Math.round(size.x * dpr);
-            const canvasHeight = Math.round(size.y * dpr);
+            const size =
+                map.getSize();
         
-            if (
+        
+            const dpr =
+                Math.min(
+                    window.devicePixelRatio || 1,
+                    2
+                );
+        
+        
+            const canvasWidth =
+                Math.round(
+                    size.x * dpr
+                );
+        
+            const canvasHeight =
+                Math.round(
+                    size.y * dpr
+                );
+        
+        
+            if(
                 weatherCanvas.width !== canvasWidth ||
                 weatherCanvas.height !== canvasHeight
-            ) {
-                weatherCanvas.width = canvasWidth;
-                weatherCanvas.height = canvasHeight;
+            ){
         
-                weatherCanvas.style.width = size.x + 'px';
-                weatherCanvas.style.height = size.y + 'px';
+                weatherCanvas.width =
+                    canvasWidth;
+        
+                weatherCanvas.height =
+                    canvasHeight;
+        
+                weatherCanvas.style.width =
+                    size.x + 'px';
+        
+                weatherCanvas.style.height =
+                    size.y + 'px';
             }
         
-            // Work in normal screen pixels.
+        
             ctx.setTransform(
                 dpr,
                 0,
@@ -1316,6 +1131,7 @@
                 0
             );
         
+        
             ctx.clearRect(
                 0,
                 0,
@@ -1323,129 +1139,123 @@
                 size.y
             );
         
-            // Smooth the temperature raster.
+        
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
         
         
-            const bounds = weatherRasterBounds;
-        
-            const zoom = map.getZoom();
-        
-        
             /*
-             * One complete world is 360 degrees.
-             * At Web Mercator zoom Z, its width is:
-             */
-            const worldWidth =
-                256 * Math.pow(2, zoom);
-        
-        
-            /*
-             * Calculate how many copies are necessary
-             * to cover the screen.
+             * EXACT LEAFLET WORLD WIDTH.
              *
-             * We create extra copies on both sides so
-             * dragging never exposes an empty area.
+             * This is the width of 360° at the
+             * current Web Mercator zoom.
              */
-            const copies =
-                Math.ceil(size.x / worldWidth) + 2;
         
+            const zoom =
+                map.getZoom();
         
-            const centerLng =
-                map.getCenter().lng;
-        
-        
-            /*
-             * Find the world copy closest to the map center.
-             */
-            const centerWorld =
-                Math.floor(
-                    (centerLng - bounds.west) / 360
+            const worldWidth =
+                256 * Math.pow(
+                    2,
+                    zoom
                 );
         
         
-            for (
-                let i = -copies;
-                i <= copies;
-                i++
-            ) {
+            /*
+             * Our source canvas is exactly one
+             * geographic world:
+             *
+             *       -180° → +180°
+             */
         
-                const world =
-                    centerWorld + i;
-        
-        
-                /*
-                 * Move this copy exactly 360 degrees
-                 * east/west from the original raster.
-                 */
-                const west =
-                    bounds.west + world * 360;
-        
-                const east =
-                    bounds.east + world * 360;
+            const worldHeight =
+                worldWidth *
+                (
+                    weatherSourceCanvas.height /
+                    weatherSourceCanvas.width
+                );
         
         
-                /*
-                 * Convert geographic coordinates
-                 * to screen coordinates.
-                 */
-                const topLeft =
-                    map.latLngToContainerPoint([
-                        bounds.north,
-                        west
-                    ]);
+            /*
+             * Find longitude -180 on screen.
+             */
         
-                const bottomRight =
-                    map.latLngToContainerPoint([
-                        bounds.south,
-                        east
-                    ]);
+            const left =
+                map.latLngToContainerPoint(
+                    [0, -180]
+                ).x;
         
+        
+            /*
+             * Latitude 0 gives us the vertical
+             * center of the world raster.
+             */
+        
+            const centerY =
+                map.latLngToContainerPoint(
+                    [0, 0]
+                ).y;
+        
+        
+            const top =
+                centerY -
+                worldHeight / 2;
+        
+        
+            /*
+             * Determine which copies are visible.
+             */
+        
+            const firstCopy =
+                Math.floor(
+                    -left / worldWidth
+                ) - 1;
+        
+        
+            const lastCopy =
+                Math.ceil(
+                    (size.x - left) /
+                    worldWidth
+                ) + 1;
+        
+        
+            /*
+             * Draw every world copy.
+             */
+        
+            for(
+                let copy = firstCopy;
+                copy <= lastCopy;
+                copy++
+            ){
         
                 const x =
-                    topLeft.x;
-        
-                const y =
-                    topLeft.y;
-        
-                const width =
-                    bottomRight.x - topLeft.x;
-        
-                const height =
-                    bottomRight.y - topLeft.y;
+                    left +
+                    copy * worldWidth;
         
         
-                /*
-                 * Skip copies that are completely
-                 * outside the visible screen.
-                 */
-                if (
-                    x + width < 0 ||
-                    x > size.x ||
-                    y + height < 0 ||
-                    y > size.y
-                ) {
+                if(
+                    x + worldWidth <= 0 ||
+                    x >= size.x
+                ){
                     continue;
                 }
         
         
-                /*
-                 * Draw the temperature raster.
-                 *
-                 * Unlike L.imageOverlay, this does NOT
-                 * create separate Leaflet layers.
-                 */
                 ctx.drawImage(
                     weatherSourceCanvas,
+                    0,
+                    0,
+                    weatherSourceCanvas.width,
+                    weatherSourceCanvas.height,
+        
                     x,
-                    y,
-                    width,
-                    height
+                    top,
+                    worldWidth,
+                    worldHeight
                 );
             }
         }
-
         async function switchMapMode(mode) {
         
             currentMapMode = mode;
