@@ -181,7 +181,250 @@
         window.addEventListener('DOMContentLoaded', () => {
             initTacticalGlobeMap();
         });
-
+        function scheduleWeatherCanvasDraw() {
+        
+            if (!weatherCanvas || !weatherSourceCanvas || !weatherRasterBounds) {
+                return;
+            }
+        
+            if (weatherDrawFrame) {
+                return;
+            }
+        
+            weatherDrawFrame = requestAnimationFrame(() => {
+        
+                weatherDrawFrame = 0;
+        
+                resizeWeatherCanvas();
+                drawWeatherCanvas();
+        
+            });
+        }
+        
+        
+        function resizeWeatherCanvas() {
+        
+            if (!weatherCanvas || !map) {
+                return;
+            }
+        
+            const size = map.getSize();
+        
+            const dpr = Math.min(
+                window.devicePixelRatio || 1,
+                2
+            );
+        
+            const width = Math.round(size.x * dpr);
+            const height = Math.round(size.y * dpr);
+        
+            if (
+                weatherCanvas.width !== width ||
+                weatherCanvas.height !== height
+            ) {
+        
+                weatherCanvas.width = width;
+                weatherCanvas.height = height;
+        
+                weatherCanvas.style.width = size.x + 'px';
+                weatherCanvas.style.height = size.y + 'px';
+            }
+        }
+        
+        
+        function ensureWeatherCanvas() {
+        
+            if (weatherCanvas) {
+                resizeWeatherCanvas();
+                return;
+            }
+        
+            weatherCanvas = document.createElement('canvas');
+        
+            weatherCanvas.id = 'weatherCanvas';
+        
+            weatherCanvas.style.position = 'absolute';
+            weatherCanvas.style.left = '0';
+            weatherCanvas.style.top = '0';
+        
+            weatherCanvas.style.width = '100%';
+            weatherCanvas.style.height = '100%';
+        
+            weatherCanvas.style.pointerEvents = 'none';
+        
+            weatherCanvas.style.zIndex = '450';
+        
+            map.getContainer().appendChild(weatherCanvas);
+        
+            resizeWeatherCanvas();
+        }
+        
+        
+        function drawWeatherCanvas() {
+        
+            if (
+                !weatherCanvas ||
+                !weatherSourceCanvas ||
+                !weatherRasterBounds
+            ) {
+                return;
+            }
+        
+            const ctx = weatherCanvas.getContext('2d');
+        
+            const size = map.getSize();
+        
+            const dpr = Math.min(
+                window.devicePixelRatio || 1,
+                2
+            );
+        
+            ctx.setTransform(
+                dpr,
+                0,
+                0,
+                dpr,
+                0,
+                0
+            );
+        
+            ctx.clearRect(
+                0,
+                0,
+                size.x,
+                size.y
+            );
+        
+            // Smooth interpolation when scaling the temperature raster.
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+        
+        
+            const bounds = weatherRasterBounds;
+        
+            const zoom = map.getZoom();
+        
+            /*
+             * Width of one complete world in projected pixels.
+             */
+            const worldWidth =
+                256 * Math.pow(2, zoom);
+        
+        
+            /*
+             * Calculate enough copies to completely cover
+             * the screen horizontally.
+             */
+            const copies =
+                Math.ceil(size.x / worldWidth) + 2;
+        
+        
+            const centerLng =
+                map.getCenter().lng;
+        
+        
+            /*
+             * Which world copy is closest to the map center?
+             */
+            const centerWorld =
+                Math.floor(
+                    (centerLng - bounds.west) / 360
+                );
+        
+        
+            for (
+                let i = -copies;
+                i <= copies;
+                i++
+            ) {
+        
+                const world =
+                    centerWorld + i;
+        
+        
+                const west =
+                    bounds.west + world * 360;
+        
+                const east =
+                    bounds.east + world * 360;
+        
+        
+                const topLeft =
+                    map.latLngToContainerPoint([
+                        bounds.north,
+                        west
+                    ]);
+        
+        
+                const bottomRight =
+                    map.latLngToContainerPoint([
+                        bounds.south,
+                        east
+                    ]);
+        
+        
+                const x =
+                    topLeft.x;
+        
+                const y =
+                    topLeft.y;
+        
+                const width =
+                    bottomRight.x - topLeft.x;
+        
+                const height =
+                    bottomRight.y - topLeft.y;
+        
+        
+                /*
+                 * Don't draw copies that are completely
+                 * outside the screen.
+                 */
+                if (
+                    x + width < 0 ||
+                    x > size.x ||
+                    y + height < 0 ||
+                    y > size.y
+                ) {
+                    continue;
+                }
+        
+        
+                ctx.drawImage(
+                    weatherSourceCanvas,
+                    x,
+                    y,
+                    width,
+                    height
+                );
+            }
+        }
+        
+        
+        function removeWeatherCanvas() {
+        
+            if (weatherDrawFrame) {
+        
+                cancelAnimationFrame(
+                    weatherDrawFrame
+                );
+        
+                weatherDrawFrame = 0;
+            }
+        
+        
+            if (weatherCanvas) {
+        
+                weatherCanvas.remove();
+        
+                weatherCanvas = null;
+            }
+        
+        
+            weatherSourceCanvas = null;
+            weatherRasterBounds = null;
+            weatherLoadedZoom = null;
+        }
         function initTacticalGlobeMap() {
         
             map = L.map('map', {
