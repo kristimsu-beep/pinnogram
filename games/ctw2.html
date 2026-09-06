@@ -242,22 +242,29 @@
                 return;
             }
         
-            weatherCanvas = document.createElement('canvas');
+            weatherCanvas =
+                document.createElement('canvas');
         
-            weatherCanvas.id = 'weatherCanvas';
+            weatherCanvas.id =
+                'weatherCanvas';
         
-            weatherCanvas.style.position = 'absolute';
+            weatherCanvas.style.position =
+                'absolute';
+        
             weatherCanvas.style.left = '0';
             weatherCanvas.style.top = '0';
         
             weatherCanvas.style.width = '100%';
             weatherCanvas.style.height = '100%';
         
-            weatherCanvas.style.pointerEvents = 'none';
+            weatherCanvas.style.pointerEvents =
+                'none';
         
-            weatherCanvas.style.zIndex = '450';
+            weatherCanvas.style.zIndex =
+                '450';
         
-            map.getContainer().appendChild(weatherCanvas);
+            map.getContainer()
+                .appendChild(weatherCanvas);
         
             resizeWeatherCanvas();
         }
@@ -1023,9 +1030,18 @@
                  */
                 weatherSourceCanvas =
                     createWeatherCanvas(data);
-        
-        
-                weatherRasterBounds = bounds;
+                
+                weatherSourceCanvas.__srcWidth =
+                    width;
+                
+                weatherSourceCanvas.__srcHeight =
+                    height;
+                
+                weatherSourceCanvas.__values =
+                    data.values;
+                
+                weatherRasterBounds =
+                    bounds;
         
         
                 weatherLoadedZoom =
@@ -1066,19 +1082,21 @@
             }
         }
 
-        function drawWeatherCanvas(){
+        function drawWeatherCanvas() {
         
-            if(
+            if (
                 !weatherCanvas ||
                 !weatherSourceCanvas ||
                 !map
-            ){
+            ) {
                 return;
             }
         
         
             const ctx =
-                weatherCanvas.getContext('2d');
+                weatherCanvas.getContext('2d', {
+                    alpha: true
+                });
         
         
             const size =
@@ -1092,27 +1110,23 @@
                 );
         
         
-            const canvasWidth =
-                Math.round(
-                    size.x * dpr
-                );
+            const width =
+                Math.round(size.x * dpr);
         
-            const canvasHeight =
-                Math.round(
-                    size.y * dpr
-                );
+            const height =
+                Math.round(size.y * dpr);
         
         
-            if(
-                weatherCanvas.width !== canvasWidth ||
-                weatherCanvas.height !== canvasHeight
-            ){
+            if (
+                weatherCanvas.width !== width ||
+                weatherCanvas.height !== height
+            ) {
         
                 weatherCanvas.width =
-                    canvasWidth;
+                    width;
         
                 weatherCanvas.height =
-                    canvasHeight;
+                    height;
         
                 weatherCanvas.style.width =
                     size.x + 'px';
@@ -1121,6 +1135,10 @@
                     size.y + 'px';
             }
         
+        
+            /*
+             * Work in CSS pixels.
+             */
         
             ctx.setTransform(
                 dpr,
@@ -1140,121 +1158,316 @@
             );
         
         
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
+            /*
+             * Keep the temperature field smooth.
+             */
+        
+            ctx.imageSmoothingEnabled =
+                true;
+        
+            ctx.imageSmoothingQuality =
+                'high';
         
         
             /*
-             * EXACT LEAFLET WORLD WIDTH.
-             *
-             * This is the width of 360° at the
-             * current Web Mercator zoom.
+             * ---------------------------------------------------------
+             * SOURCE GRID
+             * ---------------------------------------------------------
              */
         
-            const zoom =
-                map.getZoom();
+            const srcWidth =
+                weatherSourceCanvas.__srcWidth;
         
-            const worldWidth =
-                256 * Math.pow(
-                    2,
-                    zoom
-                );
+            const srcHeight =
+                weatherSourceCanvas.__srcHeight;
+        
+            const values =
+                weatherSourceCanvas.__values;
+        
+        
+            if (
+                !srcWidth ||
+                !srcHeight ||
+                !values
+            ) {
+                return;
+            }
         
         
             /*
-             * Our source canvas is exactly one
-             * geographic world:
-             *
-             *       -180° → +180°
+             * ---------------------------------------------------------
+             * TEMPERATURE INTERPOLATION
+             * ---------------------------------------------------------
              */
         
-            const worldHeight =
-                worldWidth *
-                (
-                    weatherSourceCanvas.height /
-                    weatherSourceCanvas.width
-                );
+            function getValue(x, y) {
+        
+                /*
+                 * Longitude wraps forever.
+                 */
+        
+                x =
+                    ((x % srcWidth) + srcWidth)
+                    % srcWidth;
         
         
-            /*
-             * Find longitude -180 on screen.
-             */
-        
-            const left =
-                map.latLngToContainerPoint(
-                    [0, -180]
-                ).x;
-        
-        
-            /*
-             * Latitude 0 gives us the vertical
-             * center of the world raster.
-             */
-        
-            const centerY =
-                map.latLngToContainerPoint(
-                    [0, 0]
-                ).y;
+                y =
+                    Math.max(
+                        0,
+                        Math.min(
+                            srcHeight - 1,
+                            y
+                        )
+                    );
         
         
-            const top =
-                centerY -
-                worldHeight / 2;
+                const x0 =
+                    Math.floor(x);
+        
+                const y0 =
+                    Math.floor(y);
         
         
-            /*
-             * Determine which copies are visible.
-             */
+                const x1 =
+                    Math.min(
+                        x0 + 1,
+                        srcWidth - 1
+                    );
         
-            const firstCopy =
-                Math.floor(
-                    -left / worldWidth
-                ) - 1;
-        
-        
-            const lastCopy =
-                Math.ceil(
-                    (size.x - left) /
-                    worldWidth
-                ) + 1;
+                const y1 =
+                    Math.min(
+                        y0 + 1,
+                        srcHeight - 1
+                    );
         
         
-            /*
-             * Draw every world copy.
-             */
+                const fx =
+                    x - x0;
         
-            for(
-                let copy = firstCopy;
-                copy <= lastCopy;
-                copy++
-            ){
-        
-                const x =
-                    left +
-                    copy * worldWidth;
+                const fy =
+                    y - y0;
         
         
-                if(
-                    x + worldWidth <= 0 ||
-                    x >= size.x
-                ){
-                    continue;
+                const v00 =
+                    Number(
+                        values[
+                            y0 * srcWidth + x0
+                        ]
+                    );
+        
+                const v10 =
+                    Number(
+                        values[
+                            y0 * srcWidth + x1
+                        ]
+                    );
+        
+                const v01 =
+                    Number(
+                        values[
+                            y1 * srcWidth + x0
+                        ]
+                    );
+        
+                const v11 =
+                    Number(
+                        values[
+                            y1 * srcWidth + x1
+                        ]
+                    );
+        
+        
+                if (
+                    !Number.isFinite(v00) ||
+                    !Number.isFinite(v10) ||
+                    !Number.isFinite(v01) ||
+                    !Number.isFinite(v11)
+                ) {
+                    return null;
                 }
         
         
-                ctx.drawImage(
-                    weatherSourceCanvas,
-                    0,
-                    0,
-                    weatherSourceCanvas.width,
-                    weatherSourceCanvas.height,
+                const top =
+                    v00 +
+                    (v10 - v00) * fx;
         
-                    x,
-                    top,
-                    worldWidth,
-                    worldHeight
+        
+                const bottom =
+                    v01 +
+                    (v11 - v01) * fx;
+        
+        
+                return (
+                    top +
+                    (bottom - top) * fy
                 );
             }
+        
+        
+            /*
+             * ---------------------------------------------------------
+             * DRAW DIRECTLY FROM THE MAP
+             * ---------------------------------------------------------
+             *
+             * No image tiling.
+             * No world rectangles.
+             * No drawImage().
+             */
+        
+            const imageData =
+                ctx.createImageData(
+                    width,
+                    height
+                );
+        
+        
+            const pixels =
+                imageData.data;
+        
+        
+            /*
+             * Render every screen pixel.
+             */
+        
+            for (
+                let py = 0;
+                py < height;
+                py++
+            ) {
+        
+                for (
+                    let px = 0;
+                    px < width;
+                    px++
+                ) {
+        
+                    /*
+                     * Convert canvas pixel into Leaflet
+                     * container coordinates.
+                     */
+        
+                    const screenX =
+                        px / dpr;
+        
+                    const screenY =
+                        py / dpr;
+        
+        
+                    const latLng =
+                        map.containerPointToLatLng([
+                            screenX,
+                            screenY
+                        ]);
+        
+        
+                    let lat =
+                        latLng.lat;
+        
+                    let lng =
+                        latLng.lng;
+        
+        
+                    /*
+                     * Leaflet/WebMercator does not actually
+                     * contain the mathematical poles.
+                     *
+                     * Clamp to the valid WebMercator range.
+                     */
+        
+                    lat =
+                        Math.max(
+                            -85.05112878,
+                            Math.min(
+                                85.05112878,
+                                lat
+                            )
+                        );
+        
+        
+                    /*
+                     * Wrap longitude forever.
+                     */
+        
+                    lng =
+                        ((lng + 180) % 360 + 360)
+                        % 360 - 180;
+        
+        
+                    /*
+                     * Convert geographic coordinates
+                     * into the temperature grid.
+                     *
+                     * Grid:
+                     *
+                     * longitude -180 → +180
+                     * latitude   +90 → -90
+                     */
+        
+                    const gx =
+                        (
+                            (lng + 180) / 360
+                        ) *
+                        (srcWidth - 1);
+        
+        
+                    const gy =
+                        (
+                            (90 - lat) / 180
+                        ) *
+                        (srcHeight - 1);
+        
+        
+                    const temp =
+                        getValue(
+                            gx,
+                            gy
+                        );
+        
+        
+                    const index =
+                        (
+                            py * width +
+                            px
+                        ) * 4;
+        
+        
+                    if (temp === null) {
+        
+                        pixels[index] = 0;
+                        pixels[index + 1] = 0;
+                        pixels[index + 2] = 0;
+                        pixels[index + 3] = 0;
+        
+                        continue;
+                    }
+        
+        
+                    const color =
+                        getTemperatureColor(
+                            temp
+                        );
+        
+        
+                    pixels[index] =
+                        color[0];
+        
+                    pixels[index + 1] =
+                        color[1];
+        
+                    pixels[index + 2] =
+                        color[2];
+        
+                    pixels[index + 3] =
+                        195;
+                }
+            }
+        
+        
+            ctx.putImageData(
+                imageData,
+                0,
+                0
+            );
         }
         async function switchMapMode(mode) {
         
