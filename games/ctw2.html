@@ -268,7 +268,8 @@
             if (
                 !weatherCanvas ||
                 !weatherSourceCanvas ||
-                !weatherRasterBounds
+                !weatherRasterBounds ||
+                !map
             ) {
                 return;
             }
@@ -281,6 +282,30 @@
                 window.devicePixelRatio || 1,
                 2
             );
+        
+            const canvasWidth =
+                Math.round(size.x * dpr);
+        
+            const canvasHeight =
+                Math.round(size.y * dpr);
+        
+            if (
+                weatherCanvas.width !== canvasWidth ||
+                weatherCanvas.height !== canvasHeight
+            ) {
+        
+                weatherCanvas.width =
+                    canvasWidth;
+        
+                weatherCanvas.height =
+                    canvasHeight;
+        
+                weatherCanvas.style.width =
+                    size.x + 'px';
+        
+                weatherCanvas.style.height =
+                    size.y + 'px';
+            }
         
             ctx.setTransform(
                 dpr,
@@ -298,106 +323,106 @@
                 size.y
             );
         
-            // Smooth interpolation when scaling the temperature raster.
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
         
-        
-            const bounds = weatherRasterBounds;
-        
-            const zoom = map.getZoom();
+            const bounds =
+                weatherRasterBounds;
         
             /*
-             * Width of one complete world in projected pixels.
+             * IMPORTANT:
+             *
+             * The API gives us a complete global raster:
+             *
+             *   -180 ... +180
+             *
+             * Therefore one weather image represents
+             * exactly one complete world.
              */
+        
             const worldWidth =
-                256 * Math.pow(2, zoom);
-        
-        
-            /*
-             * Calculate enough copies to completely cover
-             * the screen horizontally.
-             */
-            const copies =
-                Math.ceil(size.x / worldWidth) + 2;
-        
-        
-            const centerLng =
-                map.getCenter().lng;
-        
+                map.project(
+                    [0, 180],
+                    map.getZoom()
+                ).x -
+                map.project(
+                    [0, -180],
+                    map.getZoom()
+                ).x;
         
             /*
-             * Which world copy is closest to the map center?
+             * Find the projected position of -180°
+             * relative to the current map viewport.
              */
-            const centerWorld =
+            const leftWorld =
+                map.latLngToContainerPoint([
+                    0,
+                    -180
+                ]).x;
+        
+            /*
+             * Draw enough complete copies to cover
+             * the viewport.
+             */
+            const firstCopy =
                 Math.floor(
-                    (centerLng - bounds.west) / 360
-                );
+                    -leftWorld / worldWidth
+                ) - 1;
         
+            const lastCopy =
+                Math.ceil(
+                    (size.x - leftWorld) /
+                    worldWidth
+                ) + 1;
+        
+            /*
+             * Project the north/south edges.
+             *
+             * Leaflet's Web Mercator projection cannot
+             * represent ±90 exactly, so use the same
+             * projected latitude that Leaflet itself uses.
+             */
+            const top =
+                map.latLngToContainerPoint([
+                    85.05112878,
+                    -180
+                ]).y;
+        
+            const bottom =
+                map.latLngToContainerPoint([
+                    -85.05112878,
+                    -180
+                ]).y;
+        
+            const height =
+                bottom - top;
         
             for (
-                let i = -copies;
-                i <= copies;
-                i++
+                let copy = firstCopy;
+                copy <= lastCopy;
+                copy++
             ) {
         
-                const world =
-                    centerWorld + i;
-        
-        
-                const west =
-                    bounds.west + world * 360;
-        
-                const east =
-                    bounds.east + world * 360;
-        
-        
-                const topLeft =
-                    map.latLngToContainerPoint([
-                        bounds.north,
-                        west
-                    ]);
-        
-        
-                const bottomRight =
-                    map.latLngToContainerPoint([
-                        bounds.south,
-                        east
-                    ]);
-        
-        
                 const x =
-                    topLeft.x;
-        
-                const y =
-                    topLeft.y;
-        
-                const width =
-                    bottomRight.x - topLeft.x;
-        
-                const height =
-                    bottomRight.y - topLeft.y;
-        
+                    leftWorld +
+                    copy * worldWidth;
         
                 /*
-                 * Don't draw copies that are completely
+                 * Don't draw copies which are completely
                  * outside the screen.
                  */
                 if (
-                    x + width < 0 ||
-                    x > size.x ||
-                    y + height < 0 ||
-                    y > size.y
+                    x + worldWidth < 0 ||
+                    x > size.x
                 ) {
                     continue;
                 }
         
-        
                 ctx.drawImage(
                     weatherSourceCanvas,
                     x,
-                    y,
-                    width,
+                    top,
+                    worldWidth,
                     height
                 );
             }
