@@ -274,14 +274,17 @@
                 return;
             }
         
-            const ctx = weatherCanvas.getContext('2d');
+            const ctx =
+                weatherCanvas.getContext('2d');
         
-            const size = map.getSize();
+            const size =
+                map.getSize();
         
-            const dpr = Math.min(
-                window.devicePixelRatio || 1,
-                2
-            );
+            const dpr =
+                Math.min(
+                    window.devicePixelRatio || 1,
+                    2
+                );
         
             const canvasWidth =
                 Math.round(size.x * dpr);
@@ -326,76 +329,100 @@
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
         
-            const bounds =
-                weatherRasterBounds;
         
             /*
-             * IMPORTANT:
+             * =========================================================
+             * ONE COMPLETE GLOBAL WEATHER WORLD
+             * =========================================================
              *
-             * The API gives us a complete global raster:
+             * The API raster is:
              *
-             *   -180 ... +180
+             *      721 x 361
              *
-             * Therefore one weather image represents
-             * exactly one complete world.
+             * covering:
+             *
+             *      -180 ... +180
+             *       -90 ...  +90
+             *
+             * Therefore its geographic aspect ratio is exactly 2:1.
+             *
+             * We use Leaflet's projected longitude width for the
+             * horizontal size and derive the vertical size from the
+             * raster's 2:1 aspect ratio.
              */
+        
+            const zoom =
+                map.getZoom();
         
             const worldWidth =
                 map.project(
                     [0, 180],
-                    map.getZoom()
+                    zoom
                 ).x -
                 map.project(
                     [0, -180],
-                    map.getZoom()
+                    zoom
                 ).x;
         
+            const worldHeight =
+                worldWidth *
+                (
+                    weatherSourceCanvas.height /
+                    weatherSourceCanvas.width
+                );
+        
+        
             /*
-             * Find the projected position of -180°
-             * relative to the current map viewport.
+             * =========================================================
+             * FIND THE SCREEN POSITION OF THE GLOBAL RASTER
+             * =========================================================
+             *
+             * We anchor the raster at longitude -180.
              */
-            const leftWorld =
+        
+            const anchor =
                 map.latLngToContainerPoint([
                     0,
                     -180
-                ]).x;
+                ]);
         
             /*
-             * Draw enough complete copies to cover
-             * the viewport.
+             * Because the source raster is centered vertically
+             * around latitude 0, calculate its top from the
+             * map's latitude-0 screen position.
              */
+        
+            const centerY =
+                map.latLngToContainerPoint([
+                    0,
+                    0
+                ]).y;
+        
+            const top =
+                centerY -
+                worldHeight / 2;
+        
+        
+            /*
+             * =========================================================
+             * ENDLESS HORIZONTAL COPIES
+             * =========================================================
+             */
+        
+            const left =
+                anchor.x;
+        
             const firstCopy =
                 Math.floor(
-                    -leftWorld / worldWidth
+                    -left / worldWidth
                 ) - 1;
         
             const lastCopy =
                 Math.ceil(
-                    (size.x - leftWorld) /
+                    (size.x - left) /
                     worldWidth
                 ) + 1;
         
-            /*
-             * Project the north/south edges.
-             *
-             * Leaflet's Web Mercator projection cannot
-             * represent ±90 exactly, so use the same
-             * projected latitude that Leaflet itself uses.
-             */
-            const top =
-                map.latLngToContainerPoint([
-                    85.05112878,
-                    -180
-                ]).y;
-        
-            const bottom =
-                map.latLngToContainerPoint([
-                    -85.05112878,
-                    -180
-                ]).y;
-        
-            const height =
-                bottom - top;
         
             for (
                 let copy = firstCopy;
@@ -404,26 +431,32 @@
             ) {
         
                 const x =
-                    leftWorld +
+                    left +
                     copy * worldWidth;
         
                 /*
-                 * Don't draw copies which are completely
-                 * outside the screen.
+                 * Skip completely invisible copies.
                  */
+        
                 if (
-                    x + worldWidth < 0 ||
-                    x > size.x
+                    x + worldWidth <= 0 ||
+                    x >= size.x
                 ) {
                     continue;
                 }
+        
+                /*
+                 * Draw exactly one raster copy.
+                 *
+                 * No overlap.
+                 */
         
                 ctx.drawImage(
                     weatherSourceCanvas,
                     x,
                     top,
                     worldWidth,
-                    height
+                    worldHeight
                 );
             }
         }
