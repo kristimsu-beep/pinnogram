@@ -1045,7 +1045,16 @@
         
         
                 const data = await response.json();
-        
+                
+                console.log(
+                    '🌡️ WEATHER DATA:',
+                    {
+                        bounds: data.bounds,
+                        width: data.width,
+                        height: data.height
+                    }
+                );
+                        
         
                 // Ignore an old request that finished late.
                 if (renderId !== weatherRenderId) {
@@ -1338,55 +1347,62 @@
             }
         }
 
-        async function switchMapMode(mode){
+        async function switchMapMode(mode) {
         
-            currentMapMode=mode;
+            currentMapMode = mode;
+        
         
             document
                 .getElementById('btn-mode-politic')
                 .classList
                 .toggle(
                     'btn-active',
-                    mode==='politic'
+                    mode === 'politic'
                 );
+        
         
             document
                 .getElementById('btn-mode-weather')
                 .classList
                 .toggle(
                     'btn-active',
-                    mode==='weather'
+                    mode === 'weather'
                 );
         
+        
+            /*
+             * Invalidate any previous weather request.
+             */
             weatherRenderId++;
         
-            if(weatherRenderController){
+        
+            if (weatherRenderController) {
         
                 weatherRenderController.abort();
         
-                weatherRenderController=null;
+                weatherRenderController = null;
             }
         
-            if(mode==='politic'){
         
-                if(weatherOverlay){
+            /*
+             * POLITICAL MODE
+             */
+            if (mode === 'politic') {
         
-                    weatherOverlay.forEach(
-                        overlay=>{
-                            if(map.hasLayer(overlay)){
-                                map.removeLayer(overlay);
-                            }
-                        }
-                    );
+                /*
+                 * Remove the new canvas weather layer.
+                 */
+                removeWeatherCanvas();
         
-                    weatherOverlay=null;
-                }
         
-                if(
+                /*
+                 * Show political countries.
+                 */
+                if (
                     !map.hasLayer(
                         countriesGroupLayer
                     )
-                ){
+                ) {
         
                     map.addLayer(
                         countriesGroupLayer
@@ -1396,19 +1412,30 @@
                 return;
             }
         
-            if(mode==='weather'){
         
-                if(
+            /*
+             * WEATHER MODE
+             */
+            if (mode === 'weather') {
+        
+                /*
+                 * Hide political countries.
+                 */
+                if (
                     map.hasLayer(
                         countriesGroupLayer
                     )
-                ){
+                ) {
         
                     map.removeLayer(
                         countriesGroupLayer
                     );
                 }
         
+        
+                /*
+                 * Load the weather raster.
+                 */
                 await renderGlobalWeatherHeatGrid();
             }
         }
