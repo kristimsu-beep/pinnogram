@@ -781,59 +781,101 @@
             // ---------------------------------------------------------
             // Safely read a temperature from the original grid
             // ---------------------------------------------------------
+            // ---------------------------------------------------------
+            // Read temperature from the source grid.
+            //
+            // X wraps horizontally because the temperature map represents
+            // a complete world. The pixel after the last column is column 0.
+            // Y is still clamped because the poles are the actual edges.
+            // ---------------------------------------------------------
             function getValue(x, y){
-        
-                x = Math.max(
-                    0,
-                    Math.min(srcWidth - 1, x)
-                );
-        
+            
+                // Horizontal wrapping
+                x = Math.floor(x);
+            
+                x =
+                    ((x % srcWidth) + srcWidth) %
+                    srcWidth;
+            
+                // Vertical clamping
                 y = Math.max(
                     0,
-                    Math.min(srcHeight - 1, y)
+                    Math.min(
+                        srcHeight - 1,
+                        Math.floor(y)
+                    )
                 );
-        
+            
                 const value =
-                    Number(values[y * srcWidth + x]);
-        
+                    Number(
+                        values[
+                            y * srcWidth + x
+                        ]
+                    );
+            
                 return Number.isFinite(value)
                     ? value
                     : null;
             }
-        
-        
+            
+            
             // ---------------------------------------------------------
-            // Bilinear interpolation between the four surrounding
-            // temperature values.
+            // Bilinear interpolation with horizontal world wrapping.
             // ---------------------------------------------------------
             function interpolateTemperature(x, y){
-        
-                const x0 = Math.floor(x);
-                const y0 = Math.floor(y);
-        
-                const x1 =
-                    Math.min(
-                        x0 + 1,
-                        srcWidth - 1
+            
+                // Keep X inside [0, srcWidth)
+                x =
+                    ((x % srcWidth) + srcWidth) %
+                    srcWidth;
+            
+                // Y remains inside the raster
+                y =
+                    Math.max(
+                        0,
+                        Math.min(
+                            srcHeight - 1,
+                            y
+                        )
                     );
-        
+            
+                const x0 =
+                    Math.floor(x);
+            
+                const y0 =
+                    Math.floor(y);
+            
+                // IMPORTANT:
+                // When x0 is the last column, x1 becomes column 0.
+                const x1 =
+                    (x0 + 1) % srcWidth;
+            
                 const y1 =
                     Math.min(
                         y0 + 1,
                         srcHeight - 1
                     );
-        
-                const fx = x - x0;
-                const fy = y - y0;
-        
-                const v00 = getValue(x0, y0);
-                const v10 = getValue(x1, y0);
-                const v01 = getValue(x0, y1);
-                const v11 = getValue(x1, y1);
-        
-        
-                // If the weather API contains missing values,
-                // don't create strange interpolation around them.
+            
+                const fx =
+                    x - x0;
+            
+                const fy =
+                    y - y0;
+            
+                const v00 =
+                    getValue(x0, y0);
+            
+                const v10 =
+                    getValue(x1, y0);
+            
+                const v01 =
+                    getValue(x0, y1);
+            
+                const v11 =
+                    getValue(x1, y1);
+            
+            
+                // Missing data
                 if(
                     v00 === null ||
                     v10 === null ||
@@ -842,16 +884,19 @@
                 ){
                     return null;
                 }
-        
-        
+            
+            
+                // Horizontal interpolation
                 const top =
                     v00 +
                     (v10 - v00) * fx;
-        
+            
                 const bottom =
                     v01 +
                     (v11 - v01) * fx;
-        
+            
+            
+                // Vertical interpolation
                 return (
                     top +
                     (bottom - top) * fy
