@@ -647,19 +647,20 @@
                      */
         
                     // ---------------------------------------------------------
-                    // Smooth temperature sampling
-                    // The texture uses a floating-point normalized temperature.
-                    // GL_LINEAR performs the bilinear interpolation for us.
+                    // Explicit bilinear temperature interpolation
                     // ---------------------------------------------------------
                     
-                    float temperatureValue =
-                        texture(
-                            u_temperature,
-                            vec2(tx, ty)
-                        ).r;
+                    // ---------------------------------------------------------
+                    // Temperature sampling
+                    // ---------------------------------------------------------
                     
-                    // Negative values are our "no data" marker.
-                    // 0.0 is a REAL temperature: -60°C.
+                    float temperatureValue = texture(
+                        u_temperature,
+                        vec2(tx, ty)
+                    ).r;
+                    
+                    // 0.0 is a valid temperature (-60°C).
+                    // Only negative values mean "no data".
                     if (temperatureValue < 0.0) {
                         discard;
                     }
@@ -854,31 +855,41 @@
         
             const values =
                 data.values;
-    
+        
+        
             const pixels =
-                new Float32Array(
+                new Uint8Array(
                     width *
-                    height
+                    height *
+                    4
                 );
-  
+        
+        
             for (
                 let i = 0;
                 i < width * height;
                 i++
             ) {
-            
+        
                 const value =
                     Number(values[i]);
-            
+        
+                const p =
+                    i * 4;
+        
+        
                 if (!Number.isFinite(value)) {
-            
-                    // Negative means "no temperature data"
-                    pixels[i] = -1.0;
-            
+        
+                    pixels[p] = 0;
+                    pixels[p + 1] = 0;
+                    pixels[p + 2] = 0;
+                    pixels[p + 3] = 0;
+        
                     continue;
                 }
-            
-                pixels[i] =
+        
+        
+                const normalized =
                     Math.max(
                         0,
                         Math.min(
@@ -886,6 +897,17 @@
                             (value + 60) / 116
                         )
                     );
+        
+        
+                pixels[p] =
+                    Math.round(
+                        normalized * 255
+                    );
+        
+                pixels[p + 1] = 0;
+                pixels[p + 2] = 0;
+        
+                pixels[p + 3] = 255;
             }
         
         
@@ -950,12 +972,12 @@
             gl.texImage2D(
                 gl.TEXTURE_2D,
                 0,
-                gl.R32F,
+                gl.RGBA,
                 width,
                 height,
                 0,
-                gl.RED,
-                gl.FLOAT,
+                gl.RGBA,
+                gl.UNSIGNED_BYTE,
                 pixels
             );
         
