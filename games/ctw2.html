@@ -698,7 +698,7 @@
                     float temperatureValue = mix(top, bottom, fy);
                     
                     
-                    if (tempSample.a < 0.01) {
+                    if (temperatureValue < 0.01) {
                         discard;
                     }
                     
