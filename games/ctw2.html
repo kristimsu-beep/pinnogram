@@ -646,25 +646,20 @@
                      * bilinear interpolation.
                      */
         
-                    vec4 sample =
+                    vec4 tempSample =
                         texture(
                             u_temperature,
-                            vec2(tx,ty)
+                            vec2(tx, ty)
                         );
-        
-        
-                    if (sample.a < 0.01) {
+                    
+                    
+                    if (tempSample.a < 0.01) {
                         discard;
                     }
-        
-        
-                    /*
-                     * Temperature was encoded from
-                     * -60°C → 56°C.
-                     */
-        
+                    
+                    
                     float temperature =
-                        sample.r * 116.0 - 60.0;
+                        tempSample.r * 116.0 - 60.0;
         
         
                     vec3 color =
