@@ -646,11 +646,56 @@
                      * bilinear interpolation.
                      */
         
-                    vec4 tempSample =
-                        texture(
-                            u_temperature,
-                            vec2(tx, ty)
-                        );
+                    // ---------------------------------------------------------
+                    // Explicit bilinear temperature interpolation
+                    // ---------------------------------------------------------
+                    
+                    float texW = float(textureSize(u_temperature, 0).x);
+                    float texH = float(textureSize(u_temperature, 0).y);
+                    
+                    // Convert UV to temperature-grid coordinates
+                    float gx = tx * texW - 0.5;
+                    float gy = ty * texH - 0.5;
+                    
+                    float x0 = floor(gx);
+                    float y0 = floor(gy);
+                    
+                    float fx = gx - x0;
+                    float fy = gy - y0;
+                    
+                    // Wrap horizontally so the temperature layer is endless
+                    float xA = mod(x0, texW);
+                    float xB = mod(x0 + 1.0, texW);
+                    
+                    // Clamp vertically
+                    float yA = clamp(y0, 0.0, texH - 1.0);
+                    float yB = clamp(y0 + 1.0, 0.0, texH - 1.0);
+                    
+                    float t00 = texture(
+                        u_temperature,
+                        vec2((xA + 0.5) / texW, (yA + 0.5) / texH)
+                    ).r;
+                    
+                    float t10 = texture(
+                        u_temperature,
+                        vec2((xB + 0.5) / texW, (yA + 0.5) / texH)
+                    ).r;
+                    
+                    float t01 = texture(
+                        u_temperature,
+                        vec2((xA + 0.5) / texW, (yB + 0.5) / texH)
+                    ).r;
+                    
+                    float t11 = texture(
+                        u_temperature,
+                        vec2((xB + 0.5) / texW, (yB + 0.5) / texH)
+                    ).r;
+                    
+                    // Bilinear interpolation
+                    float top = mix(t00, t10, fx);
+                    float bottom = mix(t01, t11, fx);
+                    
+                    float temperatureValue = mix(top, bottom, fy);
                     
                     
                     if (tempSample.a < 0.01) {
@@ -659,7 +704,7 @@
                     
                     
                     float temperature =
-                        tempSample.r * 116.0 - 60.0;
+                        temperatureValue * 116.0 - 60.0;
         
         
                     vec3 color =
