@@ -647,61 +647,22 @@
                      */
         
                     // ---------------------------------------------------------
-                    // Explicit bilinear temperature interpolation
+                    // Smooth temperature sampling
+                    // The texture uses a floating-point normalized temperature.
+                    // GL_LINEAR performs the bilinear interpolation for us.
                     // ---------------------------------------------------------
                     
-                    float texW = float(textureSize(u_temperature, 0).x);
-                    float texH = float(textureSize(u_temperature, 0).y);
+                    float temperatureValue =
+                        texture(
+                            u_temperature,
+                            vec2(tx, ty)
+                        ).r;
                     
-                    // Convert UV to temperature-grid coordinates
-                    float gx = tx * texW - 0.5;
-                    float gy = ty * texH - 0.5;
-                    
-                    float x0 = floor(gx);
-                    float y0 = floor(gy);
-                    
-                    float fx = gx - x0;
-                    float fy = gy - y0;
-                    
-                    // Wrap horizontally so the temperature layer is endless
-                    float xA = mod(x0, texW);
-                    float xB = mod(x0 + 1.0, texW);
-                    
-                    // Clamp vertically
-                    float yA = clamp(y0, 0.0, texH - 1.0);
-                    float yB = clamp(y0 + 1.0, 0.0, texH - 1.0);
-                    
-                    float t00 = texture(
-                        u_temperature,
-                        vec2((xA + 0.5) / texW, (yA + 0.5) / texH)
-                    ).r;
-                    
-                    float t10 = texture(
-                        u_temperature,
-                        vec2((xB + 0.5) / texW, (yA + 0.5) / texH)
-                    ).r;
-                    
-                    float t01 = texture(
-                        u_temperature,
-                        vec2((xA + 0.5) / texW, (yB + 0.5) / texH)
-                    ).r;
-                    
-                    float t11 = texture(
-                        u_temperature,
-                        vec2((xB + 0.5) / texW, (yB + 0.5) / texH)
-                    ).r;
-                    
-                    // Bilinear interpolation
-                    float top = mix(t00, t10, fx);
-                    float bottom = mix(t01, t11, fx);
-                    
-                    float temperatureValue = mix(top, bottom, fy);
-                    
-                    
-                    if (temperatureValue < 0.01) {
+                    // Negative values are our "no data" marker.
+                    // 0.0 is a REAL temperature: -60°C.
+                    if (temperatureValue < 0.0) {
                         discard;
                     }
-                    
                     
                     float temperature =
                         temperatureValue * 116.0 - 60.0;
@@ -893,41 +854,31 @@
         
             const values =
                 data.values;
-        
-        
+    
             const pixels =
-                new Uint8Array(
+                new Float32Array(
                     width *
-                    height *
-                    4
+                    height
                 );
-        
-        
+  
             for (
                 let i = 0;
                 i < width * height;
                 i++
             ) {
-        
+            
                 const value =
                     Number(values[i]);
-        
-                const p =
-                    i * 4;
-        
-        
+            
                 if (!Number.isFinite(value)) {
-        
-                    pixels[p] = 0;
-                    pixels[p + 1] = 0;
-                    pixels[p + 2] = 0;
-                    pixels[p + 3] = 0;
-        
+            
+                    // Negative means "no temperature data"
+                    pixels[i] = -1.0;
+            
                     continue;
                 }
-        
-        
-                const normalized =
+            
+                pixels[i] =
                     Math.max(
                         0,
                         Math.min(
@@ -935,17 +886,6 @@
                             (value + 60) / 116
                         )
                     );
-        
-        
-                pixels[p] =
-                    Math.round(
-                        normalized * 255
-                    );
-        
-                pixels[p + 1] = 0;
-                pixels[p + 2] = 0;
-        
-                pixels[p + 3] = 255;
             }
         
         
@@ -1010,12 +950,12 @@
             gl.texImage2D(
                 gl.TEXTURE_2D,
                 0,
-                gl.RGBA,
+                gl.R32F,
                 width,
                 height,
                 0,
-                gl.RGBA,
-                gl.UNSIGNED_BYTE,
+                gl.RED,
+                gl.FLOAT,
                 pixels
             );
         
