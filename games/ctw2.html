@@ -630,17 +630,25 @@
                      * leave the map untouched.
                      */
         
+                    // ---------------------------------------------------------
+                    // Keep the temperature field continuous around the globe.
+                    // Longitude wraps horizontally.
+                    // Latitude is clamped to the valid weather range.
+                    // ---------------------------------------------------------
+                    
+                    tx = fract(tx);
+                    
+                    if (tx < 0.0) {
+                        tx += 1.0;
+                    }
+                    
                     if (
-                        tx < 0.0 ||
-                        tx > 1.0 ||
                         ty < 0.0 ||
                         ty > 1.0
                     ) {
-        
                         discard;
                     }
-        
-        
+   
                     /*
                      * The texture itself performs
                      * bilinear interpolation.
@@ -937,7 +945,7 @@
             gl.texParameteri(
                 gl.TEXTURE_2D,
                 gl.TEXTURE_MIN_FILTER,
-                gl.LINEAR_MIPMAP_LINEAR
+                gl.LINEAR
             );
             
             gl.texParameteri(
@@ -945,30 +953,19 @@
                 gl.TEXTURE_MAG_FILTER,
                 gl.LINEAR
             );
-        
-        
-            /*
-             * Horizontal temperature repeats forever.
-             */
-        
+            
             gl.texParameteri(
                 gl.TEXTURE_2D,
                 gl.TEXTURE_WRAP_S,
                 gl.REPEAT
             );
-        
-        
-            /*
-             * North/South must NOT repeat.
-             */
-        
+            
             gl.texParameteri(
                 gl.TEXTURE_2D,
                 gl.TEXTURE_WRAP_T,
                 gl.CLAMP_TO_EDGE
             );
-        
-        
+            
             gl.texImage2D(
                 gl.TEXTURE_2D,
                 0,
@@ -980,8 +977,6 @@
                 gl.UNSIGNED_BYTE,
                 pixels
             );
-            
-            gl.generateMipmap(gl.TEXTURE_2D);
         
         
             weatherDataWidth = width;
