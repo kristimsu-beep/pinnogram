@@ -6297,163 +6297,320 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                     max(width - 1, 1)
                 )
 
-                # ----------------------------------------------------
-                # Rough land / ocean classification
-                # ----------------------------------------------------
-
-                is_water = False
-
-                if -60.0 < lat < 70.0:
-
-                    if lng < -25.0:
-                        is_water = True
-
-                    elif lng > 140.0:
-                        is_water = True
-
-                if lat < 30.0 and 20.0 < lng < 120.0:
-                    is_water = True
-
-                # ----------------------------------------------------
-                # POLAR REGIONS
+                # ---------------------------------------------------------
+                # Smooth global temperature field
                 #
-                # IMPORTANT:
-                # Antarctica must NEVER receive the normal ocean
-                # temperature formula.
-                # ----------------------------------------------------
-
-                is_antarctica = lat <= -60.0
-                is_arctic = lat >= 70.0
-
-                # ----------------------------------------------------
-                # Temperature model
-                # ----------------------------------------------------
-
-                if is_antarctica:
-
-                    # Very cold Antarctic ice.
-                    # -60° latitude  -> about -28°C
-                    # -90° latitude  -> about -42°C
-                    #
-                    # Small seasonal influence only.
-                    base_temp = (
-                        -28.0
-                        - (abs(lat) - 60.0) * 0.45
-                        - season_shift * 0.10
-                    )
-
-                elif is_arctic:
-
-                    # Cold Arctic / Greenland region.
-                    base_temp = (
-                        -12.0
-                        - (lat - 70.0) * 0.65
-                        + season_shift * 0.12
-                    )
-
-                elif not is_water:
-
-                    effective_lat = lat - season_shift
-
-                    base_temp = (
-                        42.0 -
-                        abs(effective_lat) * 0.76
-                    )
-
-                else:
-
-                    tropical_cooling = (
-                        7.0 *
-                        math.exp(
-                            -(lat * lat) /
-                            (2.0 * 22.0 * 22.0)
-                        )
-                    )
-
-                    ocean_base = (
-                        25.0 -
-                        abs(lat) * 0.20
-                    )
-
-                    polar_moderation = (
-                        5.0 *
-                        (abs(lat) / 90.0) ** 2
-                    )
-
-                    base_temp = (
-                        ocean_base -
-                        tropical_cooling +
-                        polar_moderation
-                    )
-
-                # ----------------------------------------------------
-                # Smooth large-scale temperature waves
-                # ----------------------------------------------------
-
-                wave1 = (
-                    math.sin(lat / 8.0) *
-                    math.cos(lng / 12.0) *
-                    4.0
-                )
-
-                wave2 = (
-                    math.sin((lat + lng) / 7.0) *
-                    1.5
-                )
-
-                temp = (
-                    base_temp +
-                    wave1 +
-                    wave2
-                )
-
-                # ----------------------------------------------------
-                # Temperature anomalies
-                # ----------------------------------------------------
-
-                anomalies = [
-                    (25.0, 45.0, 22.0, 15.0),
-                    (25.0, 15.0, 25.0, 13.0),
-                    (36.05, -116.81, 10.0, 16.0),
-                    (-75.0, 120.0, 35.0, -35.0),
-                    (72.0, -40.0, 18.0, -25.0),
-                    (62.0, 129.0, 20.0, -16.0)
-                ]
-
-                for anomaly_lat, anomaly_lng, radius, strength in anomalies:
-
-                    d_lat = lat - anomaly_lat
-                    d_lng = lng - anomaly_lng
-
+                # This deliberately avoids hard land/ocean boundaries.
+                # Instead, several broad continent-shaped influence fields
+                # are blended together to create continuous gradients.
+                # ---------------------------------------------------------
+                
+                # Smooth Gaussian influence helper.
+                def region_weight(lat, lng, center_lat, center_lng, lat_radius, lng_radius):
+                    d_lng = lng - center_lng
+                
                     if d_lng > 180.0:
                         d_lng -= 360.0
-
+                
                     if d_lng < -180.0:
                         d_lng += 360.0
-
+                
+                    d_lat = lat - center_lat
+                
+                    value = (
+                        (d_lat / lat_radius) ** 2 +
+                        (d_lng / lng_radius) ** 2
+                    )
+                
+                    return math.exp(-0.5 * value)
+                
+                
+                # ---------------------------------------------------------
+                # Broad continent influence.
+                #
+                # These are intentionally large and soft. They are NOT
+                # intended to be an exact coastline mask. Their purpose is
+                # to make land warmer/cooler than nearby ocean without
+                # producing rectangular edges.
+                # ---------------------------------------------------------
+                
+                land_weights = [
+                    # North America
+                    region_weight(lat, lng, 48.0, -105.0, 25.0, 48.0),
+                
+                    # South America
+                    region_weight(lat, lng, -15.0, -60.0, 25.0, 30.0),
+                
+                    # Europe
+                    region_weight(lat, lng, 52.0, 15.0, 18.0, 32.0),
+                
+                    # Africa
+                    region_weight(lat, lng, 5.0, 20.0, 38.0, 30.0),
+                
+                    # Asia
+                    region_weight(lat, lng, 45.0, 85.0, 30.0, 65.0),
+                
+                    # Australia
+                    region_weight(lat, lng, -25.0, 135.0, 17.0, 25.0),
+                
+                    # Greenland
+                    region_weight(lat, lng, 72.0, -42.0, 15.0, 22.0),
+                
+                    # Antarctica
+                    region_weight(lat, lng, -78.0, 20.0, 14.0, 180.0)
+                ]
+                
+                
+                # Combine the continent influences.
+                #
+                # 0.0 = mostly ocean
+                # 1.0 = strongly land-like
+                #
+                # The smoothstep makes the transition gradual.
+                land_influence = 0.0
+                
+                for weight in land_weights:
+                    land_influence = max(land_influence, weight)
+                
+                land_influence = (
+                    land_influence *
+                    land_influence *
+                    (3.0 - 2.0 * land_influence)
+                )
+                
+                
+                # ---------------------------------------------------------
+                # Ocean temperature.
+                #
+                # Ocean temperatures change much more gradually with
+                # latitude than land temperatures.
+                # ---------------------------------------------------------
+                
+                ocean_temperature = (
+                    27.0
+                    - 0.23 * abs(lat)
+                    + 4.0 * math.exp(
+                        -(lat * lat) /
+                        (2.0 * 25.0 * 25.0)
+                    )
+                )
+                
+                # Cold polar ocean.
+                polar_ocean = (
+                    7.0 *
+                    (abs(lat) / 90.0) ** 2
+                )
+                
+                ocean_temperature += polar_ocean
+                
+                
+                # ---------------------------------------------------------
+                # Land temperature.
+                #
+                # Stronger latitude/season response than ocean.
+                # ---------------------------------------------------------
+                
+                effective_lat = lat - season_shift
+                
+                land_temperature = (
+                    43.0
+                    - abs(effective_lat) * 0.78
+                )
+                
+                
+                # Continental interiors are more extreme than coastal
+                # regions. This remains smooth because it depends on the
+                # same continuous land influence.
+                continental_effect = (
+                    8.0 *
+                    land_influence *
+                    (
+                        0.35 +
+                        0.65 * land_influence
+                    )
+                )
+                
+                land_temperature += (
+                    math.copysign(
+                        continental_effect,
+                        -abs(effective_lat) + 25.0
+                    )
+                )
+                
+                
+                # ---------------------------------------------------------
+                # Smooth land/ocean blend.
+                # ---------------------------------------------------------
+                
+                base_temp = (
+                    ocean_temperature * (1.0 - land_influence)
+                    +
+                    land_temperature * land_influence
+                )
+                
+                
+                # ---------------------------------------------------------
+                # Polar regions.
+                #
+                # Keep these smooth rather than using abrupt latitude
+                # switches.
+                # ---------------------------------------------------------
+                
+                arctic_factor = 0.0
+                
+                if lat > 65.0:
+                    arctic_factor = min(
+                        1.0,
+                        (lat - 65.0) / 12.0
+                    )
+                
+                arctic_factor = (
+                    arctic_factor *
+                    arctic_factor *
+                    (3.0 - 2.0 * arctic_factor)
+                )
+                
+                arctic_temperature = (
+                    -8.0
+                    - max(0.0, lat - 70.0) * 0.65
+                    + season_shift * 0.12
+                )
+                
+                base_temp = (
+                    base_temp * (1.0 - arctic_factor)
+                    +
+                    arctic_temperature * arctic_factor
+                )
+                
+                
+                antarctic_factor = 0.0
+                
+                if lat < -58.0:
+                    antarctic_factor = min(
+                        1.0,
+                        (-lat - 58.0) / 15.0
+                    )
+                
+                antarctic_factor = (
+                    antarctic_factor *
+                    antarctic_factor *
+                    (3.0 - 2.0 * antarctic_factor)
+                )
+                
+                antarctic_temperature = (
+                    -24.0
+                    - max(0.0, abs(lat) - 60.0) * 0.55
+                    - season_shift * 0.10
+                )
+                
+                base_temp = (
+                    base_temp * (1.0 - antarctic_factor)
+                    +
+                    antarctic_temperature * antarctic_factor
+                )
+                
+                
+                # ---------------------------------------------------------
+                # Large-scale natural-looking temperature waves.
+                #
+                # These are deliberately low-frequency so they create
+                # broad gradients instead of visible raster blocks.
+                # ---------------------------------------------------------
+                
+                wave1 = (
+                    math.sin(lat / 13.0)
+                    * math.cos(lng / 24.0)
+                    * 2.8
+                )
+                
+                wave2 = (
+                    math.sin((lat + lng * 0.45) / 18.0)
+                    * 1.4
+                )
+                
+                wave3 = (
+                    math.cos((lng - lat * 0.7) / 32.0)
+                    * 1.0
+                )
+                
+                temp = (
+                    base_temp
+                    + wave1
+                    + wave2
+                    + wave3
+                )
+                
+                
+                # ---------------------------------------------------------
+                # Smooth regional heat anomalies.
+                #
+                # These replace the old sharp-looking geographic
+                # rectangles with soft circular/elliptical regions.
+                # ---------------------------------------------------------
+                
+                anomalies = [
+                    # Arabian Peninsula / Middle East
+                    (25.0, 45.0, 22.0, 18.0),
+                
+                    # Sahara
+                    (25.0, 15.0, 28.0, 16.0),
+                
+                    # Southwestern USA / Mexico
+                    (36.0, -117.0, 18.0, 10.0),
+                
+                    # Antarctic interior
+                    (-75.0, 120.0, 35.0, -30.0),
+                
+                    # Greenland
+                    (72.0, -40.0, 18.0, -22.0),
+                
+                    # Siberia
+                    (62.0, 129.0, 22.0, -18.0)
+                ]
+                
+                for anomaly_lat, anomaly_lng, radius, strength in anomalies:
+                
+                    d_lat = lat - anomaly_lat
+                
+                    d_lng = lng - anomaly_lng
+                
+                    if d_lng > 180.0:
+                        d_lng -= 360.0
+                
+                    if d_lng < -180.0:
+                        d_lng += 360.0
+                
                     distance = math.sqrt(
                         d_lat * d_lat +
                         d_lng * d_lng
                     )
-
+                
                     if distance < radius:
-
+                
                         factor = (
                             1.0 -
                             distance / radius
                         )
-
+                
+                        # Smooth falloff instead of a sharp edge.
+                        factor = (
+                            factor *
+                            factor *
+                            (3.0 - 2.0 * factor)
+                        )
+                
                         temp += (
                             strength *
-                            factor *
                             factor
                         )
-
+                
+                
+                # Final temperature range.
                 temp = max(
                     -62.0,
                     min(56.0, temp)
                 )
-
+                
                 values.append(
                     round(temp, 1)
                 )
