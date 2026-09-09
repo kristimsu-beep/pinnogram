@@ -636,13 +636,9 @@
                     // Latitude remains limited to the available raster.
                     // ---------------------------------------------------------
                     
-                    tx = fract(tx);
-                    
-                    if (tx < 0.0) {
-                        tx += 1.0;
-                    }
-                    
                     if (
+                        tx < 0.0 ||
+                        tx > 1.0 ||
                         ty < 0.0 ||
                         ty > 1.0
                     ) {
@@ -661,17 +657,16 @@
                     // ---------------------------------------------------------
                     // Temperature sampling
                     // ---------------------------------------------------------
-                    
-                    float temperatureValue = texture(
+                    vec4 tempSample = texture(
                         u_temperature,
                         vec2(tx, ty)
-                    ).r;
+                    );
                     
-                    // 0.0 is a valid temperature (-60°C).
-                    // Only negative values mean "no data".
-                    if (temperatureValue < 0.0) {
+                    if (tempSample.a < 0.01) {
                         discard;
                     }
+                    
+                    float temperatureValue = tempSample.r;
                     
                     float temperature =
                         temperatureValue * 116.0 - 60.0;
