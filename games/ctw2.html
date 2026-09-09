@@ -631,9 +631,9 @@
                      */
         
                     // ---------------------------------------------------------
-                    // Keep the temperature field continuous around the globe.
-                    // Longitude wraps horizontally.
-                    // Latitude is clamped to the valid weather range.
+                    // Weather raster coverage
+                    // Longitude is continuous and wraps around the globe.
+                    // Latitude remains limited to the available raster.
                     // ---------------------------------------------------------
                     
                     tx = fract(tx);
