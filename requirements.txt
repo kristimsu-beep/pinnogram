@@ -23,3 +23,5 @@ duckduckgo_search>=6.0.0
 g4f>=0.3.3.0
 discord.py>=2.3.2
 asyncio>=3.4.3
+geopandas
+shapely
