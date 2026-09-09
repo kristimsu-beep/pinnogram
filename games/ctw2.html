@@ -629,16 +629,23 @@
                      * If outside the weather raster,
                      * leave the map untouched.
                      */
-        
+
                     // ---------------------------------------------------------
                     // Weather raster coverage
-                    // Longitude is continuous and wraps around the globe.
-                    // Latitude remains limited to the available raster.
+                    // ---------------------------------------------------------
+                    // Longitude wraps continuously around the globe.
+                    // Latitude remains limited to the weather raster.
+                    //
+                    // fract() converts:
+                    //   -0.2 -> 0.8
+                    //    0.0 -> 0.0
+                    //    0.4 -> 0.4
+                    //    1.2 -> 0.2
                     // ---------------------------------------------------------
                     
+                    tx = fract(tx);
+                    
                     if (
-                        tx < 0.0 ||
-                        tx > 1.0 ||
                         ty < 0.0 ||
                         ty > 1.0
                     ) {
