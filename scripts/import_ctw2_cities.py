@@ -1,389 +1,429 @@
+import asyncio
 import csv
 import io
 import os
-import random
 import zipfile
 from collections import defaultdict
 
-from pymongo import MongoClient, UpdateOne
+import motor.motor_asyncio
 
 
 # ============================================================
 # CONFIG
 # ============================================================
 
+BASE_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
+)
+
 ZIP_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    BASE_DIR,
     "data",
     "cities1000.zip"
 )
 
-MONGODB_URI = os.environ.get("MONGODB_URI")
-
-# Change this only if your CTW2 database uses another name.
-MONGODB_DATABASE = os.environ.get("MONGODB_DATABASE", "pinnogram")
+MONGO_URI = os.environ.get("MONGO_URI")
 
 TARGET_CITY_COUNT = 10000
 
 
 # ============================================================
-# CHECK DATABASE CONNECTION
+# CHECK MONGODB URI
 # ============================================================
 
-if not MONGODB_URI:
+if not MONGO_URI:
     raise RuntimeError(
-        "MONGODB_URI environment variable is not set."
-    )
-
-if not os.path.exists(ZIP_PATH):
-    raise FileNotFoundError(
-        f"Could not find GeoNames file:\n{ZIP_PATH}"
+        "MONGO_URI environment variable is not set."
     )
 
 
 # ============================================================
-# CONNECT TO MONGODB
+# CONNECT TO A SEPARATE CTW2 CITIES DATABASE
 # ============================================================
 
-print("Connecting to MongoDB...")
+print("Connecting to MongoDB Atlas...")
 
-client = MongoClient(MONGODB_URI)
-db = client[MONGODB_DATABASE]
+mongo_client = motor.motor_asyncio.AsyncIOMotorClient(
+    MONGO_URI
+)
 
-city_catalog = db["ctw2_city_catalog"]
-city_states = db["ctw2_cities"]
+cities_db = mongo_client["ctw2_cities_db"]
+
+city_catalog = cities_db["city_catalog"]
+city_states = cities_db["city_states"]
 
 
 # ============================================================
 # READ GEONAMES
 # ============================================================
 
-print("Reading cities1000.zip...")
+def read_cities():
 
-cities = []
+    print("Opening cities1000.zip...")
 
-with zipfile.ZipFile(ZIP_PATH, "r") as archive:
-
-    txt_files = [
-        name
-        for name in archive.namelist()
-        if name.endswith(".txt")
-        and not name.startswith("__")
-    ]
-
-    if not txt_files:
-        raise RuntimeError(
-            "No GeoNames TXT file was found inside cities1000.zip."
+    if not os.path.exists(ZIP_PATH):
+        raise FileNotFoundError(
+            f"Could not find:\n{ZIP_PATH}"
         )
 
-    txt_name = txt_files[0]
+    cities = []
 
-    print(f"Using: {txt_name}")
+    with zipfile.ZipFile(ZIP_PATH, "r") as archive:
 
-    with archive.open(txt_name) as raw_file:
+        txt_files = [
+            name
+            for name in archive.namelist()
+            if name.endswith(".txt")
+        ]
 
-        text_file = io.TextIOWrapper(
-            raw_file,
-            encoding="utf-8"
+        if not txt_files:
+            raise RuntimeError(
+                "No TXT file found inside cities1000.zip."
+            )
+
+        txt_name = txt_files[0]
+
+        print(
+            f"Reading GeoNames file: {txt_name}"
         )
 
-        reader = csv.reader(
-            text_file,
-            delimiter="\t"
-        )
+        with archive.open(txt_name) as raw:
 
-        for row in reader:
+            text_file = io.TextIOWrapper(
+                raw,
+                encoding="utf-8"
+            )
 
-            if len(row) < 19:
-                continue
+            reader = csv.reader(
+                text_file,
+                delimiter="\t"
+            )
 
-            try:
-                geoname_id = int(row[0])
-                name = row[1].strip()
-                ascii_name = row[2].strip()
+            for row in reader:
 
-                latitude = float(row[4])
-                longitude = float(row[5])
+                if len(row) < 19:
+                    continue
 
-                feature_class = row[6].strip()
-                feature_code = row[7].strip()
+                try:
 
-                country_code = row[8].strip()
+                    geoname_id = int(row[0])
 
-                population = int(row[14] or 0)
+                    name = row[1].strip()
 
-            except (ValueError, TypeError):
-                continue
+                    ascii_name = row[2].strip()
 
-            # We only want actual populated places.
-            if feature_class != "P":
-                continue
+                    latitude = float(row[4])
 
-            if not name:
-                continue
+                    longitude = float(row[5])
 
-            if not country_code:
-                continue
+                    feature_class = row[6].strip()
 
-            if not (-90 <= latitude <= 90):
-                continue
+                    feature_code = row[7].strip()
 
-            if not (-180 <= longitude <= 180):
-                continue
+                    country_code = row[8].strip()
 
-            cities.append({
-                "city_id": geoname_id,
-                "name": name,
-                "ascii_name": ascii_name or name,
-                "lat": latitude,
-                "lng": longitude,
-                "country_code": country_code,
-                "feature_code": feature_code,
-                "real_population": population
-            })
+                    population = int(
+                        row[14] or 0
+                    )
 
+                except (ValueError, TypeError):
 
-print(f"Loaded {len(cities):,} populated places.")
+                    continue
+
+                # Only populated places.
+                if feature_class != "P":
+                    continue
+
+                if not name:
+                    continue
+
+                if not country_code:
+                    continue
+
+                if not (
+                    -90 <= latitude <= 90
+                ):
+                    continue
+
+                if not (
+                    -180 <= longitude <= 180
+                ):
+                    continue
+
+                cities.append({
+                    "city_id": geoname_id,
+                    "name": name,
+                    "ascii_name": ascii_name or name,
+                    "lat": latitude,
+                    "lng": longitude,
+                    "country_code": country_code,
+                    "feature_code": feature_code,
+                    "real_population": population
+                })
+
+    return cities
 
 
 # ============================================================
-# REMOVE DUPLICATES
-# ============================================================
-
-unique = {}
-
-for city in cities:
-    unique[city["city_id"]] = city
-
-cities = list(unique.values())
-
-print(f"After deduplication: {len(cities):,}")
-
-
-# ============================================================
-# CITY PRIORITY
+# CALCULATE CITY IMPORTANCE
 # ============================================================
 
 def city_priority(city):
 
-    feature = city["feature_code"]
     population = city["real_population"]
+
+    feature = city["feature_code"]
 
     score = population
 
-    # Strongly prioritize national capitals.
+    # National capital
     if feature == "PPLC":
         score += 10_000_000
 
-    # Administrative capitals / seats.
+    # First-level administrative center
     elif feature == "PPLA":
         score += 3_000_000
 
+    # Second-level administrative center
     elif feature == "PPLA2":
         score += 1_500_000
 
+    # Third-level administrative center
     elif feature == "PPLA3":
         score += 500_000
 
     return score
 
 
-for city in cities:
-    city["_priority"] = city_priority(city)
-
-
 # ============================================================
-# GUARANTEE COUNTRY COVERAGE
+# SELECT ~10,000 CITIES
 # ============================================================
 
-by_country = defaultdict(list)
-
-for city in cities:
-    by_country[city["country_code"]].append(city)
-
-
-selected = {}
-remaining_candidates = []
-
-
-for country_code, country_cities in by_country.items():
-
-    country_cities.sort(
-        key=lambda city: city["_priority"],
-        reverse=True
-    )
-
-    # Guarantee at least one important city
-    # from every country represented in GeoNames.
-    first_city = country_cities[0]
-
-    selected[first_city["city_id"]] = first_city
-
-    # Keep the rest available for global selection.
-    for city in country_cities[1:]:
-        remaining_candidates.append(city)
-
-
-print(
-    f"Guaranteed country coverage: "
-    f"{len(selected):,} cities"
-)
-
-
-# ============================================================
-# GLOBAL SELECTION
-# ============================================================
-
-remaining_candidates.sort(
-    key=lambda city: city["_priority"],
-    reverse=True
-)
-
-
-# Prevent one country from taking over the entire 10k.
-country_counts = defaultdict(int)
-
-for city in selected.values():
-    country_counts[city["country_code"]] += 1
-
-
-MAX_PER_COUNTRY = 250
-
-
-for city in remaining_candidates:
-
-    if len(selected) >= TARGET_CITY_COUNT:
-        break
-
-    country = city["country_code"]
-
-    if country_counts[country] >= MAX_PER_COUNTRY:
-        continue
-
-    selected[city["city_id"]] = city
-    country_counts[country] += 1
-
-
-# ============================================================
-# IF STILL UNDER 10K
-# ============================================================
-
-if len(selected) < TARGET_CITY_COUNT:
+def select_cities(cities):
 
     print(
-        "Country limits prevented reaching 10,000. "
-        "Filling remaining slots without the country cap."
+        f"GeoNames populated places: "
+        f"{len(cities):,}"
     )
 
-    for city in remaining_candidates:
+    # Remove duplicate IDs.
+    unique = {}
 
-        if len(selected) >= TARGET_CITY_COUNT:
-            break
+    for city in cities:
+        unique[city["city_id"]] = city
+
+    cities = list(unique.values())
+
+    # Calculate importance.
+    for city in cities:
+        city["_priority"] = city_priority(city)
+
+    # Group by country.
+    by_country = defaultdict(list)
+
+    for city in cities:
+        by_country[
+            city["country_code"]
+        ].append(city)
+
+    selected = {}
+
+    # --------------------------------------------------------
+    # First guarantee at least one city per country.
+    # --------------------------------------------------------
+
+    for country, country_cities in by_country.items():
+
+        country_cities.sort(
+            key=lambda city: city["_priority"],
+            reverse=True
+        )
+
+        city = country_cities[0]
+
+        selected[city["city_id"]] = city
+
+    print(
+        "Countries represented: "
+        f"{len(selected):,}"
+    )
+
+    # --------------------------------------------------------
+    # Sort all remaining cities by importance.
+    # --------------------------------------------------------
+
+    remaining = []
+
+    for city in cities:
 
         if city["city_id"] in selected:
             continue
 
+        remaining.append(city)
+
+    remaining.sort(
+        key=lambda city: city["_priority"],
+        reverse=True
+    )
+
+    # Avoid one country taking almost all 10k.
+    MAX_PER_COUNTRY = 250
+
+    country_counts = defaultdict(int)
+
+    for city in selected.values():
+        country_counts[
+            city["country_code"]
+        ] += 1
+
+    # --------------------------------------------------------
+    # Fill the remaining slots.
+    # --------------------------------------------------------
+
+    for city in remaining:
+
+        if len(selected) >= TARGET_CITY_COUNT:
+            break
+
+        country = city["country_code"]
+
+        if (
+            country_counts[country]
+            >= MAX_PER_COUNTRY
+        ):
+            continue
+
         selected[city["city_id"]] = city
 
+        country_counts[country] += 1
 
-cities = list(selected.values())
+    # --------------------------------------------------------
+    # Fallback if country limits prevented 10k.
+    # --------------------------------------------------------
 
+    if len(selected) < TARGET_CITY_COUNT:
 
-# ============================================================
-# FINAL SORT
-# ============================================================
+        for city in remaining:
 
-cities.sort(
-    key=lambda city: city["city_id"]
-)
+            if len(selected) >= TARGET_CITY_COUNT:
+                break
 
+            if city["city_id"] in selected:
+                continue
 
-if len(cities) > TARGET_CITY_COUNT:
+            selected[city["city_id"]] = city
 
-    cities = cities[:TARGET_CITY_COUNT]
+    result = list(selected.values())
 
+    result.sort(
+        key=lambda city: city["_priority"],
+        reverse=True
+    )
 
-print(
-    f"Final CTW2 city count: {len(cities):,}"
-)
+    # Exactly 10,000 when enough data exists.
+    if len(result) > TARGET_CITY_COUNT:
+        result = result[:TARGET_CITY_COUNT]
 
-
-# ============================================================
-# PREPARE CATALOG DOCUMENTS
-# ============================================================
-
-catalog_documents = []
-
-for city in cities:
-
-    catalog_documents.append({
-        "city_id": city["city_id"],
-
-        "name": city["name"],
-        "ascii_name": city["ascii_name"],
-
-        "lat": city["lat"],
-        "lng": city["lng"],
-
-        "country_code": city["country_code"],
-        "feature_code": city["feature_code"],
-
-        # Real-world population is kept only as metadata.
-        # CTW2 gameplay population starts at 100.
-        "real_population": city["real_population"],
-
-        "location": {
-            "type": "Point",
-            "coordinates": [
-                city["lng"],
-                city["lat"]
-            ]
-        }
-    })
+    return result
 
 
 # ============================================================
-# PREPARE GAME STATE
+# IMPORT INTO MONGODB
 # ============================================================
 
-state_documents = []
+async def import_cities():
 
-for city in cities:
+    cities = read_cities()
 
-    state_documents.append({
-        "city_id": city["city_id"],
+    cities = select_cities(cities)
 
-        # Nobody owns the city initially.
-        "owner_username": None,
+    print()
+    print(
+        f"Selected {len(cities):,} cities."
+    )
 
-        # Every CTW2 city starts at exactly 100.
-        "population": 100,
+    # --------------------------------------------------------
+    # Clear ONLY the CTW2 city database collections.
+    # --------------------------------------------------------
 
-        # Capital will be selected later.
-        "is_capital": False
-    })
+    print("Clearing old city catalog...")
 
+    await city_catalog.delete_many({})
 
-# ============================================================
-# REPLACE OLD IMPORT
-# ============================================================
+    print("Clearing old city states...")
 
-print("Clearing previous CTW2 city catalog...")
+    await city_states.delete_many({})
 
-city_catalog.delete_many({})
+    # --------------------------------------------------------
+    # Build catalog documents.
+    # --------------------------------------------------------
 
-print("Clearing previous CTW2 city state...")
+    catalog_documents = []
 
-city_states.delete_many({})
+    for city in cities:
 
+        catalog_documents.append({
 
-# ============================================================
-# INSERT CATALOG
-# ============================================================
+            "city_id": city["city_id"],
 
-print("Inserting city catalog...")
+            "name": city["name"],
 
-if catalog_documents:
+            "ascii_name": city["ascii_name"],
+
+            "lat": city["lat"],
+
+            "lng": city["lng"],
+
+            "country_code":
+                city["country_code"],
+
+            "feature_code":
+                city["feature_code"],
+
+            # Real-world population is stored only
+            # for city importance/reference.
+            "real_population":
+                city["real_population"],
+
+            # GeoJSON Point.
+            "location": {
+                "type": "Point",
+                "coordinates": [
+                    city["lng"],
+                    city["lat"]
+                ]
+            }
+        })
+
+    # --------------------------------------------------------
+    # Build CTW2 game-state documents.
+    # --------------------------------------------------------
+
+    state_documents = []
+
+    for city in cities:
+
+        state_documents.append({
+
+            "city_id": city["city_id"],
+
+            # No country owns the city initially.
+            "owner_username": None,
+
+            # EVERY CTW2 CITY STARTS AT 100.
+            "population": 100,
+
+            # Capital will be selected later.
+            "is_capital": False
+        })
+
+    # --------------------------------------------------------
+    # Insert catalog.
+    # --------------------------------------------------------
+
+    print("Inserting city catalog...")
 
     for start in range(
         0,
@@ -395,25 +435,22 @@ if catalog_documents:
             start:start + 1000
         ]
 
-        city_catalog.insert_many(
+        await city_catalog.insert_many(
             batch,
             ordered=False
         )
 
         print(
-            f"Catalog inserted: "
+            f"Catalog: "
             f"{min(start + 1000, len(catalog_documents)):,}"
             f"/{len(catalog_documents):,}"
         )
 
+    # --------------------------------------------------------
+    # Insert states.
+    # --------------------------------------------------------
 
-# ============================================================
-# INSERT GAME STATE
-# ============================================================
-
-print("Creating CTW2 city states...")
-
-if state_documents:
+    print("Creating city game states...")
 
     for start in range(
         0,
@@ -425,75 +462,80 @@ if state_documents:
             start:start + 1000
         ]
 
-        city_states.insert_many(
+        await city_states.insert_many(
             batch,
             ordered=False
         )
 
         print(
-            f"State inserted: "
+            f"States: "
             f"{min(start + 1000, len(state_documents)):,}"
             f"/{len(state_documents):,}"
         )
 
+    # --------------------------------------------------------
+    # Indexes.
+    # --------------------------------------------------------
+
+    print("Creating indexes...")
+
+    await city_catalog.create_index(
+        [("location", "2dsphere")]
+    )
+
+    await city_catalog.create_index(
+        [("city_id", 1)],
+        unique=True
+    )
+
+    await city_catalog.create_index(
+        [("country_code", 1)]
+    )
+
+    await city_states.create_index(
+        [("city_id", 1)],
+        unique=True
+    )
+
+    await city_states.create_index(
+        [("owner_username", 1)]
+    )
+
+    await city_states.create_index(
+        [("is_capital", 1)]
+    )
+
+    print()
+    print("======================================")
+    print(" CTW2 CITY IMPORT COMPLETE")
+    print("======================================")
+    print(
+        f"Cities: {len(cities):,}"
+    )
+    print(
+        "Database: ctw2_cities_db"
+    )
+    print(
+        "Catalog: city_catalog"
+    )
+    print(
+        "States: city_states"
+    )
+    print(
+        "Starting population: 100"
+    )
+    print(
+        "2dsphere index: READY"
+    )
+    print("======================================")
+
 
 # ============================================================
-# INDEXES
+# RUN
 # ============================================================
 
-print("Creating MongoDB indexes...")
+if __name__ == "__main__":
 
-city_catalog.create_index(
-    [("location", "2dsphere")]
-)
-
-city_catalog.create_index(
-    [("city_id", 1)],
-    unique=True
-)
-
-city_catalog.create_index(
-    [("country_code", 1)]
-)
-
-city_states.create_index(
-    [("city_id", 1)],
-    unique=True
-)
-
-city_states.create_index(
-    [("owner_username", 1)]
-)
-
-city_states.create_index(
-    [("is_capital", 1)]
-)
-
-
-# ============================================================
-# FINISHED
-# ============================================================
-
-print()
-print("==============================================")
-print(" CTW2 CITY IMPORT COMPLETE")
-print("==============================================")
-print(
-    f"Cities imported: {len(cities):,}"
-)
-print(
-    "Collection: ctw2_city_catalog"
-)
-print(
-    "Collection: ctw2_cities"
-)
-print(
-    "Population: 100 for every city"
-)
-print(
-    "Geospatial index: READY"
-)
-print("==============================================")
-
-
-client.close()
+    asyncio.run(
+        import_cities()
+    )
