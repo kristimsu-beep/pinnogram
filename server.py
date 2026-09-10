@@ -6156,6 +6156,66 @@ async def ctw2_save_country(data: dict):
         print(f"🚨 [ОШИБКА CTW2 SAVE]: {str(e)}")
         return {"status": "error", "message": f"Ошибка СУБД MongoDB Atlas: {str(e)}"}
 
+# =====================================================================
+# 🛠️ CTW2 MODERATION / COMMAND API
+# =====================================================================
+
+@app.post("/api/ctw2/command")
+async def ctw2_execute_command(data: dict):
+    try:
+        username = str(data.get("username", "")).strip()
+        command = str(data.get("command", "")).strip().lower()
+
+        if not username:
+            return {
+                "status": "error",
+                "message": "Пользователь не определён."
+            }
+
+        if not command:
+            return {
+                "status": "error",
+                "message": "Команда не указана."
+            }
+
+        # -------------------------------------------------------------
+        # !reset me
+        # -------------------------------------------------------------
+        if command == "!reset me":
+
+            result = await db["ctw2_countries"].delete_one({
+                "username": username
+            })
+
+            if result.deleted_count > 0:
+                return {
+                    "status": "success",
+                    "command": "!reset me",
+                    "message": "Ваше государство было полностью удалено из CTW 2."
+                }
+
+            return {
+                "status": "success",
+                "command": "!reset me",
+                "message": "У вас нет зарегистрированного государства."
+            }
+
+        # -------------------------------------------------------------
+        # Unknown command
+        # -------------------------------------------------------------
+        return {
+            "status": "error",
+            "message": f"Неизвестная команда: {command}"
+        }
+
+    except Exception as e:
+        print(f"🚨 [ОШИБКА CTW2 COMMAND]: {str(e)}")
+
+        return {
+            "status": "error",
+            "message": f"Ошибка выполнения команды: {str(e)}"
+        }
+
 # 3. API: Выдача всех зарегистрированных стран мира для рендеринга Leaflet
 @app.get("/api/ctw2/countries/list")
 async def ctw2_get_all_countries():
