@@ -6255,6 +6255,41 @@ async def ctw2_get_all_countries():
         print(f"🚨 [ОШИБКА CTW2 COUNTRIES_LIST]: {str(e)}")
         return {"status": "error", "message": str(e), "countries": []}
 
+@app.get("/api/ctw2/cities")
+async def ctw2_get_cities():
+    try:
+        cursor = cities_db["city_catalog"].find(
+            {},
+            {
+                "_id": 0,
+                "city_id": 1,
+                "name": 1,
+                "ascii_name": 1,
+                "lat": 1,
+                "lng": 1,
+                "country_code": 1,
+                "real_population": 1
+            }
+        )
+
+        cities = await cursor.to_list(length=10000)
+
+        return {
+            "status": "success",
+            "cities": cities
+        }
+
+    except Exception as e:
+        print(
+            f"🚨 [CTW2 CITIES API ERROR] {e}"
+        )
+
+        return {
+            "status": "error",
+            "message": str(e),
+            "cities": []
+        }
+
 # =====================================================================
 # 🪐 АВТОНОМНЫЙ ПЛАНЕТАРНЫЙ КЛИМАТИЧЕСКИЙ ДВИЖОК CTW 2 (РЕАЛЬНАЯ МАТЕМАТИКА)
 # =====================================================================
