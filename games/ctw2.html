@@ -1954,26 +1954,22 @@
                         [lat, lng],
                         {
                             radius: isCapital ? 6 : 4,
-        
-                            color:
-                                isOwned
-                                    ? (isCapital ? '#ffd700' : '#ff3030')
-                                    : '#ffffff',
-        
-                            weight:
-                                isCapital ? 2 : 1,
-        
+                
+                            color: '#ffffff',
+                
+                            weight: isCapital ? 2 : 1,
+                
                             fillColor:
                                 isOwned
-                                    ? (isCapital ? '#ff3030' : '#ff3030')
+                                    ? '#ff3030'
                                     : '#00f2fe',
-        
+                
                             fillOpacity: 0.95,
-        
+                
                             interactive: true
                         }
                     );
-        
+
                 marker.bindPopup(`
                     <div style="
                         color:#fff;
@@ -1998,7 +1994,7 @@
                         ">
                             ${
                                 isOwned
-                                    ? '🔴 Your country'
+                                    ? `🔴 Your country: ${currentCTW2Country?.name || 'YOUR COUNTRY'}`
                                     : '🌍 Uncontrolled'
                             }
                         </div>
