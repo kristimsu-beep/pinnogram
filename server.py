@@ -6250,11 +6250,12 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
 
     try:
         import geopandas as gpd
+        import numpy as np
         from shapely.geometry import Point
         from shapely.strtree import STRtree
 
         # =========================================================
-        # GLOBAL SETTINGS
+        # GLOBAL RASTER SETTINGS
         # =========================================================
 
         LAT_MIN = -90.0
@@ -6264,34 +6265,45 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
 
         STEP = 0.5
 
-        WIDTH = int(round((LNG_MAX - LNG_MIN) / STEP)) + 1
-        HEIGHT = int(round((LAT_MAX - LAT_MIN) / STEP)) + 1
+        WIDTH = int(round(
+            (LNG_MAX - LNG_MIN) / STEP
+        )) + 1
+
+        HEIGHT = int(round(
+            (LAT_MAX - LAT_MIN) / STEP
+        )) + 1
 
         # =========================================================
-        # CACHE
+        # SERVER-SIDE CACHE
         # =========================================================
 
-        global ctw2_land_mask_cache
+        global ctw2_terrain_cache
 
-        if "ctw2_land_mask_cache" not in globals():
-            ctw2_land_mask_cache = None
+        if "ctw2_terrain_cache" not in globals():
+            ctw2_terrain_cache = None
 
         # =========================================================
-        # LOAD REAL NATURAL EARTH LAND DATA
+        # BUILD TERRAIN CACHE ONLY ONCE
         # =========================================================
 
-        if ctw2_land_mask_cache is None:
+        if ctw2_terrain_cache is None:
+
+            print("🌍 Loading Natural Earth terrain data...")
+
+            # -----------------------------------------------------
+            # LAND
+            # -----------------------------------------------------
 
             land_candidates = [
                 "data/ne_50m_land[1].shp",
-                "data/ne_50m_land.shp",
+                "data/ne_50m_land.shp"
             ]
 
             land_path = None
 
-            for candidate in land_candidates:
-                if os.path.exists(candidate):
-                    land_path = candidate
+            for path in land_candidates:
+                if os.path.exists(path):
+                    land_path = path
                     break
 
             if land_path is None:
@@ -6300,115 +6312,487 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                     "Expected data/ne_50m_land[1].shp"
                 )
 
-            print("🌍 Loading Natural Earth land polygons:", land_path)
+            print(
+                "🌍 Loading land:",
+                land_path
+            )
 
-            land_gdf = gpd.read_file(land_path)
+            land_gdf = gpd.read_file(
+                land_path
+            )
 
-            if land_gdf.empty:
-                raise RuntimeError(
-                    "Natural Earth land dataset loaded but contains no polygons."
-                )
-
-            # Make sure coordinates are geographic longitude/latitude.
             if land_gdf.crs is not None:
-                land_gdf = land_gdf.to_crs("EPSG:4326")
+                land_gdf = land_gdf.to_crs(
+                    "EPSG:4326"
+                )
 
             land_geometries = [
                 geometry
                 for geometry in land_gdf.geometry
-                if geometry is not None and not geometry.is_empty
+                if geometry is not None
+                and not geometry.is_empty
             ]
 
             if not land_geometries:
                 raise RuntimeError(
-                    "Natural Earth dataset contains no valid geometries."
+                    "Natural Earth land dataset is empty."
                 )
 
-            land_tree = STRtree(land_geometries)
+            land_tree = STRtree(
+                land_geometries
+            )
 
             print(
-                "🌍 Natural Earth polygons loaded:",
+                "🌍 Land polygons:",
                 len(land_geometries)
             )
 
+            # -----------------------------------------------------
+            # ELEVATION POINTS
+            # -----------------------------------------------------
+
+            elevation_candidates = [
+                "data/ne_50m_geography_regions_elevation_points[1].shp",
+                "data/ne_50m_geography_regions_elevation_points.shp"
+            ]
+
+            elevation_path = None
+
+            for path in elevation_candidates:
+                if os.path.exists(path):
+                    elevation_path = path
+                    break
+
+            if elevation_path is None:
+                raise FileNotFoundError(
+                    "Natural Earth elevation points file not found. "
+                    "Expected "
+                    "data/ne_50m_geography_regions_elevation_points[1].shp"
+                )
+
+            print(
+                "⛰️ Loading elevation points:",
+                elevation_path
+            )
+
+            elevation_gdf = gpd.read_file(
+                elevation_path
+            )
+
+            if elevation_gdf.crs is not None:
+                elevation_gdf = elevation_gdf.to_crs(
+                    "EPSG:4326"
+                )
+
+            print(
+                "⛰️ Elevation fields:",
+                list(elevation_gdf.columns)
+            )
+
+            # -----------------------------------------------------
+            # FIND ELEVATION FIELD
+            # -----------------------------------------------------
+
+            elevation_field = None
+
+            possible_fields = [
+                "elevation",
+                "ELEVATION",
+                "elev",
+                "ELEV",
+                "elev_m",
+                "ELEV_M"
+            ]
+
+            for field in possible_fields:
+                if field in elevation_gdf.columns:
+                    elevation_field = field
+                    break
+
+            if elevation_field is None:
+
+                raise RuntimeError(
+                    "Could not find elevation field in "
+                    "Natural Earth elevation dataset. "
+                    f"Available fields: "
+                    f"{list(elevation_gdf.columns)}"
+                )
+
+            print(
+                "⛰️ Using elevation field:",
+                elevation_field
+            )
+
+            # -----------------------------------------------------
+            # STORE VALID ELEVATION POINTS
+            # -----------------------------------------------------
+
+            elevation_geometries = []
+            elevation_values = []
+
+            for _, row in elevation_gdf.iterrows():
+
+                geometry = row.geometry
+
+                if (
+                    geometry is None
+                    or geometry.is_empty
+                ):
+                    continue
+
+                try:
+                    elevation = float(
+                        row[elevation_field]
+                    )
+                except (
+                    TypeError,
+                    ValueError
+                ):
+                    continue
+
+                if not math.isfinite(
+                    elevation
+                ):
+                    continue
+
+                elevation_geometries.append(
+                    geometry
+                )
+
+                elevation_values.append(
+                    max(
+                        0.0,
+                        elevation
+                    )
+                )
+
+            if not elevation_geometries:
+                raise RuntimeError(
+                    "No valid elevation points found."
+                )
+
+            elevation_values = np.asarray(
+                elevation_values,
+                dtype=np.float32
+            )
+
+            elevation_tree = STRtree(
+                elevation_geometries
+            )
+
+            print(
+                "⛰️ Valid elevation points:",
+                len(elevation_geometries)
+            )
+
             # =====================================================
-            # PRECOMPUTE GLOBAL LAND MASK
+            # PRECOMPUTE LAND MASK
             # =====================================================
 
             print(
-                "🌍 Building global coastline mask:",
+                "🌍 Building coastline mask:",
                 WIDTH,
                 "x",
                 HEIGHT
             )
 
-            land_mask = bytearray(WIDTH * HEIGHT)
+            land_mask = np.zeros(
+                WIDTH * HEIGHT,
+                dtype=np.uint8
+            )
 
-            for y in range(HEIGHT):
+            for y in range(
+                HEIGHT
+            ):
 
                 lat = (
                     LAT_MAX -
                     y * STEP
                 )
 
-                for x in range(WIDTH):
+                for x in range(
+                    WIDTH
+                ):
 
                     lng = (
                         LNG_MIN +
                         x * STEP
                     )
 
-                    point = Point(lng, lat)
+                    point = Point(
+                        lng,
+                        lat
+                    )
 
-                    # Shapely 2.x STRtree returns indexes.
-                    candidates = land_tree.query(point)
+                    candidates = land_tree.query(
+                        point
+                    )
 
                     is_land = False
 
                     for index in candidates:
 
-                        geometry = land_geometries[int(index)]
+                        geometry = (
+                            land_geometries[
+                                int(index)
+                            ]
+                        )
 
-                        if geometry.covers(point):
+                        if geometry.covers(
+                            point
+                        ):
                             is_land = True
                             break
 
                     if is_land:
+
                         land_mask[
                             y * WIDTH + x
                         ] = 1
 
-            ctw2_land_mask_cache = land_mask
+            print(
+                "🌍 Coastline mask ready."
+            )
 
-            print("🌍 Global coastline mask ready.")
+            # =====================================================
+            # PRECOMPUTE ELEVATION FIELD
+            # =====================================================
+
+            print(
+                "⛰️ Building elevation influence field..."
+            )
+
+            elevation_field_array = np.zeros(
+                WIDTH * HEIGHT,
+                dtype=np.float32
+            )
+
+            # Influence radius in degrees.
+            #
+            # This is intentionally fairly small because these
+            # are mountain PEAK points, not a full DEM.
+            INFLUENCE_RADIUS = 4.0
+
+            for y in range(
+                HEIGHT
+            ):
+
+                lat = (
+                    LAT_MAX -
+                    y * STEP
+                )
+
+                for x in range(
+                    WIDTH
+                ):
+
+                    lng = (
+                        LNG_MIN +
+                        x * STEP
+                    )
+
+                    # Only apply terrain cooling over land.
+                    if (
+                        land_mask[
+                            y * WIDTH + x
+                        ] == 0
+                    ):
+                        continue
+
+                    point = Point(
+                        lng,
+                        lat
+                    )
+
+                    # Bounding box around point.
+                    search_box = point.buffer(
+                        INFLUENCE_RADIUS
+                    )
+
+                    candidates = (
+                        elevation_tree.query(
+                            search_box
+                        )
+                    )
+
+                    if len(candidates) == 0:
+                        continue
+
+                    weighted_sum = 0.0
+                    weight_total = 0.0
+
+                    for index in candidates:
+
+                        index = int(index)
+
+                        mountain = (
+                            elevation_geometries[
+                                index
+                            ]
+                        )
+
+                        mountain_lat = (
+                            mountain.y
+                        )
+
+                        mountain_lng = (
+                            mountain.x
+                        )
+
+                        d_lat = (
+                            lat -
+                            mountain_lat
+                        )
+
+                        d_lng = (
+                            lng -
+                            mountain_lng
+                        )
+
+                        # Correct antimeridian.
+                        if d_lng > 180.0:
+                            d_lng -= 360.0
+
+                        if d_lng < -180.0:
+                            d_lng += 360.0
+
+                        # Correct longitude distance
+                        # according to latitude.
+                        d_lng *= max(
+                            0.35,
+                            math.cos(
+                                math.radians(
+                                    lat
+                                )
+                            )
+                        )
+
+                        distance = math.sqrt(
+                            d_lat * d_lat +
+                            d_lng * d_lng
+                        )
+
+                        if (
+                            distance >
+                            INFLUENCE_RADIUS
+                        ):
+                            continue
+
+                        # Smooth influence.
+                        #
+                        # 1 at mountain,
+                        # 0 at radius edge.
+                        normalized_distance = (
+                            distance /
+                            INFLUENCE_RADIUS
+                        )
+
+                        influence = (
+                            1.0 -
+                            normalized_distance
+                        )
+
+                        influence = (
+                            influence *
+                            influence *
+                            (
+                                3.0 -
+                                2.0 *
+                                influence
+                            )
+                        )
+
+                        elevation = float(
+                            elevation_values[
+                                index
+                            ]
+                        )
+
+                        # The mountain elevation is
+                        # weighted by its distance.
+                        weighted_sum += (
+                            elevation *
+                            influence
+                        )
+
+                        weight_total += (
+                            influence
+                        )
+
+                    if weight_total > 0.0:
+
+                        estimated_elevation = (
+                            weighted_sum /
+                            weight_total
+                        )
+
+                        elevation_field_array[
+                            y * WIDTH + x
+                        ] = estimated_elevation
+
+            print(
+                "⛰️ Elevation influence field ready."
+            )
+
+            # =====================================================
+            # SAVE CACHE
+            # =====================================================
+
+            ctw2_terrain_cache = {
+                "land_mask": land_mask,
+                "elevation": elevation_field_array
+            }
+
+            print(
+                "🌍 Terrain cache ready."
+            )
 
         else:
-            land_mask = ctw2_land_mask_cache
+
+            land_mask = (
+                ctw2_terrain_cache[
+                    "land_mask"
+                ]
+            )
+
+            elevation_field_array = (
+                ctw2_terrain_cache[
+                    "elevation"
+                ]
+            )
 
         # =========================================================
-        # TEMPERATURE MODEL
+        # CURRENT SEASON
         # =========================================================
 
-        day_of_year = datetime.now().timetuple().tm_yday
+        day_of_year = (
+            datetime.now()
+            .timetuple()
+            .tm_yday
+        )
 
-        # Seasonal movement of warm/cold zones.
         season_shift = (
             math.sin(
                 2.0 *
                 math.pi *
-                (day_of_year - 80.0) /
+                (
+                    day_of_year -
+                    80.0
+                ) /
                 365.0
             )
             * 23.44
         )
 
+        # =========================================================
+        # TEMPERATURE RASTER
+        # =========================================================
+
         values = []
 
-        # =========================================================
-        # GLOBAL TEMPERATURE FIELD
-        # =========================================================
-
-        for y in range(HEIGHT):
+        for y in range(
+            HEIGHT
+        ):
 
             lat = (
                 LAT_MAX -
@@ -6417,134 +6801,268 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
 
             lat_abs = abs(lat)
 
-            for x in range(WIDTH):
+            for x in range(
+                WIDTH
+            ):
 
                 lng = (
                     LNG_MIN +
                     x * STEP
                 )
 
-                index = y * WIDTH + x
+                index = (
+                    y * WIDTH +
+                    x
+                )
 
                 is_land = (
                     land_mask[index] == 1
                 )
 
-                # -------------------------------------------------
-                # POLAR REGIONS
-                # -------------------------------------------------
+                # =================================================
+                # BASE TEMPERATURE
+                # =================================================
 
-                if lat <= -60.0:
+                # We deliberately DO NOT have a hard
+                # "if lat <= -60 Antarctica" switch anymore.
+                #
+                # Instead Antarctica gradually becomes colder.
+                # This removes the horizontal boundary you saw.
+                # =================================================
 
-                    # Antarctica.
-                    base_temp = (
-                        -27.0
-                        - (abs(lat) - 60.0) * 0.52
-                        - season_shift * 0.10
-                    )
+                effective_lat = (
+                    lat -
+                    season_shift
+                )
 
-                elif lat >= 70.0:
+                # General planetary temperature.
+                land_base = (
+                    41.5 -
+                    abs(effective_lat) *
+                    0.77
+                )
 
-                    # Arctic.
-                    base_temp = (
-                        -10.0
-                        - (lat - 70.0) * 0.60
-                        + season_shift * 0.12
-                    )
+                # Ocean is more moderate.
+                ocean_base = (
+                    27.0 -
+                    lat_abs * 0.20
+                )
 
-                # -------------------------------------------------
-                # LAND
-                # -------------------------------------------------
-
-                elif is_land:
-
-                    # Latitude controls the broad global gradient.
-                    effective_lat = (
-                        lat - season_shift
-                    )
-
-                    base_temp = (
-                        41.5
-                        - abs(effective_lat) * 0.77
-                    )
-
-                    # Continentality.
-                    #
-                    # Interiors are warmer in summer and colder
-                    # in winter than coastal areas.
-                    continental_strength = (
-                        0.5 +
-                        0.5 *
-                        math.sin(
-                            math.radians(lng * 1.7)
-                        ) *
-                        math.sin(
-                            math.radians(lat * 1.2)
+                tropical_ocean_cooling = (
+                    4.5 *
+                    math.exp(
+                        -(
+                            lat * lat
+                        ) /
+                        (
+                            2.0 *
+                            28.0 *
+                            28.0
                         )
                     )
+                )
 
+                polar_ocean_moderation = (
+                    5.5 *
+                    (
+                        lat_abs /
+                        90.0
+                    ) ** 2
+                )
+
+                ocean_base = (
+                    ocean_base
+                    -
+                    tropical_ocean_cooling
+                    +
+                    polar_ocean_moderation
+                )
+
+                # =================================================
+                # LAND / OCEAN
+                # =================================================
+
+                if is_land:
+
+                    base_temp = land_base
+
+                    # Continental variation.
                     continental_effect = (
-                        continental_strength * 3.5
+                        math.sin(
+                            math.radians(
+                                lng * 1.7
+                            )
+                        )
+                        *
+                        math.sin(
+                            math.radians(
+                                lat * 1.2
+                            )
+                        )
+                        *
+                        1.8
                     )
 
-                    base_temp += continental_effect
-
-                # -------------------------------------------------
-                # OCEAN
-                # -------------------------------------------------
+                    base_temp += (
+                        continental_effect
+                    )
 
                 else:
 
-                    # Ocean temperatures vary much more gradually
-                    # than land temperatures.
-                    ocean_base = (
-                        27.0
-                        - lat_abs * 0.20
-                    )
+                    base_temp = ocean_base
 
-                    # Tropical ocean cooling/moderation.
-                    tropical_cooling = (
-                        4.5 *
-                        math.exp(
-                            -(
-                                lat * lat
-                            ) /
-                            (
-                                2.0 *
-                                28.0 *
-                                28.0
-                            )
-                        )
-                    )
+                # =================================================
+                # SMOOTH ANTARCTIC TRANSITION
+                # =================================================
 
-                    # Polar moderation.
-                    polar_moderation = (
-                        5.5 *
+                # Instead of abruptly changing temperature
+                # at -60°, smoothly cool the southern region.
+                #
+                # At -55° -> almost no extra effect.
+                # At -70° -> strong effect.
+                # At -85° -> very strong effect.
+                #
+                # This is what removes the hard horizontal
+                # boundary from the previous version.
+
+                antarctic_start = -55.0
+                antarctic_end = -82.0
+
+                antarctic_factor = (
+                    (
+                        antarctic_start -
+                        lat
+                    ) /
+                    (
+                        antarctic_start -
+                        antarctic_end
+                    )
+                )
+
+                antarctic_factor = max(
+                    0.0,
+                    min(
+                        1.0,
+                        antarctic_factor
+                    )
+                )
+
+                antarctic_factor = (
+                    antarctic_factor *
+                    antarctic_factor *
+                    (
+                        3.0 -
+                        2.0 *
+                        antarctic_factor
+                    )
+                )
+
+                if lat < antarctic_start:
+
+                    antarctic_temperature = (
+                        -15.0
+                        -
                         (
-                            lat_abs / 90.0
-                        ) ** 2
+                            abs(lat) -
+                            55.0
+                        ) *
+                        0.55
+                        -
+                        season_shift *
+                        0.10
                     )
 
                     base_temp = (
-                        ocean_base
-                        - tropical_cooling
-                        + polar_moderation
+                        base_temp *
+                        (
+                            1.0 -
+                            antarctic_factor
+                        )
+                        +
+                        antarctic_temperature *
+                        antarctic_factor
                     )
 
                 # =================================================
-                # LARGE-SCALE NATURAL VARIATION
+                # ARCTIC SMOOTHING
+                # =================================================
+
+                arctic_start = 65.0
+                arctic_end = 82.0
+
+                arctic_factor = (
+                    (
+                        lat -
+                        arctic_start
+                    ) /
+                    (
+                        arctic_end -
+                        arctic_start
+                    )
+                )
+
+                arctic_factor = max(
+                    0.0,
+                    min(
+                        1.0,
+                        arctic_factor
+                    )
+                )
+
+                arctic_factor = (
+                    arctic_factor *
+                    arctic_factor *
+                    (
+                        3.0 -
+                        2.0 *
+                        arctic_factor
+                    )
+                )
+
+                if lat > arctic_start:
+
+                    arctic_temperature = (
+                        -8.0
+                        -
+                        (
+                            lat -
+                            65.0
+                        ) *
+                        0.55
+                        +
+                        season_shift *
+                        0.12
+                    )
+
+                    base_temp = (
+                        base_temp *
+                        (
+                            1.0 -
+                            arctic_factor
+                        )
+                        +
+                        arctic_temperature *
+                        arctic_factor
+                    )
+
+                # =================================================
+                # NATURAL LARGE-SCALE VARIATION
                 # =================================================
 
                 wave1 = (
                     math.sin(
-                        math.radians(lat * 2.8)
+                        math.radians(
+                            lat * 2.8
+                        )
                     )
                     *
                     math.cos(
-                        math.radians(lng * 1.7)
+                        math.radians(
+                            lng * 1.7
+                        )
                     )
                     *
-                    2.4
+                    2.0
                 )
 
                 wave2 = (
@@ -6554,7 +7072,8 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                             lng * 2.0
                         )
                     )
-                    * 1.3
+                    *
+                    1.1
                 )
 
                 wave3 = (
@@ -6564,31 +7083,27 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                             lng * 1.1
                         )
                     )
-                    * 0.8
+                    *
+                    0.7
                 )
 
                 temp = (
                     base_temp
-                    + wave1
-                    + wave2
-                    + wave3
+                    +
+                    wave1
+                    +
+                    wave2
+                    +
+                    wave3
                 )
 
                 # =================================================
-                # REALISTIC REGIONAL WARM/COLD ANOMALIES
+                # REGIONAL ANOMALIES
                 # =================================================
 
                 anomalies = [
 
-                    # Middle East / Arabian Peninsula.
-                    (
-                        25.0,
-                        45.0,
-                        22.0,
-                        15.0
-                    ),
-
-                    # Sahara / North Africa.
+                    # Sahara
                     (
                         25.0,
                         15.0,
@@ -6596,7 +7111,15 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                         13.0
                     ),
 
-                    # Southwestern USA / Mexico.
+                    # Middle East
+                    (
+                        25.0,
+                        45.0,
+                        22.0,
+                        15.0
+                    ),
+
+                    # Southwestern USA
                     (
                         36.0,
                         -116.0,
@@ -6604,7 +7127,7 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                         9.0
                     ),
 
-                    # Siberia.
+                    # Siberia
                     (
                         62.0,
                         129.0,
@@ -6612,7 +7135,7 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                         -12.0
                     ),
 
-                    # Greenland.
+                    # Greenland
                     (
                         72.0,
                         -40.0,
@@ -6620,12 +7143,12 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                         -18.0
                     ),
 
-                    # Antarctica interior.
+                    # Antarctica interior
                     (
                         -75.0,
                         120.0,
                         35.0,
-                        -20.0
+                        -18.0
                     )
                 ]
 
@@ -6646,20 +7169,18 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                         anomaly_lng
                     )
 
-                    # Correct longitude distance around
-                    # the antimeridian.
                     if d_lng > 180.0:
                         d_lng -= 360.0
 
                     if d_lng < -180.0:
                         d_lng += 360.0
 
-                    # Longitude distance becomes smaller toward
-                    # the poles.
                     longitude_scale = max(
                         0.35,
                         math.cos(
-                            math.radians(lat)
+                            math.radians(
+                                lat
+                            )
                         )
                     )
 
@@ -6676,16 +7197,17 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
 
                         factor = (
                             1.0 -
-                            distance / radius
+                            distance /
+                            radius
                         )
 
-                        # Smooth falloff.
                         factor = (
                             factor *
                             factor *
                             (
                                 3.0 -
-                                2.0 * factor
+                                2.0 *
+                                factor
                             )
                         )
 
@@ -6695,29 +7217,44 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                         )
 
                 # =================================================
-                # LAND / OCEAN CONTRAST
+                # ALTITUDE COOLING
                 # =================================================
 
                 if is_land:
 
-                    # Slightly stronger continental temperature
-                    # contrast.
-                    temp += (
-                        math.sin(
-                            math.radians(
-                                lng * 0.8
-                            )
-                        )
-                        * 0.7
+                    elevation_m = float(
+                        elevation_field_array[
+                            index
+                        ]
                     )
 
-                else:
+                    # Convert meters to kilometers.
+                    elevation_km = (
+                        elevation_m /
+                        1000.0
+                    )
 
-                    # Ocean temperatures should remain smoother.
-                    temp *= 0.97
+                    # YOUR RULE:
+                    #
+                    # Every 1 km higher =
+                    # 6°C colder.
+                    #
+                    # 4000m:
+                    # 4 * 6 = 24°C cooling.
+                    #
+                    # 35°C - 24°C = 11°C.
+                    #
+                    altitude_cooling = (
+                        elevation_km *
+                        6.0
+                    )
+
+                    temp -= (
+                        altitude_cooling
+                    )
 
                 # =================================================
-                # FINAL CLAMP
+                # FINAL LIMIT
                 # =================================================
 
                 temp = max(
@@ -6736,12 +7273,12 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
                 )
 
         # =========================================================
-        # RETURN GLOBAL RASTER
+        # RETURN
         # =========================================================
 
         return {
             "status": "success",
-            "source": "natural_earth_real_coastline",
+            "source": "natural_earth_land_plus_elevation",
             "bounds": {
                 "south": LAT_MIN,
                 "north": LAT_MAX,
@@ -6763,7 +7300,7 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
 
         return {
             "status": "error",
-            "source": "natural_earth_real_coastline",
+            "source": "natural_earth_land_plus_elevation",
             "values": [],
             "error": str(e)
         }
