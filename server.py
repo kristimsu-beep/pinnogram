@@ -22,7 +22,7 @@ from typing import List
 from fastapi.staticfiles import StaticFiles
 from bson import ObjectId  # 🎯 ВОТ ЭТОТ ИМПОРТ ВСЁ ИСПРАВИТ!
 from urllib.parse import unquote  # 🎯 Этот инструмент превратит кракозябры обратно в русские буквы!
-
+from scripts.import_ctw2_cities import initialize_ctw2_cities
 
 # Вечное облачное хранилище для видео и голосовых Pinnogram
 SUPABASE_URL = "https://zzcfdrryfsychezckjov.supabase.co"
@@ -2577,7 +2577,24 @@ async def startup():
         asyncio.create_task(start_global_economic_loop())
         # 🎯 ПОДСАЖИВАЕМ ЗАПУСК ДИСКОРД-БОТА В ТВОЙ ЖИВОЙ STARTUP-БЛОК!
         asyncio.create_task(start_discord_bot_background_task())
-    
+        # ============================================================
+        # 🌍 CTW2 REAL CITIES INITIALIZATION
+        # ============================================================
+        
+        try:
+            asyncio.create_task(
+                initialize_ctw2_cities()
+            )
+        
+            print(
+                "🌍 [CTW2 CITIES] "
+                "Инициализация системы реальных городов запущена!"
+            )
+        
+        except Exception as e:
+            print(
+                f"🚨 [CTW2 CITIES START ERROR] {e}"
+            )    
         print("🚀 Pinnogram Engine: База готова, бот-будильник запущен!")
         TOKEN = os.getenv("KONATA_BOT_TOKEN", "").strip()
         
