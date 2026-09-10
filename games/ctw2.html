@@ -410,7 +410,10 @@
         
         let baseTileLayer;
         let countriesGroupLayer;
-        
+
+        let citiesGroupLayer;
+        let ctw2Cities = [];
+
         let drawControl;
         let drawnItems;
 
@@ -1559,7 +1562,9 @@
         
             countriesGroupLayer =
                 L.layerGroup().addTo(map);
-        
+
+            citiesGroupLayer =
+                L.layerGroup().addTo(map);        
             drawnItems =
                 new L.FeatureGroup();
         
@@ -1595,9 +1600,12 @@
         
             // Weather sensor
             initWeatherPointSensor();
-        
+            
             // Political map
             loadGlobalEmpireMapData();
+            
+            // Real CTW2 cities
+            loadCTW2Cities();
         
         }
 
@@ -1711,6 +1719,147 @@
             } catch (err) { console.error("Ошибка загрузки карты империй: ", err); }
         }
 
+        async function loadCTW2Cities() {
+        
+            try {
+        
+                console.log(
+                    "🌍 [CTW2 CITIES] Loading cities..."
+                );
+        
+                const response =
+                    await fetch(
+                        "/api/ctw2/cities"
+                    );
+        
+                const data =
+                    await response.json();
+        
+                if (
+                    data.status !== "success"
+                ) {
+        
+                    console.error(
+                        "🚨 [CTW2 CITIES] API error:",
+                        data.message
+                    );
+        
+                    return;
+                }
+        
+                ctw2Cities =
+                    Array.isArray(data.cities)
+                        ? data.cities
+                        : [];
+        
+                console.log(
+                    "🏙️ [CTW2 CITIES] Loaded:",
+                    ctw2Cities.length
+                );
+        
+                renderCTW2Cities();
+        
+            } catch (err) {
+        
+                console.error(
+                    "🚨 [CTW2 CITIES] Failed to load cities:",
+                    err
+                );
+        
+            }
+        
+        }
+
+        function renderCTW2Cities() {
+        
+            if (!citiesGroupLayer) {
+                return;
+            }
+        
+            citiesGroupLayer.clearLayers();
+        
+            if (!Array.isArray(ctw2Cities)) {
+                return;
+            }
+        
+            ctw2Cities.forEach(city => {
+        
+                const lat =
+                    Number(city.lat);
+        
+                const lng =
+                    Number(city.lng);
+        
+                if (
+                    !Number.isFinite(lat) ||
+                    !Number.isFinite(lng)
+                ) {
+                    return;
+                }
+        
+                const marker =
+                    L.circleMarker(
+                        [lat, lng],
+                        {
+                            radius: 3,
+                            color: '#ffffff',
+                            weight: 1,
+                            fillColor: '#00f2fe',
+                            fillOpacity: 0.9,
+                            interactive: true
+                        }
+                    );
+        
+                const population =
+                    Number(city.real_population || 0);
+        
+                marker.bindPopup(`
+                    <div style="
+                        color:#fff;
+                        font-family:sans-serif;
+                        font-size:12px;
+                        padding:4px;
+                    ">
+                        <div style="
+                            font-size:16px;
+                            font-weight:800;
+                            color:#00f2fe;
+                            margin-bottom:5px;
+                        ">
+                            🏙️ ${city.name}
+                        </div>
+        
+                        <div>
+                            <b>Country:</b>
+                            ${city.country_code || "—"}
+                        </div>
+        
+                        <div>
+                            <b>Real population:</b>
+                            ${population.toLocaleString()}
+                        </div>
+        
+                        <div>
+                            <b>CTW2 population:</b>
+                            100
+                        </div>
+                    </div>
+                `, {
+                    className:
+                        'weather-popup-neon'
+                });
+        
+                citiesGroupLayer.addLayer(
+                    marker
+                );
+        
+            });
+        
+            console.log(
+                "🏙️ [CTW2 CITIES] Rendered:",
+                citiesGroupLayer.getLayers().length
+            );
+        }
 
         // =====================================================================
         // 🌡️ 4. КЛИМАТИЧЕСКИЙ ДВИЖОК
