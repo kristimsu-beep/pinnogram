@@ -113,6 +113,218 @@
         #map.weather-mode .leaflet-tile-container {
             filter: brightness(0.9) saturate(0.75) contrast(0.95);
         }
+
+        /* =====================================================================
+           🛠️ CTW2 SECRET COMMAND CONSOLE
+           ===================================================================== */
+        
+        .ctw2-command-console {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 10000;
+        
+            background:
+                linear-gradient(
+                    180deg,
+                    rgba(5, 8, 20, 0.98),
+                    rgba(5, 8, 20, 0.92)
+                );
+        
+            border-bottom:
+                1px solid rgba(0, 242, 254, 0.35);
+        
+            box-shadow:
+                0 8px 30px rgba(0, 0, 0, 0.45),
+                0 0 30px rgba(0, 242, 254, 0.08);
+        
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+        
+            transform: translateY(-110%);
+            opacity: 0;
+            pointer-events: none;
+        
+            transition:
+                transform 0.28s cubic-bezier(0.165, 0.84, 0.44, 1),
+                opacity 0.2s ease;
+        }
+        
+        .ctw2-command-console.open {
+            transform: translateY(0);
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        .ctw2-command-inner {
+            width: 100%;
+            height: 58px;
+        
+            display: flex;
+            align-items: center;
+        
+            box-sizing: border-box;
+        
+            padding:
+                8px 16px;
+        
+            gap: 12px;
+        }
+        
+        .ctw2-command-icon {
+            width: 34px;
+            height: 34px;
+        
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        
+            border-radius: 9px;
+        
+            color: #00f2fe;
+        
+            background:
+                rgba(0, 242, 254, 0.08);
+        
+            border:
+                1px solid rgba(0, 242, 254, 0.2);
+        
+            box-shadow:
+                0 0 15px rgba(0, 242, 254, 0.08);
+        
+            flex-shrink: 0;
+        }
+        
+        .ctw2-command-prompt {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        
+            font-family:
+                Consolas,
+                "Courier New",
+                monospace;
+        
+            font-size: 13px;
+        
+            white-space: nowrap;
+        }
+        
+        .ctw2-command-prompt span {
+            color: #00f2fe;
+            font-weight: 800;
+        }
+        
+        .ctw2-command-prompt b {
+            color: rgba(255,255,255,0.45);
+        }
+        
+        #ctw2CommandInput {
+            flex: 1;
+        
+            min-width: 0;
+        
+            height: 38px;
+        
+            box-sizing: border-box;
+        
+            border:
+                1px solid rgba(255,255,255,0.08);
+        
+            border-radius: 9px;
+        
+            outline: none;
+        
+            background:
+                rgba(0,0,0,0.35);
+        
+            color: #fff;
+        
+            padding:
+                0 13px;
+        
+            font-family:
+                Consolas,
+                "Courier New",
+                monospace;
+        
+            font-size: 13px;
+        
+            transition:
+                border-color 0.2s,
+                box-shadow 0.2s;
+        }
+        
+        #ctw2CommandInput::placeholder {
+            color:
+                rgba(255,255,255,0.25);
+        }
+        
+        #ctw2CommandInput:focus {
+            border-color:
+                rgba(0,242,254,0.55);
+        
+            box-shadow:
+                0 0 15px rgba(0,242,254,0.08);
+        }
+        
+        #ctw2CommandClose {
+            width: 36px;
+            height: 36px;
+        
+            border: none;
+            border-radius: 9px;
+        
+            background:
+                rgba(255,255,255,0.05);
+        
+            color:
+                rgba(255,255,255,0.55);
+        
+            cursor: pointer;
+        
+            transition:
+                background 0.2s,
+                color 0.2s;
+        }
+        
+        #ctw2CommandClose:hover {
+            background:
+                rgba(255,0,127,0.15);
+        
+            color:
+                #ff007f;
+        }
+        
+        .ctw2-command-status {
+            display: none;
+        
+            padding:
+                0 18px 10px;
+        
+            font-family:
+                Consolas,
+                "Courier New",
+                monospace;
+        
+            font-size: 11px;
+        
+            color:
+                rgba(255,255,255,0.55);
+        }
+        
+        .ctw2-command-status.visible {
+            display: block;
+        }
+        
+        .ctw2-command-status.success {
+            color: #4cd964;
+        }
+        
+        .ctw2-command-status.error {
+            color: #ff476f;
+        }
     </style>
 </head>
 <body>
@@ -125,6 +337,45 @@
         <button class="mode-btn" id="btn-mode-weather" onclick="switchMapMode('weather')">
             <i class="fa-solid fa-temperature-half"></i> Тепловой радар
         </button>
+    </div>
+
+    <!-- 🛠️ CTW2 COMMAND CONSOLE -->
+    <div id="ctw2CommandConsole" class="ctw2-command-console">
+    
+        <div class="ctw2-command-inner">
+    
+            <div class="ctw2-command-icon">
+                <i class="fa-solid fa-terminal"></i>
+            </div>
+    
+            <div class="ctw2-command-prompt">
+                <span>CTW2</span>
+                <b>&gt;</b>
+            </div>
+    
+            <input
+                id="ctw2CommandInput"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Введите команду..."
+            >
+    
+            <button
+                id="ctw2CommandClose"
+                type="button"
+                title="Закрыть"
+            >
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+    
+        </div>
+    
+        <div
+            id="ctw2CommandStatus"
+            class="ctw2-command-status"
+        ></div>
+    
     </div>
 
     <!-- 🗺️ ПОЛНОЭКРАННЫЙ ТАКТИЧЕСКИЙ ХОЛСТ LEAFLET MAP -->
@@ -177,6 +428,256 @@
         window.addEventListener('DOMContentLoaded', () => {
             initTacticalGlobeMap();
         });
+
+        // =====================================================================
+        // 🛠️ CTW2 SECRET COMMAND CONSOLE
+        // =====================================================================
+        
+        let ctw2CommandConsoleOpen = false;
+        
+        function toggleCTW2CommandConsole(forceState = null) {
+        
+            const consoleElement =
+                document.getElementById('ctw2CommandConsole');
+        
+            const input =
+                document.getElementById('ctw2CommandInput');
+        
+            if (!consoleElement) {
+                return;
+            }
+        
+            if (forceState === null) {
+                ctw2CommandConsoleOpen =
+                    !ctw2CommandConsoleOpen;
+            } else {
+                ctw2CommandConsoleOpen =
+                    forceState;
+            }
+        
+            consoleElement.classList.toggle(
+                'open',
+                ctw2CommandConsoleOpen
+            );
+        
+            if (ctw2CommandConsoleOpen) {
+        
+                setTimeout(() => {
+        
+                    if (input) {
+                        input.focus();
+                        input.select();
+                    }
+        
+                }, 100);
+        
+            } else {
+        
+                if (input) {
+                    input.value = '';
+                }
+        
+                setCTW2CommandStatus('', '');
+            }
+        }
+        
+
+        // -------------------------------------------------------------
+        // SHIFT + P
+        // -------------------------------------------------------------
+        
+        document.addEventListener('keydown', function(event) {
+        
+            if (
+                event.shiftKey &&
+                event.key.toLowerCase() === 'p'
+            ) {
+        
+                event.preventDefault();
+        
+                toggleCTW2CommandConsole();
+        
+            }
+        
+        });
+
+        // =====================================================================
+        // 🛠️ CTW2 COMMAND EXECUTION
+        // =====================================================================
+        
+        function setCTW2CommandStatus(message, type = '') {
+        
+            const status =
+                document.getElementById('ctw2CommandStatus');
+        
+            if (!status) {
+                return;
+            }
+        
+            status.textContent = message;
+        
+            status.className =
+                'ctw2-command-status';
+        
+            if (message) {
+                status.classList.add('visible');
+            }
+        
+            if (type) {
+                status.classList.add(type);
+            }
+        }
+        
+        
+        async function executeCTW2Command(command) {
+        
+            command =
+                String(command || '')
+                    .trim()
+                    .toLowerCase();
+        
+            if (!command) {
+                return;
+            }
+        
+            setCTW2CommandStatus(
+                'Executing ' + command + '...',
+                ''
+            );
+        
+            try {
+        
+                const response =
+                    await fetch('/api/ctw2/command', {
+                        method: 'POST',
+        
+                        headers: {
+                            'Content-Type':
+                                'application/json'
+                        },
+        
+                        body: JSON.stringify({
+                            username: currentUser,
+                            command: command
+                        })
+                    });
+        
+                const data =
+                    await response.json();
+        
+                if (!response.ok) {
+        
+                    throw new Error(
+                        data.message ||
+                        `HTTP ${response.status}`
+                    );
+        
+                }
+        
+                if (data.status === 'success') {
+        
+                    setCTW2CommandStatus(
+                        '✓ ' + data.message,
+                        'success'
+                    );
+        
+                    // Refresh the political map.
+                    await loadGlobalEmpireMapData();
+        
+                } else {
+        
+                    setCTW2CommandStatus(
+                        '✕ ' +
+                        (data.message ||
+                         'Команда не выполнена.'),
+                        'error'
+                    );
+        
+                }
+        
+            } catch (error) {
+        
+                console.error(
+                    'CTW2 command error:',
+                    error
+                );
+        
+                setCTW2CommandStatus(
+                    '✕ Ошибка выполнения команды.',
+                    'error'
+                );
+            }
+        }
+
+        // =====================================================================
+        // ⌨️ COMMAND INPUT
+        // =====================================================================
+        
+        document.addEventListener('DOMContentLoaded', function() {
+        
+            const input =
+                document.getElementById('ctw2CommandInput');
+        
+            const closeButton =
+                document.getElementById('ctw2CommandClose');
+        
+            if (input) {
+        
+                input.addEventListener(
+                    'keydown',
+                    async function(event) {
+        
+                        if (event.key === 'Enter') {
+        
+                            event.preventDefault();
+        
+                            const command =
+                                input.value.trim();
+        
+                            if (!command) {
+                                return;
+                            }
+        
+                            await executeCTW2Command(
+                                command
+                            );
+        
+                            input.value = '';
+        
+                        }
+        
+                        if (event.key === 'Escape') {
+        
+                            event.preventDefault();
+        
+                            toggleCTW2CommandConsole(
+                                false
+                            );
+        
+                        }
+        
+                    }
+                );
+        
+            }
+        
+            if (closeButton) {
+        
+                closeButton.addEventListener(
+                    'click',
+                    function() {
+        
+                        toggleCTW2CommandConsole(
+                            false
+                        );
+        
+                    }
+                );
+        
+            }
+        
+        });
+
         function scheduleWeatherCanvasDraw() {
         
             if (
