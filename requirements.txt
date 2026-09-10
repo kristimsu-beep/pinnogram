@@ -25,3 +25,4 @@ discord.py>=2.3.2
 asyncio>=3.4.3
 geopandas
 shapely
+numpy
