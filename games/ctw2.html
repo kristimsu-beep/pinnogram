@@ -1926,11 +1926,8 @@
         
             ctw2Cities.forEach(city => {
         
-                const lat =
-                    Number(city.lat);
-        
-                const lng =
-                    Number(city.lng);
+                const lat = Number(city.lat);
+                const lng = Number(city.lng);
         
                 if (
                     !Number.isFinite(lat) ||
@@ -1940,33 +1937,35 @@
                 }
         
                 const isOwned =
-                    city.owner_username === currentUser;
+                    String(city.owner_username || '').trim() ===
+                    String(currentUser || '').trim();
         
                 const isCapital =
                     city.is_capital === true;
+        
+                const population =
+                    Number(city.real_population || 0);
+        
+                const ctw2Population =
+                    Number(city.population || 100);
         
                 const marker =
                     L.circleMarker(
                         [lat, lng],
                         {
-                            radius:
-                                isCapital
-                                    ? 5
-                                    : 3,
+                            radius: isCapital ? 6 : 4,
         
                             color:
                                 isOwned
-                                    ? '#ff3030'
+                                    ? (isCapital ? '#ffd700' : '#ff3030')
                                     : '#ffffff',
         
                             weight:
-                                isCapital
-                                    ? 2
-                                    : 1,
+                                isCapital ? 2 : 1,
         
                             fillColor:
                                 isOwned
-                                    ? '#ff3030'
+                                    ? (isCapital ? '#ff3030' : '#ff3030')
                                     : '#00f2fe',
         
                             fillOpacity: 0.95,
@@ -1975,228 +1974,174 @@
                         }
                     );
         
-                const realPopulation =
-                    Number(
-                        city.real_population || 0
-                    );
-        
-                const gamePopulation =
-                    Number(
-                        city.population || 100
-                    );
-        
-                let ownershipText;
-        
-                if (isOwned) {
-        
-                    ownershipText = `
-                        <div style="
-                            color:#ff3030;
-                            font-weight:800;
-                            margin-top:5px;
-                        ">
-                            🔴 Your country
-                        </div>
-                    `;
-        
-                } else {
-        
-                    ownershipText = `
-                        <div style="
-                            color:rgba(255,255,255,0.65);
-                            margin-top:5px;
-                        ">
-                            🌍 Uncontrolled
-                        </div>
-                    `;
-                }
-        
-                const capitalText =
-                    isCapital
-                        ? `
-                            <div style="
-                                color:#ffd84d;
-                                font-weight:800;
-                                margin-top:5px;
-                            ">
-                                ⭐ Capital
-                            </div>
-                        `
-                        : '';
-        
                 marker.bindPopup(`
                     <div style="
                         color:#fff;
                         font-family:sans-serif;
                         font-size:12px;
                         padding:4px;
-                        min-width:170px;
                     ">
         
                         <div style="
                             font-size:16px;
                             font-weight:800;
-                            color:
-                                ${isOwned
-                                    ? '#ff3030'
-                                    : '#00f2fe'};
-                            margin-bottom:7px;
+                            color:${isOwned ? '#ff3030' : '#00f2fe'};
+                            margin-bottom:6px;
                         ">
                             🏙️ ${city.name}
                         </div>
         
-                        ${ownershipText}
-        
-                        ${capitalText}
-        
                         <div style="
-                            margin-top:7px;
+                            font-weight:800;
+                            color:${isOwned ? '#ff3030' : '#00f2fe'};
+                            margin-bottom:5px;
                         ">
+                            ${
+                                isOwned
+                                    ? '🔴 Your country'
+                                    : '🌍 Uncontrolled'
+                            }
+                        </div>
+        
+                        ${
+                            isCapital
+                                ? `
+                                    <div style="
+                                        color:#ffd700;
+                                        font-weight:800;
+                                        margin-bottom:5px;
+                                    ">
+                                        ⭐ CAPITAL
+                                    </div>
+                                `
+                                : ''
+                        }
+        
+                        <div>
                             <b>Real country:</b>
                             ${city.country_code || "—"}
                         </div>
         
                         <div>
-                            <b>CTW2 population:</b>
-                            ${gamePopulation.toLocaleString()}
+                            <b>Real population:</b>
+                            ${population.toLocaleString()}
                         </div>
         
                         <div>
-                            <b>Real population:</b>
-                            ${realPopulation.toLocaleString()}
+                            <b>CTW2 population:</b>
+                            ${ctw2Population.toLocaleString()}
                         </div>
+        
+                        ${
+                            isOwned
+                                ? `
+                                    <div style="
+                                        margin-top:7px;
+                                        color:#aaa;
+                                        font-size:10px;
+                                    ">
+                                        Double-click this city to make it your capital.
+                                    </div>
+                                `
+                                : ''
+                        }
         
                     </div>
                 `, {
-                    className:
-                        'weather-popup-neon'
+                    className: 'weather-popup-neon'
                 });
         
-                // ----------------------------------------------------
-                // Double-click = make capital
-                // ----------------------------------------------------
+                marker.on('dblclick', async function(event) {
         
-                marker.on(
-                    'dblclick',
-                    async function(e) {
+                    if (event.originalEvent) {
+                        L.DomEvent.stopPropagation(event.originalEvent);
+                    }
         
-                        L.DomEvent.stopPropagation(e);
+                    if (!isOwned) {
         
-                        if (!isOwned) {
+                        Swal.fire({
+                            title: 'City not controlled',
+                            text: 'You can only select a capital in a city controlled by your country.',
+                            icon: 'warning',
+                            background: '#0a0f1d',
+                            color: '#fff'
+                        });
         
-                            Swal.fire({
-                                title: "Город недоступен",
-                                text:
-                                    "Этот город не находится " +
-                                    "в вашей стране.",
-                                icon: "warning",
-                                background: "#0a0f1d",
-                                color: "#fff",
-                                confirmButtonColor:
-                                    "#00f2fe"
-                            });
+                        return;
+                    }
         
-                            return;
-                        }
+                    try {
         
-                        if (isCapital) {
+                        const response =
+                            await fetch(
+                                '/api/ctw2/city/capital',
+                                {
+                                    method: 'POST',
         
-                            return;
-                        }
+                                    headers: {
+                                        'Content-Type':
+                                            'application/json'
+                                    },
         
-                        try {
-        
-                            const response =
-                                await fetch(
-                                    '/api/ctw2/city/capital',
-                                    {
-                                        method: 'POST',
-        
-                                        headers: {
-                                            'Content-Type':
-                                                'application/json'
-                                        },
-        
-                                        body:
-                                            JSON.stringify({
-                                                username:
-                                                    currentUser,
-        
-                                                city_id:
-                                                    city.city_id
-                                            })
-                                    }
-                                );
-        
-                            const data =
-                                await response.json();
-        
-                            if (
-                                data.status !==
-                                'success'
-                            ) {
-        
-                                Swal.fire({
-                                    title: "Ошибка",
-                                    text:
-                                        data.message ||
-                                        "Не удалось назначить столицу.",
-                                    icon: "error",
-                                    background:
-                                        "#0a0f1d",
-                                    color: "#fff"
-                                });
-        
-                                return;
-                            }
-        
-                            console.log(
-                                "⭐ [CTW2 CAPITAL]",
-                                city.name
+                                    body: JSON.stringify({
+                                        username: currentUser,
+                                        city_id: city.city_id
+                                    })
+                                }
                             );
         
-                            // Reload current city state.
+                        const data =
+                            await response.json();
+        
+                        if (data.status === 'success') {
+        
                             await loadCTW2Cities();
         
-                            // Update country panel.
                             await loadCTW2CountryPanel();
         
                             Swal.fire({
-                                title:
-                                    "Столица назначена! ⭐",
-                                text:
-                                    `${city.name} теперь является столицей вашей страны.`,
-                                icon: "success",
-                                background:
-                                    "#0a0f1d",
-                                color: "#fff",
-                                confirmButtonColor:
-                                    "#4cd964"
+                                title: '⭐ Capital selected!',
+                                text: data.message,
+                                icon: 'success',
+                                background: '#0a0f1d',
+                                color: '#fff',
+                                confirmButtonColor: '#ff3030'
                             });
         
-                        } catch (error) {
-        
-                            console.error(
-                                "🚨 [CTW2 CAPITAL ERROR]",
-                                error
-                            );
+                        } else {
         
                             Swal.fire({
-                                title: "Ошибка",
+                                title: 'Cannot select capital',
                                 text:
-                                    "Не удалось сохранить столицу.",
-                                icon: "error",
-                                background:
-                                    "#0a0f1d",
-                                color: "#fff"
+                                    data.message ||
+                                    'This city cannot become your capital.',
+                                icon: 'error',
+                                background: '#0a0f1d',
+                                color: '#fff'
                             });
-                        }
-                    }
-                );
         
-                citiesGroupLayer.addLayer(
-                    marker
-                );
+                        }
+        
+                    } catch (error) {
+        
+                        console.error(
+                            '🚨 [CTW2 CAPITAL ERROR]',
+                            error
+                        );
+        
+                        Swal.fire({
+                            title: 'Error',
+                            text: 'Failed to select the capital.',
+                            icon: 'error',
+                            background: '#0a0f1d',
+                            color: '#fff'
+                        });
+        
+                    }
+        
+                });
+        
+                citiesGroupLayer.addLayer(marker);
         
             });
         
