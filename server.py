@@ -6420,6 +6420,134 @@ async def ctw2_save_country(data: dict):
                 f"Ошибка СУБД MongoDB Atlas: {str(e)}"
         }
 
+@app.post("/api/ctw2/city/capital")
+async def ctw2_set_capital(data: dict):
+    try:
+        username = str(
+            data.get("username", "")
+        ).strip()
+
+        city_id = data.get("city_id")
+
+        if not username:
+            return {
+                "status": "error",
+                "message": "Пользователь не определён."
+            }
+
+        if city_id is None:
+            return {
+                "status": "error",
+                "message": "Город не указан."
+            }
+
+        try:
+            city_id = int(city_id)
+        except (TypeError, ValueError):
+            return {
+                "status": "error",
+                "message": "Некорректный ID города."
+            }
+
+        # ----------------------------------------------------
+        # Check that the city belongs to this player.
+        # ----------------------------------------------------
+
+        city_state = await cities_db[
+            "city_states"
+        ].find_one({
+            "city_id": city_id,
+            "owner_username": username
+        })
+
+        if not city_state:
+            return {
+                "status": "error",
+                "message":
+                    "Этот город не находится "
+                    "под вашим контролем."
+            }
+
+        # ----------------------------------------------------
+        # Remove previous capital.
+        # ----------------------------------------------------
+
+        await cities_db[
+            "city_states"
+        ].update_many(
+            {
+                "owner_username": username,
+                "is_capital": True
+            },
+            {
+                "$set": {
+                    "is_capital": False
+                }
+            }
+        )
+
+        # ----------------------------------------------------
+        # Make the selected city capital.
+        # ----------------------------------------------------
+
+        await cities_db[
+            "city_states"
+        ].update_one(
+            {
+                "city_id": city_id,
+                "owner_username": username
+            },
+            {
+                "$set": {
+                    "is_capital": True
+                }
+            }
+        )
+
+        city = await cities_db[
+            "city_catalog"
+        ].find_one(
+            {
+                "city_id": city_id
+            },
+            {
+                "_id": 0,
+                "name": 1
+            }
+        )
+
+        city_name = (
+            city.get("name", "Unknown City")
+            if city
+            else "Unknown City"
+        )
+
+        print(
+            f"⭐ [CTW2 CAPITAL] "
+            f"{city_name} is now the capital of "
+            f"{username}."
+        )
+
+        return {
+            "status": "success",
+            "message":
+                f"{city_name} теперь является "
+                "столицей вашей страны.",
+            "city_id": city_id,
+            "city_name": city_name
+        }
+
+    except Exception as e:
+
+        print(
+            f"🚨 [CTW2 CAPITAL ERROR] {e}"
+        )
+
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
 # =====================================================================
 # 🛠️ CTW2 MODERATION / COMMAND API
 # =====================================================================
