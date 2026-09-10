@@ -24,6 +24,7 @@ from bson import ObjectId  # 🎯 ВОТ ЭТОТ ИМПОРТ ВСЁ ИСПРА
 from urllib.parse import unquote  # 🎯 Этот инструмент превратит кракозябры обратно в русские буквы!
 from scripts.import_ctw2_cities import initialize_ctw2_cities
 
+
 # Вечное облачное хранилище для видео и голосовых Pinnogram
 SUPABASE_URL = "https://zzcfdrryfsychezckjov.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6Y2ZkcnJ5ZnN5Y2hlemNram92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMTk1MTgsImV4cCI6MjA5NDY5NTUxOH0.L5QdbaIumhGTwATLNZnrTklUOHYD9PhYUYBpM--OZds"
