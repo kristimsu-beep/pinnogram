@@ -3778,6 +3778,7 @@ try:
     print("[🗄️ MONGO-БАЗА] Инициализация подключения к облачному кластеру...")
     mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
     db = mongo_client["robux_hub_db"]
+    cities_db = mongo_client["ctw2_cities_db"]
     sessions_collection = db["user_sessions"]
     print("[🎉 MONGO-УСПЕХ] Облачный шлюз MongoDB успешно запущен!")
 except Exception as e:
