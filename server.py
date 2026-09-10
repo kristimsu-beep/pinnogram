@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from bson import ObjectId  # 🎯 ВОТ ЭТОТ ИМПОРТ ВСЁ ИСПРАВИТ!
 from urllib.parse import unquote  # 🎯 Этот инструмент превратит кракозябры обратно в русские буквы!
 from scripts.import_ctw2_cities import initialize_ctw2_cities
-
+from shapely.geometry import Point, Polygon
 
 # Вечное облачное хранилище для видео и голосовых Pinnogram
 SUPABASE_URL = "https://zzcfdrryfsychezckjov.supabase.co"
@@ -6152,28 +6152,273 @@ async def get_ctw2_game_page():
 @app.post("/api/ctw2/country/save")
 async def ctw2_save_country(data: dict):
     try:
-        username = data.get("username", "Anonymous").strip()
-        country_name = data.get("name", "Новая Империя").strip()
-        lang = data.get("lang", "Русский").strip()
-        flag = data.get("flag", "🏳️").strip()
-        coordinates = data.get("coordinates", []) # GPS точки нарисованных границ [[lat, lng], ...]
+        username = str(
+            data.get("username", "Anonymous")
+        ).strip()
 
-        if not coordinates or len(coordinates) < 3:
-            return {"status": "error", "message": "Вы должны обвести на карте минимум 3 точки границ вашей страны!"}
+        country_name = str(
+            data.get("name", "Новая Империя")
+        ).strip()
 
-        # Сохраняем или обновляем границы государства игрока (upsert=True)
+        lang = str(
+            data.get("lang", "Русский")
+        ).strip()
+
+        flag = str(
+            data.get("flag", "🏳️")
+        ).strip()
+
+        coordinates = data.get(
+            "coordinates",
+            []
+        )
+
+        # ----------------------------------------------------
+        # Basic validation
+        # ----------------------------------------------------
+
+        if not username:
+            return {
+                "status": "error",
+                "message": "Пользователь не определён."
+            }
+
+        if (
+            not isinstance(coordinates, list)
+            or len(coordinates) < 3
+        ):
+            return {
+                "status": "error",
+                "message":
+                    "Вы должны обвести на карте минимум "
+                    "3 точки границ вашей страны!"
+            }
+
+        # ----------------------------------------------------
+        # Convert Leaflet coordinates to Shapely polygon
+        #
+        # Leaflet:
+        # [latitude, longitude]
+        #
+        # Shapely:
+        # (longitude, latitude)
+        # ----------------------------------------------------
+
+        polygon_points = []
+
+        for point in coordinates:
+
+            if (
+                not isinstance(point, (list, tuple))
+                or len(point) < 2
+            ):
+                continue
+
+            try:
+                lat = float(point[0])
+                lng = float(point[1])
+            except (TypeError, ValueError):
+                continue
+
+            if not (
+                -90 <= lat <= 90
+                and -180 <= lng <= 180
+            ):
+                continue
+
+            polygon_points.append(
+                (lng, lat)
+            )
+
+        if len(polygon_points) < 3:
+            return {
+                "status": "error",
+                "message":
+                    "Некорректные координаты территории."
+            }
+
+        polygon = Polygon(
+            polygon_points
+        )
+
+        if not polygon.is_valid:
+            polygon = polygon.buffer(0)
+
+        if polygon.is_empty:
+            return {
+                "status": "error",
+                "message":
+                    "Не удалось создать корректную "
+                    "территорию."
+            }
+
+        # ----------------------------------------------------
+        # Save country
+        # ----------------------------------------------------
+
         await db["ctw2_countries"].update_one(
-            {"username": username},
-            {"$set": {
-                "username": username, "name": country_name, "lang": lang,
-                "flag": flag, "coordinates": coordinates, "updated_at": datetime.utcnow()
-            }},
+            {
+                "username": username
+            },
+            {
+                "$set": {
+                    "username": username,
+                    "name": country_name,
+                    "lang": lang,
+                    "flag": flag,
+                    "coordinates": coordinates,
+                    "updated_at": datetime.utcnow()
+                }
+            },
             upsert=True
         )
-        return {"status": "success", "message": f"Государство {country_name} официально признано на мировой карте CTW 2!"}
+
+        # ====================================================
+        # CITY OWNERSHIP
+        # ====================================================
+
+        print(
+            f"🏙️ [CTW2 CITIES] "
+            f"Checking cities for {username}..."
+        )
+
+        # ----------------------------------------------------
+        # Get all cities.
+        #
+        # We currently have ~10,000, which is small enough
+        # for this first implementation.
+        # ----------------------------------------------------
+
+        city_cursor = cities_db[
+            "city_catalog"
+        ].find(
+            {},
+            {
+                "_id": 0,
+                "city_id": 1,
+                "lat": 1,
+                "lng": 1
+            }
+        )
+
+        city_documents = await city_cursor.to_list(
+            length=10000
+        )
+
+        owned_city_ids = []
+
+        for city in city_documents:
+
+            try:
+                city_lat = float(
+                    city.get("lat")
+                )
+
+                city_lng = float(
+                    city.get("lng")
+                )
+
+                point = Point(
+                    city_lng,
+                    city_lat
+                )
+
+                if polygon.covers(point):
+
+                    city_id = city.get(
+                        "city_id"
+                    )
+
+                    if city_id is not None:
+                        owned_city_ids.append(
+                            city_id
+                        )
+
+            except (
+                TypeError,
+                ValueError
+            ):
+                continue
+
+        print(
+            f"🏙️ [CTW2 CITIES] "
+            f"{username} controls "
+            f"{len(owned_city_ids)} cities."
+        )
+
+        # ----------------------------------------------------
+        # Release cities that belonged to this player but
+        # are no longer inside their territory.
+        #
+        # IMPORTANT:
+        # We don't delete the city state.
+        # We simply remove ownership.
+        # ----------------------------------------------------
+
+        await cities_db[
+            "city_states"
+        ].update_many(
+            {
+                "owner_username": username,
+                "city_id": {
+                    "$nin": owned_city_ids
+                }
+            },
+            {
+                "$set": {
+                    "owner_username": None,
+                    "is_capital": False
+                }
+            }
+        )
+
+        # ----------------------------------------------------
+        # Assign newly captured cities.
+        #
+        # Population remains whatever the city currently has.
+        # If this is a brand-new city state, the default is 100.
+        # ----------------------------------------------------
+
+        for city_id in owned_city_ids:
+
+            await cities_db[
+                "city_states"
+            ].update_one(
+                {
+                    "city_id": city_id
+                },
+                {
+                    "$set": {
+                        "owner_username": username
+                    },
+                    "$setOnInsert": {
+                        "population": 100,
+                        "is_capital": False
+                    }
+                },
+                upsert=True
+            )
+
+        return {
+            "status": "success",
+            "message":
+                f"Государство {country_name} "
+                "официально признано на мировой карте CTW 2!",
+            "cities_owned":
+                len(owned_city_ids)
+        }
+
     except Exception as e:
-        print(f"🚨 [ОШИБКА CTW2 SAVE]: {str(e)}")
-        return {"status": "error", "message": f"Ошибка СУБД MongoDB Atlas: {str(e)}"}
+
+        print(
+            f"🚨 [ОШИБКА CTW2 SAVE]: {str(e)}"
+        )
+
+        return {
+            "status": "error",
+            "message":
+                f"Ошибка СУБД MongoDB Atlas: {str(e)}"
+        }
 
 # =====================================================================
 # 🛠️ CTW2 MODERATION / COMMAND API
@@ -6259,7 +6504,10 @@ async def ctw2_get_all_countries():
 @app.get("/api/ctw2/cities")
 async def ctw2_get_cities():
     try:
-        cursor = cities_db["city_catalog"].find(
+
+        city_cursor = cities_db[
+            "city_catalog"
+        ].find(
             {},
             {
                 "_id": 0,
@@ -6273,7 +6521,73 @@ async def ctw2_get_cities():
             }
         )
 
-        cities = await cursor.to_list(length=10000)
+        cities = await city_cursor.to_list(
+            length=10000
+        )
+
+        # ----------------------------------------------------
+        # Get current CTW2 states
+        # ----------------------------------------------------
+
+        state_cursor = cities_db[
+            "city_states"
+        ].find(
+            {},
+            {
+                "_id": 0,
+                "city_id": 1,
+                "owner_username": 1,
+                "population": 1,
+                "is_capital": 1
+            }
+        )
+
+        states = await state_cursor.to_list(
+            length=10000
+        )
+
+        state_by_city = {
+            state["city_id"]: state
+            for state in states
+        }
+
+        # ----------------------------------------------------
+        # Merge catalog + state
+        # ----------------------------------------------------
+
+        for city in cities:
+
+            state = state_by_city.get(
+                city["city_id"]
+            )
+
+            if state:
+
+                city["owner_username"] = (
+                    state.get(
+                        "owner_username"
+                    )
+                )
+
+                city["population"] = (
+                    state.get(
+                        "population",
+                        100
+                    )
+                )
+
+                city["is_capital"] = (
+                    state.get(
+                        "is_capital",
+                        False
+                    )
+                )
+
+            else:
+
+                city["owner_username"] = None
+                city["population"] = 100
+                city["is_capital"] = False
 
         return {
             "status": "success",
@@ -6281,6 +6595,7 @@ async def ctw2_get_cities():
         }
 
     except Exception as e:
+
         print(
             f"🚨 [CTW2 CITIES API ERROR] {e}"
         )
