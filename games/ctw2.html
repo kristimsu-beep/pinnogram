@@ -325,6 +325,101 @@
         .ctw2-command-status.error {
             color: #ff476f;
         }
+
+        #ctw2CountryPanel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+        
+            width: 230px;
+        
+            padding: 14px;
+        
+            background:
+                rgba(8, 14, 24, 0.92);
+        
+            border:
+                1px solid rgba(0, 242, 254, 0.55);
+        
+            border-radius: 10px;
+        
+            box-shadow:
+                0 0 18px rgba(0, 242, 254, 0.18);
+        
+            color: white;
+        
+            font-family:
+                Arial,
+                sans-serif;
+        
+            z-index: 1000;
+        
+            backdrop-filter:
+                blur(8px);
+        }
+        
+        .ctw2-country-panel-header {
+            display: flex;
+        
+            align-items: center;
+        
+            gap: 8px;
+        
+            padding-bottom: 10px;
+        
+            margin-bottom: 8px;
+        
+            border-bottom:
+                1px solid rgba(255,255,255,0.12);
+        
+            font-size: 14px;
+        
+            font-weight: 800;
+        }
+        
+        #ctw2CountryFlag {
+            font-size: 21px;
+        }
+        
+        #ctw2CountryName {
+            overflow: hidden;
+        
+            text-overflow: ellipsis;
+        
+            white-space: nowrap;
+        }
+        
+        .ctw2-country-stat {
+            display: flex;
+        
+            justify-content: space-between;
+        
+            align-items: center;
+        
+            gap: 10px;
+        
+            padding: 7px 0;
+        
+            font-size: 12px;
+        
+            color: rgba(255,255,255,0.72);
+        }
+        
+        .ctw2-country-stat strong {
+            color: #ffffff;
+        
+            font-size: 13px;
+        
+            text-align: right;
+        
+            max-width: 125px;
+        
+            overflow: hidden;
+        
+            text-overflow: ellipsis;
+        
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
@@ -378,6 +473,35 @@
     
     </div>
 
+    <div id="ctw2CountryPanel">
+    
+        <div class="ctw2-country-panel-header">
+            <span id="ctw2CountryFlag">🏳️</span>
+    
+            <span id="ctw2CountryName">
+                YOUR COUNTRY
+            </span>
+        </div>
+    
+        <div class="ctw2-country-stat">
+            <span>🏙️ Cities</span>
+            <strong id="ctw2CountryCities">0</strong>
+        </div>
+    
+        <div class="ctw2-country-stat">
+            <span>⭐ Capital</span>
+            <strong id="ctw2CountryCapital">
+                Not selected
+            </strong>
+        </div>
+    
+        <div class="ctw2-country-stat">
+            <span>👥 Population</span>
+            <strong id="ctw2CountryPopulation">0</strong>
+        </div>
+    
+    </div>
+
     <!-- 🗺️ ПОЛНОЭКРАННЫЙ ТАКТИЧЕСКИЙ ХОЛСТ LEAFLET MAP -->
     <div id="map"></div>
 
@@ -405,6 +529,7 @@
         let map;
         let currentMapMode = 'politic'; // 'politic' или 'weather'
         let currentUser = localStorage.getItem('geraUsername') || 'Anonymous';
+        let currentCTW2Country = null;
         
         let newCountryPassport = { name: "", lang: "", flag: "" };
         
@@ -1606,6 +1731,7 @@
             
             // Real CTW2 cities
             loadCTW2Cities();
+            loadCTW2CountryPanel();
         
         }
 
@@ -2808,6 +2934,204 @@
                     console.error("Ошибка точечного сканирования погоды: ", err);
                 }
             });
+        }
+
+        function updateCTW2CountryPanel() {
+        
+            const flagElement =
+                document.getElementById(
+                    'ctw2CountryFlag'
+                );
+        
+            const nameElement =
+                document.getElementById(
+                    'ctw2CountryName'
+                );
+        
+            const citiesElement =
+                document.getElementById(
+                    'ctw2CountryCities'
+                );
+        
+            const capitalElement =
+                document.getElementById(
+                    'ctw2CountryCapital'
+                );
+        
+            const populationElement =
+                document.getElementById(
+                    'ctw2CountryPopulation'
+                );
+        
+            if (
+                !flagElement ||
+                !nameElement ||
+                !citiesElement ||
+                !capitalElement ||
+                !populationElement
+            ) {
+                return;
+            }
+        
+            if (!currentCTW2Country) {
+        
+                flagElement.textContent = '🏳️';
+        
+                nameElement.textContent =
+                    'YOUR COUNTRY';
+        
+                citiesElement.textContent =
+                    '0';
+        
+                capitalElement.textContent =
+                    'Not selected';
+        
+                populationElement.textContent =
+                    '0';
+        
+                return;
+            }
+        
+            flagElement.textContent =
+                currentCTW2Country.flag || '🏳️';
+        
+            nameElement.textContent =
+                currentCTW2Country.name ||
+                'YOUR COUNTRY';
+        
+            citiesElement.textContent =
+                Number(
+                    currentCTW2Country.cities || 0
+                ).toLocaleString();
+        
+            capitalElement.textContent =
+                currentCTW2Country.capital ||
+                'Not selected';
+        
+            populationElement.textContent =
+                Number(
+                    currentCTW2Country.population || 0
+                ).toLocaleString();
+        }
+
+        async function loadCTW2CountryPanel() {
+        
+            try {
+        
+                const response =
+                    await fetch(
+                        '/api/ctw2/countries/list'
+                    );
+        
+                const data =
+                    await response.json();
+        
+                if (
+                    data.status !== 'success'
+                ) {
+                    return;
+                }
+        
+                const countries =
+                    Array.isArray(data.countries)
+                        ? data.countries
+                        : [];
+        
+                const myCountry =
+                    countries.find(
+                        country =>
+                            country.username ===
+                            currentUser
+                    );
+        
+                if (!myCountry) {
+        
+                    currentCTW2Country = null;
+        
+                    updateCTW2CountryPanel();
+        
+                    return;
+                }
+        
+                /*
+                 * For now we get the city statistics
+                 * from the city API.
+                 */
+        
+                const cityResponse =
+                    await fetch(
+                        '/api/ctw2/cities'
+                    );
+        
+                const cityData =
+                    await cityResponse.json();
+        
+                const cities =
+                    cityData.status === 'success' &&
+                    Array.isArray(cityData.cities)
+                        ? cityData.cities
+                        : [];
+        
+                const ownedCities =
+                    cities.filter(
+                        city =>
+                            city.owner_username ===
+                            currentUser
+                    );
+        
+                const population =
+                    ownedCities.reduce(
+                        (total, city) =>
+                            total +
+                            Number(
+                                city.population || 100
+                            ),
+                        0
+                    );
+        
+                const capital =
+                    ownedCities.find(
+                        city =>
+                            city.is_capital === true
+                    );
+        
+                currentCTW2Country = {
+        
+                    name:
+                        myCountry.name ||
+                        'YOUR COUNTRY',
+        
+                    flag:
+                        myCountry.flag ||
+                        '🏳️',
+        
+                    cities:
+                        ownedCities.length,
+        
+                    population:
+                        population,
+        
+                    capital:
+                        capital
+                            ? capital.name
+                            : null
+                };
+        
+                updateCTW2CountryPanel();
+        
+                console.log(
+                    '🌍 [CTW2 COUNTRY PANEL]',
+                    currentCTW2Country
+                );
+        
+            } catch (error) {
+        
+                console.error(
+                    '🚨 [CTW2 COUNTRY PANEL ERROR]',
+                    error
+                );
+        
+            }
         }
 
     </script>
