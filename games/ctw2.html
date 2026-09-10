@@ -426,12 +426,34 @@
 
     <!-- 🎛️ ХАЙ-ТЕК ТУМБЛЕР ПЕРЕКЛЮЧЕНИЯ РЕЖИМОВ КАРТЫ (APPLE-STYLE) -->
     <div class="map-mode-control">
-        <button class="mode-btn btn-active" id="btn-mode-politic" onclick="switchMapMode('politic')">
-            <i class="fa-solid fa-earth-americas"></i> Политическая
+    
+        <button
+            class="mode-btn btn-active"
+            id="btn-mode-politic"
+            onclick="switchMapMode('politic')"
+        >
+            <i class="fa-solid fa-earth-americas"></i>
+            Политическая
         </button>
-        <button class="mode-btn" id="btn-mode-weather" onclick="switchMapMode('weather')">
-            <i class="fa-solid fa-temperature-half"></i> Тепловой радар
+    
+        <button
+            class="mode-btn"
+            id="btn-mode-weather"
+            onclick="switchMapMode('weather')"
+        >
+            <i class="fa-solid fa-temperature-half"></i>
+            Тепловой радар
         </button>
+    
+        <button
+            class="mode-btn"
+            id="btn-mode-satellite"
+            onclick="switchMapMode('satellite')"
+        >
+            <i class="fa-solid fa-satellite"></i>
+            Спутник
+        </button>
+    
     </div>
 
     <!-- 🛠️ CTW2 COMMAND CONSOLE -->
@@ -534,8 +556,9 @@
         let newCountryPassport = { name: "", lang: "", flag: "" };
         
         let baseTileLayer;
+        let satelliteLayer = null;
+        
         let countriesGroupLayer;
-
         let citiesGroupLayer;
         let ctw2Cities = [];
 
@@ -2978,8 +3001,16 @@
                     'btn-active',
                     mode === 'weather'
                 );
-        
-        
+
+
+            document
+                .getElementById('btn-mode-satellite')
+                .classList
+                .toggle(
+                    'btn-active',
+                    mode === 'satellite'
+                );        
+
             /*
              * Invalidate any previous weather request.
              */
@@ -3047,6 +3078,39 @@
                  * Load the weather raster.
                  */
                 await renderGlobalWeatherHeatGrid();
+            }
+
+            /*
+             * SATELLITE MODE
+             */
+            if (mode === 'satellite') {
+            
+                /*
+                 * Remove the weather WebGL layer.
+                 */
+                removeWeatherCanvas();
+            
+                /*
+                 * Hide political countries.
+                 */
+                if (
+                    map.hasLayer(
+                        countriesGroupLayer
+                    )
+                ) {
+            
+                    map.removeLayer(
+                        countriesGroupLayer
+                    );
+                }
+            
+                /*
+                 * Satellite imagery will be connected
+                 * in the next step.
+                 */
+                console.log(
+                    '🛰️ [CTW2 SATELLITE] Satellite mode activated.'
+                );
             }
         }
         // НЕУБИВАЕМЫЙ МЕТЕОЗОНД (ИСПРАВЛЕНО: ЯРЛЫК ТЕПЕРЬ СТРЕЛЯЕТ С ПЕРВОГО КЛИКА)
