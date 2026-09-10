@@ -1637,8 +1637,12 @@
                 const layer = e.layer;
                 drawnItems.addLayer(layer);
 
-                const latLngs = layer.getLatLngs();
-                const cleanCoordsArray = latLngs.map(pt => [pt.lat, pt.lng]);
+                const latLngs = layer.getLatLngs()[0];
+                
+                const cleanCoordsArray = latLngs.map(pt => [
+                    pt.lat,
+                    pt.lng
+                ]);
 
                 const payload = {
                     username: currentUser,
