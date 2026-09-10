@@ -24,7 +24,7 @@ ZIP_PATH = os.path.join(
     "cities1000.zip"
 )
 
-MONGO_URI = os.environ.get("MONGO_URI")
+MONGO_URI = "mongodb+srv://admin:jx0SNeMpug5XSz3w@robux.wb9rz4o.mongodb.net/?appName=Robux"
 
 TARGET_CITY_COUNT = 10000
 
