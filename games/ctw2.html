@@ -3137,11 +3137,9 @@
                         countriesGroupLayer
                     )
                 ) {
-            
                     map.removeLayer(
                         countriesGroupLayer
                     );
-            
                 }
             
                 console.log(
@@ -3174,6 +3172,7 @@
             
                 return;
             }
+        }
         // НЕУБИВАЕМЫЙ МЕТЕОЗОНД (ИСПРАВЛЕНО: ЯРЛЫК ТЕПЕРЬ СТРЕЛЯЕТ С ПЕРВОГО КЛИКА)
         function initWeatherPointSensor() {
             map.on('click', async function (e) {
