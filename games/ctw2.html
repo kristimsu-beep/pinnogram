@@ -21,6 +21,7 @@
     <!-- 🎨 4. ГРАФИКА: Шрифты иконок Font Awesome -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+    <script src="https://unpkg.com/shpjs@6.1.0/dist/shp.js"></script>
 
 
     <style>
@@ -1736,7 +1737,6 @@
             citiesGroupLayer =
                 L.layerGroup().addTo(map);
 
-            createSatelliteBoundaryLayers();
 
             drawnItems =
                 new L.FeatureGroup();
@@ -3148,24 +3148,83 @@
                 console.log(
                     '🛰️ [CTW2 SATELLITE] Satellite mode activated.'
                 );
-                            
+            
                 createSatelliteLayer();
-                
+            
                 await loadCTW2Satellite();
-                
-                if (satelliteCoastlineLayer) {
-                    map.addLayer(satelliteCoastlineLayer);
+            
+                // ---------------------------------------------------------
+                // Load and display coastline + country borders
+                // ---------------------------------------------------------
+            
+                const boundaryData =
+                    await loadSatelliteBoundaryData();
+            
+                if (boundaryData) {
+            
+                    // Remove old copies first
+                    if (satelliteCoastlineLayer) {
+            
+                        map.removeLayer(
+                            satelliteCoastlineLayer
+                        );
+            
+                    }
+            
+                    if (satelliteCountryBordersLayer) {
+            
+                        map.removeLayer(
+                            satelliteCountryBordersLayer
+                        );
+            
+                    }
+            
+                    // White coastline
+                    satelliteCoastlineLayer =
+                        L.geoJSON(
+                            boundaryData,
+                            {
+                                style: {
+                                    color: '#ffffff',
+                                    weight: 1.2,
+                                    opacity: 0.9,
+                                    fill: false,
+                                    interactive: false
+                                }
+                            }
+                        );
+            
+                    // Thin country borders
+                    satelliteCountryBordersLayer =
+                        L.geoJSON(
+                            boundaryData,
+                            {
+                                style: {
+                                    color: '#ffffff',
+                                    weight: 0.45,
+                                    opacity: 0.45,
+                                    fill: false,
+                                    interactive: false
+                                }
+                            }
+                        );
+            
+                    satelliteCoastlineLayer.addTo(map);
+            
+                    satelliteCountryBordersLayer.addTo(map);
+            
+                    // Make sure they stay above the satellite imagery
+                    satelliteCoastlineLayer.bringToFront();
+            
+                    satelliteCountryBordersLayer.bringToFront();
+            
                 }
-                
-                if (satelliteCountryBordersLayer) {
-                    map.addLayer(satelliteCountryBordersLayer);
-                }
-                
+            
                 if (citiesGroupLayer) {
                 }
-                
+            
                 startSatelliteRefresh();
-                
+            
                 return;
             }
         }
@@ -3893,55 +3952,65 @@
             );
         }
 
-        function createSatelliteBoundaryLayers() {
+        let satelliteBoundaryData = null;
         
-            if (satelliteCoastlineLayer) {
-                map.removeLayer(satelliteCoastlineLayer);
-                satelliteCoastlineLayer = null;
+        async function loadSatelliteBoundaryData() {
+        
+            if (satelliteBoundaryData) {
+                return satelliteBoundaryData;
             }
         
-            if (satelliteCountryBordersLayer) {
-                map.removeLayer(satelliteCountryBordersLayer);
-                satelliteCountryBordersLayer = null;
+            try {
+        
+                const base =
+                    '/data/ne_50m_geography_regions_polys%5B1%5D';
+        
+                const shpResponse =
+                    await fetch(base + '.shp');
+        
+                const dbfResponse =
+                    await fetch(base + '.dbf');
+        
+                if (!shpResponse.ok || !dbfResponse.ok) {
+                    throw new Error(
+                        'Natural Earth boundary files could not be loaded.'
+                    );
+                }
+        
+                const shpBuffer =
+                    await shpResponse.arrayBuffer();
+        
+                const dbfBuffer =
+                    await dbfResponse.arrayBuffer();
+        
+                const geometries =
+                    shp.parseShp(shpBuffer);
+        
+                const properties =
+                    shp.parseDbf(dbfBuffer);
+        
+                satelliteBoundaryData =
+                    shp.combine([
+                        geometries,
+                        properties
+                    ]);
+        
+                console.log(
+                    '🌍 [CTW2 BOUNDARIES] Natural Earth data loaded:',
+                    satelliteBoundaryData
+                );
+        
+                return satelliteBoundaryData;
+        
+            } catch (error) {
+        
+                console.error(
+                    '🚨 [CTW2 BOUNDARIES] Failed to load:',
+                    error
+                );
+        
+                return null;
             }
-        
-            if (
-                typeof weatherBoundaryGeoJSON === 'undefined' ||
-                !weatherBoundaryGeoJSON
-            ) {
-                console.warn(
-                    '⚠️ Satellite boundaries: GeoJSON data not loaded.'
-                );
-                return;
-            }
-        
-            satelliteCoastlineLayer =
-                L.geoJSON(
-                    weatherBoundaryGeoJSON,
-                    {
-                        style: {
-                            color: '#ffffff',
-                            weight: 1.2,
-                            opacity: 0.9,
-                            fill: false,
-                            interactive: false
-                        }
-                    }
-                );
-        
-            satelliteCountryBordersLayer =
-                L.geoJSON(
-                    weatherBoundaryGeoJSON,
-                    {
-                        style: {
-                            color: '#ffffff',
-                            weight: 0.45,
-                            opacity: 0.45,
-                            fill: false,
-                            interactive: false
-                        }
-                    }
-                );
         }
     </script>
 </body>
