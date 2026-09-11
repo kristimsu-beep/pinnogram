@@ -571,6 +571,7 @@
 
         let meteosatLayer = null;
         let meteosatRefreshTimer = null;
+        let meteosatRefreshKey = 0;
         let meteosatTime = null;
         
         const METEOSAT_WMS_URL =
@@ -3818,7 +3819,10 @@
                         ],
         
                         attribution:
-                            'Meteosat imagery © EUMETSAT / NASA'
+                            'Meteosat imagery © EUMETSAT / NASA',
+        
+                        _ctw2_frame:
+                            meteosatRefreshKey
                     }
                 );
         
@@ -3833,8 +3837,26 @@
                 return;
             }
         
+            /*
+             * Every refresh gets one single frame key.
+             * All WMS tiles requested during this
+             * refresh therefore belong to the same
+             * client-side generation.
+             */
+            meteosatRefreshKey =
+                Date.now();
+        
             if (!meteosatLayer) {
+        
                 createMeteosatLayer();
+        
+            } else {
+        
+                meteosatLayer.setParams({
+                    _ctw2_frame:
+                        meteosatRefreshKey
+                });
+        
             }
         
             if (
@@ -3842,28 +3864,18 @@
                     meteosatLayer
                 )
             ) {
+        
                 meteosatLayer.addTo(map);
+        
             }
         
             meteosatLayer.setZIndex(475);
         
-            /*
-             * Force Leaflet/browser to request a fresh
-             * generation of the Meteosat WMS tiles.
-             *
-             * The parameter is only a cache-buster.
-             * EUMETSAT still decides which current
-             * imagery is returned.
-             */
-            meteosatLayer.setParams({
-                _ctw2_refresh:
-                    Date.now()
-            });
-        
             meteosatLayer.redraw();
         
             console.log(
-                '🛰️ [CTW2 METEOSAT] Fresh WMS imagery requested.'
+                '🛰️ [CTW2 METEOSAT] Frame refresh:',
+                meteosatRefreshKey
             );
         }
     </script>
