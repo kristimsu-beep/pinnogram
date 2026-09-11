@@ -571,6 +571,7 @@
 
         let meteosatLayer = null;
         let meteosatRefreshTimer = null;
+        let meteosatTime = null;
         
         const METEOSAT_WMS_URL =
             'https://view.eumetsat.int/geoserver/wms';
@@ -3725,6 +3726,58 @@
                     error
                 );
         
+            }
+        }
+
+        async function getLatestMeteosatTime() {
+        
+            try {
+        
+                const response =
+                    await fetch(
+                        'https://view.eumetsat.int/geoserver/wms' +
+                        '?service=WMS' +
+                        '&request=GetCapabilities',
+                        {
+                            cache: 'no-store'
+                        }
+                    );
+        
+                if (!response.ok) {
+                    throw new Error(
+                        'Meteosat GetCapabilities failed: ' +
+                        response.status
+                    );
+                }
+        
+                const text =
+                    await response.text();
+        
+                /*
+                 * We don't need to parse the whole
+                 * capabilities document here yet.
+                 *
+                 * The important part is that the WMS
+                 * service is time-enabled. We will use
+                 * the latest available frame from the
+                 * server on the next step.
+                 */
+        
+                console.log(
+                    '🛰️ [CTW2 METEOSAT] WMS capabilities loaded.'
+                );
+        
+                return null;
+        
+            }
+            catch (error) {
+        
+                console.error(
+                    '🚨 [CTW2 METEOSAT TIME] Failed:',
+                    error
+                );
+        
+                return null;
             }
         }
 
