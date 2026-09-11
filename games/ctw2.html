@@ -563,7 +563,7 @@
         let satelliteLoading = false;
         
         const SATELLITE_SERVICE_URL =
-            'https://satellitemaps.nesdis.noaa.gov/arcgis/rest/services/Most_Recent_MERGEDGC/ImageServer';        
+            'https://satellitemaps.nesdis.noaa.gov/arcgis/rest/services/MERGEDGC_current/ImageServer';       
         let countriesGroupLayer;
         let citiesGroupLayer;
         let ctw2Cities = [];
@@ -2023,7 +2023,12 @@
                         ">
                             ${
                                 isOwned
-                                    ? `🔴 Your country: ${currentCTW2Country?.name || 'YOUR COUNTRY'}`
+                                    ? `🔴 Your country: ${
+                                        currentCTW2Country &&
+                                        currentCTW2Country.name
+                                            ? currentCTW2Country.name
+                                            : 'YOUR COUNTRY'
+                                    }`
                                     : '🌍 Uncontrolled'
                             }
                         </div>
@@ -3128,9 +3133,13 @@
                 createSatelliteLayer();
             
                 await loadCTW2Satellite();
-            
+                
+                if (citiesGroupLayer) {
+                    citiesGroupLayer.bringToFront();
+                }
+                
                 startSatelliteRefresh();
-            
+                
                 return;
             }
         }
@@ -3363,7 +3372,16 @@
                 };
         
                 updateCTW2CountryPanel();
-        
+                
+                /*
+                 * The city markers may have been rendered
+                 * before the country information finished loading.
+                 *
+                 * Re-render them now so their popups use
+                 * the correct country name.
+                 */
+                renderCTW2Cities();
+                
                 console.log(
                     '🌍 [CTW2 COUNTRY PANEL]',
                     currentCTW2Country
