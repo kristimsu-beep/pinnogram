@@ -3639,16 +3639,6 @@
                 himawariLayer = null;
             }
         
-            /*
-             * NASA GIBS Himawari-9 Band 13
-             *
-             * Clean Infrared
-             * 10.3 µm
-             *
-             * Unlike visible imagery, IR works
-             * during both day and night.
-             */
-        
             const today =
                 new Date();
         
@@ -3657,25 +3647,24 @@
                     .slice(0, 10);
         
             const url =
-                HIMAWARI_GIBS_URL +
-                'Himawari_AHI_Band13_Clean_Infrared/' +
+                'https://gibs.earthdata.nasa.gov/wmts/epsg3857/nrt/' +
+                'Himawari_AHI_Band3_Red_Visible_1km/' +
                 'default/' +
                 date +
                 '/' +
                 'GoogleMapsCompatible_Level6/' +
-                '{z}/{y}/{x}.png';
+                '{z}/{y}/{x}.jpg';
         
             himawariLayer =
                 L.tileLayer(
                     url,
                     {
                         minZoom: 0,
-        
                         maxZoom: 6,
         
                         tileSize: 256,
         
-                        opacity: 0.75,
+                        opacity: 1,
         
                         noWrap: false,
         
@@ -3694,7 +3683,7 @@
             try {
         
                 console.log(
-                    '🛰️ [HIMAWARI] Loading NASA GIBS Himawari-9...'
+                    '🛰️ [HIMAWARI] Loading visible satellite imagery...'
                 );
         
                 const layer =
@@ -3712,13 +3701,13 @@
                     Date.now();
         
                 console.log(
-                    '🛰️ [HIMAWARI] NASA GIBS layer active.'
+                    '🛰️ [HIMAWARI] Visible imagery active.'
                 );
         
             } catch (error) {
         
                 console.error(
-                    '🚨 [HIMAWARI] GIBS failed:',
+                    '🚨 [HIMAWARI] Visible imagery failed:',
                     error
                 );
             }
