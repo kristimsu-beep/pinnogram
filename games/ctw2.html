@@ -581,7 +581,10 @@
         let citiesGroupLayer;
         let ctw2Cities = [];
 
+        let satelliteCoastlineLayer = null;
+        let satelliteCountryBordersLayer = null;
         let drawControl;
+
         let drawnItems;
 
         // Авторизация по кукам сессии мессенджера GeraGram
@@ -1731,7 +1734,10 @@
                 L.layerGroup().addTo(map);
 
             citiesGroupLayer =
-                L.layerGroup().addTo(map);        
+                L.layerGroup().addTo(map);
+
+            createSatelliteBoundaryLayers();
+
             drawnItems =
                 new L.FeatureGroup();
         
@@ -3142,10 +3148,18 @@
                 console.log(
                     '🛰️ [CTW2 SATELLITE] Satellite mode activated.'
                 );
-            
+                            
                 createSatelliteLayer();
-            
+                
                 await loadCTW2Satellite();
+                
+                if (satelliteCoastlineLayer) {
+                    map.addLayer(satelliteCoastlineLayer);
+                }
+                
+                if (satelliteCountryBordersLayer) {
+                    map.addLayer(satelliteCountryBordersLayer);
+                }
                 
                 if (citiesGroupLayer) {
                 }
@@ -3877,6 +3891,57 @@
                 '🛰️ [CTW2 METEOSAT] Frame refresh:',
                 meteosatRefreshKey
             );
+        }
+
+        function createSatelliteBoundaryLayers() {
+        
+            if (satelliteCoastlineLayer) {
+                map.removeLayer(satelliteCoastlineLayer);
+                satelliteCoastlineLayer = null;
+            }
+        
+            if (satelliteCountryBordersLayer) {
+                map.removeLayer(satelliteCountryBordersLayer);
+                satelliteCountryBordersLayer = null;
+            }
+        
+            if (
+                typeof weatherBoundaryGeoJSON === 'undefined' ||
+                !weatherBoundaryGeoJSON
+            ) {
+                console.warn(
+                    '⚠️ Satellite boundaries: GeoJSON data not loaded.'
+                );
+                return;
+            }
+        
+            satelliteCoastlineLayer =
+                L.geoJSON(
+                    weatherBoundaryGeoJSON,
+                    {
+                        style: {
+                            color: '#ffffff',
+                            weight: 1.2,
+                            opacity: 0.9,
+                            fill: false,
+                            interactive: false
+                        }
+                    }
+                );
+        
+            satelliteCountryBordersLayer =
+                L.geoJSON(
+                    weatherBoundaryGeoJSON,
+                    {
+                        style: {
+                            color: '#ffffff',
+                            weight: 0.45,
+                            opacity: 0.45,
+                            fill: false,
+                            interactive: false
+                        }
+                    }
+                );
         }
     </script>
 </body>
