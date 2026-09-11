@@ -3965,29 +3965,43 @@
                 const base =
                     '/data/ne_50m_geography_regions_polys%5B1%5D';
         
-                const shpResponse =
-                    await fetch(base + '.shp');
+                const response =
+                    await fetch(
+                        base + '.shp'
+                    );
         
-                const dbfResponse =
-                    await fetch(base + '.dbf');
-        
-                if (!shpResponse.ok || !dbfResponse.ok) {
+                if (!response.ok) {
                     throw new Error(
-                        'Natural Earth boundary files could not be loaded.'
+                        `SHP file HTTP ${response.status}`
                     );
                 }
         
                 const shpBuffer =
-                    await shpResponse.arrayBuffer();
+                    await response.arrayBuffer();
+        
+                const dbfResponse =
+                    await fetch(
+                        base + '.dbf'
+                    );
+        
+                if (!dbfResponse.ok) {
+                    throw new Error(
+                        `DBF file HTTP ${dbfResponse.status}`
+                    );
+                }
         
                 const dbfBuffer =
                     await dbfResponse.arrayBuffer();
         
                 const geometries =
-                    shp.parseShp(shpBuffer);
+                    shp.parseShp(
+                        shpBuffer
+                    );
         
                 const properties =
-                    shp.parseDbf(dbfBuffer);
+                    shp.parseDbf(
+                        dbfBuffer
+                    );
         
                 satelliteBoundaryData =
                     shp.combine([
@@ -3996,7 +4010,7 @@
                     ]);
         
                 console.log(
-                    '🌍 [CTW2 BOUNDARIES] Natural Earth data loaded:',
+                    '🌍 [CTW2 BOUNDARIES] Natural Earth boundaries loaded.',
                     satelliteBoundaryData
                 );
         
