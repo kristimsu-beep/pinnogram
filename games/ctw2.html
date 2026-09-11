@@ -564,6 +564,12 @@
         let satelliteLoading = false;
         let satelliteCoastlineLayer = null;
         let satelliteCountryBordersLayer = null;
+        const HIMAWARI_SLIDER_BASE =
+            'https://rammb-slider.cira.colostate.edu/data/';
+        
+        const HIMAWARI_CORS_PROXY =
+            'https://slider-proxy.domoritz.workers.dev/?';
+        
         let himawariLayer = null;
         let himawariTime = null;
         let himawariRefreshTimer = null;
@@ -3626,92 +3632,116 @@
 
         async function getLatestHimawariTime() {
         
+            const latestUrl =
+                HIMAWARI_SLIDER_BASE +
+                'json/himawari/full_disk/geocolor/latest_times.json';
+        
+            const proxyUrl =
+                HIMAWARI_CORS_PROXY +
+                encodeURIComponent(latestUrl);
+        
             const response =
                 await fetch(
-                    'https://www.jma.go.jp/bosai/himawari/data/satimg/targetTimes_fd.json',
+                    proxyUrl,
                     {
                         cache: 'no-store'
                     }
                 );
         
             if (!response.ok) {
-        
                 throw new Error(
-                    'Himawari time request failed: ' +
-                    response.status
+                    `Himawari latest-time HTTP ${response.status}`
                 );
-        
             }
         
-            const times =
+            const data =
                 await response.json();
         
+            console.log(
+                '🛰️ [HIMAWARI] Latest data:',
+                data
+            );
+        
             if (
-                !Array.isArray(times) ||
-                times.length === 0
+                !data ||
+                !data.timestamps_int ||
+                !data.timestamps_int.length
             ) {
-        
                 throw new Error(
-                    'No Himawari timestamps returned.'
+                    'Himawari latest timestamp not found.'
                 );
-        
             }
         
-            const latest =
-                times[times.length - 1];
-        
-            return {
-                basetime: latest.basetime,
-                validtime: latest.validtime
-            };
+            return String(
+                data.timestamps_int[0]
+            );
         }
         
-        function createHimawariLayer(
-            basetime,
-            validtime
-        ) {
+        function createHimawariLayer(timestamp) {
         
-            if (
-                himawariLayer &&
-                map.hasLayer(himawariLayer)
-            ) {
+            if (himawariLayer) {
         
                 map.removeLayer(
                     himawariLayer
                 );
         
+                himawariLayer = null;
             }
         
-            const url =
-                'https://www.jma.go.jp/bosai/himawari/data/satimg/' +
-                basetime +
-                '/fd/' +
-                validtime +
-                '/REP/ETC/{z}/{x}/{y}.jpg';
+            const timestampString =
+                String(timestamp);
+        
+            const year =
+                timestampString.substring(0, 4);
+        
+            const month =
+                timestampString.substring(4, 6);
+        
+            const day =
+                timestampString.substring(6, 8);
+        
+            const datePath =
+                `${year}/${month}/${day}`;
+        
+            const imagePath =
+                `${timestampString}`;
+        
+            const baseUrl =
+                HIMAWARI_SLIDER_BASE +
+                `imagery/${datePath}/` +
+                `himawari---full_disk/` +
+                `geocolor/${imagePath}/`;
+        
+            /*
+             * SLIDER full-disk GeoColor:
+             *
+             * level 0 → 1x1
+             * level 1 → 2x2
+             * level 2 → 4x4
+             * level 3 → 8x8
+             * level 4 → 16x16
+             */
         
             himawariLayer =
                 L.tileLayer(
-                    url,
+                    baseUrl +
+                    '{z}/{y}_{x}.png',
                     {
-                        minZoom: 3,
+                        tileSize: 688,
         
-                        maxZoom: 10,
+                        zoomOffset: 0,
         
-                        maxNativeZoom: 5,
+                        minZoom: 0,
+                        maxZoom: 4,
         
-                        tileSize: 256,
+                        noWrap: true,
         
-                        opacity: 1.0,
+                        opacity: 1,
         
                         zIndex: 450,
         
-                        bounds: [
-                            [-70, 60],
-                            [80, 210]
-                        ],
-        
                         attribution:
-                            'Himawari imagery © Japan Meteorological Agency'
+                            'Himawari-9 GeoColor © CIRA/RAMMB'
                     }
                 );
         
@@ -3722,43 +3752,51 @@
         
             try {
         
-                const latest =
+                console.log(
+                    '🛰️ [HIMAWARI] Loading latest GeoColor...'
+                );
+        
+                const latestTimestamp =
                     await getLatestHimawariTime();
         
                 if (
-                    currentMapMode !== 'satellite'
+                    himawariTime ===
+                    latestTimestamp
                 ) {
         
-                    return;
+                    console.log(
+                        '🛰️ [HIMAWARI] Already showing latest image.'
+                    );
         
+                    return;
                 }
         
                 himawariTime =
-                    latest;
+                    latestTimestamp;
         
                 const layer =
                     createHimawariLayer(
-                        latest.basetime,
-                        latest.validtime
+                        latestTimestamp
                     );
         
-                layer.addTo(map);
+                if (layer) {
         
-                layer.setZIndex(450);
+                    layer.addTo(map);
         
-                console.log(
-                    '🛰️ [CTW2 HIMAWARI] Latest imagery:',
-                    latest.validtime
-                );
+                    layer.bringToFront();
         
-            }
-            catch (error) {
+                    console.log(
+                        '🛰️ [HIMAWARI] GeoColor loaded:',
+                        latestTimestamp
+                    );
+                }
+        
+            } catch (error) {
         
                 console.error(
-                    '🚨 [CTW2 HIMAWARI] Failed:',
+                    '🚨 [HIMAWARI] GeoColor failed:',
                     error
                 );
-        
             }
         }
 
