@@ -560,9 +560,7 @@
         let satelliteRefreshTimer = null;
         let satelliteImageTimestamp = null;
 
-        let satelliteImageOverlay = null;
         let satelliteLoading = false;
-        let satelliteRenderId = 0;
         
         const SATELLITE_SERVICE_URL =
             'https://satellitemaps.nesdis.noaa.gov/arcgis/rest/services/Most_Recent_MERGEDGC/ImageServer';        
@@ -3108,45 +3106,31 @@
              * SATELLITE MODE
              */
             if (mode === 'satellite') {
-        
-                /*
-                 * Remove weather.
-                 */
+            
                 removeWeatherCanvas();
-        
-        
-                /*
-                 * Hide political countries.
-                 */
+            
                 if (
                     map.hasLayer(
                         countriesGroupLayer
                     )
                 ) {
-        
+            
                     map.removeLayer(
                         countriesGroupLayer
                     );
+            
                 }
-        
-        
+            
                 console.log(
                     '🛰️ [CTW2 SATELLITE] Satellite mode activated.'
                 );
-        
-        
-                /*
-                 * Load the latest NOAA satellite image.
-                 */
+            
+                createSatelliteLayer();
+            
                 await loadCTW2Satellite();
-        
-        
-                /*
-                 * Automatically refresh the satellite
-                 * imagery approximately every 10 minutes.
-                 */
+            
                 startSatelliteRefresh();
-        
+            
                 return;
             }
         }
@@ -3395,235 +3379,30 @@
             }
         }
 
-        async function loadCTW2Satellite() {
-        
-            if (currentMapMode !== 'satellite') {
-                return;
-            }
-        
-            if (satelliteLoading) {
-                return;
-            }
-        
-            satelliteLoading = true;
-        
-            const renderId = ++satelliteRenderId;
-        
-            try {
-        
-                const bounds = map.getBounds();
-        
-                const south =
-                    Math.max(
-                        -76,
-                        bounds.getSouth()
-                    );
-        
-                const north =
-                    Math.min(
-                        76,
-                        bounds.getNorth()
-                    );
-        
-                const west =
-                    bounds.getWest();
-        
-                const east =
-                    bounds.getEast();
-        
-                /*
-                 * NOAA ImageServer uses geographic coordinates.
-                 *
-                 * We request the current visible map area rather
-                 * than downloading a giant global image.
-                 */
-        
-                const bbox =
-                    [
-                        west,
-                        south,
-                        east,
-                        north
-                    ].join(',');
-        
-                const size =
-                    Math.min(
-                        2000,
-                        Math.max(
-                            1000,
-                            Math.round(
-                                map.getSize().x * 1.5
-                            )
-                        )
-                    );
-        
-                const url =
-                    SATELLITE_SERVICE_URL +
-                    '/exportImage?' +
-                    new URLSearchParams({
-        
-                        bbox: bbox,
-        
-                        bboxSR: '4326',
-        
-                        imageSR: '4326',
-        
-                        size:
-                            size +
-                            ',' +
-                            Math.round(
-                                size *
-                                (
-                                    (north - south) /
-                                    Math.max(
-                                        0.01,
-                                        east - west
-                                    )
-                                )
-                            ),
-        
-                        format: 'jpg',
-        
-                        pixelType: 'U8',
-        
-                        noDataInterpretation: 'esriNoDataMatchAny',
-        
-                        interpolation: 'RSP_BilinearInterpolation',
-        
-                        mosaicRule: JSON.stringify({
-                            mosaicMethod: 'esriMosaicAttribute',
-                            sortField: 'End_Time',
-                            sortValue: '9999999999999',
-                            ascending: false
-                        }),
-        
-                        f: 'image'
-        
-                    }).toString();
-        
-                const response =
-                    await fetch(url);
-        
-                if (!response.ok) {
-        
-                    throw new Error(
-                        'NOAA satellite request failed: ' +
-                        response.status
-                    );
-        
-                }
-        
-                const blob =
-                    await response.blob();
-        
-                if (
-                    renderId !== satelliteRenderId ||
-                    currentMapMode !== 'satellite'
-                ) {
-                    return;
-                }
-        
-                const imageUrl =
-                    URL.createObjectURL(blob);
-        
-                /*
-                 * Remove previous satellite image.
-                 */
-        
-                if (
-                    satelliteImageOverlay &&
-                    map.hasLayer(
-                        satelliteImageOverlay
-                    )
-                ) {
-        
-                    map.removeLayer(
-                        satelliteImageOverlay
-                    );
-        
-                    satelliteImageOverlay = null;
-                }
-        
-                /*
-                 * Display the new NOAA image.
-                 */
-        
-                satelliteImageOverlay =
-                    L.imageOverlay(
-                        imageUrl,
-                        [
-                            [south, west],
-                            [north, east]
-                        ],
-                        {
-                            opacity: 1,
-                            interactive: false,
-                            crossOrigin: true
-                        }
-                    );
-        
-                satelliteImageOverlay.addTo(map);
-        
-                /*
-                 * Release the previous browser object URL
-                 * after Leaflet has received the image.
-                 */
-        
-                setTimeout(() => {
-        
-                    URL.revokeObjectURL(
-                        imageUrl
-                    );
-        
-                }, 30000);
-        
-                satelliteImageTimestamp =
-                    new Date();
-        
-                console.log(
-                    '🛰️ [CTW2 SATELLITE] NOAA imagery loaded.',
-                    satelliteImageTimestamp
-                );
-        
-            }
-            catch (error) {
-        
-                console.error(
-                    '🚨 [CTW2 SATELLITE] Failed to load NOAA imagery:',
-                    error
-                );
-        
-            }
-            finally {
-        
-                satelliteLoading = false;
-        
-            }
-        }
-
         function startSatelliteRefresh() {
         
             stopSatelliteRefresh();
         
-            /*
-             * NOAA's merged GOES service is time-enabled with
-             * approximately 10-minute imagery.
-             *
-             * We refresh every 10 minutes.
-             */
-        
             satelliteRefreshTimer =
-                setInterval(() => {
+                setInterval(
+                    () => {
         
-                    if (
-                        currentMapMode === 'satellite'
-                    ) {
+                        if (
+                            currentMapMode === 'satellite' &&
+                            satelliteLayer
+                        ) {
         
-                        loadCTW2Satellite();
+                            satelliteLayer.redraw();
         
-                    }
+                            console.log(
+                                '🛰️ [CTW2 SATELLITE] Refreshing satellite tiles.'
+                            );
         
-                }, 10 * 60 * 1000);
+                        }
+        
+                    },
+                    10 * 60 * 1000
+                );
         }
 
         function stopSatelliteRefresh() {
@@ -3637,6 +3416,7 @@
                 );
         
                 satelliteRefreshTimer = null;
+        
             }
         }
 
@@ -3644,22 +3424,68 @@
         
             stopSatelliteRefresh();
         
-            satelliteRenderId++;
-        
             if (
-                satelliteImageOverlay &&
-                map.hasLayer(
-                    satelliteImageOverlay
-                )
+                satelliteLayer &&
+                map.hasLayer(satelliteLayer)
             ) {
         
                 map.removeLayer(
-                    satelliteImageOverlay
+                    satelliteLayer
                 );
+        
             }
         
-            satelliteImageOverlay = null;
             satelliteLoading = false;
+        }
+
+        function createSatelliteLayer() {
+        
+            if (satelliteLayer) {
+                return satelliteLayer;
+            }
+        
+            satelliteLayer =
+                L.tileLayer(
+                    SATELLITE_SERVICE_URL +
+                    '/tile/{z}/{y}/{x}',
+                    {
+                        minZoom: 0,
+                        maxZoom: 23,
+        
+                        opacity: 1.0,
+        
+                        tileSize: 256,
+        
+                        attribution:
+                            'Satellite imagery © NOAA'
+                    }
+                );
+        
+            return satelliteLayer;
+        }
+
+        async function loadCTW2Satellite() {
+        
+            if (currentMapMode !== 'satellite') {
+                return;
+            }
+        
+            if (!satelliteLayer) {
+                createSatelliteLayer();
+            }
+        
+            if (!map.hasLayer(satelliteLayer)) {
+        
+                satelliteLayer.addTo(map);
+        
+            }
+        
+            satelliteImageTimestamp =
+                new Date();
+        
+            console.log(
+                '🛰️ [CTW2 SATELLITE] NOAA tiled imagery active.'
+            );
         }
     </script>
 </body>
