@@ -3413,21 +3413,39 @@
         
             satelliteRefreshTimer =
                 setInterval(
-                    () => {
-        
+                    async () => {
+            
                         if (
-                            currentMapMode === 'satellite' &&
-                            satelliteLayer
+                            currentMapMode !== 'satellite'
                         ) {
-        
-                            satelliteLayer.redraw();
-        
-                            console.log(
-                                '🛰️ [CTW2 SATELLITE] Refreshing satellite tiles.'
-                            );
-        
+                            return;
                         }
-        
+            
+                        /*
+                         * NOAA
+                         */
+                        if (satelliteLayer) {
+                            satelliteLayer.redraw();
+                        }
+            
+                        /*
+                         * Meteosat
+                         */
+                        await loadMeteosatSatellite();
+            
+                        /*
+                         * Himawari
+                         *
+                         * This checks JMA's latest timestamp
+                         * and replaces the layer if a new
+                         * image exists.
+                         */
+                        await loadHimawariSatellite();
+            
+                        console.log(
+                            '🛰️ [CTW2 SATELLITE] All satellite sources refreshed.'
+                        );
+            
                     },
                     10 * 60 * 1000
                 );
@@ -3763,9 +3781,7 @@
             }
         
             if (!meteosatLayer) {
-        
                 createMeteosatLayer();
-        
             }
         
             if (
@@ -3773,15 +3789,28 @@
                     meteosatLayer
                 )
             ) {
-        
                 meteosatLayer.addTo(map);
-        
             }
         
             meteosatLayer.setZIndex(475);
         
+            /*
+             * Force Leaflet/browser to request a fresh
+             * generation of the Meteosat WMS tiles.
+             *
+             * The parameter is only a cache-buster.
+             * EUMETSAT still decides which current
+             * imagery is returned.
+             */
+            meteosatLayer.setParams({
+                _ctw2_refresh:
+                    Date.now()
+            });
+        
+            meteosatLayer.redraw();
+        
             console.log(
-                '🛰️ [CTW2 METEOSAT] EUMETSAT GeoColour imagery active.'
+                '🛰️ [CTW2 METEOSAT] Fresh WMS imagery requested.'
             );
         }
     </script>
