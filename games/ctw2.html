@@ -3631,49 +3631,49 @@
         function createHimawariLayer() {
         
             if (himawariLayer) {
-        
-                map.removeLayer(
-                    himawariLayer
-                );
-        
+                map.removeLayer(himawariLayer);
                 himawariLayer = null;
             }
         
-            const today =
-                new Date();
-        
-            const date =
-                today.toISOString()
-                    .slice(0, 10);
+            /*
+             * NASA GIBS Himawari-9/AHI
+             * Red Visible 0.64 µm
+             *
+             * This is normal visible satellite imagery.
+             * It is NOT infrared.
+             */
         
             const url =
-                'https://gibs.earthdata.nasa.gov/wmts/epsg3857/nrt/' +
+                'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/' +
                 'Himawari_AHI_Band3_Red_Visible_1km/' +
-                'default/' +
-                date +
-                '/' +
+                'default/{time}/' +
                 'GoogleMapsCompatible_Level6/' +
                 '{z}/{y}/{x}.jpg';
         
-            himawariLayer =
-                L.tileLayer(
-                    url,
-                    {
-                        minZoom: 0,
-                        maxZoom: 6,
+            const today = new Date();
+            const date =
+                today.getUTCFullYear() + '-' +
+                String(today.getUTCMonth() + 1).padStart(2, '0') + '-' +
+                String(today.getUTCDate()).padStart(2, '0');
         
-                        tileSize: 256,
+            const finalUrl = url.replace('{time}', date);
         
-                        opacity: 1,
+            himawariLayer = L.tileLayer(finalUrl, {
+                minZoom: 0,
+                maxZoom: 6,
+                maxNativeZoom: 6,
         
-                        noWrap: false,
+                tileSize: 256,
         
-                        zIndex: 450,
+                opacity: 1.0,
         
-                        attribution:
-                            'Himawari-9/AHI © JMA/NASA GIBS'
-                    }
-                );
+                noWrap: false,
+        
+                zIndex: 450,
+        
+                attribution:
+                    'Himawari-9/AHI © JMA / NASA GIBS'
+            });
         
             return himawariLayer;
         }
@@ -3683,25 +3683,24 @@
             try {
         
                 console.log(
-                    '🛰️ [HIMAWARI] Loading visible satellite imagery...'
+                    '🛰️ [HIMAWARI] Loading NASA GIBS visible imagery...'
                 );
         
-                const layer =
-                    createHimawariLayer();
+                const layer = createHimawariLayer();
         
                 if (!layer) {
+                    console.warn(
+                        '⚠️ [HIMAWARI] Layer could not be created.'
+                    );
                     return;
                 }
         
                 layer.addTo(map);
         
-                layer.bringToFront();
-        
-                himawariTime =
-                    Date.now();
+                himawariTime = Date.now();
         
                 console.log(
-                    '🛰️ [HIMAWARI] Visible imagery active.'
+                    '🛰️ [HIMAWARI] NASA GIBS visible imagery active.'
                 );
         
             } catch (error) {
