@@ -3639,23 +3639,28 @@
                 'https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi',
                 {
                     layers: 'Himawari_AHI_Band3_Red_Visible_1km',
-        
+            
                     format: 'image/jpeg',
-        
+            
                     transparent: false,
-        
+            
                     version: '1.1.1',
-        
+            
                     time: '2026-09-09',
-        
+            
                     tileSize: 256,
-        
+            
                     opacity: 1.0,
-        
+            
                     noWrap: false,
-        
+            
+                    bounds: [
+                        [-70, 80],
+                        [80, 180]
+                    ],
+            
                     zIndex: 450,
-        
+            
                     attribution:
                         'Himawari-9/AHI Red Visible © NASA GIBS'
                 }
