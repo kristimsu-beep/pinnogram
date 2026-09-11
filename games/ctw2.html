@@ -564,11 +564,9 @@
         let satelliteLoading = false;
         let satelliteCoastlineLayer = null;
         let satelliteCountryBordersLayer = null;
-        const HIMAWARI_SLIDER_BASE =
-            'https://rammb-slider.cira.colostate.edu/data/';
-        
-        const HIMAWARI_CORS_PROXY =
-            'https://slider-proxy.domoritz.workers.dev/?';
+
+        const HIMAWARI_GIBS_URL =
+            'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/';
         
         let himawariLayer = null;
         let himawariTime = null;
@@ -3629,55 +3627,8 @@
             await loadMeteosatSatellite();
         
         }
-
-        async function getLatestHimawariTime() {
         
-            const latestUrl =
-                HIMAWARI_SLIDER_BASE +
-                'json/himawari/full_disk/geocolor/latest_times.json';
-        
-            const proxyUrl =
-                HIMAWARI_CORS_PROXY +
-                encodeURIComponent(latestUrl);
-        
-            const response =
-                await fetch(
-                    proxyUrl,
-                    {
-                        cache: 'no-store'
-                    }
-                );
-        
-            if (!response.ok) {
-                throw new Error(
-                    `Himawari latest-time HTTP ${response.status}`
-                );
-            }
-        
-            const data =
-                await response.json();
-        
-            console.log(
-                '🛰️ [HIMAWARI] Latest data:',
-                data
-            );
-        
-            if (
-                !data ||
-                !data.timestamps_int ||
-                !data.timestamps_int.length
-            ) {
-                throw new Error(
-                    'Himawari latest timestamp not found.'
-                );
-            }
-        
-            return String(
-                data.timestamps_int[0]
-            );
-        }
-        
-        function createHimawariLayer(timestamp) {
+        function createHimawariLayer() {
         
             if (himawariLayer) {
         
@@ -3688,80 +3639,52 @@
                 himawariLayer = null;
             }
         
-            const timestampString =
-                String(timestamp);
+            /*
+             * NASA GIBS Himawari-9 Band 13
+             *
+             * Clean Infrared
+             * 10.3 µm
+             *
+             * Unlike visible imagery, IR works
+             * during both day and night.
+             */
         
-            const year =
-                timestampString.substring(0, 4);
+            const today =
+                new Date();
         
-            const month =
-                timestampString.substring(4, 6);
+            const date =
+                today.toISOString()
+                    .slice(0, 10);
         
-            const day =
-                timestampString.substring(6, 8);
-        
-            const datePath =
-                `${year}/${month}/${day}`;
-        
-            const baseUrl =
-                HIMAWARI_SLIDER_BASE +
-                `imagery/${datePath}/` +
-                `himawari---full_disk/` +
-                `geocolor/${timestampString}/`;
-        
-            const pad =
-                (value, digits) =>
-                    String(value).padStart(
-                        digits,
-                        '0'
-                    );
+            const url =
+                HIMAWARI_GIBS_URL +
+                'Himawari_AHI_Band13_Clean_Infrared/' +
+                'default/' +
+                date +
+                '/' +
+                'GoogleMapsCompatible_Level6/' +
+                '{z}/{y}/{x}.png';
         
             himawariLayer =
                 L.tileLayer(
-                    '',
+                    url,
                     {
-                        tileSize: 688,
-        
                         minZoom: 0,
-                        maxZoom: 4,
         
-                        noWrap: true,
+                        maxZoom: 6,
         
-                        opacity: 1,
+                        tileSize: 256,
+        
+                        opacity: 0.75,
+        
+                        noWrap: false,
         
                         zIndex: 450,
         
                         attribution:
-                            'Himawari-9 GeoColor © CIRA/RAMMB'
+                            'Himawari-9/AHI © JMA/NASA GIBS'
                     }
                 );
-        
-            himawariLayer.getTileUrl =
-                function(coords) {
-        
-                    const level =
-                        pad(
-                            coords.z,
-                            2
-                        );
-        
-                    const y =
-                        pad(
-                            coords.y,
-                            3
-                        );
-        
-                    const x =
-                        pad(
-                            coords.x,
-                            3
-                        );
-        
-                    return (
-                        baseUrl +
-                        `${level}/${y}_${x}.png`
-                    );
-                };
         
             return himawariLayer;
         }
@@ -3771,48 +3694,31 @@
             try {
         
                 console.log(
-                    '🛰️ [HIMAWARI] Loading latest GeoColor...'
+                    '🛰️ [HIMAWARI] Loading NASA GIBS Himawari-9...'
                 );
         
-                const latestTimestamp =
-                    await getLatestHimawariTime();
+                const layer =
+                    createHimawariLayer();
         
-                if (
-                    himawariTime ===
-                    latestTimestamp
-                ) {
-        
-                    console.log(
-                        '🛰️ [HIMAWARI] Already showing latest image.'
-                    );
-        
+                if (!layer) {
                     return;
                 }
         
+                layer.addTo(map);
+        
+                layer.bringToFront();
+        
                 himawariTime =
-                    latestTimestamp;
+                    Date.now();
         
-                const layer =
-                    createHimawariLayer(
-                        latestTimestamp
-                    );
-        
-                if (layer) {
-        
-                    layer.addTo(map);
-        
-                    layer.bringToFront();
-        
-                    console.log(
-                        '🛰️ [HIMAWARI] GeoColor loaded:',
-                        latestTimestamp
-                    );
-                }
+                console.log(
+                    '🛰️ [HIMAWARI] NASA GIBS layer active.'
+                );
         
             } catch (error) {
         
                 console.error(
-                    '🚨 [HIMAWARI] GeoColor failed:',
+                    '🚨 [HIMAWARI] GIBS failed:',
                     error
                 );
             }
