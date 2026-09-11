@@ -3703,33 +3703,24 @@
             const datePath =
                 `${year}/${month}/${day}`;
         
-            const imagePath =
-                `${timestampString}`;
-        
             const baseUrl =
                 HIMAWARI_SLIDER_BASE +
                 `imagery/${datePath}/` +
                 `himawari---full_disk/` +
-                `geocolor/${imagePath}/`;
+                `geocolor/${timestampString}/`;
         
-            /*
-             * SLIDER full-disk GeoColor:
-             *
-             * level 0 → 1x1
-             * level 1 → 2x2
-             * level 2 → 4x4
-             * level 3 → 8x8
-             * level 4 → 16x16
-             */
+            const pad =
+                (value, digits) =>
+                    String(value).padStart(
+                        digits,
+                        '0'
+                    );
         
             himawariLayer =
                 L.tileLayer(
-                    baseUrl +
-                    '{z}/{y}_{x}.png',
+                    '',
                     {
                         tileSize: 688,
-        
-                        zoomOffset: 0,
         
                         minZoom: 0,
                         maxZoom: 4,
@@ -3744,6 +3735,33 @@
                             'Himawari-9 GeoColor © CIRA/RAMMB'
                     }
                 );
+        
+            himawariLayer.getTileUrl =
+                function(coords) {
+        
+                    const level =
+                        pad(
+                            coords.z,
+                            2
+                        );
+        
+                    const y =
+                        pad(
+                            coords.y,
+                            3
+                        );
+        
+                    const x =
+                        pad(
+                            coords.x,
+                            3
+                        );
+        
+                    return (
+                        baseUrl +
+                        `${level}/${y}_${x}.png`
+                    );
+                };
         
             return himawariLayer;
         }
