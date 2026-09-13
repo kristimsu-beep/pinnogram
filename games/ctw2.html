@@ -3734,13 +3734,7 @@
                         `JMA timestamp HTTP ${response.status}`
                     );
                 }
-
-                const nightLayer = createHimawariNightLayer();
-                
-                if (nightLayer) {
-                    nightLayer.addTo(map);
-                }
-
+        
                 const times = await response.json();
         
                 if (!Array.isArray(times) || !times.length) {
@@ -3768,11 +3762,26 @@
                     latestTime
                 );
         
+                /*
+                 * Remove the previous Himawari imagery.
+                 */
                 if (himawariLayer) {
                     map.removeLayer(himawariLayer);
                     himawariLayer = null;
                 }
         
+                /*
+                 * Add the Himawari night layer.
+                 */
+                const nightLayer = createHimawariNightLayer();
+        
+                if (nightLayer) {
+                    nightLayer.addTo(map);
+                }
+        
+                /*
+                 * JMA Himawari True Color Reproduction tiles.
+                 */
                 const url =
                     'https://www.jma.go.jp/bosai/himawari/data/satimg/' +
                     latestTime +
@@ -3781,6 +3790,7 @@
                     '/REP/ETC/{z}/{x}/{y}.jpg';
         
                 himawariLayer = L.tileLayer(url, {
+        
                     minZoom: 3,
                     maxZoom: 5,
                     maxNativeZoom: 5,
