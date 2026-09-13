@@ -3652,8 +3652,9 @@
             const url =
                 'https://www.jma.go.jp/bosai/himawari/data/satimg/' +
                 '{time}/fd/{time}/REP/ETC/{z}/{x}/{y}.jpg';
-        
+
             himawariLayer = L.tileLayer(url, {
+            
                 minZoom: 3,
                 maxZoom: 5,
                 maxNativeZoom: 5,
@@ -3669,14 +3670,14 @@
                     [80, 180]
                 ],
             
-                pane: 'himawariPane',
-            
                 zIndex: 450,
+            
+                time: latestTime,
             
                 attribution:
                     'Himawari-9 True Color Reproduction © JMA'
             });
-        
+       
             return himawariLayer;
         }
 
