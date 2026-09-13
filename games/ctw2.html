@@ -569,6 +569,7 @@
             'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/';
         
         let himawariLayer = null;
+        let himawariNightLayer = null;
         let himawariTime = null;
         let himawariRefreshTimer = null;
 
@@ -3679,6 +3680,42 @@
             return himawariLayer;
         }
 
+        function createHimawariNightLayer() {
+        
+            if (himawariNightLayer) {
+                map.removeLayer(himawariNightLayer);
+                himawariNightLayer = null;
+            }
+        
+            const url =
+                'https://www.jma.go.jp/bosai/himawari/data/satimg/' +
+                '{time}/fd/{time}/B13/ALBD/{z}/{x}/{y}.jpg';
+        
+            himawariNightLayer = L.tileLayer(url, {
+                minZoom: 3,
+                maxZoom: 5,
+                maxNativeZoom: 5,
+        
+                tileSize: 256,
+        
+                opacity: 0.75,
+        
+                noWrap: false,
+        
+                bounds: [
+                    [-70, 80],
+                    [80, 180]
+                ],
+        
+                zIndex: 440,
+        
+                attribution:
+                    'Himawari-9 infrared © JMA'
+            });
+        
+            return himawariNightLayer;
+        }
+
         async function loadHimawariSatellite() {
         
             try {
@@ -3697,7 +3734,13 @@
                         `JMA timestamp HTTP ${response.status}`
                     );
                 }
-        
+
+                const nightLayer = createHimawariNightLayer();
+                
+                if (nightLayer) {
+                    nightLayer.addTo(map);
+                }
+
                 const times = await response.json();
         
                 if (!Array.isArray(times) || !times.length) {
