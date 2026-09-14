@@ -3841,9 +3841,12 @@
         
                 const response =
                     await fetch(
-                        'https://view.eumetsat.int/geoserver/wms' +
+                        METEOSAT_WMS_URL +
                         '?service=WMS' +
-                        '&request=GetCapabilities',
+                        '&version=1.3.0' +
+                        '&request=GetCapabilities' +
+                        '&_ctw2=' +
+                        Date.now(),
                         {
                             cache: 'no-store'
                         }
@@ -3859,21 +3862,142 @@
                 const text =
                     await response.text();
         
+                const parser =
+                    new DOMParser();
+        
+                const xml =
+                    parser.parseFromString(
+                        text,
+                        'text/xml'
+                    );
+        
                 /*
-                 * We don't need to parse the whole
-                 * capabilities document here yet.
+                 * Find the exact GeoColour layer.
+                 */
+                const nameNodes =
+                    Array.from(
+                        xml.getElementsByTagNameNS(
+                            '*',
+                            'Name'
+                        )
+                    );
+        
+                const nameNode =
+                    nameNodes.find(
+                        node =>
+                            node.textContent.trim() ===
+                            'mtg_fd:rgb_geocolour'
+                    );
+        
+                if (!nameNode) {
+                    throw new Error(
+                        'mtg_fd:rgb_geocolour was not found in GetCapabilities.'
+                    );
+                }
+        
+                /*
+                 * Get the Layer containing
+                 * mtg_fd:rgb_geocolour.
+                 */
+                const layer =
+                    nameNode.closest('Layer');
+        
+                if (!layer) {
+                    throw new Error(
+                        'GeoColour layer element not found.'
+                    );
+                }
+        
+                /*
+                 * Find its time dimension.
+                 */
+                const dimensions =
+                    Array.from(
+                        layer.querySelectorAll(
+                            'Dimension'
+                        )
+                    );
+        
+                const timeDimension =
+                    dimensions.find(
+                        dimension =>
+                            (
+                                dimension.getAttribute('name') ||
+                                dimension.getAttribute('NAME') ||
+                                ''
+                            ).toLowerCase() === 'time'
+                    );
+        
+                if (!timeDimension) {
+                    throw new Error(
+                        'No time dimension found for GeoColour.'
+                    );
+                }
+        
+                let timeText =
+                    timeDimension.textContent
+                        .trim();
+        
+                /*
+                 * EUMETSAT may return:
                  *
-                 * The important part is that the WMS
-                 * service is time-enabled. We will use
-                 * the latest available frame from the
-                 * server on the next step.
+                 * 2026-09-14T08:00:00Z,
+                 * 2026-09-14T08:10:00Z,...
+                 *
+                 * or an interval such as:
+                 *
+                 * start/end/PT10M
+                 *
+                 * We want the newest frame.
                  */
         
+                const values =
+                    timeText
+                        .split(',')
+                        .map(value => value.trim())
+                        .filter(Boolean);
+        
+                if (!values.length) {
+                    throw new Error(
+                        'GeoColour time dimension is empty.'
+                    );
+                }
+        
+                let latest =
+                    values[values.length - 1];
+        
+                /*
+                 * If the last value is an ISO8601
+                 * interval, take its end time.
+                 */
+                if (latest.includes('/')) {
+        
+                    const parts =
+                        latest.split('/');
+        
+                    latest =
+                        parts[1];
+                }
+        
+                /*
+                 * Make sure it is a usable date.
+                 */
+                const parsed =
+                    Date.parse(latest);
+        
+                if (Number.isNaN(parsed)) {
+                    throw new Error(
+                        'Invalid Meteosat timestamp: ' +
+                        latest
+                    );
+                }
+        
                 console.log(
-                    '🛰️ [CTW2 METEOSAT] WMS capabilities loaded.'
+                    '🛰️ [CTW2 METEOSAT] Latest GeoColour frame:',
+                    latest
                 );
         
-                return null;
+                return latest;
         
             }
             catch (error) {
@@ -3886,54 +4010,85 @@
                 return null;
             }
         }
-
-        function createMeteosatLayer() {
+        
+        
+        function createMeteosatLayer(
+            meteosatTime = null
+        ) {
         
             if (meteosatLayer) {
-                return meteosatLayer;
+        
+                map.removeLayer(
+                    meteosatLayer
+                );
+        
+                meteosatLayer = null;
+            }
+        
+            /*
+             * IMPORTANT:
+             *
+             * "time" is the actual EUMETSAT
+             * WMS time parameter.
+             *
+             * Every tile will now request
+             * exactly the same satellite frame.
+             */
+            const params = {
+        
+                layers:
+                    'mtg_fd:rgb_geocolour',
+        
+                version:
+                    '1.3.0',
+        
+                format:
+                    'image/png',
+        
+                transparent:
+                    true,
+        
+                styles:
+                    '',
+        
+                opacity:
+                    1.0,
+        
+                zIndex:
+                    475,
+        
+                bounds: [
+                    [-77, -95],
+                    [77, 95]
+                ],
+        
+                attribution:
+                    'Meteosat imagery © EUMETSAT / NASA',
+        
+                _ctw2_frame:
+                    meteosatRefreshKey
+            };
+        
+            /*
+             * Only add "time" when we successfully
+             * discovered a real EUMETSAT frame.
+             */
+            if (meteosatTime) {
+        
+                params.time =
+                    meteosatTime;
             }
         
             meteosatLayer =
                 L.tileLayer.wms(
                     METEOSAT_WMS_URL,
-                    {
-                        layers:
-                            'mtg_fd:rgb_geocolour',
-        
-                        version:
-                            '1.3.0',
-        
-                        format:
-                            'image/png',
-        
-                        transparent:
-                            true,
-        
-                        styles:
-                            '',
-        
-                        opacity:
-                            1.0,
-        
-                        zIndex:
-                            475,
-        
-                        bounds: [
-                            [-77, -95],
-                            [77, 95]
-                        ],
-        
-                        attribution:
-                            'Meteosat imagery © EUMETSAT / NASA',
-        
-                        _ctw2_frame:
-                            meteosatRefreshKey
-                    }
+                    params
                 );
         
             return meteosatLayer;
         }
-
+        
+        
         async function loadMeteosatSatellite() {
         
             if (
@@ -3943,44 +4098,64 @@
             }
         
             /*
-             * Every refresh gets one single frame key.
-             * All WMS tiles requested during this
-             * refresh therefore belong to the same
-             * client-side generation.
+             * One refresh = one Meteosat frame.
              */
             meteosatRefreshKey =
                 Date.now();
         
-            if (!meteosatLayer) {
+            /*
+             * Ask EUMETSAT which frame is
+             * currently the newest.
+             */
+            const latestTime =
+                await getLatestMeteosatTime();
         
-                createMeteosatLayer();
+            if (!latestTime) {
         
-            } else {
+                console.warn(
+                    '⚠️ [CTW2 METEOSAT] Could not determine latest frame.'
+                );
         
-                meteosatLayer.setParams({
-                    _ctw2_frame:
-                        meteosatRefreshKey
-                });
+                /*
+                 * Do not destroy a working old layer
+                 * just because the timestamp request failed.
+                 */
+                if (
+                    meteosatLayer &&
+                    map.hasLayer(meteosatLayer)
+                ) {
+                    return;
+                }
         
+                return;
             }
         
-            if (
-                !map.hasLayer(
-                    meteosatLayer
-                )
-            ) {
+            meteosatTime =
+                latestTime;
         
-                meteosatLayer.addTo(map);
+            /*
+             * Re-create the layer using the
+             * exact same timestamp for every tile.
+             */
+            createMeteosatLayer(
+                latestTime
+            );
         
-            }
+            meteosatLayer.addTo(map);
         
-            meteosatLayer.setZIndex(475);
+            meteosatLayer.setZIndex(
+                475
+            );
         
+            /*
+             * Force Leaflet to request the new
+             * timestamped tiles.
+             */
             meteosatLayer.redraw();
         
             console.log(
-                '🛰️ [CTW2 METEOSAT] Frame refresh:',
-                meteosatRefreshKey
+                '🛰️ [CTW2 METEOSAT] Using synchronized frame:',
+                latestTime
             );
         }
 
