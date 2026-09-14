@@ -3795,28 +3795,39 @@
                     '/REP/ETC/{z}/{x}/{y}.jpg';
                 
                 himawariLayer =
-                    createHimawariTransparentColorLayer(
-                        url
-                    );
+                    L.tileLayer(url, {
                 
-                himawariLayer.options.minZoom = 3;
-                himawariLayer.options.maxZoom = 5;
-                himawariLayer.options.maxNativeZoom = 5;
-                himawariLayer.options.tileSize = 256;
-                himawariLayer.options.opacity = 1.0;
-                himawariLayer.options.noWrap = false;
+                        minZoom: 3,
+                        maxZoom: 5,
+                        maxNativeZoom: 5,
                 
-                himawariLayer.options.bounds = [
-                    [-60, 95],
-                    [70, 175]
-                ];
+                        tileSize: 256,
                 
-                himawariLayer.options.zIndex = 450;
+                        opacity: 1.0,
                 
-                himawariLayer.options.attribution =
-                    'Himawari-9 True Color Reproduction © JMA';
+                        noWrap: false,
+                
+                        bounds: [
+                            [-60, 95],
+                            [70, 175]
+                        ],
+                
+                        zIndex: 450,
+                
+                        attribution:
+                            'Himawari-9 True Color Reproduction © JMA'
+                    });
                 
                 himawariLayer.addTo(map);
+                
+                const himawariPane =
+                    himawariLayer.getPane();
+                
+                if (himawariPane) {
+                
+                    himawariPane.style.mixBlendMode =
+                        'screen';
+                }
                 
                 himawariTime = Date.now();
                 
@@ -3832,169 +3843,6 @@
                     error
                 );
             }
-        }
-
-        function createHimawariTransparentColorLayer(url) {
-        
-            const layer = L.TileLayer.extend({
-        
-                createTile: function(coords, done) {
-        
-                    const tile =
-                        document.createElement('canvas');
-        
-                    tile.width = 256;
-                    tile.height = 256;
-        
-                    const ctx =
-                        tile.getContext('2d', {
-                            willReadFrequently: true
-                        });
-        
-                    const image =
-                        new Image();
-        
-                    image.crossOrigin =
-                        'anonymous';
-        
-                    image.onload = function() {
-        
-                        try {
-        
-                            ctx.drawImage(
-                                image,
-                                0,
-                                0,
-                                256,
-                                256
-                            );
-        
-                            const imageData =
-                                ctx.getImageData(
-                                    0,
-                                    0,
-                                    256,
-                                    256
-                                );
-        
-                            const data =
-                                imageData.data;
-        
-                            /*
-                             * Make the black nighttime part
-                             * transparent.
-                             *
-                             * Bright daytime pixels stay
-                             * completely untouched.
-                             */
-        
-                            for (
-                                let i = 0;
-                                i < data.length;
-                                i += 4
-                            ) {
-        
-                                const r = data[i];
-                                const g = data[i + 1];
-                                const b = data[i + 2];
-        
-                                const brightness =
-                                    0.299 * r +
-                                    0.587 * g +
-                                    0.114 * b;
-        
-                                /*
-                                 * Very dark pixels:
-                                 * completely transparent.
-                                 */
-                                if (brightness < 22) {
-        
-                                    data[i + 3] = 0;
-        
-                                }
-        
-                                /*
-                                 * Transition zone:
-                                 * gradually fade into the
-                                 * gray infrared layer.
-                                 */
-                                else if (brightness < 55) {
-        
-                                    const alpha =
-                                        (brightness - 22) /
-                                        (55 - 22);
-        
-                                    data[i + 3] =
-                                        Math.round(
-                                            alpha * 255
-                                        );
-                                }
-        
-                                /*
-                                 * Daytime:
-                                 * completely opaque.
-                                 */
-                                else {
-        
-                                    data[i + 3] = 255;
-                                }
-                            }
-        
-                            ctx.putImageData(
-                                imageData,
-                                0,
-                                0
-                            );
-        
-                            done(
-                                null,
-                                tile
-                            );
-        
-                        }
-                        catch (error) {
-        
-                            console.error(
-                                '🚨 [HIMAWARI] Tile processing failed:',
-                                error
-                            );
-        
-                            /*
-                             * Still finish the tile so
-                             * Leaflet doesn't get stuck.
-                             */
-                            done(
-                                null,
-                                tile
-                            );
-                        }
-                    };
-        
-                    image.onerror = function(error) {
-        
-                        console.error(
-                            '🚨 [HIMAWARI] Tile failed:',
-                            coords,
-                            error
-                        );
-        
-                        done(
-                            error,
-                            tile
-                        );
-                    };
-        
-                    image.src =
-                        L.Util.template(
-                            url,
-                            coords
-                        );
-        
-                    return tile;
-                }
-            });
-        
-            return new layer();
         }
 
         async function getLatestMeteosatTime() {
