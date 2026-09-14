@@ -4010,30 +4010,14 @@
                 return null;
             }
         }
-        
-        
-        function createMeteosatLayer(
-            meteosatTime = null
-        ) {
+
+        function createMeteosatLayer(meteosatTime = null) {
         
             if (meteosatLayer) {
-        
-                map.removeLayer(
-                    meteosatLayer
-                );
-        
+                map.removeLayer(meteosatLayer);
                 meteosatLayer = null;
             }
         
-            /*
-             * IMPORTANT:
-             *
-             * "time" is the actual EUMETSAT
-             * WMS time parameter.
-             *
-             * Every tile will now request
-             * exactly the same satellite frame.
-             */
             const params = {
         
                 layers:
@@ -4057,11 +4041,6 @@
                 zIndex:
                     475,
         
-                bounds: [
-                    [-77, -95],
-                    [77, 95]
-                ],
-        
                 attribution:
                     'Meteosat imagery © EUMETSAT / NASA',
         
@@ -4070,13 +4049,12 @@
             };
         
             /*
-             * Only add "time" when we successfully
-             * discovered a real EUMETSAT frame.
+             * IMPORTANT:
+             * This is the actual EUMETSAT frame.
+             * Every tile will request this same time.
              */
             if (meteosatTime) {
-        
-                params.time =
-                    meteosatTime;
+                params.time = meteosatTime;
             }
         
             meteosatLayer =
@@ -4085,10 +4063,18 @@
                     params
                 );
         
+            /*
+             * Leaflet layer options belong here,
+             * outside the WMS request parameters.
+             */
+            meteosatLayer.options.bounds = [
+                [-77, -95],
+                [77, 95]
+            ];
+        
             return meteosatLayer;
         }
-        
-        
+
         async function loadMeteosatSatellite() {
         
             if (
