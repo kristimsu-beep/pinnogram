@@ -3681,46 +3681,6 @@
             return himawariLayer;
         }
 
-        function createHimawariNightLayer(latestTime) {
-        
-            if (himawariNightLayer) {
-                map.removeLayer(himawariNightLayer);
-                himawariNightLayer = null;
-            }
-        
-            const url =
-                'https://www.jma.go.jp/bosai/himawari/data/satimg/' +
-                latestTime +
-                '/fd/' +
-                latestTime +
-                '/B13/TBB/{z}/{x}/{y}.jpg';
-        
-            himawariNightLayer = L.tileLayer(url, {
-        
-                minZoom: 3,
-                maxZoom: 5,
-                maxNativeZoom: 5,
-        
-                tileSize: 256,
-        
-                opacity: 0.75,
-        
-                noWrap: false,
-        
-                bounds: [
-                    [-60, 70],
-                    [70, 180]
-                ],
-        
-                zIndex: 440,
-        
-                attribution:
-                    'Himawari-9 infrared © JMA'
-            });
-        
-            return himawariNightLayer;
-        }
-
         async function loadHimawariSatellite() {
         
             try {
@@ -3776,16 +3736,6 @@
                 }
         
                 /*
-                 * Add the Himawari night layer.
-                 */
-                const nightLayer =
-                    createHimawariNightLayer(latestTime);
-        
-                if (nightLayer) {
-                    nightLayer.addTo(map);
-                }
-        
-                /*
                  * JMA Himawari True Color Reproduction tiles.
                  */
                 const url =
@@ -3820,16 +3770,7 @@
                     });
                 
                 himawariLayer.addTo(map);
-                
-                const himawariPane =
-                    himawariLayer.getPane();
-                
-                if (himawariPane) {
-                
-                    himawariPane.style.mixBlendMode =
-                        'screen';
-                }
-                
+
                 himawariTime = Date.now();
                 
                 console.log(
