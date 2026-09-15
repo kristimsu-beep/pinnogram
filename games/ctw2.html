@@ -3778,7 +3778,8 @@
                 /*
                  * Add the Himawari night layer.
                  */
-                const nightLayer = createHimawariNightLayer();
+                const nightLayer =
+                    createHimawariNightLayer(latestTime);
         
                 if (nightLayer) {
                     nightLayer.addTo(map);
@@ -3808,7 +3809,7 @@
                         noWrap: false,
                 
                         bounds: [
-                            [-60, 95],
+                            [-60, 90],
                             [70, 175]
                         ],
                 
