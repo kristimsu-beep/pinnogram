@@ -569,10 +569,8 @@
             'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/';
         
         let himawariLayer = null;
-        let himawariNightLayer = null;
         let himawariTime = null;
         let himawariRefreshTimer = null;
-        let himawariGeoColorLayer = null;
 
         const SATELLITE_SERVICE_URL =
             'https://satellitemaps.nesdis.noaa.gov/arcgis/rest/services/MERGEDGC_current/ImageServer';
@@ -3691,270 +3689,90 @@
             try {
         
                 console.log(
-                    '🛰️ [HIMAWARI] Loading CIRA GeoColor...'
+                    '🛰️ [HIMAWARI] Loading latest JMA true-color imagery...'
                 );
-        
-                /*
-                 * ---------------------------------------------------------
-                 * Get the newest CIRA Himawari GeoColor timestamp.
-                 * ---------------------------------------------------------
-                 */
         
                 const response =
                     await fetch(
-                        'https://rammb-slider.cira.colostate.edu/data/json/' +
-                        'himawari/full_disk/geocolor/latest_times.json?' +
+                        'https://www.jma.go.jp/bosai/himawari/data/satimg.json?' +
                         Date.now()
                     );
         
                 if (!response.ok) {
                     throw new Error(
-                        `CIRA timestamp HTTP ${response.status}`
+                        `Himawari HTTP ${response.status}`
                     );
                 }
         
                 const data =
                     await response.json();
         
-                if (
-                    !data.timestamps_int ||
-                    !data.timestamps_int.length
-                ) {
+                const latestTime =
+                    data
+                        .himawari
+                        ?.latest
+                        ?.fd;
+        
+                if (!latestTime) {
                     throw new Error(
-                        'CIRA returned no GeoColor timestamps.'
+                        'Could not find latest Himawari timestamp.'
                     );
                 }
         
-                /*
-                 * Newest timestamp.
-                 *
-                 * Example:
-                 * 20260913190000
-                 */
+                const url =
+                    'https://www.jma.go.jp/bosai/himawari/data/satimg/' +
+                    latestTime +
+                    '/fd/' +
+                    latestTime +
+                    '/REP/ETC/{z}/{x}/{y}.jpg';
         
-                const timestamp =
-                    String(
-                        data.timestamps_int[0]
-                    );
-        
-                console.log(
-                    '🛰️ [HIMAWARI] CIRA GeoColor timestamp:',
-                    timestamp
-                );
-        
-                /*
-                 * ---------------------------------------------------------
-                 * Remove previous GeoColor layer.
-                 * ---------------------------------------------------------
-                 */
-        
-                if (himawariGeoColorLayer) {
-        
+                if (himawariLayer) {
                     map.removeLayer(
-                        himawariGeoColorLayer
+                        himawariLayer
                     );
-        
-                    himawariGeoColorLayer = null;
                 }
         
-                /*
-                 * ---------------------------------------------------------
-                 * Convert timestamp into:
-                 *
-                 * YYYY/MM/DD
-                 *
-                 * ---------------------------------------------------------
-                 */
+                himawariLayer =
+                    L.tileLayer(url, {
         
-                const year =
-                    timestamp.substring(0, 4);
-        
-                const month =
-                    timestamp.substring(4, 6);
-        
-                const day =
-                    timestamp.substring(6, 8);
-        
-                /*
-                 * ---------------------------------------------------------
-                 * CIRA GeoColor tile source.
-                 *
-                 * Himawari GeoColor uses 688x688 tiles.
-                 * Level 00 = 1 tile
-                 * Level 01 = 2x2
-                 * Level 02 = 4x4
-                 * Level 03 = 8x8
-                 * Level 04 = 16x16
-                 *
-                 * We use level 04 for the highest available resolution.
-                 * ---------------------------------------------------------
-                 */
-        
-                const baseURL =
-                    'https://rammb-slider.cira.colostate.edu/data/imagery/' +
-                    year + '/' +
-                    month + '/' +
-                    day +
-                    '/himawari---full_disk/geocolor/' +
-                    timestamp +
-                    '/';
-        
-                /*
-                 * ---------------------------------------------------------
-                 * Custom Leaflet GridLayer.
-                 *
-                 * CIRA tiles are NOT normal 256px XYZ tiles.
-                 * They are 688px satellite-image blocks.
-                 * ---------------------------------------------------------
-                 */
-        
-                const GeoColorLayer =
-                    L.GridLayer.extend({
-        
-                        createTile: function (
-                            coords,
-                            done
-                        ) {
-        
-                            const tile =
-                                document.createElement(
-                                    'img'
-                                );
-        
-                            tile.width = 688;
-                            tile.height = 688;
-        
-                            tile.style.width = '688px';
-                            tile.style.height = '688px';
-        
-                            tile.alt = '';
-        
-                            /*
-                             * CIRA level 04 contains
-                             * 16 x 16 blocks.
-                             */
-        
-                            const level = 4;
-        
-                            /*
-                             * Leaflet x/y coordinates need
-                             * to be converted to CIRA's
-                             * row/column numbering.
-                             */
-        
-                            const x =
-                                coords.x;
-        
-                            const y =
-                                coords.y;
-        
-                            /*
-                             * CIRA filename format:
-                             *
-                             * 000_000.png
-                             * 000_001.png
-                             * ...
-                             */
-        
-                            const row =
-                                String(y)
-                                    .padStart(3, '0');
-        
-                            const col =
-                                String(x)
-                                    .padStart(3, '0');
-        
-                            tile.src =
-                                baseURL +
-                                String(level)
-                                    .padStart(2, '0') +
-                                '/' +
-                                row +
-                                '_' +
-                                col +
-                                '.png';
-        
-                            tile.onload =
-                                function () {
-        
-                                    done(
-                                        null,
-                                        tile
-                                    );
-        
-                                };
-        
-                            tile.onerror =
-                                function () {
-        
-                                    /*
-                                     * Don't break the entire
-                                     * satellite layer if an
-                                     * outside tile is requested.
-                                     */
-        
-                                    done(
-                                        null,
-                                        tile
-                                    );
-        
-                                };
-        
-                            return tile;
-                        }
-        
-                    });
-        
-                /*
-                 * ---------------------------------------------------------
-                 * Create GeoColor layer.
-                 * ---------------------------------------------------------
-                 */
-        
-                himawariGeoColorLayer =
-                    new GeoColorLayer({
-        
-                        tileSize: 688,
-        
-                        minZoom: 2,
-        
+                        minZoom: 3,
                         maxZoom: 5,
+                        maxNativeZoom: 5,
         
-                        maxNativeZoom: 4,
+                        tileSize: 256,
         
                         opacity: 1.0,
         
-                        noWrap: true,
+                        noWrap: false,
+        
+                        bounds: [
+                            [-60, 90],
+                            [70, 175]
+                        ],
         
                         zIndex: 450,
         
                         attribution:
-                            'Himawari-9 GeoColor © CIRA / NOAA'
+                            'Himawari-9 True Color © JMA'
+        
                     });
         
-                /*
-                 * Add to map.
-                 */
-        
-                himawariGeoColorLayer.addTo(
-                    map
-                );
+                himawariLayer.addTo(map);
         
                 himawariTime =
                     Date.now();
         
                 console.log(
-                    '🛰️ [HIMAWARI] CIRA GeoColor active:',
-                    timestamp
+                    '🛰️ [HIMAWARI] JMA imagery active:',
+                    latestTime
                 );
         
             } catch (error) {
         
                 console.error(
-                    '🚨 [HIMAWARI] CIRA GeoColor failed:',
+                    '🚨 [HIMAWARI] Failed:',
                     error
                 );
-        
             }
         }
 
