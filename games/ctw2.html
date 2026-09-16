@@ -3692,51 +3692,77 @@
                     '🛰️ [HIMAWARI] Loading latest JMA true-color imagery...'
                 );
         
+                // Get the actual latest full-disk observation time
                 const response =
                     await fetch(
-                        'https://www.jma.go.jp/bosai/himawari/data/satimg.json?' +
+                        'https://www.jma.go.jp/bosai/himawari/data/satimg/targetTimes_fd.json?' +
                         Date.now()
                     );
         
                 if (!response.ok) {
                     throw new Error(
-                        `Himawari HTTP ${response.status}`
+                        `Himawari timestamp HTTP ${response.status}`
                     );
                 }
         
-                const data =
+                const times =
                     await response.json();
         
-                const latestTime =
-                    data
-                        .himawari
-                        ?.latest
-                        ?.fd;
-        
-                if (!latestTime) {
+                if (
+                    !Array.isArray(times) ||
+                    times.length === 0
+                ) {
                     throw new Error(
-                        'Could not find latest Himawari timestamp.'
+                        'JMA returned no Himawari timestamps.'
                     );
                 }
         
-                const url =
-                    'https://www.jma.go.jp/bosai/himawari/data/satimg/' +
-                    latestTime +
-                    '/fd/' +
-                    latestTime +
-                    '/REP/ETC/{z}/{x}/{y}.jpg';
+                // JMA provides the newest observation at the end
+                const latest =
+                    times[times.length - 1];
         
+                const baseTime =
+                    latest.basetime;
+        
+                const validTime =
+                    latest.validtime;
+        
+                if (!baseTime || !validTime) {
+                    throw new Error(
+                        'Invalid Himawari timestamp data.'
+                    );
+                }
+        
+                console.log(
+                    '🛰️ [HIMAWARI] Latest JMA frame:',
+                    baseTime
+                );
+        
+                // Remove previous Himawari layer
                 if (himawariLayer) {
+        
                     map.removeLayer(
                         himawariLayer
                     );
+        
+                    himawariLayer = null;
                 }
+        
+                // JMA full-disk true-color tiles
+                const url =
+                    'https://www.jma.go.jp/bosai/himawari/data/satimg/' +
+                    baseTime +
+                    '/fd/' +
+                    validTime +
+                    '/REP/ETC/{z}/{x}/{y}.jpg';
         
                 himawariLayer =
                     L.tileLayer(url, {
         
                         minZoom: 3,
+        
                         maxZoom: 5,
+        
                         maxNativeZoom: 5,
         
                         tileSize: 256,
@@ -3757,14 +3783,16 @@
         
                     });
         
-                himawariLayer.addTo(map);
+                himawariLayer.addTo(
+                    map
+                );
         
                 himawariTime =
                     Date.now();
         
                 console.log(
                     '🛰️ [HIMAWARI] JMA imagery active:',
-                    latestTime
+                    baseTime
                 );
         
             } catch (error) {
