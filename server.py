@@ -7871,26 +7871,7 @@ async def ctw2_himawari_proxy(
     y: int,
     timestamp: str
 ):
-    """
-    Himawari-9 PSvis full-disk JPEG -> Leaflet XYZ tile.
-
-    JMA Himawari imagery uses a normalized geostationary
-    projection. This converts the requested Web-Mercator
-    tile into the corresponding Himawari image coordinates.
-    """
-
     try:
-        # ---------------------------------------------------------
-        # VALIDATION
-        # ---------------------------------------------------------
-
-        if z < 0 or z > 6:
-            return Response(
-                content="Invalid zoom level",
-                status_code=400,
-                media_type="text/plain"
-            )
-
         if len(timestamp) != 14 or not timestamp.isdigit():
             return Response(
                 content="Invalid timestamp",
@@ -7898,7 +7879,6 @@ async def ctw2_himawari_proxy(
                 media_type="text/plain"
             )
 
-        # Round to nearest previous 10-minute observation
         minute = int(timestamp[10:12])
         minute = (minute // 10) * 10
 
@@ -7908,10 +7888,6 @@ async def ctw2_himawari_proxy(
             + "00"
         )
 
-        # ---------------------------------------------------------
-        # JMA FULL-DISK VISIBLE IMAGE
-        # ---------------------------------------------------------
-
         jma_url = (
             "https://www.data.jma.go.jp/"
             "sat/data/HimawariJDDS/jpeg/fd/"
@@ -7919,10 +7895,7 @@ async def ctw2_himawari_proxy(
             "PSvis_RDfd_JRsdus_image.jpg"
         )
 
-        print(
-            "🛰️ [CTW2 HIMAWARI] Fetching:",
-            jma_url
-        )
+        print("🛰️ [CTW2 HIMAWARI] Fetching:", jma_url)
 
         async with httpx.AsyncClient(
             timeout=30.0,
@@ -7937,304 +7910,25 @@ async def ctw2_himawari_proxy(
                 }
             )
 
+        print(
+            "🛰️ [CTW2 HIMAWARI] JMA status:",
+            response.status_code,
+            "bytes:",
+            len(response.content)
+        )
+
         if response.status_code != 200:
-
-            print(
-                "⚠️ [CTW2 HIMAWARI] JMA returned:",
-                response.status_code
-            )
-
             return Response(
                 content=(
-                    "JMA image returned HTTP "
+                    "JMA returned HTTP "
                     f"{response.status_code}"
                 ),
                 status_code=response.status_code,
                 media_type="text/plain"
             )
 
-        # ---------------------------------------------------------
-        # LOAD IMAGE
-        # ---------------------------------------------------------
-
-        source = Image.open(
-            io.BytesIO(response.content)
-        ).convert("RGB")
-
-        width, height = source.size
-
-        print(
-            "🛰️ [CTW2 HIMAWARI] Image:",
-            width,
-            "x",
-            height
-        )
-
-        # ---------------------------------------------------------
-        # LEAFLET TILE
-        # ---------------------------------------------------------
-
-        TILE = 256
-
-        n = 2 ** z
-
-        max_tile = n - 1
-
-        if x < 0 or x > max_tile or y < 0 or y > max_tile:
-
-            return Response(
-                content="Invalid tile coordinates",
-                status_code=400,
-                media_type="text/plain"
-            )
-
-        # ---------------------------------------------------------
-        # HIMAWARI PROJECTION CONSTANTS
-        #
-        # JMA visible-band full disk:
-        #
-        # sub_lon = 140.7°
-        # CFAC    = 40932513
-        # LFAC    = 40932513
-        # COFF    = 5500.5
-        # LOFF    = 5500.5
-        #
-        # These are the normalized geostationary projection
-        # parameters documented by JMA.
-        # ---------------------------------------------------------
-
-        SUB_LON = math.radians(140.7)
-
-        CFAC = 40932513.0
-        LFAC = 40932513.0
-
-        COFF = 5500.5
-        LOFF = 5500.5
-
-        # ---------------------------------------------------------
-        # IMPORTANT:
-        #
-        # The public JPEG is much smaller than the native
-        # 11000x11000 Himawari grid.
-        #
-        # Therefore scale the JMA projection coordinates
-        # into the actual JPEG dimensions.
-        # ---------------------------------------------------------
-
-        native_size = 11000.0
-
-        scale_x = width / native_size
-        scale_y = height / native_size
-
-        # ---------------------------------------------------------
-        # XYZ -> geographic coordinates
-        # ---------------------------------------------------------
-
-        def xyz_to_latlon(px, py):
-
-            lon = (
-                px / TILE
-                + x
-            ) / n
-
-            lat_norm = (
-                py / TILE
-                + y
-            ) / n
-
-            longitude = (
-                lon * 360.0
-            ) - 180.0
-
-            merc_y = (
-                math.pi
-                * (1.0 - 2.0 * lat_norm)
-            )
-
-            latitude = math.degrees(
-                math.atan(
-                    math.sinh(merc_y)
-                )
-            )
-
-            return latitude, longitude
-
-        # ---------------------------------------------------------
-        # GEO -> HIMAWARI IMAGE COORDINATE
-        # ---------------------------------------------------------
-
-        def latlon_to_himawari(
-            latitude,
-            longitude
-        ):
-
-            lat = math.radians(latitude)
-            lon = math.radians(longitude)
-
-            dlon = lon - SUB_LON
-
-            # Earth / satellite geometry
-            re = 6378.137
-            rp = 6356.7523
-            h = 42164.0
-
-            cos_lat = math.cos(lat)
-            sin_lat = math.sin(lat)
-            cos_dlon = math.cos(dlon)
-            sin_dlon = math.sin(dlon)
-
-            # Geocentric latitude correction
-            geocentric_lat = math.atan(
-                (rp * rp / (re * re))
-                * math.tan(lat)
-            )
-
-            rc = rp / math.sqrt(
-                1.0
-                -
-                (
-                    1.0
-                    -
-                    (rp * rp / (re * re))
-                )
-                * math.cos(geocentric_lat)
-                ** 2
-            )
-
-            sx = (
-                h
-                - rc * math.cos(geocentric_lat)
-                * cos_dlon
-            )
-
-            sy = (
-                rc
-                * math.cos(geocentric_lat)
-                * sin_dlon
-            )
-
-            sz = (
-                rc
-                * math.sin(geocentric_lat)
-            )
-
-            visible = (
-                (h - sx) * sx
-                - sy * sy
-                - sz * sz
-            )
-
-            if visible <= 0:
-                return None
-
-            x_angle = math.atan2(
-                -sy,
-                sx
-            )
-
-            y_angle = math.asin(
-                -sz / math.sqrt(
-                    sx * sx
-                    + sy * sy
-                    + sz * sz
-                )
-            )
-
-            column = (
-                COFF
-                + CFAC
-                * x_angle
-                / (2.0 ** 16)
-            )
-
-            line = (
-                LOFF
-                + LFAC
-                * y_angle
-                / (2.0 ** 16)
-            )
-
-            return (
-                column * scale_x,
-                line * scale_y
-            )
-
-        # ---------------------------------------------------------
-        # CREATE OUTPUT TILE
-        # ---------------------------------------------------------
-
-        output_tile = Image.new(
-            "RGB",
-            (TILE, TILE),
-            (0, 0, 0)
-        )
-
-        # ---------------------------------------------------------
-        # SAMPLE OUTPUT TILE
-        #
-        # 2x supersampling gives smoother results.
-        # ---------------------------------------------------------
-
-        for py in range(TILE):
-
-            for px in range(TILE):
-
-                latitude, longitude = xyz_to_latlon(
-                    px + 0.5,
-                    py + 0.5
-                )
-
-                # Himawari coverage is roughly centered
-                # on 140.7E.
-                if longitude < 70 or longitude > 210:
-                    continue
-
-                if latitude < -70 or latitude > 70:
-                    continue
-
-                result = latlon_to_himawari(
-                    latitude,
-                    longitude
-                )
-
-                if result is None:
-                    continue
-
-                sx, sy = result
-
-                if (
-                    sx < 0
-                    or sy < 0
-                    or sx >= width
-                    or sy >= height
-                ):
-                    continue
-
-                ix = int(sx)
-                iy = int(sy)
-
-                output_tile.putpixel(
-                    (px, py),
-                    source.getpixel(
-                        (ix, iy)
-                    )
-                )
-
-        # ---------------------------------------------------------
-        # RETURN TILE
-        # ---------------------------------------------------------
-
-        buffer = io.BytesIO()
-
-        output_tile.save(
-            buffer,
-            format="JPEG",
-            quality=88,
-            optimize=True
-        )
-
         return Response(
-            content=buffer.getvalue(),
+            content=response.content,
             media_type="image/jpeg",
             headers={
                 "Cache-Control":
@@ -8254,10 +7948,7 @@ async def ctw2_himawari_proxy(
         traceback.print_exc()
 
         return Response(
-            content=(
-                "Himawari proxy error: "
-                + repr(e)
-            ),
+            content=f"Himawari proxy error: {repr(e)}",
             status_code=502,
             media_type="text/plain"
         )
