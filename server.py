@@ -7862,6 +7862,68 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
             "error": str(e)
         }
 
+@app.get("/api/ctw2/satellite/himawari")
+async def ctw2_himawari_proxy(url: str):
+    """
+    Proxy Himawari/CIRA imagery through our own server.
+
+    This prevents browser CORS problems when the external
+    imagery provider does not send Access-Control-Allow-Origin.
+    """
+
+    try:
+        # Only allow the CIRA/RAMMB host.
+        allowed_prefix = (
+            "https://rammb-slider.cira.colostate.edu/"
+        )
+
+        if not url.startswith(allowed_prefix):
+            return Response(
+                content="Invalid Himawari URL",
+                status_code=400,
+                media_type="text/plain"
+            )
+
+        async with httpx.AsyncClient(
+            timeout=30.0,
+            follow_redirects=True
+        ) as client:
+
+            response = await client.get(url)
+
+        if response.status_code != 200:
+            return Response(
+                content=f"Himawari source returned HTTP {response.status_code}",
+                status_code=response.status_code,
+                media_type="text/plain"
+            )
+
+        content_type = response.headers.get(
+            "content-type",
+            "image/jpeg"
+        )
+
+        return Response(
+            content=response.content,
+            media_type=content_type,
+            headers={
+                "Cache-Control": "public, max-age=300"
+            }
+        )
+
+    except Exception as e:
+
+        print(
+            "❌ [CTW2 HIMAWARI PROXY] Error:",
+            repr(e)
+        )
+
+        return Response(
+            content="Himawari proxy error",
+            status_code=502,
+            media_type="text/plain"
+        )
+
 # =====================================================================
 # 🛰️ API 2: ТОЧЕЧНЫЙ МЕТЕО-ЗОНД (МГНОВЕННЫЙ РАСЧЕТ В ЛЮБОМ ПИКСЕЛЕ КЛИКА)
 # =====================================================================
