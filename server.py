@@ -7870,40 +7870,57 @@ async def ctw2_himawari_proxy(
     timestamp: str
 ):
     """
-    Proxy official JMA Himawari-9 True Color Reproduction tiles.
+    JMA Himawari full-disk JPEG -> Leaflet XYZ tile.
 
-    JMA format:
-    /satimg/{timestamp}/fd/{timestamp}/REP/ETC/{z}/{x}/{y}.jpg
+    The JMA public JPEG archive provides full-disk imagery.
+    This endpoint downloads the full-disk image, crops the
+    requested Web-Mercator tile area, and returns a JPEG tile.
     """
 
     try:
-
         # ---------------------------------------------------------
-        # Basic validation
+        # Validate parameters
         # ---------------------------------------------------------
 
-        if z < 3 or z > 5:
+        if z < 0 or z > 6:
             return Response(
-                content="Invalid Himawari zoom level",
+                content="Invalid zoom level",
                 status_code=400,
                 media_type="text/plain"
             )
 
         if len(timestamp) != 14 or not timestamp.isdigit():
             return Response(
-                content="Invalid Himawari timestamp",
+                content="Invalid timestamp",
                 status_code=400,
                 media_type="text/plain"
             )
 
+        # Round requested time to a 10-minute Himawari observation.
+        year = int(timestamp[0:4])
+        month = int(timestamp[4:6])
+        day = int(timestamp[6:8])
+        hour = int(timestamp[8:10])
+        minute = int(timestamp[10:12])
+
+        minute = (minute // 10) * 10
+
+        timestamp = (
+            f"{year:04d}"
+            f"{month:02d}"
+            f"{day:02d}"
+            f"{hour:02d}"
+            f"{minute:02d}00"
+        )
+
         # ---------------------------------------------------------
-        # Official JMA Himawari True Color tile
+        # JMA public full-disk JPEG
         # ---------------------------------------------------------
 
         jma_url = (
-            "https://www.jma.go.jp/bosai/himawari/data/satimg/"
-            f"{timestamp}/fd/{timestamp}/"
-            f"REP/ETC/{z}/{x}/{y}.jpg"
+            "https://www.data.jma.go.jp/sat/data/HimawariJDDS/jpeg/"
+            "fd/"
+            f"Z__C_RJTD_{timestamp}_OBS_SAT_PSir1_RDfd_JRsdus_image.jpg"
         )
 
         print(
@@ -7912,19 +7929,18 @@ async def ctw2_himawari_proxy(
         )
 
         # ---------------------------------------------------------
-        # Download from JMA
+        # Download JMA image
         # ---------------------------------------------------------
 
         async with httpx.AsyncClient(
-            timeout=20.0,
+            timeout=30.0,
             follow_redirects=True
         ) as client:
 
             response = await client.get(
                 jma_url,
                 headers={
-                    "User-Agent":
-                        "Mozilla/5.0 CTW2 Satellite Viewer"
+                    "User-Agent": "Mozilla/5.0 CTW2 Satellite Viewer"
                 }
             )
 
@@ -7937,7 +7953,7 @@ async def ctw2_himawari_proxy(
 
             return Response(
                 content=(
-                    "JMA Himawari returned HTTP "
+                    "JMA full-disk image returned HTTP "
                     f"{response.status_code}"
                 ),
                 status_code=response.status_code,
@@ -7945,11 +7961,186 @@ async def ctw2_himawari_proxy(
             )
 
         # ---------------------------------------------------------
-        # Return image to browser
+        # Open JMA image
         # ---------------------------------------------------------
 
+        source = Image.open(
+            io.BytesIO(response.content)
+        ).convert("RGB")
+
+        source_width, source_height = source.size
+
+        print(
+            "🛰️ [CTW2 HIMAWARI] Source image:",
+            source_width,
+            "x",
+            source_height
+        )
+
+        # ---------------------------------------------------------
+        # Web Mercator XYZ tile
+        # ---------------------------------------------------------
+
+        tile_size = 256
+        world_size = tile_size * (2 ** z)
+
+        # Prevent invalid XYZ coordinates
+        max_tile = (2 ** z) - 1
+
+        if x < 0 or x > max_tile or y < 0 or y > max_tile:
+            return Response(
+                content="Invalid tile coordinates",
+                status_code=400,
+                media_type="text/plain"
+            )
+
+        # ---------------------------------------------------------
+        # Convert XYZ tile boundaries to longitude/latitude
+        # ---------------------------------------------------------
+
+        lon_left = (x / (2 ** z)) * 360.0 - 180.0
+        lon_right = ((x + 1) / (2 ** z)) * 360.0 - 180.0
+
+        def tile_y_to_lat(tile_y):
+            n = math.pi - (
+                2.0 * math.pi * tile_y / (2 ** z)
+            )
+
+            return math.degrees(
+                math.atan(math.sinh(n))
+            )
+
+        lat_top = tile_y_to_lat(y)
+        lat_bottom = tile_y_to_lat(y + 1)
+
+        # ---------------------------------------------------------
+        # IMPORTANT:
+        #
+        # JMA full-disk imagery is NOT a normal equirectangular
+        # world map. It is a geostationary-disk projection.
+        #
+        # Therefore this first implementation uses the geographic
+        # longitude/latitude extent of the visible disk.
+        # ---------------------------------------------------------
+
+        # Himawari-9 nominal sub-satellite longitude.
+        satellite_lon = 140.7
+
+        # Approximate visible geographic extent.
+        disk_lon_min = 80.0
+        disk_lon_max = 200.0
+        disk_lat_min = -60.0
+        disk_lat_max = 60.0
+
+        # If tile is completely outside Himawari coverage,
+        # return transparent tile.
+        if (
+            lon_right < disk_lon_min
+            or lon_left > disk_lon_max
+            or lat_top < disk_lat_min
+            or lat_bottom > disk_lat_max
+        ):
+            transparent = Image.new(
+                "RGBA",
+                (tile_size, tile_size),
+                (0, 0, 0, 0)
+            )
+
+            output = io.BytesIO()
+            transparent.save(output, format="PNG")
+
+            return Response(
+                content=output.getvalue(),
+                media_type="image/png",
+                headers={
+                    "Cache-Control": "public, max-age=300"
+                }
+            )
+
+        # ---------------------------------------------------------
+        # Map geographic coordinates onto the JMA image.
+        #
+        # This is an initial geographic approximation. We will
+        # refine the geostationary projection after confirming that
+        # JMA imagery is successfully being returned.
+        # ---------------------------------------------------------
+
+        crop_left = (
+            (lon_left - disk_lon_min)
+            / (disk_lon_max - disk_lon_min)
+            * source_width
+        )
+
+        crop_right = (
+            (lon_right - disk_lon_min)
+            / (disk_lon_max - disk_lon_min)
+            * source_width
+        )
+
+        crop_top = (
+            (disk_lat_max - lat_top)
+            / (disk_lat_max - disk_lat_min)
+            * source_height
+        )
+
+        crop_bottom = (
+            (disk_lat_max - lat_bottom)
+            / (disk_lat_max - disk_lat_min)
+            * source_height
+        )
+
+        # Clamp
+        crop_left = max(0, min(source_width, crop_left))
+        crop_right = max(0, min(source_width, crop_right))
+        crop_top = max(0, min(source_height, crop_top))
+        crop_bottom = max(0, min(source_height, crop_bottom))
+
+        if crop_right <= crop_left or crop_bottom <= crop_top:
+            transparent = Image.new(
+                "RGBA",
+                (tile_size, tile_size),
+                (0, 0, 0, 0)
+            )
+
+            output = io.BytesIO()
+            transparent.save(output, format="PNG")
+
+            return Response(
+                content=output.getvalue(),
+                media_type="image/png"
+            )
+
+        # ---------------------------------------------------------
+        # Crop and resize
+        # ---------------------------------------------------------
+
+        cropped = source.crop((
+            int(crop_left),
+            int(crop_top),
+            int(crop_right),
+            int(crop_bottom)
+        ))
+
+        tile = cropped.resize(
+            (tile_size, tile_size),
+            Image.Resampling.BILINEAR
+        )
+
+        # ---------------------------------------------------------
+        # Return JPEG tile
+        # ---------------------------------------------------------
+
+        output = io.BytesIO()
+
+        tile.save(
+            output,
+            format="JPEG",
+            quality=88,
+            optimize=True
+        )
+
         return Response(
-            content=response.content,
+            content=output.getvalue(),
             media_type="image/jpeg",
             headers={
                 "Cache-Control": "public, max-age=300"
