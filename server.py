@@ -7879,6 +7879,7 @@ async def ctw2_himawari_proxy(
                 media_type="text/plain"
             )
 
+        # Himawari observations are available at 10-minute intervals.
         minute = int(timestamp[10:12])
         minute = (minute // 10) * 10
 
@@ -7888,14 +7889,18 @@ async def ctw2_himawari_proxy(
             + "00"
         )
 
+        # JMA True Color Reproduction full-disk product.
         jma_url = (
             "https://www.data.jma.go.jp/"
             "sat/data/HimawariJDDS/jpeg/fd/"
             f"Z__C_RJTD_{timestamp}_OBS_SAT_"
-            "PSvis_RDfd_JRsdus_image.jpg"
+            "TRC_RDfd_JRsdus_image.jpg"
         )
 
-        print("🛰️ [CTW2 HIMAWARI] Fetching:", jma_url)
+        print(
+            "🛰️ [CTW2 HIMAWARI TCR] Fetching:",
+            jma_url
+        )
 
         async with httpx.AsyncClient(
             timeout=30.0,
@@ -7911,7 +7916,7 @@ async def ctw2_himawari_proxy(
             )
 
         print(
-            "🛰️ [CTW2 HIMAWARI] JMA status:",
+            "🛰️ [CTW2 HIMAWARI TCR] JMA status:",
             response.status_code,
             "bytes:",
             len(response.content)
@@ -7920,8 +7925,9 @@ async def ctw2_himawari_proxy(
         if response.status_code != 200:
             return Response(
                 content=(
-                    "JMA returned HTTP "
-                    f"{response.status_code}"
+                    "JMA TCR returned HTTP "
+                    f"{response.status_code}\n"
+                    f"URL: {jma_url}"
                 ),
                 status_code=response.status_code,
                 media_type="text/plain"
@@ -7937,18 +7943,17 @@ async def ctw2_himawari_proxy(
         )
 
     except Exception as e:
-
         import traceback
 
         print(
-            "❌ [CTW2 HIMAWARI PROXY] Error:",
+            "❌ [CTW2 HIMAWARI TCR] Error:",
             repr(e)
         )
 
         traceback.print_exc()
 
         return Response(
-            content=f"Himawari proxy error: {repr(e)}",
+            content=f"Himawari TCR proxy error: {repr(e)}",
             status_code=502,
             media_type="text/plain"
         )
