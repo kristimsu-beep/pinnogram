@@ -7919,9 +7919,8 @@ async def ctw2_himawari_proxy(
         # ---------------------------------------------------------
 
         jma_url = (
-            "https://www.data.jma.go.jp/sat/data/HimawariJDDS/jpeg/"
-            "fd/"
-            f"Z__C_RJTD_{timestamp}_OBS_SAT_PSir1_RDfd_JRsdus_image.jpg"
+            "https://www.data.jma.go.jp/sat/data/HimawariJDDS/jpeg/fd/"
+            f"Z__C_RJTD_{timestamp}_OBS_SAT_PSvis_RDfd_JRsdus_image.jpg"
         )
 
         print(
@@ -8149,14 +8148,14 @@ async def ctw2_himawari_proxy(
         )
 
     except Exception as e:
-
-        print(
-            "❌ [CTW2 HIMAWARI PROXY] Error:",
-            repr(e)
-        )
-
+    
+        import traceback
+    
+        print("❌ [CTW2 HIMAWARI PROXY] Error:", repr(e))
+        traceback.print_exc()
+    
         return Response(
-            content="Himawari proxy error",
+            content=f"Himawari proxy error: {repr(e)}",
             status_code=502,
             media_type="text/plain"
         )
