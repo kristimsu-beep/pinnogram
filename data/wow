@@ -1,0 +1,3922 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SkyWorld Flight Simulator</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    font-family: Arial, sans-serif;
+}
+
+canvas {
+    display: block;
+}
+
+#game {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+}
+
+#ui {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    pointer-events: none;
+    transform: translateZ(0);
+}
+
+.hud {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    padding: 14px 18px;
+    min-width: 230px;
+    color: white;
+    background: rgba(5, 10, 18, 0.68);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 14px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.hud-title {
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+}
+
+.hud-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 25px;
+    font-size: 13px;
+    margin: 4px 0;
+}
+
+.hud-value {
+    font-weight: bold;
+    color: #9de8ff;
+}
+
+.time-box {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    padding: 12px 18px;
+    color: white;
+    background: rgba(5,10,18,0.68);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 14px;
+    backdrop-filter: blur(8px);
+    text-align: center;
+}
+
+.time-clock {
+    font-size: 25px;
+    font-weight: bold;
+}
+
+.time-period {
+    margin-top: 3px;
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+#navWrap {
+    position: absolute;
+    right: 18px;
+    bottom: 18px;
+    width: 270px;
+    padding: 10px;
+    background: rgba(5,10,18,0.72);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 16px;
+    backdrop-filter: blur(8px);
+}
+
+#navTitle {
+    color: white;
+    font-size: 12px;
+    margin: 0 0 7px 4px;
+    letter-spacing: 1px;
+}
+
+#navMap {
+    width: 250px;
+    height: 250px;
+    display: block;
+    border-radius: 10px;
+}
+
+.controls {
+    position: absolute;
+    left: 18px;
+    bottom: 18px;
+    padding: 12px 15px;
+    color: rgba(255,255,255,0.9);
+    background: rgba(5,10,18,0.58);
+    border: 1px solid rgba(255,255,255,0.13);
+    border-radius: 13px;
+    font-size: 12px;
+    backdrop-filter: blur(7px);
+}
+
+.controls b {
+    color: white;
+}
+
+.message {
+    position: absolute;
+    left: 50%;
+    top: 82%;
+    transform: translateX(-50%);
+    color: white;
+    padding: 11px 22px;
+    background: rgba(0,0,0,0.62);
+    border-radius: 30px;
+    opacity: 0;
+    transition: opacity .25s;
+    font-size: 14px;
+}
+
+.crosshair {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 24px;
+    height: 24px;
+    transform: translate(-50%, -50%);
+    opacity: .55;
+}
+
+.crosshair::before,
+.crosshair::after {
+    content: "";
+    position: absolute;
+    background: white;
+}
+
+.crosshair::before {
+    width: 24px;
+    height: 1px;
+    left: 0;
+    top: 11px;
+}
+
+.crosshair::after {
+    width: 1px;
+    height: 24px;
+    left: 11px;
+    top: 0;
+}
+
+.camera-label {
+    position: absolute;
+    top: 75px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    padding: 6px 12px;
+    background: rgba(0,0,0,0.4);
+    border-radius: 20px;
+    font-size: 11px;
+    opacity: .75;
+}
+
+#menu {
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: auto;
+    background:
+        radial-gradient(
+            circle at center,
+            rgba(35,100,150,.38),
+            rgba(0,0,0,.93)
+        );
+}
+
+.menu-box {
+    width: min(620px, 90vw);
+    padding: 42px;
+    text-align: center;
+    color: white;
+    background: rgba(5,10,18,.78);
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 25px;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 30px 100px rgba(0,0,0,.65);
+}
+
+.menu-title {
+    font-size: 48px;
+    font-weight: bold;
+    letter-spacing: 3px;
+    margin-bottom: 10px;
+}
+
+.menu-subtitle {
+    opacity: .72;
+    margin-bottom: 30px;
+}
+
+.start-btn {
+    border: none;
+    padding: 15px 42px;
+    border-radius: 30px;
+    background: linear-gradient(
+        135deg,
+        #39bfff,
+        #1c6cff
+    );
+    color: white;
+    font-size: 17px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 8px 30px rgba(30,140,255,.35);
+}
+
+.start-btn:hover {
+    transform: scale(1.04);
+}
+
+.menu-info {
+    margin-top: 25px;
+    color: rgba(255,255,255,.65);
+    font-size: 12px;
+    line-height: 1.8;
+}
+
+#cockpitHint {
+    position: absolute;
+    left: 50%;
+    bottom: 25px;
+    transform: translateX(-50%);
+    color: rgba(255,255,255,.7);
+    font-size: 11px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="game"></div>
+
+<div id="ui">
+
+    <div class="hud">
+
+        <div class="hud-title">
+            SKYWORLD FLIGHT
+        </div>
+
+        <div class="hud-line">
+            <span>ALT</span>
+            <span class="hud-value" id="altitude">0 m</span>
+        </div>
+
+        <div class="hud-line">
+            <span>SPEED</span>
+            <span class="hud-value" id="speed">0 km/h</span>
+        </div>
+
+        <div class="hud-line">
+            <span>HDG</span>
+            <span class="hud-value" id="heading">000°</span>
+        </div>
+
+        <div class="hud-line">
+            <span>V/S</span>
+            <span class="hud-value" id="verticalSpeed">0 m/s</span>
+        </div>
+
+        <div class="hud-line">
+            <span>THROTTLE</span>
+            <span class="hud-value" id="throttle">0%</span>
+        </div>
+
+        <div class="hud-line">
+            <span>FUEL</span>
+            <span class="hud-value" id="fuel">100%</span>
+        </div>
+
+        <div class="hud-line">
+            <span>ENGINE</span>
+            <span class="hud-value" id="engine">OFF</span>
+        </div>
+
+        <div class="hud-line">
+            <span>BIOME</span>
+            <span class="hud-value" id="biome">PLAINS</span>
+        </div>
+
+    </div>
+
+    <div class="time-box">
+
+        <div class="time-clock" id="timeClock">
+            07:00
+        </div>
+
+        <div class="time-period" id="timePeriod">
+            🌅 DAWN
+        </div>
+
+    </div>
+
+    <div class="camera-label" id="cameraLabel">
+        EXTERNAL VIEW
+    </div>
+
+    <div class="crosshair"></div>
+
+    <div id="navWrap">
+
+        <div id="navTitle">
+            NAVIGATION / RELIEF
+        </div>
+
+        <canvas id="navMap"
+                width="250"
+                height="250">
+        </canvas>
+
+    </div>
+
+    <div class="controls">
+
+        <b>W / S</b> — pitch<br>
+        <b>R / Y</b> — throttle<br>
+        <b>A / D</b> — roll<br>
+        <b>Q / E</b> — yaw<br>
+        <b>SPACE</b> — engine<br>
+        <b>1</b> — cockpit / external<br>
+        <b>LMB</b> — camera<br>
+        <b>WHEEL</b> — zoom
+
+    </div>
+
+    <div class="message" id="message"></div>
+
+</div>
+
+
+<div id="menu">
+
+    <div class="menu-box">
+
+        <div class="menu-title">
+            SKYWORLD
+        </div>
+
+        <div class="menu-subtitle">
+            FLIGHT SIMULATOR
+        </div>
+
+        <button class="start-btn" id="startButton">
+            START FLIGHT
+        </button>
+
+        <div class="menu-info">
+            Explore mountains, jungle, desert, Antarctica<br>
+            and the giant MEGA CITY.<br><br>
+
+            The complete game day lasts 5 real minutes.
+        </div>
+
+    </div>
+
+</div>
+
+
+<script type="module">
+
+import * as THREE from
+"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+
+
+/* =========================================================
+   BASIC SETUP
+========================================================= */
+
+const container =
+    document.getElementById("game");
+
+const scene =
+    new THREE.Scene();
+
+scene.background =
+    new THREE.Color(0x82cdf7);
+
+scene.fog =
+    new THREE.Fog(
+        0x82cdf7,
+        900,
+        6500
+    );
+
+
+const camera =
+    new THREE.PerspectiveCamera(
+        65,
+        innerWidth / innerHeight,
+        0.1,
+        30000
+    );
+
+
+const renderer =
+    new THREE.WebGLRenderer({
+        antialias: true
+    });
+
+
+/*
+   LIGHT OPTIMIZATION:
+   Было 2. Теперь максимум 1.5.
+   Сам рендер и разрешение сцены не меняются.
+*/
+renderer.setPixelRatio(
+    Math.min(devicePixelRatio, 1.5)
+);
+
+renderer.setSize(
+    innerWidth,
+    innerHeight
+);
+
+renderer.shadowMap.enabled = true;
+
+renderer.shadowMap.type =
+    THREE.PCFSoftShadowMap;
+
+renderer.outputColorSpace =
+    THREE.SRGBColorSpace;
+
+container.appendChild(renderer.domElement);
+
+
+/* =========================================================
+   LIGHTING
+========================================================= */
+
+const hemiLight =
+    new THREE.HemisphereLight(
+        0xcceeff,
+        0x35442b,
+        1.6
+    );
+
+scene.add(hemiLight);
+
+
+const sunLight =
+    new THREE.DirectionalLight(
+        0xffffff,
+        2
+    );
+
+sunLight.castShadow = true;
+
+
+/*
+   LIGHT OPTIMIZATION:
+   2048 -> 1024.
+   Тени остаются включены.
+*/
+sunLight.shadow.mapSize.width = 1024;
+sunLight.shadow.mapSize.height = 1024;
+
+sunLight.shadow.camera.left = -2500;
+sunLight.shadow.camera.right = 2500;
+sunLight.shadow.camera.top = 2500;
+sunLight.shadow.camera.bottom = -2500;
+
+scene.add(sunLight);
+
+
+const moonLight =
+    new THREE.DirectionalLight(
+        0x9ab7ff,
+        0
+    );
+
+scene.add(moonLight);
+
+
+/* =========================================================
+   STARS
+========================================================= */
+
+const starGeometry =
+    new THREE.BufferGeometry();
+
+const starPositions = [];
+
+
+/*
+   LIGHT OPTIMIZATION:
+   Было 1800.
+   Стало 1000.
+*/
+for (let i = 0; i < 1000; i++) {
+
+    const radius =
+        7000 + Math.random() * 7000;
+
+    const theta =
+        Math.random() * Math.PI * 2;
+
+    const phi =
+        Math.acos(
+            2 * Math.random() - 1
+        );
+
+    starPositions.push(
+        radius *
+        Math.sin(phi) *
+        Math.cos(theta),
+
+        radius *
+        Math.cos(phi),
+
+        radius *
+        Math.sin(phi) *
+        Math.sin(theta)
+    );
+}
+
+starGeometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(
+        starPositions,
+        3
+    )
+);
+
+const starMaterial =
+    new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: 9,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false
+    });
+
+const stars =
+    new THREE.Points(
+        starGeometry,
+        starMaterial
+    );
+
+scene.add(stars);
+
+
+/* =========================================================
+   MOON
+========================================================= */
+
+const moon =
+    new THREE.Mesh(
+        new THREE.SphereGeometry(
+            130,
+            32,
+            32
+        ),
+        new THREE.MeshBasicMaterial({
+            color: 0xe7ecff,
+            transparent: true,
+            opacity: 0
+        })
+    );
+
+scene.add(moon);
+
+
+/* =========================================================
+   TERRAIN
+========================================================= */
+
+const terrainSize = 6500;
+
+
+/*
+   LIGHT OPTIMIZATION:
+   Было 200x200.
+   Стало 160x160.
+
+   terrainHeight() НЕ МЕНЯЕМ.
+*/
+const terrainSegments = 160;
+
+
+function terrainHeight(x, z) {
+
+    let h = 0;
+
+    h +=
+        Math.sin(x * 0.0012) *
+        35;
+
+    h +=
+        Math.cos(z * 0.0015) *
+        30;
+
+    h +=
+        Math.sin((x + z) * 0.0021) *
+        18;
+
+    h +=
+        Math.sin(
+            x * 0.004 +
+            z * 0.001
+        ) * 10;
+
+
+    const m1 =
+        Math.exp(
+            -Math.pow(
+                (x + 900) / 700,
+                2
+            )
+            -
+            Math.pow(
+                (z + 100) / 1200,
+                2
+            )
+        );
+
+    h += m1 * 390;
+
+
+    const m2 =
+        Math.exp(
+            -Math.pow(
+                (x - 1200) / 900,
+                2
+            )
+            -
+            Math.pow(
+                (z - 900) / 700,
+                2
+            )
+        );
+
+    h += m2 * 300;
+
+
+    h +=
+        Math.sin(x * 0.006) *
+        Math.cos(z * 0.005) *
+        20;
+
+
+    if (z > 1900) {
+
+        const amount =
+            Math.min(
+                1,
+                (z - 1900) / 1800
+            );
+
+        h += amount * 180;
+
+        h +=
+            Math.sin(x * 0.0028) *
+            Math.cos(z * 0.0032) *
+            100 *
+            amount;
+
+        h +=
+            Math.sin((x - z) * 0.006) *
+            45 *
+            amount;
+    }
+
+    return h;
+}
+
+
+const terrainGeometry =
+    new THREE.PlaneGeometry(
+        terrainSize,
+        terrainSize,
+        terrainSegments,
+        terrainSegments
+    );
+
+terrainGeometry.rotateX(
+    -Math.PI / 2
+);
+
+
+const positionAttribute =
+    terrainGeometry.attributes.position;
+
+
+const colors = [];
+
+
+for (
+    let i = 0;
+    i < positionAttribute.count;
+    i++
+) {
+
+    const x =
+        positionAttribute.getX(i);
+
+    const z =
+        positionAttribute.getZ(i);
+
+    const h =
+        terrainHeight(x, z);
+
+    let color;
+
+
+    if (z > 1900) {
+
+        const snow =
+            THREE.MathUtils.clamp(
+                0.75 + h / 700,
+                0.75,
+                1
+            );
+
+        color =
+            new THREE.Color(
+                snow,
+                snow,
+                snow
+            );
+
+    } else if (
+        x > 600 &&
+        z > 400
+    ) {
+
+        color =
+            new THREE.Color(
+                0xd2a85b
+            );
+
+    } else if (
+        x < -500 &&
+        z > 300
+    ) {
+
+        color =
+            new THREE.Color(
+                0x24763c
+            );
+
+    } else if (h > 260) {
+
+        color =
+            new THREE.Color(
+                0x85847c
+            );
+
+    } else if (h > 140) {
+
+        color =
+            new THREE.Color(
+                0x777844
+            );
+
+    } else {
+
+        color =
+            new THREE.Color(
+                0x4d9347
+            );
+    }
+
+
+    colors.push(
+        color.r,
+        color.g,
+        color.b
+    );
+}
+
+
+terrainGeometry.setAttribute(
+    "color",
+    new THREE.Float32BufferAttribute(
+        colors,
+        3
+    )
+);
+
+
+const terrainMaterial =
+    new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.92,
+        metalness: 0.03
+    });
+
+
+const terrain =
+    new THREE.Mesh(
+        terrainGeometry,
+        terrainMaterial
+    );
+
+terrain.receiveShadow = true;
+
+scene.add(terrain);
+
+
+/* =========================================================
+   OCEAN
+========================================================= */
+
+const ocean =
+    new THREE.Mesh(
+        new THREE.PlaneGeometry(
+            16000,
+            16000
+        ),
+        new THREE.MeshStandardMaterial({
+            color: 0x176b9b,
+            roughness: .25,
+            metalness: .05
+        })
+    );
+
+ocean.rotation.x =
+    -Math.PI / 2;
+
+ocean.position.y = -12;
+
+ocean.receiveShadow = true;
+
+scene.add(ocean);
+
+
+/* =========================================================
+   ANTARCTIC ICE
+========================================================= */
+
+const antarctica =
+    new THREE.Mesh(
+        new THREE.PlaneGeometry(
+            4500,
+            1000
+        ),
+        new THREE.MeshStandardMaterial({
+            color: 0xeaf5ff,
+            roughness: .75
+        })
+    );
+
+antarctica.rotation.x =
+    -Math.PI / 2;
+
+antarctica.position.set(
+    0,
+    4,
+    2400
+);
+
+scene.add(antarctica);
+
+
+/* =========================================================
+   TREES
+========================================================= */
+
+function createTree(x, z) {
+
+    const tree =
+        new THREE.Group();
+
+
+    const trunk =
+        new THREE.Mesh(
+            new THREE.CylinderGeometry(
+                0.7,
+                1,
+                8,
+                8
+            ),
+            new THREE.MeshStandardMaterial({
+                color: 0x69452b
+            })
+        );
+
+    trunk.position.y = 4;
+
+    tree.add(trunk);
+
+
+    const crown =
+        new THREE.Mesh(
+            new THREE.SphereGeometry(
+                4.5,
+                8,
+                8
+            ),
+            new THREE.MeshStandardMaterial({
+                color: 0x236b35
+            })
+        );
+
+    crown.position.y = 9;
+
+    tree.add(crown);
+
+
+    tree.position.set(
+        x,
+        terrainHeight(x, z),
+        z
+    );
+
+    scene.add(tree);
+}
+
+
+/*
+   LIGHT OPTIMIZATION:
+   Было 220.
+   Стало 150.
+*/
+for (let i = 0; i < 150; i++) {
+
+    const x =
+        (Math.random() - .5) * 6000;
+
+    const z =
+        (Math.random() - .5) * 6000;
+
+    if (z > 1900) continue;
+
+    if (
+        x < -500 &&
+        z > 300
+    ) {
+
+        createTree(x, z);
+    }
+}
+
+
+/* =========================================================
+   PALMS
+========================================================= */
+
+function createPalm(x, z) {
+
+    const palm =
+        new THREE.Group();
+
+
+    const trunk =
+        new THREE.Mesh(
+            new THREE.CylinderGeometry(
+                .45,
+                .7,
+                9,
+                8
+            ),
+            new THREE.MeshStandardMaterial({
+                color: 0x795335
+            })
+        );
+
+    trunk.position.y = 4.5;
+
+    palm.add(trunk);
+
+
+    /*
+       Сохраняем 7 листьев.
+       Уменьшаем только количество пальм.
+    */
+    for (let i = 0; i < 7; i++) {
+
+        const leaf =
+            new THREE.Mesh(
+                new THREE.BoxGeometry(
+                    .35,
+                    .25,
+                    5
+                ),
+                new THREE.MeshStandardMaterial({
+                    color: 0x277a3b
+                })
+            );
+
+        leaf.position.y = 9;
+
+        leaf.rotation.y =
+            i / 7 * Math.PI * 2;
+
+        leaf.rotation.x =
+            THREE.MathUtils.degToRad(
+                -18
+            );
+
+        leaf.translateZ(2.3);
+
+        palm.add(leaf);
+    }
+
+
+    palm.position.set(
+        x,
+        terrainHeight(x, z),
+        z
+    );
+
+    scene.add(palm);
+}
+
+
+/*
+   LIGHT OPTIMIZATION:
+   Было 130.
+   Стало 80.
+*/
+for (let i = 0; i < 80; i++) {
+
+    const x =
+        -500 -
+        Math.random() * 1800;
+
+    const z =
+        300 +
+        Math.random() * 1600;
+
+    createPalm(x, z);
+}
+
+
+/* =========================================================
+   CITIES
+========================================================= */
+
+const cities = [
+    {
+        name: "AURORA",
+        x: -900,
+        z: -400
+    },
+
+    {
+        name: "NOVA CITY",
+        x: 800,
+        z: 1200
+    },
+
+    {
+        name: "RIVER CITY",
+        x: -1500,
+        z: -1300
+    },
+
+    {
+        name: "MEGA CITY",
+        x: 1800,
+        z: -800
+    }
+];
+
+
+/* =========================================================
+   CITY MARKERS
+========================================================= */
+
+function createCityMarker(city) {
+
+    const group =
+        new THREE.Group();
+
+
+    const pole =
+        new THREE.Mesh(
+            new THREE.CylinderGeometry(
+                .08,
+                .08,
+                30,
+                6
+            ),
+            new THREE.MeshBasicMaterial({
+                color: 0xffd34d
+            })
+        );
+
+    pole.position.y = 15;
+
+    group.add(pole);
+
+
+    const ball =
+        new THREE.Mesh(
+            new THREE.SphereGeometry(
+                1.5,
+                12,
+                12
+            ),
+            new THREE.MeshBasicMaterial({
+                color: 0xffc928
+            })
+        );
+
+    ball.position.y = 30;
+
+    group.add(ball);
+
+
+    group.position.set(
+        city.x,
+        terrainHeight(
+            city.x,
+            city.z
+        ),
+        city.z
+    );
+
+    scene.add(group);
+}
+
+
+cities.forEach(
+    createCityMarker
+);
+
+
+/* =========================================================
+   MEGA CITY
+========================================================= */
+
+function createMegaCity(cx, cz) {
+
+    const city =
+        new THREE.Group();
+
+
+    /* ROADS */
+
+    const roadMat =
+        new THREE.MeshStandardMaterial({
+            color: 0x202329,
+            roughness: .92
+        });
+
+
+    const roadSize = 500;
+
+
+    for (
+        let x = -roadSize;
+        x <= roadSize;
+        x += 70
+    ) {
+
+        const road =
+            new THREE.Mesh(
+                new THREE.BoxGeometry(
+                    18,
+                    .08,
+                    roadSize * 2
+                ),
+                roadMat
+            );
+
+        road.position.set(
+            cx + x,
+            2,
+            cz
+        );
+
+        city.add(road);
+    }
+
+
+    for (
+        let z = -roadSize;
+        z <= roadSize;
+        z += 70
+    ) {
+
+        const road =
+            new THREE.Mesh(
+                new THREE.BoxGeometry(
+                    roadSize * 2,
+                    .08,
+                    18
+                ),
+                roadMat
+            );
+
+        road.position.set(
+            cx,
+            2,
+            cz + z
+        );
+
+        city.add(road);
+    }
+
+
+    /* BUILDINGS */
+
+    for (
+        let x = -roadSize + 25;
+        x <= roadSize - 25;
+        x += 70
+    ) {
+
+        for (
+            let z = -roadSize + 25;
+            z <= roadSize - 25;
+            z += 70
+        ) {
+
+            if (
+                Math.random() < .12
+            ) continue;
+
+
+            const width =
+                25 +
+                Math.random() * 25;
+
+            const depth =
+                25 +
+                Math.random() * 25;
+
+
+            const distance =
+                Math.sqrt(
+                    x*x +
+                    z*z
+                );
+
+
+            let height;
+
+
+            if (distance < 170) {
+
+                height =
+                    180 +
+                    Math.random() * 260;
+
+            } else {
+
+                height =
+                    30 +
+                    Math.random() * 130;
+            }
+
+
+            const hue =
+                .55 +
+                Math.random() * .08;
+
+
+            const buildingMat =
+                new THREE.MeshStandardMaterial({
+                    color:
+                        new THREE.Color()
+                            .setHSL(
+                                hue,
+                                .12,
+                                .25 +
+                                Math.random() * .22
+                            ),
+
+                    metalness: .65,
+                    roughness: .22
+                });
+
+
+            const building =
+                new THREE.Mesh(
+                    new THREE.BoxGeometry(
+                        width,
+                        height,
+                        depth
+                    ),
+                    buildingMat
+                );
+
+
+            building.position.set(
+                cx + x,
+                height / 2,
+                cz + z
+            );
+
+
+            building.castShadow = true;
+            building.receiveShadow = true;
+
+
+            city.add(building);
+
+
+            /* WINDOWS */
+
+            if (height > 100) {
+
+                const windowMat =
+                    new THREE.MeshBasicMaterial({
+                        color: 0x9edcff
+                    });
+
+
+                const window =
+                    new THREE.Mesh(
+                        new THREE.BoxGeometry(
+                            width * .72,
+                            height * .72,
+                            .04
+                        ),
+                        windowMat
+                    );
+
+
+                window.position.set(
+                    cx + x,
+                    height * .53,
+                    cz - depth / 2 - .03
+                );
+
+
+                city.add(window);
+            }
+        }
+    }
+
+
+    /* CENTRAL SKYSCRAPERS */
+
+    for (let i = 0; i < 14; i++) {
+
+        const h =
+            300 +
+            Math.random() * 400;
+
+
+        const tower =
+            new THREE.Mesh(
+                new THREE.CylinderGeometry(
+                    18 +
+                    Math.random() * 15,
+                    30,
+                    h,
+                    8
+                ),
+                new THREE.MeshStandardMaterial({
+                    color: 0x52606d,
+                    metalness: .9,
+                    roughness: .12
+                })
+            );
+
+
+        tower.position.set(
+            cx +
+            (Math.random() - .5) * 220,
+
+            h / 2,
+
+            cz +
+            (Math.random() - .5) * 220
+        );
+
+
+        tower.castShadow = true;
+
+        city.add(tower);
+    }
+
+
+    /* CENTRAL TOWER */
+
+    const towerHeight = 720;
+
+
+    const centralTower =
+        new THREE.Mesh(
+            new THREE.CylinderGeometry(
+                28,
+                48,
+                towerHeight,
+                10
+            ),
+            new THREE.MeshStandardMaterial({
+                color: 0x71808c,
+                metalness: .95,
+                roughness: .09
+            })
+        );
+
+
+    centralTower.position.set(
+        cx,
+        towerHeight / 2,
+        cz
+    );
+
+
+    centralTower.castShadow = true;
+
+    city.add(centralTower);
+
+
+    /* TOP LIGHT */
+
+    const beacon =
+        new THREE.PointLight(
+            0xff3344,
+            12,
+            600
+        );
+
+    beacon.position.set(
+        cx,
+        towerHeight + 15,
+        cz
+    );
+
+    city.add(beacon);
+
+
+    /* STREET LIGHTS */
+
+    /*
+       ОСНОВНАЯ ОПТИМИЗАЦИЯ MEGA CITY.
+
+       Раньше здесь создавалось:
+       14 x 14 = 196 PointLight.
+
+       Это очень дорого для WebGL.
+
+       Теперь оставляем только 16,
+       распределённых по городу.
+    */
+
+    const streetLightPositions = [
+        [-450, -450],
+        [-150, -450],
+        [150, -450],
+        [450, -450],
+
+        [-450, -150],
+        [450, -150],
+
+        [-450, 150],
+        [450, 150],
+
+        [-450, 450],
+        [-150, 450],
+        [150, 450],
+        [450, 450],
+
+        [0, -300],
+        [0, 300],
+        [-300, 0],
+        [300, 0]
+    ];
+
+    for (const [x, z] of streetLightPositions) {
+
+        const light =
+            new THREE.PointLight(
+                0xffd18a,
+                .8,
+                90
+            );
+
+        light.position.set(
+            cx + x,
+            8,
+            cz + z
+        );
+
+        city.add(light);
+    }
+
+
+    scene.add(city);
+
+    return city;
+}
+
+
+createMegaCity(
+    1800,
+    -800
+);
+
+
+/* =========================================================
+   AIRPORT
+========================================================= */
+
+const airports = [];
+
+
+function createAirport(
+    name,
+    x,
+    z,
+    heading
+) {
+
+    const airport =
+        new THREE.Group();
+
+
+    const runway =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                120,
+                .5,
+                1100
+            ),
+            new THREE.MeshStandardMaterial({
+                color: 0x303338,
+                roughness: .9
+            })
+        );
+
+
+    runway.position.y = 2;
+
+    runway.rotation.y =
+        heading;
+
+
+    airport.add(runway);
+
+
+    const stripeMat =
+        new THREE.MeshBasicMaterial({
+            color: 0xffffff
+        });
+
+
+    for (
+        let i = -500;
+        i <= 500;
+        i += 70
+    ) {
+
+        const stripe =
+            new THREE.Mesh(
+                new THREE.BoxGeometry(
+                    6,
+                    .06,
+                    30
+                ),
+                stripeMat
+            );
+
+        stripe.position.set(
+            0,
+            2.3,
+            i
+        );
+
+        stripe.rotation.y =
+            heading;
+
+        airport.add(stripe);
+    }
+
+
+    /* TERMINAL */
+
+    const terminal =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                150,
+                35,
+                90
+            ),
+            new THREE.MeshStandardMaterial({
+                color: 0x8c9aa5,
+                metalness: .4,
+                roughness: .35
+            })
+        );
+
+
+    terminal.position.set(
+        130,
+        19,
+        0
+    );
+
+
+    terminal.rotation.y =
+        heading;
+
+
+    airport.add(terminal);
+
+
+    /* CONTROL TOWER */
+
+    const tower =
+        new THREE.Mesh(
+            new THREE.CylinderGeometry(
+                7,
+                11,
+                85,
+                12
+            ),
+            new THREE.MeshStandardMaterial({
+                color: 0x69747d,
+                metalness: .65,
+                roughness: .25
+            })
+        );
+
+
+    tower.position.set(
+        210,
+        42,
+        0
+    );
+
+
+    airport.add(tower);
+
+
+    const beacon =
+        new THREE.PointLight(
+            0xff3333,
+            15,
+            500
+        );
+
+
+    beacon.position.set(
+        210,
+        88,
+        0
+    );
+
+
+    airport.add(beacon);
+
+
+    airport.position.set(
+        x,
+        terrainHeight(x, z),
+        z
+    );
+
+
+    scene.add(airport);
+
+
+    airports.push({
+        name,
+        x,
+        z,
+        heading
+    });
+}
+
+
+createAirport(
+    "AURORA INTL",
+    -900,
+    -400,
+    0
+);
+
+
+createAirport(
+    "NOVA FIELD",
+    1000,
+    1000,
+    Math.PI / 2
+);
+
+
+createAirport(
+    "COASTAL AIRPORT",
+    -1800,
+    -1100,
+    -Math.PI / 4
+);
+
+
+createAirport(
+    "MEGA CITY INTERNATIONAL",
+    1800,
+    -1450,
+    Math.PI
+);
+
+
+/* =========================================================
+   AIRPLANE
+========================================================= */
+
+let airplane;
+
+
+const flight = {
+
+    speed: 0,
+
+    altitude: 180,
+
+    heading: 0,
+
+    pitch: 0,
+
+    roll: 0,
+
+    throttle: 0,
+
+    verticalSpeed: 0,
+
+    fuel: 100,
+
+    engine: false
+
+};
+
+
+/* =========================================================
+   COCKPIT
+========================================================= */
+
+let cockpitGroup = null;
+
+
+function createCockpit() {
+
+    cockpitGroup =
+        new THREE.Group();
+
+
+    const dashboardMat =
+        new THREE.MeshStandardMaterial({
+            color: 0x151922,
+            roughness: .32,
+            metalness: .72
+        });
+
+
+    const dashboard =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                13,
+                2.4,
+                2.2
+            ),
+            dashboardMat
+        );
+
+
+    dashboard.position.set(
+        0,
+        3,
+        -8.5
+    );
+
+
+    cockpitGroup.add(
+        dashboard
+    );
+
+
+    const panelMat =
+        new THREE.MeshStandardMaterial({
+            color: 0x05070b,
+            roughness: .2,
+            metalness: .8
+        });
+
+
+    const panel =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                12,
+                3.5,
+                .35
+            ),
+            panelMat
+        );
+
+
+    panel.position.set(
+        0,
+        4.5,
+        -8.8
+    );
+
+
+    panel.rotation.x =
+        THREE.MathUtils.degToRad(-12);
+
+
+    cockpitGroup.add(panel);
+
+
+    const instruments = [
+        [-4.3,4.7],
+        [-2.7,4.8],
+        [-1,4.85],
+        [1,4.85],
+        [2.7,4.8],
+        [4.3,4.7]
+    ];
+
+
+    instruments.forEach(
+        (p, index) => {
+
+            const material =
+                new THREE.MeshStandardMaterial({
+                    color:
+                        index % 2 === 0
+                            ? 0x073b46
+                            : 0x102d47,
+
+                    emissive:
+                        index % 2 === 0
+                            ? 0x03242c
+                            : 0x06182b,
+
+                    roughness: .18,
+                    metalness: .25
+                });
+
+
+            const screen =
+                new THREE.Mesh(
+                    new THREE.BoxGeometry(
+                        1.35,
+                        .85,
+                        .08
+                    ),
+                    material
+                );
+
+
+            screen.position.set(
+                p[0],
+                p[1],
+                -9.05
+            );
+
+
+            screen.rotation.x =
+                THREE.MathUtils.degToRad(-12);
+
+
+            cockpitGroup.add(
+                screen
+            );
+        }
+    );
+
+
+    const centerScreen =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                2.8,
+                1.8,
+                .1
+            ),
+            new THREE.MeshStandardMaterial({
+                color: 0x082a35,
+                emissive: 0x061c25,
+                roughness: .12,
+                metalness: .35
+            })
+        );
+
+
+    centerScreen.position.set(
+        0,
+        4.8,
+        -9.05
+    );
+
+
+    centerScreen.rotation.x =
+        THREE.MathUtils.degToRad(-12);
+
+
+    cockpitGroup.add(
+        centerScreen
+    );
+
+
+    const frameMat =
+        new THREE.MeshStandardMaterial({
+            color: 0x11151b,
+            metalness: .8,
+            roughness: .3
+        });
+
+
+    const leftFrame =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                .35,
+                8,
+                .45
+            ),
+            frameMat
+        );
+
+
+    leftFrame.position.set(
+        -6.5,
+        6,
+        -8
+    );
+
+
+    leftFrame.rotation.z =
+        THREE.MathUtils.degToRad(-5);
+
+
+    cockpitGroup.add(
+        leftFrame
+    );
+
+
+    const rightFrame =
+        leftFrame.clone();
+
+
+    rightFrame.position.x =
+        6.5;
+
+
+    rightFrame.rotation.z =
+        THREE.MathUtils.degToRad(5);
+
+
+    cockpitGroup.add(
+        rightFrame
+    );
+
+
+    const centerFrame =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                .28,
+                8,
+                .45
+            ),
+            frameMat
+        );
+
+
+    centerFrame.position.set(
+        0,
+        6,
+        -10
+    );
+
+
+    cockpitGroup.add(
+        centerFrame
+    );
+
+
+    /* YOKE */
+
+    const columnMat =
+        new THREE.MeshStandardMaterial({
+            color: 0x1a1c20,
+            metalness: .85,
+            roughness: .25
+        });
+
+
+    const column =
+        new THREE.Mesh(
+            new THREE.CylinderGeometry(
+                .18,
+                .22,
+                2.5,
+                16
+            ),
+            columnMat
+        );
+
+
+    column.position.set(
+        0,
+        2,
+        -6.8
+    );
+
+
+    column.rotation.x =
+        THREE.MathUtils.degToRad(-15);
+
+
+    cockpitGroup.add(
+        column
+    );
+
+
+    const yoke =
+        new THREE.Mesh(
+            new THREE.TorusGeometry(
+                .85,
+                .16,
+                12,
+                32
+            ),
+            columnMat
+        );
+
+
+    yoke.position.set(
+        0,
+        2.8,
+        -7.4
+    );
+
+
+    yoke.rotation.x =
+        THREE.MathUtils.degToRad(70);
+
+
+    cockpitGroup.add(yoke);
+
+
+    cockpitGroup.visible = false;
+
+
+    airplane.add(
+        cockpitGroup
+    );
+}
+
+
+/* =========================================================
+   AIRPLANE MODEL
+========================================================= */
+
+function createAirplane() {
+
+    const group =
+        new THREE.Group();
+
+
+    /* BODY */
+
+    const bodyMat =
+        new THREE.MeshStandardMaterial({
+            color: 0xdfe6ec,
+            metalness: .92,
+            roughness: .12
+        });
+
+
+    const body =
+        new THREE.Mesh(
+            new THREE.CylinderGeometry(
+                2.8,
+                3.2,
+                28,
+                32
+            ),
+            bodyMat
+        );
+
+
+    body.rotation.x =
+        Math.PI / 2;
+
+
+    body.castShadow = true;
+
+
+    group.add(body);
+
+
+    /* NOSE */
+
+    const nose =
+        new THREE.Mesh(
+            new THREE.ConeGeometry(
+                2.8,
+                7,
+                32
+            ),
+            bodyMat
+        );
+
+
+    nose.rotation.x =
+        -Math.PI / 2;
+
+
+    nose.position.z =
+        -17.5;
+
+
+    nose.castShadow = true;
+
+
+    group.add(nose);
+
+
+    /* WINGS */
+
+    const wingMat =
+        new THREE.MeshStandardMaterial({
+            color: 0xc7d0d8,
+            metalness: .88,
+            roughness: .16
+        });
+
+
+    const wing =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                32,
+                .7,
+                6
+            ),
+            wingMat
+        );
+
+
+    wing.position.z =
+        -1;
+
+
+    wing.castShadow = true;
+
+
+    group.add(wing);
+
+
+    /* TAIL */
+
+    const tail =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                12,
+                .5,
+                4
+            ),
+            wingMat
+        );
+
+
+    tail.position.z =
+        11;
+
+
+    group.add(tail);
+
+
+    /* VERTICAL TAIL */
+
+    const verticalTail =
+        new THREE.Mesh(
+            new THREE.BoxGeometry(
+                .6,
+                7,
+                5
+            ),
+            wingMat
+        );
+
+
+    verticalTail.position.set(
+        0,
+        3.5,
+        10
+    );
+
+
+    group.add(
+        verticalTail
+    );
+
+
+    /* ENGINES */
+
+    const engineMat =
+        new THREE.MeshStandardMaterial({
+            color: 0x8e969e,
+            metalness: .97,
+            roughness: .08
+        });
+
+
+    for (const x of [-7, 7]) {
+
+        const engine =
+            new THREE.Mesh(
+                new THREE.CylinderGeometry(
+                    1.7,
+                    1.9,
+                    8,
+                    24
+                ),
+                engineMat
+            );
+
+
+        engine.rotation.x =
+            Math.PI / 2;
+
+
+        engine.position.set(
+            x,
+            -1,
+            -3
+        );
+
+
+        engine.castShadow = true;
+
+
+        group.add(engine);
+
+
+        const intake =
+            new THREE.Mesh(
+                new THREE.CircleGeometry(
+                    1.3,
+                    24
+                ),
+                new THREE.MeshBasicMaterial({
+                    color: 0x101318
+                })
+            );
+
+
+        intake.rotation.x =
+            Math.PI / 2;
+
+
+        intake.position.set(
+            x,
+            -1,
+            -7.05
+        );
+
+
+        group.add(intake);
+    }
+
+
+    /* COCKPIT GLASS */
+
+    const glass =
+        new THREE.Mesh(
+            new THREE.SphereGeometry(
+                3.1,
+                24,
+                12,
+                0,
+                Math.PI * 2,
+                0,
+                Math.PI / 2
+            ),
+            new THREE.MeshPhysicalMaterial({
+                color: 0x7fc9e8,
+                metalness: .15,
+                roughness: .08,
+                transmission: .25,
+                transparent: true,
+                opacity: .42
+            })
+        );
+
+
+    glass.scale.set(
+        1,
+        .8,
+        1.5
+    );
+
+
+    glass.position.set(
+        0,
+        1.7,
+        -9
+    );
+
+
+    group.add(glass);
+
+
+    scene.add(group);
+
+
+    return group;
+}
+
+
+airplane =
+    createAirplane();
+
+
+createCockpit();
+
+
+/* =========================================================
+   INITIAL AIRCRAFT POSITION
+========================================================= */
+
+airplane.position.set(
+    -900,
+    180,
+    -400
+);
+
+
+flight.altitude = 180;
+
+
+/* =========================================================
+   CAMERA
+========================================================= */
+
+let cameraYaw = 0;
+
+let cameraPitch =
+    THREE.MathUtils.degToRad(18);
+
+let cameraDistance = 55;
+
+let cameraInitialized = false;
+
+let cockpitView = false;
+
+
+/* =========================================================
+   CAMERA UPDATE
+========================================================= */
+
+function updateCamera() {
+
+    if (!airplane)
+        return;
+
+
+    if (cockpitView) {
+
+        if (cockpitGroup)
+            cockpitGroup.visible = true;
+
+
+        const cockpitOffset =
+            new THREE.Vector3(
+                0,
+                5.2,
+                -7.5
+            );
+
+
+        cockpitOffset.applyQuaternion(
+            airplane.quaternion
+        );
+
+
+        const cockpitPosition =
+            airplane.position
+                .clone()
+                .add(cockpitOffset);
+
+
+        camera.position.copy(
+            cockpitPosition
+        );
+
+
+        const forward =
+            new THREE.Vector3(
+                0,
+                3.8,
+                -100
+            );
+
+
+        forward.applyQuaternion(
+            airplane.quaternion
+        );
+
+
+        const lookTarget =
+            airplane.position
+                .clone()
+                .add(forward);
+
+
+        camera.lookAt(
+            lookTarget
+        );
+
+
+        return;
+    }
+
+
+    if (cockpitGroup)
+        cockpitGroup.visible = false;
+
+
+    const offset =
+        new THREE.Vector3();
+
+
+    offset.x =
+        Math.sin(cameraYaw) *
+        Math.cos(cameraPitch) *
+        cameraDistance;
+
+
+    offset.y =
+        Math.sin(cameraPitch) *
+        cameraDistance;
+
+
+    offset.z =
+        Math.cos(cameraYaw) *
+        Math.cos(cameraPitch) *
+        cameraDistance;
+
+
+    const desiredPosition =
+        airplane.position
+            .clone()
+            .add(offset);
+
+
+    if (!cameraInitialized) {
+
+        camera.position.copy(
+            desiredPosition
+        );
+
+        camera.lookAt(
+            airplane.position
+        );
+
+        cameraInitialized = true;
+
+    } else {
+
+        camera.position.lerp(
+            desiredPosition,
+            .12
+        );
+
+        camera.lookAt(
+            airplane.position
+        );
+    }
+}
+
+
+/* =========================================================
+   INPUT
+========================================================= */
+
+const keys = {};
+
+
+window.addEventListener(
+    "keydown",
+    e => {
+
+        const key =
+            e.key.toLowerCase();
+
+
+        keys[key] = true;
+
+
+        if (
+            key === " " ||
+            e.code === "Space"
+        ) {
+
+            flight.engine =
+                !flight.engine;
+
+            showMessage(
+                flight.engine
+                    ? "ENGINE ON"
+                    : "ENGINE OFF"
+            );
+        }
+
+
+        if (key === "1") {
+
+            cockpitView =
+                !cockpitView;
+
+
+            if (cockpitView) {
+
+                cameraLabel.textContent =
+                    "COCKPIT VIEW";
+
+                showMessage(
+                    "✈️ COCKPIT VIEW"
+                );
+
+            } else {
+
+                cameraLabel.textContent =
+                    "EXTERNAL VIEW";
+
+                showMessage(
+                    "🌍 EXTERNAL VIEW"
+                );
+            }
+        }
+    }
+);
+
+
+window.addEventListener(
+    "keyup",
+    e => {
+
+        keys[
+            e.key.toLowerCase()
+        ] = false;
+    }
+);
+
+
+/* =========================================================
+   MOUSE CAMERA
+========================================================= */
+
+let dragging = false;
+
+let lastMouseX = 0;
+let lastMouseY = 0;
+
+
+renderer.domElement.addEventListener(
+    "mousedown",
+    e => {
+
+        if (cockpitView)
+            return;
+
+        if (e.button !== 0)
+            return;
+
+        dragging = true;
+
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+    }
+);
+
+
+window.addEventListener(
+    "mouseup",
+    () => {
+
+        dragging = false;
+    }
+);
+
+
+window.addEventListener(
+    "mousemove",
+    e => {
+
+        if (!dragging)
+            return;
+
+        if (cockpitView)
+            return;
+
+
+        const dx =
+            e.clientX -
+            lastMouseX;
+
+        const dy =
+            e.clientY -
+            lastMouseY;
+
+
+        lastMouseX =
+            e.clientX;
+
+        lastMouseY =
+            e.clientY;
+
+
+        cameraYaw -=
+            dx * .006;
+
+        cameraPitch -=
+            dy * .004;
+
+
+        cameraPitch =
+            THREE.MathUtils.clamp(
+                cameraPitch,
+                THREE.MathUtils.degToRad(-10),
+                THREE.MathUtils.degToRad(75)
+            );
+    }
+);
+
+
+renderer.domElement.addEventListener(
+    "wheel",
+    e => {
+
+        if (cockpitView)
+            return;
+
+        cameraDistance +=
+            e.deltaY * .05;
+
+
+        cameraDistance =
+            THREE.MathUtils.clamp(
+                cameraDistance,
+                18,
+                180
+            );
+    }
+);
+
+
+/* =========================================================
+   FLIGHT PHYSICS
+========================================================= */
+
+function updateFlight(dt) {
+
+    if (!flight.engine) {
+
+        flight.throttle *=
+            Math.pow(.2, dt);
+
+    }
+
+
+    if (keys["r"]) {
+
+        flight.throttle +=
+            .008 * dt;
+    }
+
+
+    if (keys["y"]) {
+
+        flight.throttle -=
+            .012 * dt;
+    }
+
+
+    flight.throttle =
+        THREE.MathUtils.clamp(
+            flight.throttle,
+            0,
+            1
+        );
+
+
+    if (keys["w"]) {
+
+        flight.pitch +=
+            .018 * dt;
+    }
+
+
+    if (keys["s"]) {
+
+        flight.pitch -=
+            .018 * dt;
+    }
+
+
+    if (keys["a"]) {
+
+        flight.roll +=
+            .025 * dt;
+    }
+
+
+    if (keys["d"]) {
+
+        flight.roll -=
+            .025 * dt;
+    }
+
+
+    if (keys["q"]) {
+
+        flight.heading +=
+            .018 * dt;
+    }
+
+
+    if (keys["e"]) {
+
+        flight.heading -=
+            .018 * dt;
+    }
+
+
+    flight.pitch *=
+        Math.pow(.985, dt);
+
+
+    flight.roll *=
+        Math.pow(.975, dt);
+
+
+    const targetSpeed =
+        flight.throttle *
+        520;
+
+
+    flight.speed +=
+        (
+            targetSpeed -
+            flight.speed
+        ) *
+        .008 *
+        dt;
+
+
+    if (!flight.engine) {
+
+        flight.speed *=
+            Math.pow(.996, dt);
+    }
+
+
+    flight.speed =
+        Math.max(
+            0,
+            flight.speed
+        );
+
+
+    const radians =
+        flight.heading;
+
+
+    const forward =
+        new THREE.Vector3(
+            Math.sin(radians),
+            0,
+            Math.cos(radians)
+        );
+
+
+    flight.verticalSpeed =
+        Math.sin(
+            flight.pitch
+        ) *
+        flight.speed *
+        .018;
+
+
+    if (flight.speed < 30)
+        flight.verticalSpeed *= .3;
+
+
+    airplane.position.x +=
+        forward.x *
+        flight.speed *
+        dt *
+        .002;
+
+
+    airplane.position.z +=
+        forward.z *
+        flight.speed *
+        dt *
+        .002;
+
+
+    airplane.position.y +=
+        flight.verticalSpeed *
+        dt;
+
+
+    /* minimum terrain clearance */
+
+    const ground =
+        terrainHeight(
+            airplane.position.x,
+            airplane.position.z
+        );
+
+
+    if (
+        airplane.position.y <
+        ground + 35
+    ) {
+
+        airplane.position.y =
+            ground + 35;
+
+        flight.verticalSpeed =
+            Math.max(
+                0,
+                flight.verticalSpeed
+            );
+    }
+
+
+    flight.altitude =
+        airplane.position.y;
+
+
+    flight.fuel -=
+        flight.throttle *
+        .0007 *
+        dt;
+
+
+    flight.fuel =
+        Math.max(
+            0,
+            flight.fuel
+        );
+
+
+    airplane.rotation.order =
+        "YXZ";
+
+
+    airplane.rotation.y =
+        flight.heading;
+
+
+    airplane.rotation.x =
+        -flight.pitch;
+
+
+    airplane.rotation.z =
+        flight.roll;
+}
+
+
+/* =========================================================
+   DAY / NIGHT
+========================================================= */
+
+const DAY_LENGTH =
+    5 * 60;
+
+
+let gameSeconds =
+    7 * 3600;
+
+
+const SKY_DAY =
+    new THREE.Color(
+        0x82cdf7
+    );
+
+
+const SKY_DAWN =
+    new THREE.Color(
+        0xffb37a
+    );
+
+
+const SKY_SUNSET =
+    new THREE.Color(
+        0xf08b5c
+    );
+
+
+const SKY_DUSK =
+    new THREE.Color(
+        0x493b68
+    );
+
+
+const SKY_NIGHT =
+    new THREE.Color(
+        0x020611
+    );
+
+
+const skyCurrent =
+    SKY_DAY.clone();
+
+
+function updateDayNight(dt) {
+
+    gameSeconds +=
+        dt /
+        60 *
+        86400 /
+        DAY_LENGTH;
+
+
+    if (
+        gameSeconds >= 86400
+    ) {
+
+        gameSeconds -=
+            86400;
+    }
+
+
+    const hour =
+        gameSeconds / 3600;
+
+
+    let daylight =
+        Math.max(
+            0,
+            Math.sin(
+                (
+                    hour - 6
+                ) /
+                12 *
+                Math.PI
+            )
+        );
+
+
+    const sunAngle =
+        (
+            hour - 6
+        ) /
+        24 *
+        Math.PI *
+        2;
+
+
+    sunLight.position.set(
+        Math.cos(sunAngle) * 4000,
+        Math.sin(sunAngle) * 4000,
+        -1200
+    );
+
+
+    moonLight.position.set(
+        -sunLight.position.x,
+        -sunLight.position.y,
+        1200
+    );
+
+
+    sunLight.intensity =
+        .15 +
+        daylight * 1.85;
+
+
+    moonLight.intensity =
+        .05 +
+        (1 - daylight) * .45;
+
+
+    hemiLight.intensity =
+        .25 +
+        daylight * 1.35;
+
+
+    stars.material.opacity =
+        THREE.MathUtils.clamp(
+            1 -
+            daylight * 2.2,
+            0,
+            1
+        );
+
+
+    moon.material.opacity =
+        THREE.MathUtils.clamp(
+            (1 - daylight) * .85,
+            0,
+            .85
+        );
+
+
+    moon.position.set(
+        -sunLight.position.x,
+        -sunLight.position.y,
+        1200
+    );
+
+
+    let targetSky;
+    let period;
+
+
+    if (
+        hour < 5 ||
+        hour >= 21
+    ) {
+
+        targetSky =
+            SKY_NIGHT;
+
+        period =
+            "🌙 NIGHT";
+
+    } else if (
+        hour < 7
+    ) {
+
+        targetSky =
+            SKY_DAWN;
+
+        period =
+            "🌅 DAWN";
+
+    } else if (
+        hour < 9
+    ) {
+
+        targetSky =
+            SKY_DAY;
+
+        period =
+            "🌄 MORNING";
+
+    } else if (
+        hour < 17
+    ) {
+
+        targetSky =
+            SKY_DAY;
+
+        period =
+            "☀️ DAY";
+
+    } else if (
+        hour < 19
+    ) {
+
+        targetSky =
+            SKY_SUNSET;
+
+        period =
+            "🌇 SUNSET";
+
+    } else {
+
+        targetSky =
+            SKY_DUSK;
+
+        period =
+            "🌆 DUSK";
+    }
+
+
+    skyCurrent.lerp(
+        targetSky,
+        .025
+    );
+
+
+    scene.background.copy(
+        skyCurrent
+    );
+
+
+    scene.fog.color.copy(
+        skyCurrent
+    );
+
+
+    const hours =
+        Math.floor(hour);
+
+    const minutes =
+        Math.floor(
+            (hour - hours) * 60
+        );
+
+
+    timeClock.textContent =
+        String(hours).padStart(
+            2,
+            "0"
+        )
+        +
+        ":"
+        +
+        String(minutes).padStart(
+            2,
+            "0"
+        );
+
+
+    timePeriod.textContent =
+        period;
+}
+
+
+/* =========================================================
+   BIOME
+========================================================= */
+
+function getBiome(x, z) {
+
+    if (z > 1900)
+        return "ANTARCTICA";
+
+    if (
+        x > 600 &&
+        z > 400
+    )
+        return "DESERT";
+
+    if (
+        x < -500 &&
+        z > 300
+    )
+        return "JUNGLE";
+
+    const h =
+        terrainHeight(x, z);
+
+
+    if (h > 260)
+        return "MOUNTAINS";
+
+    if (h > 140)
+        return "HILLS";
+
+    return "PLAINS";
+}
+
+
+/* =========================================================
+   NAVIGATION MAP
+========================================================= */
+
+const navCanvas =
+    document.getElementById(
+        "navMap"
+    );
+
+const navCtx =
+    navCanvas.getContext(
+        "2d"
+    );
+
+
+function drawNavigation() {
+
+    const w =
+        navCanvas.width;
+
+    const h =
+        navCanvas.height;
+
+
+    navCtx.clearRect(
+        0,
+        0,
+        w,
+        h
+    );
+
+
+    const scale =
+        .045;
+
+
+    const centerX =
+        airplane.position.x;
+
+    const centerZ =
+        airplane.position.z;
+
+
+    /* RELIEF */
+
+    /*
+       LIGHT OPTIMIZATION:
+       Было 5 пикселей.
+       Стало 8.
+
+       Карта всё равно остаётся 250x250,
+       но terrainHeight() вызывается намного реже.
+    */
+
+    const navStep = 8;
+
+
+    for (
+        let px = 0;
+        px < w;
+        px += navStep
+    ) {
+
+        for (
+            let pz = 0;
+            pz < h;
+            pz += navStep
+        ) {
+
+            const worldX =
+                centerX +
+                (px - w / 2) /
+                scale;
+
+
+            const worldZ =
+                centerZ +
+                (pz - h / 2) /
+                scale;
+
+
+            let color;
+
+
+            if (worldZ > 1900) {
+
+                color =
+                    "#eaf4ff";
+
+            } else {
+
+                const height =
+                    terrainHeight(
+                        worldX,
+                        worldZ
+                    );
+
+
+                if (
+                    height < -5
+                ) {
+
+                    color =
+                        "#165a82";
+
+                } else if (
+                    worldX > 600 &&
+                    worldZ > 400
+                ) {
+
+                    color =
+                        "#c49a52";
+
+                } else if (
+                    worldX < -500 &&
+                    worldZ > 300
+                ) {
+
+                    color =
+                        "#24703a";
+
+                } else if (
+                    height > 260
+                ) {
+
+                    color =
+                        "#85847c";
+
+                } else if (
+                    height > 140
+                ) {
+
+                    color =
+                        "#777844";
+
+                } else {
+
+                    color =
+                        "#4d9347";
+                }
+            }
+
+
+            navCtx.fillStyle =
+                color;
+
+
+            navCtx.fillRect(
+                px,
+                pz,
+                navStep,
+                navStep
+            );
+        }
+    }
+
+
+    /* GRID */
+
+    navCtx.strokeStyle =
+        "rgba(255,255,255,.15)";
+
+    navCtx.lineWidth = 1;
+
+
+    for (
+        let x = 0;
+        x < w;
+        x += 50
+    ) {
+
+        navCtx.beginPath();
+
+        navCtx.moveTo(
+            x,
+            0
+        );
+
+        navCtx.lineTo(
+            x,
+            h
+        );
+
+        navCtx.stroke();
+    }
+
+
+    for (
+        let y = 0;
+        y < h;
+        y += 50
+    ) {
+
+        navCtx.beginPath();
+
+        navCtx.moveTo(
+            0,
+            y
+        );
+
+        navCtx.lineTo(
+            w,
+            y
+        );
+
+        navCtx.stroke();
+    }
+
+
+    /* AIRPORTS */
+
+    airports.forEach(
+        airport => {
+
+            const x =
+                w / 2 +
+                (
+                    airport.x -
+                    centerX
+                ) *
+                scale;
+
+
+            const y =
+                h / 2 +
+                (
+                    airport.z -
+                    centerZ
+                ) *
+                scale;
+
+
+            if (
+                x < 0 ||
+                x > w ||
+                y < 0 ||
+                y > h
+            )
+                return;
+
+
+            navCtx.fillStyle =
+                "#ffffff";
+
+
+            navCtx.fillRect(
+                x - 3,
+                y - 3,
+                6,
+                6
+            );
+
+
+            navCtx.fillStyle =
+                "rgba(255,255,255,.85)";
+
+
+            navCtx.font =
+                "9px Arial";
+
+
+            navCtx.fillText(
+                airport.name,
+                x + 6,
+                y - 5
+            );
+        }
+    );
+
+
+    /* MEGA CITY */
+
+    const mx =
+        w / 2 +
+        (
+            1800 -
+            centerX
+        ) *
+        scale;
+
+
+    const my =
+        h / 2 +
+        (
+            -800 -
+            centerZ
+        ) *
+        scale;
+
+
+    if (
+        mx >= 0 &&
+        mx <= w &&
+        my >= 0 &&
+        my <= h
+    ) {
+
+        navCtx.strokeStyle =
+            "#ffd23c";
+
+        navCtx.lineWidth = 2;
+
+        navCtx.beginPath();
+
+        navCtx.arc(
+            mx,
+            my,
+            9,
+            0,
+            Math.PI * 2
+        );
+
+        navCtx.stroke();
+
+
+        navCtx.fillStyle =
+            "#fff0a0";
+
+        navCtx.font =
+            "bold 9px Arial";
+
+        navCtx.fillText(
+            "MEGA CITY",
+            mx + 11,
+            my - 8
+        );
+    }
+
+
+    /* PLANE */
+
+    const px =
+        w / 2;
+
+    const py =
+        h / 2;
+
+
+    navCtx.save();
+
+    navCtx.translate(
+        px,
+        py
+    );
+
+
+    navCtx.rotate(
+        -flight.heading
+    );
+
+
+    navCtx.fillStyle =
+        "#ff3e3e";
+
+
+    navCtx.beginPath();
+
+    navCtx.moveTo(
+        0,
+        -10
+    );
+
+    navCtx.lineTo(
+        6,
+        8
+    );
+
+    navCtx.lineTo(
+        0,
+        5
+    );
+
+    navCtx.lineTo(
+        -6,
+        8
+    );
+
+    navCtx.closePath();
+
+    navCtx.fill();
+
+    navCtx.restore();
+
+
+    /* COMPASS */
+
+    navCtx.fillStyle =
+        "white";
+
+    navCtx.font =
+        "bold 12px Arial";
+
+    navCtx.fillText(
+        "N",
+        w / 2 - 4,
+        14
+    );
+}
+
+
+/* =========================================================
+   HUD
+========================================================= */
+
+const altitudeEl =
+    document.getElementById(
+        "altitude"
+    );
+
+const speedEl =
+    document.getElementById(
+        "speed"
+    );
+
+const headingEl =
+    document.getElementById(
+        "heading"
+    );
+
+const verticalSpeedEl =
+    document.getElementById(
+        "verticalSpeed"
+    );
+
+const throttleEl =
+    document.getElementById(
+        "throttle"
+    );
+
+const fuelEl =
+    document.getElementById(
+        "fuel"
+    );
+
+const engineEl =
+    document.getElementById(
+        "engine"
+    );
+
+const biomeEl =
+    document.getElementById(
+        "biome"
+    );
+
+const timeClock =
+    document.getElementById(
+        "timeClock"
+    );
+
+const timePeriod =
+    document.getElementById(
+        "timePeriod"
+    );
+
+const messageEl =
+    document.getElementById(
+        "message"
+    );
+
+const cameraLabel =
+    document.getElementById(
+        "cameraLabel"
+    );
+
+
+function updateHUD() {
+
+    altitudeEl.textContent =
+        Math.round(
+            flight.altitude
+        ) + " m";
+
+
+    speedEl.textContent =
+        Math.round(
+            flight.speed
+        ) + " km/h";
+
+
+    let degrees =
+        THREE.MathUtils.radToDeg(
+            flight.heading
+        );
+
+
+    degrees =
+        (
+            degrees % 360 +
+            360
+        ) % 360;
+
+
+    headingEl.textContent =
+        String(
+            Math.round(degrees)
+        ).padStart(
+            3,
+            "0"
+        ) + "°";
+
+
+    verticalSpeedEl.textContent =
+        flight.verticalSpeed
+            .toFixed(1)
+        + " m/s";
+
+
+    throttleEl.textContent =
+        Math.round(
+            flight.throttle * 100
+        ) + "%";
+
+
+    fuelEl.textContent =
+        Math.round(
+            flight.fuel
+        ) + "%";
+
+
+    engineEl.textContent =
+        flight.engine
+            ? "ON"
+            : "OFF";
+
+
+    biomeEl.textContent =
+        getBiome(
+            airplane.position.x,
+            airplane.position.z
+        );
+}
+
+
+/* =========================================================
+   MESSAGE
+========================================================= */
+
+let messageTimer;
+
+
+function showMessage(text) {
+
+    messageEl.textContent =
+        text;
+
+    messageEl.style.opacity =
+        "1";
+
+
+    clearTimeout(
+        messageTimer
+    );
+
+
+    messageTimer =
+        setTimeout(
+            () => {
+
+                messageEl.style.opacity =
+                    "0";
+
+            },
+            1800
+        );
+}
+
+
+/* =========================================================
+   START
+========================================================= */
+
+let started = false;
+
+
+document
+    .getElementById("startButton")
+    .addEventListener(
+        "click",
+        () => {
+
+            started = true;
+
+            document
+                .getElementById("menu")
+                .style.display =
+                    "none";
+
+
+            cameraInitialized =
+                false;
+
+
+            updateCamera();
+
+
+            showMessage(
+                "✈️ WELCOME TO SKYWORLD"
+            );
+        }
+    );
+
+
+/* =========================================================
+   RESIZE
+========================================================= */
+
+window.addEventListener(
+    "resize",
+    () => {
+
+        camera.aspect =
+            innerWidth /
+            innerHeight;
+
+
+        camera.updateProjectionMatrix();
+
+
+        renderer.setSize(
+            innerWidth,
+            innerHeight
+        );
+    }
+);
+
+
+/* =========================================================
+   MAIN LOOP
+========================================================= */
+
+let lastTime =
+    performance.now();
+
+
+/*
+   NAVIGATION TIMER
+
+   drawNavigation() больше не запускается
+   на каждом кадре.
+
+   Это было одним из самых тяжёлых мест:
+   раньше за каждый кадр выполнялись
+   тысячи вызовов terrainHeight().
+*/
+let navigationTimer = 0;
+
+
+/*
+   HUD тоже обновляем немного реже.
+   На физику это НЕ влияет.
+*/
+let hudTimer = 0;
+
+
+function animate(now) {
+
+    requestAnimationFrame(
+        animate
+    );
+
+
+    const realDeltaMs =
+        now - lastTime;
+
+
+    const dt =
+        Math.min(
+            realDeltaMs / 16.67,
+            3
+        );
+
+
+    lastTime =
+        now;
+
+
+    if (started) {
+
+        /*
+           ФИЗИКА ОСТАЁТСЯ КАЖДЫЙ КАДР.
+        */
+        updateFlight(dt);
+
+
+        updateDayNight(dt);
+
+
+        updateCamera();
+
+
+        /*
+           HUD примерно 10 раз в секунду.
+           Это не влияет на игру.
+        */
+        hudTimer += realDeltaMs;
+
+        if (hudTimer >= 100) {
+
+            updateHUD();
+
+            hudTimer = 0;
+        }
+
+
+        /*
+           NAV MAP примерно 5-6 раз в секунду.
+        */
+        navigationTimer += realDeltaMs;
+
+        if (navigationTimer >= 180) {
+
+            drawNavigation();
+
+            navigationTimer = 0;
+        }
+    }
+
+
+    renderer.render(
+        scene,
+        camera
+    );
+}
+
+
+animate(
+    performance.now()
+);
+
+</script>
+
+</body>
+</html>
