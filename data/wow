@@ -712,7 +712,69 @@ function terrainHeight(x, z) {
 
     return h;
 }
+function islandTerrainHeight(x, z) {
 
+    const h = terrainHeight(x, z);
+
+    // Главный остров.
+    // Он покрывает все основные города и аэропорты.
+    const mainIsland =
+        Math.exp(
+            -Math.pow((x + 100) / 2700, 2)
+            -Math.pow((z + 100) / 2100, 2)
+        );
+
+    // Западный остров
+    const westIsland =
+        Math.exp(
+            -Math.pow((x + 2850) / 850, 2)
+            -Math.pow((z - 800) / 1000, 2)
+        );
+
+    // Восточный остров
+    const eastIsland =
+        Math.exp(
+            -Math.pow((x - 2850) / 850, 2)
+            -Math.pow((z + 300) / 900, 2)
+        );
+
+    // Южный остров
+    const southIsland =
+        Math.exp(
+            -Math.pow((x - 500) / 900, 2)
+            -Math.pow((z - 2700) / 650, 2)
+        );
+
+    // Северный остров
+    const northIsland =
+        Math.exp(
+            -Math.pow((x + 900) / 1000, 2)
+            -Math.pow((z + 2850) / 650, 2)
+        );
+
+    const mask = Math.max(
+        mainIsland,
+        westIsland,
+        eastIsland,
+        southIsland,
+        northIsland
+    );
+
+    // Мягкая береговая линия
+    const land =
+        THREE.MathUtils.smoothstep(
+            mask,
+            0.30,
+            0.53
+        );
+
+    // Вода находится на -12
+    return THREE.MathUtils.lerp(
+        -12,
+        h,
+        land
+    );
+}
 
 const terrainGeometry =
     new THREE.PlaneGeometry(
@@ -747,7 +809,7 @@ for (
         positionAttribute.getZ(i);
 
     const h =
-        terrainHeight(x, z);
+        islandTerrainHeight(x, z);
 
     let color;
 
@@ -907,78 +969,48 @@ scene.add(antarctica);
 ========================================================= */
 
 function createTree(x, z) {
+    const tree = new THREE.Group();
 
-    const tree =
-        new THREE.Group();
+    // Ствол
+    const trunkHeight = 18 + Math.random() * 12;
 
+    const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(2.2, 3.2, trunkHeight, 8),
+        new THREE.MeshStandardMaterial({
+            color: 0x6b4226,
+            roughness: 1
+        })
+    );
 
-    const trunk =
-        new THREE.Mesh(
-            new THREE.CylinderGeometry(
-                0.7,
-                1,
-                8,
-                8
-            ),
-            new THREE.MeshStandardMaterial({
-                color: 0x69452b
-            })
-        );
-
-    trunk.position.y = 4;
-
+    trunk.position.y = trunkHeight / 2;
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
     tree.add(trunk);
 
+    // Крона
+    const crown = new THREE.Mesh(
+        new THREE.SphereGeometry(13 + Math.random() * 5, 8, 6),
+        new THREE.MeshStandardMaterial({
+            color: 0x237a32,
+            roughness: 1
+        })
+    );
 
-    const crown =
-        new THREE.Mesh(
-            new THREE.SphereGeometry(
-                4.5,
-                8,
-                8
-            ),
-            new THREE.MeshStandardMaterial({
-                color: 0x236b35
-            })
-        );
-
-    crown.position.y = 9;
-
+    crown.position.y = trunkHeight + 8;
+    crown.scale.y = 1.15;
+    crown.castShadow = true;
+    crown.receiveShadow = true;
     tree.add(crown);
 
-
+    // Ставим дерево точно на новый островной рельеф
     tree.position.set(
         x,
-        terrainHeight(x, z),
+        islandTerrainHeight(x, z),
         z
     );
 
     scene.add(tree);
-}
-
-
-/*
-   LIGHT OPTIMIZATION:
-   Было 220.
-   Стало 150.
-*/
-for (let i = 0; i < 150; i++) {
-
-    const x =
-        (Math.random() - .5) * 6000;
-
-    const z =
-        (Math.random() - .5) * 6000;
-
-    if (z > 1900) continue;
-
-    if (
-        x < -500 &&
-        z > 300
-    ) {
-
-        createTree(x, z);
-    }
+    return tree;
 }
 
 
@@ -987,89 +1019,70 @@ for (let i = 0; i < 150; i++) {
 ========================================================= */
 
 function createPalm(x, z) {
+    const palm = new THREE.Group();
 
-    const palm =
-        new THREE.Group();
+    // Ствол
+    const trunkHeight = 22 + Math.random() * 10;
 
+    const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.8, 2.8, trunkHeight, 8),
+        new THREE.MeshStandardMaterial({
+            color: 0x8a5a32,
+            roughness: 1
+        })
+    );
 
-    const trunk =
-        new THREE.Mesh(
-            new THREE.CylinderGeometry(
-                .45,
-                .7,
-                9,
-                8
-            ),
-            new THREE.MeshStandardMaterial({
-                color: 0x795335
-            })
-        );
-
-    trunk.position.y = 4.5;
-
+    trunk.position.y = trunkHeight / 2;
+    trunk.rotation.z = (Math.random() - 0.5) * 0.08;
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
     palm.add(trunk);
 
+    // Крона пальмы
+    const leafMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2f8f3a,
+        roughness: 1
+    });
 
-    /*
-       Сохраняем 7 листьев.
-       Уменьшаем только количество пальм.
-    */
-    for (let i = 0; i < 7; i++) {
+    const leafCount = 8;
 
-        const leaf =
-            new THREE.Mesh(
-                new THREE.BoxGeometry(
-                    .35,
-                    .25,
-                    5
-                ),
-                new THREE.MeshStandardMaterial({
-                    color: 0x277a3b
-                })
-            );
+    for (let i = 0; i < leafCount; i++) {
+        const angle = (i / leafCount) * Math.PI * 2;
 
-        leaf.position.y = 9;
+        const leaf = new THREE.Mesh(
+            new THREE.ConeGeometry(2.8, 18, 5),
+            leafMaterial
+        );
 
-        leaf.rotation.y =
-            i / 7 * Math.PI * 2;
+        leaf.position.y = trunkHeight + 1;
 
-        leaf.rotation.x =
-            THREE.MathUtils.degToRad(
-                -18
-            );
+        leaf.rotation.z = Math.PI / 2;
+        leaf.rotation.y = angle;
 
-        leaf.translateZ(2.3);
+        leaf.translateX(8);
+
+        leaf.scale.y = 0.65;
+
+        leaf.castShadow = true;
+        leaf.receiveShadow = true;
 
         palm.add(leaf);
     }
 
+    // Немного случайного наклона всей пальмы
+    palm.rotation.z = (Math.random() - 0.5) * 0.12;
+    palm.rotation.x = (Math.random() - 0.5) * 0.08;
 
+    // Ставим пальму точно на островной рельеф
     palm.position.set(
         x,
-        terrainHeight(x, z),
+        islandTerrainHeight(x, z),
         z
     );
 
     scene.add(palm);
-}
 
-
-/*
-   LIGHT OPTIMIZATION:
-   Было 130.
-   Стало 80.
-*/
-for (let i = 0; i < 80; i++) {
-
-    const x =
-        -500 -
-        Math.random() * 1800;
-
-    const z =
-        300 +
-        Math.random() * 1600;
-
-    createPalm(x, z);
+    return palm;
 }
 
 
@@ -1172,93 +1185,86 @@ cities.forEach(
 ========================================================= */
 
 function createMegaCity(cx, cz) {
+    const city = new THREE.Group();
 
-    const city =
-        new THREE.Group();
+    // Немного уменьшаем размер Mega City
+    const roadSize = 430;
 
+    // =========================================================
+    // ДОРОГИ
+    // =========================================================
+    const roadMaterial = new THREE.MeshStandardMaterial({
+        color: 0x242424,
+        roughness: 0.9,
+        metalness: 0.05
+    });
 
-    /* ROADS */
-
-    const roadMat =
-        new THREE.MeshStandardMaterial({
-            color: 0x202329,
-            roughness: .92
-        });
-
-
-    const roadSize = 500;
-
-
-    for (
-        let x = -roadSize;
-        x <= roadSize;
-        x += 70
-    ) {
-
-        const road =
-            new THREE.Mesh(
-                new THREE.BoxGeometry(
-                    18,
-                    .08,
-                    roadSize * 2
-                ),
-                roadMat
-            );
-
-        road.position.set(
-            cx + x,
-            2,
-            cz
+    for (let x = -roadSize; x <= roadSize; x += 80) {
+        const road = new THREE.Mesh(
+            new THREE.BoxGeometry(
+                14,
+                0.4,
+                roadSize * 2
+            ),
+            roadMaterial
         );
 
+        road.position.set(
+            x,
+            0,
+            0
+        );
+
+        road.receiveShadow = true;
         city.add(road);
     }
 
-
-    for (
-        let z = -roadSize;
-        z <= roadSize;
-        z += 70
-    ) {
-
-        const road =
-            new THREE.Mesh(
-                new THREE.BoxGeometry(
-                    roadSize * 2,
-                    .08,
-                    18
-                ),
-                roadMat
-            );
-
-        road.position.set(
-            cx,
-            2,
-            cz + z
+    for (let z = -roadSize; z <= roadSize; z += 80) {
+        const road = new THREE.Mesh(
+            new THREE.BoxGeometry(
+                roadSize * 2,
+                0.4,
+                14
+            ),
+            roadMaterial
         );
 
+        road.position.set(
+            0,
+            0,
+            z
+        );
+
+        road.receiveShadow = true;
         city.add(road);
     }
 
+    // =========================================================
+    // ЗДАНИЯ
+    // =========================================================
+    for (let x = -roadSize + 28; x <= roadSize - 28; x += 80) {
+        for (let z = -roadSize + 28; z <= roadSize - 28; z += 80) {
 
-    /* BUILDINGS */
+            // Небольшие пустые места между зданиями
+            if (Math.random() < 0.12) {
+                continue;
+            }
 
-    for (
-        let x = -roadSize + 25;
-        x <= roadSize - 25;
-        x += 70
-    ) {
+            const distance =
+                Math.sqrt(x * x + z * z);
 
-        for (
-            let z = -roadSize + 25;
-            z <= roadSize - 25;
-            z += 70
-        ) {
+            let height;
 
-            if (
-                Math.random() < .12
-            ) continue;
-
+            // Центр города выше
+            if (distance < 160) {
+                height =
+                    180 +
+                    Math.random() * 260;
+            } else {
+                height =
+                    30 +
+                    Math.random() * 130;
+            }
 
             const width =
                 25 +
@@ -1268,266 +1274,293 @@ function createMegaCity(cx, cz) {
                 25 +
                 Math.random() * 25;
 
-
-            const distance =
-                Math.sqrt(
-                    x*x +
-                    z*z
-                );
-
-
-            let height;
-
-
-            if (distance < 170) {
-
-                height =
-                    180 +
-                    Math.random() * 260;
-
-            } else {
-
-                height =
-                    30 +
-                    Math.random() * 130;
-            }
-
-
-            const hue =
-                .55 +
-                Math.random() * .08;
-
-
-            const buildingMat =
+            const buildingMaterial =
                 new THREE.MeshStandardMaterial({
-                    color:
-                        new THREE.Color()
-                            .setHSL(
-                                hue,
-                                .12,
-                                .25 +
-                                Math.random() * .22
-                            ),
-
-                    metalness: .65,
-                    roughness: .22
+                    color: new THREE.Color(
+                        0.18 +
+                        Math.random() * 0.12,
+                        0.20 +
+                        Math.random() * 0.12,
+                        0.24 +
+                        Math.random() * 0.14
+                    ),
+                    roughness: 0.7,
+                    metalness: 0.2
                 });
 
-
-            const building =
-                new THREE.Mesh(
-                    new THREE.BoxGeometry(
-                        width,
-                        height,
-                        depth
-                    ),
-                    buildingMat
-                );
-
-
-            building.position.set(
-                cx + x,
-                height / 2,
-                cz + z
+            const building = new THREE.Mesh(
+                new THREE.BoxGeometry(
+                    width,
+                    height,
+                    depth
+                ),
+                buildingMaterial
             );
 
+            building.position.set(
+                x,
+                height / 2,
+                z
+            );
 
             building.castShadow = true;
             building.receiveShadow = true;
 
-
             city.add(building);
 
-
-            /* WINDOWS */
-
+            // =================================================
+            // ОКНА
+            // =================================================
             if (height > 100) {
-
-                const windowMat =
+                const windowMaterial =
                     new THREE.MeshBasicMaterial({
-                        color: 0x9edcff
+                        color: 0xffd76a
                     });
 
-
-                const window =
-                    new THREE.Mesh(
-                        new THREE.BoxGeometry(
-                            width * .72,
-                            height * .72,
-                            .04
-                        ),
-                        windowMat
+                const windowRows =
+                    Math.min(
+                        8,
+                        Math.floor(height / 45)
                     );
 
+                for (let row = 0; row < windowRows; row++) {
 
-                window.position.set(
-                    cx + x,
-                    height * .53,
-                    cz - depth / 2 - .03
-                );
+                    const window = new THREE.Mesh(
+                        new THREE.BoxGeometry(
+                            width * 0.55,
+                            2,
+                            0.5
+                        ),
+                        windowMaterial
+                    );
 
+                    window.position.set(
+                        x,
+                        20 + row * 40,
+                        z - depth / 2 - 0.3
+                    );
 
-                city.add(window);
+                    city.add(window);
+                }
             }
         }
     }
 
+    // =========================================================
+    // ЦЕНТРАЛЬНЫЕ НЕБОСКРЁБЫ
+    // =========================================================
+    const skyscraperCount = 10;
 
-    /* CENTRAL SKYSCRAPERS */
+    for (let i = 0; i < skyscraperCount; i++) {
 
-    for (let i = 0; i < 14; i++) {
+        const angle =
+            (i / skyscraperCount) *
+            Math.PI * 2;
 
-        const h =
+        const radius =
+            70 +
+            Math.random() * 120;
+
+        const x =
+            Math.cos(angle) * radius;
+
+        const z =
+            Math.sin(angle) * radius;
+
+        const height =
             300 +
             Math.random() * 400;
 
+        const width =
+            35 +
+            Math.random() * 20;
 
-        const tower =
-            new THREE.Mesh(
-                new THREE.CylinderGeometry(
-                    18 +
-                    Math.random() * 15,
-                    30,
-                    h,
-                    8
-                ),
-                new THREE.MeshStandardMaterial({
-                    color: 0x52606d,
-                    metalness: .9,
-                    roughness: .12
-                })
-            );
-
-
-        tower.position.set(
-            cx +
-            (Math.random() - .5) * 220,
-
-            h / 2,
-
-            cz +
-            (Math.random() - .5) * 220
-        );
-
-
-        tower.castShadow = true;
-
-        city.add(tower);
-    }
-
-
-    /* CENTRAL TOWER */
-
-    const towerHeight = 720;
-
-
-    const centralTower =
-        new THREE.Mesh(
-            new THREE.CylinderGeometry(
-                28,
-                48,
-                towerHeight,
-                10
+        const tower = new THREE.Mesh(
+            new THREE.BoxGeometry(
+                width,
+                height,
+                width
             ),
             new THREE.MeshStandardMaterial({
-                color: 0x71808c,
-                metalness: .95,
-                roughness: .09
+                color: 0x30343a,
+                roughness: 0.45,
+                metalness: 0.45
             })
         );
 
+        tower.position.set(
+            x,
+            height / 2,
+            z
+        );
 
-    centralTower.position.set(
-        cx,
-        towerHeight / 2,
-        cz
+        tower.castShadow = true;
+        tower.receiveShadow = true;
+
+        city.add(tower);
+
+        // Верхняя световая точка
+        const beacon = new THREE.Mesh(
+            new THREE.SphereGeometry(
+                3,
+                8,
+                8
+            ),
+            new THREE.MeshBasicMaterial({
+                color: 0xff3333
+            })
+        );
+
+        beacon.position.set(
+            x,
+            height + 5,
+            z
+        );
+
+        city.add(beacon);
+    }
+
+    // =========================================================
+    // ГЛАВНАЯ БАШНЯ
+    // =========================================================
+    const centralHeight = 620;
+
+    const centralTower = new THREE.Mesh(
+        new THREE.BoxGeometry(
+            65,
+            centralHeight,
+            65
+        ),
+        new THREE.MeshStandardMaterial({
+            color: 0x252a30,
+            roughness: 0.35,
+            metalness: 0.6
+        })
     );
 
+    centralTower.position.set(
+        0,
+        centralHeight / 2,
+        0
+    );
 
     centralTower.castShadow = true;
+    centralTower.receiveShadow = true;
 
     city.add(centralTower);
 
-
-    /* TOP LIGHT */
-
-    const beacon =
-        new THREE.PointLight(
-            0xff3344,
-            12,
-            600
-        );
-
-    beacon.position.set(
-        cx,
-        towerHeight + 15,
-        cz
+    // Верхушка главной башни
+    const towerTop = new THREE.Mesh(
+        new THREE.ConeGeometry(
+            35,
+            80,
+            6
+        ),
+        new THREE.MeshStandardMaterial({
+            color: 0x41464d,
+            metalness: 0.7,
+            roughness: 0.3
+        })
     );
 
-    city.add(beacon);
+    towerTop.position.set(
+        0,
+        centralHeight + 40,
+        0
+    );
 
+    towerTop.castShadow = true;
+    city.add(towerTop);
 
-    /* STREET LIGHTS */
+    // Красный маяк
+    const beaconLight = new THREE.PointLight(
+        0xff3333,
+        3,
+        180
+    );
 
-    /*
-       ОСНОВНАЯ ОПТИМИЗАЦИЯ MEGA CITY.
+    beaconLight.position.set(
+        0,
+        centralHeight + 85,
+        0
+    );
 
-       Раньше здесь создавалось:
-       14 x 14 = 196 PointLight.
+    city.add(beaconLight);
 
-       Это очень дорого для WebGL.
+    const beaconMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(
+            4,
+            8,
+            8
+        ),
+        new THREE.MeshBasicMaterial({
+            color: 0xff2222
+        })
+    );
 
-       Теперь оставляем только 16,
-       распределённых по городу.
-    */
+    beaconMesh.position.copy(
+        beaconLight.position
+    );
 
+    city.add(beaconMesh);
+
+    // =========================================================
+    // УЛИЧНОЕ ОСВЕЩЕНИЕ
+    // =========================================================
     const streetLightPositions = [
-        [-450, -450],
-        [-150, -450],
-        [150, -450],
-        [450, -450],
+        [-380, -380],
+        [0, -380],
+        [380, -380],
 
-        [-450, -150],
-        [450, -150],
+        [-380, 0],
+        [380, 0],
 
-        [-450, 150],
-        [450, 150],
+        [-380, 380],
+        [0, 380],
+        [380, 380],
 
-        [-450, 450],
-        [-150, 450],
-        [150, 450],
-        [450, 450],
+        [0, -250],
+        [0, 250],
 
-        [0, -300],
-        [0, 300],
-        [-300, 0],
-        [300, 0]
+        [-250, 0],
+        [250, 0],
+
+        [-180, -180],
+        [180, -180],
+        [-180, 180],
+        [180, 180]
     ];
 
     for (const [x, z] of streetLightPositions) {
 
-        const light =
-            new THREE.PointLight(
-                0xffd18a,
-                .8,
-                90
-            );
+        const light = new THREE.PointLight(
+            0xffcc88,
+            1.2,
+            150
+        );
 
         light.position.set(
-            cx + x,
-            8,
-            cz + z
+            x,
+            12,
+            z
         );
 
         city.add(light);
     }
 
+    // =========================================================
+    // РАЗМЕЩЕНИЕ ГОРОДА НА ОСТРОВНОМ РЕЛЬЕФЕ
+    // =========================================================
+    city.position.set(
+        cx,
+        islandTerrainHeight(cx, cz),
+        cz
+    );
 
     scene.add(city);
 
     return city;
 }
-
 
 createMegaCity(
     1800,
@@ -2394,62 +2427,52 @@ function updateCamera() {
 
 
     if (cockpitView) {
-
+    
         if (cockpitGroup)
             cockpitGroup.visible = true;
-
-
+    
         const cockpitOffset =
             new THREE.Vector3(
                 0,
-                5.2,
-                -7.5
+                5.0,
+                -9.2
             );
-
-
+    
         cockpitOffset.applyQuaternion(
             airplane.quaternion
         );
-
-
+    
         const cockpitPosition =
             airplane.position
                 .clone()
                 .add(cockpitOffset);
-
-
+    
         camera.position.copy(
             cockpitPosition
         );
-
-
+    
         const forward =
             new THREE.Vector3(
                 0,
-                3.8,
-                -100
+                2.8,
+                -120
             );
-
-
+    
         forward.applyQuaternion(
             airplane.quaternion
         );
-
-
+    
         const lookTarget =
             airplane.position
                 .clone()
                 .add(forward);
-
-
+    
         camera.lookAt(
             lookTarget
         );
-
-
+    
         return;
     }
-
 
     if (cockpitGroup)
         cockpitGroup.visible = false;
@@ -2689,214 +2712,154 @@ renderer.domElement.addEventListener(
 ========================================================= */
 
 function updateFlight(dt) {
-
+    // Тяга постепенно уменьшается при выключенном двигателе
     if (!flight.engine) {
-
-        flight.throttle *=
-            Math.pow(.2, dt);
-
+        flight.throttle *= Math.pow(0.2, dt);
     }
 
-
+    // Управление тягой
     if (keys["r"]) {
-
-        flight.throttle +=
-            .008 * dt;
+        flight.throttle += 0.008 * dt;
     }
-
 
     if (keys["y"]) {
-
-        flight.throttle -=
-            .012 * dt;
+        flight.throttle -= 0.012 * dt;
     }
 
+    flight.throttle = THREE.MathUtils.clamp(
+        flight.throttle,
+        0,
+        1
+    );
 
-    flight.throttle =
-        THREE.MathUtils.clamp(
-            flight.throttle,
-            0,
-            1
-        );
-
-
+    // Тангаж
     if (keys["w"]) {
-
-        flight.pitch +=
-            .018 * dt;
+        flight.pitch += 0.018 * dt;
     }
-
 
     if (keys["s"]) {
-
-        flight.pitch -=
-            .018 * dt;
+        flight.pitch -= 0.018 * dt;
     }
 
-
+    // Крен
     if (keys["a"]) {
-
-        flight.roll +=
-            .025 * dt;
+        flight.roll += 0.025 * dt;
     }
-
 
     if (keys["d"]) {
-
-        flight.roll -=
-            .025 * dt;
+        flight.roll -= 0.025 * dt;
     }
 
-
+    // Рыскание
     if (keys["q"]) {
-
-        flight.heading +=
-            .018 * dt;
+        flight.heading += 0.018 * dt;
     }
-
 
     if (keys["e"]) {
-
-        flight.heading -=
-            .018 * dt;
+        flight.heading -= 0.018 * dt;
     }
 
+    // Плавное возвращение самолёта
+    flight.pitch *= Math.pow(0.985, dt);
+    flight.roll *= Math.pow(0.975, dt);
 
-    flight.pitch *=
-        Math.pow(.985, dt);
-
-
-    flight.roll *=
-        Math.pow(.975, dt);
-
-
-    const targetSpeed =
-        flight.throttle *
-        520;
-
+    // Скорость зависит от тяги
+    const targetSpeed = flight.throttle * 520;
 
     flight.speed +=
-        (
-            targetSpeed -
-            flight.speed
-        ) *
-        .008 *
+        (targetSpeed - flight.speed) *
+        0.008 *
         dt;
 
-
     if (!flight.engine) {
-
-        flight.speed *=
-            Math.pow(.996, dt);
+        flight.speed *= Math.pow(0.996, dt);
     }
 
+    flight.speed = Math.max(0, flight.speed);
 
-    flight.speed =
-        Math.max(
-            0,
-            flight.speed
-        );
+    // =========================================================
+    // НАПРАВЛЕНИЕ ПОЛЁТА
+    // =========================================================
+    // Нос самолёта в модели направлен в сторону -Z,
+    // поэтому движение тоже должно быть в сторону -Z.
+    const radians = flight.heading;
 
+    const forward = new THREE.Vector3(
+        -Math.sin(radians),
+        0,
+        -Math.cos(radians)
+    );
 
-    const radians =
-        flight.heading;
-
-
-    const forward =
-        new THREE.Vector3(
-            Math.sin(radians),
-            0,
-            Math.cos(radians)
-        );
-
-
+    // Вертикальная скорость от тангажа
     flight.verticalSpeed =
-        Math.sin(
-            flight.pitch
-        ) *
+        Math.sin(flight.pitch) *
         flight.speed *
-        .018;
+        0.018;
 
+    if (flight.speed < 30) {
+        flight.verticalSpeed *= 0.3;
+    }
 
-    if (flight.speed < 30)
-        flight.verticalSpeed *= .3;
-
-
+    // Движение вперёд
     airplane.position.x +=
         forward.x *
         flight.speed *
         dt *
-        .002;
-
+        0.002;
 
     airplane.position.z +=
         forward.z *
         flight.speed *
         dt *
-        .002;
+        0.002;
 
-
+    // Движение вверх/вниз
     airplane.position.y +=
         flight.verticalSpeed *
         dt;
 
+    // =========================================================
+    // ЗЕМЛЯ / ОСТРОВНОЙ РЕЛЬЕФ
+    // =========================================================
+    const ground = islandTerrainHeight(
+        airplane.position.x,
+        airplane.position.z
+    );
 
-    /* minimum terrain clearance */
+    // Самолёт не может провалиться в землю
+    if (airplane.position.y < ground + 35) {
+        airplane.position.y = ground + 35;
 
-    const ground =
-        terrainHeight(
-            airplane.position.x,
-            airplane.position.z
+        flight.verticalSpeed = Math.max(
+            0,
+            flight.verticalSpeed
         );
-
-
-    if (
-        airplane.position.y <
-        ground + 35
-    ) {
-
-        airplane.position.y =
-            ground + 35;
-
-        flight.verticalSpeed =
-            Math.max(
-                0,
-                flight.verticalSpeed
-            );
     }
 
+    // Высота
+    flight.altitude = airplane.position.y;
 
-    flight.altitude =
-        airplane.position.y;
-
-
+    // Расход топлива
     flight.fuel -=
         flight.throttle *
-        .0007 *
+        0.0007 *
         dt;
 
+    flight.fuel = Math.max(
+        0,
+        flight.fuel
+    );
 
-    flight.fuel =
-        Math.max(
-            0,
-            flight.fuel
-        );
+    // =========================================================
+    // ПОВОРОТ САМОЛЁТА
+    // =========================================================
+    airplane.rotation.order = "YXZ";
 
+    airplane.rotation.y = flight.heading;
 
-    airplane.rotation.order =
-        "YXZ";
+    airplane.rotation.x = -flight.pitch;
 
-
-    airplane.rotation.y =
-        flight.heading;
-
-
-    airplane.rotation.x =
-        -flight.pitch;
-
-
-    airplane.rotation.z =
-        flight.roll;
+    airplane.rotation.z = flight.roll;
 }
 
 
