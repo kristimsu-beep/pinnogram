@@ -3680,128 +3680,88 @@
             return himawariLayer;
         }
 
-        async function loadHimawariSatellite() {
+        function loadHimawariSatellite() {
         
-            if (currentMapMode !== 'satellite') {
-                return;
+            console.log("🛰️ [CTW2 HIMAWARI] Loading CIRA Himawari GeoColor...");
+        
+            // Remove previous Himawari layer if it exists
+            if (window.himawariSatelliteLayer) {
+                try {
+                    map.removeLayer(window.himawariSatelliteLayer);
+                } catch (e) {}
+                window.himawariSatelliteLayer = null;
             }
         
-            try {
+            /*
+             * CIRA/RAMMB Himawari GeoColor
+             *
+             * Day:
+             *   Natural/true-color appearance
+             *
+             * Night:
+             *   GeoColor nighttime rendering instead of a completely black
+             *   transparent/empty satellite image.
+             *
+             * The timestamp is deliberately added as a cache-buster so
+             * Leaflet/browser caching does not keep old imagery forever.
+             */
         
-                console.log(
-                    '🛰️ [HIMAWARI] Loading latest JMA true-color imagery...'
-                );
+            const cacheBust = Math.floor(Date.now() / (10 * 60 * 1000));
         
-                // Get the actual latest full-disk observation time
-                const response =
-                    await fetch(
-                        'https://www.jma.go.jp/bosai/himawari/data/satimg/targetTimes_fd.json?' +
-                        Date.now()
-                    );
+            const himawariUrl =
+                "https://rammb-slider.cira.colostate.edu/" +
+                "data/json/himawari/full_disk/geocolor/latest/" +
+                "{z}/{x}/{y}.jpg?" +
+                "v=" + cacheBust;
         
-                if (!response.ok) {
-                    throw new Error(
-                        `Himawari timestamp HTTP ${response.status}`
+            window.himawariSatelliteLayer = L.tileLayer(
+                himawariUrl,
+                {
+                    minZoom: 2,
+                    maxZoom: 7,
+        
+                    opacity: 1.0,
+        
+                    tileSize: 256,
+                    zoomOffset: 0,
+        
+                    noWrap: false,
+        
+                    attribution:
+                        "Himawari imagery courtesy of JMA / CIRA-RAMMB",
+        
+                    crossOrigin: true,
+        
+                    zIndex: 20
+                }
+            );
+        
+            window.himawariSatelliteLayer.on(
+                "tileerror",
+                function (e) {
+                    console.warn(
+                        "⚠️ [CTW2 HIMAWARI] Tile failed:",
+                        e.coords
                     );
                 }
+            );
         
-                const times =
-                    await response.json();
-        
-                if (
-                    !Array.isArray(times) ||
-                    times.length === 0
-                ) {
-                    throw new Error(
-                        'JMA returned no Himawari timestamps.'
+            window.himawariSatelliteLayer.on(
+                "load",
+                function () {
+                    console.log(
+                        "✅ [CTW2 HIMAWARI] Imagery loaded."
                     );
                 }
+            );
         
-                // JMA provides the newest observation at the end
-                const latest =
-                    times[times.length - 1];
+            window.himawariSatelliteLayer.addTo(map);
         
-                const baseTime =
-                    latest.basetime;
+            console.log(
+                "🛰️ [CTW2 HIMAWARI] CIRA GeoColor layer activated."
+            );
         
-                const validTime =
-                    latest.validtime;
-        
-                if (!baseTime || !validTime) {
-                    throw new Error(
-                        'Invalid Himawari timestamp data.'
-                    );
-                }
-        
-                console.log(
-                    '🛰️ [HIMAWARI] Latest JMA frame:',
-                    baseTime
-                );
-        
-                // Remove previous Himawari layer
-                if (himawariLayer) {
-        
-                    map.removeLayer(
-                        himawariLayer
-                    );
-        
-                    himawariLayer = null;
-                }
-        
-                // JMA full-disk true-color tiles
-                const url =
-                    'https://www.jma.go.jp/bosai/himawari/data/satimg/' +
-                    baseTime +
-                    '/fd/' +
-                    validTime +
-                    '/REP/ETC/{z}/{x}/{y}.jpg';
-        
-                himawariLayer =
-                    L.tileLayer(url, {
-        
-                        minZoom: 3,
-        
-                        maxZoom: 5,
-        
-                        maxNativeZoom: 5,
-        
-                        tileSize: 256,
-        
-                        opacity: 1.0,
-        
-                        noWrap: false,
-        
-                        bounds: [
-                            [-60, 90],
-                            [70, 175]
-                        ],
-        
-                        zIndex: 450,
-        
-                        attribution:
-                            'Himawari-9 True Color © JMA'
-        
-                    });
-        
-                himawariLayer.addTo(
-                    map
-                );
-        
-                himawariTime =
-                    Date.now();
-        
-                console.log(
-                    '🛰️ [HIMAWARI] JMA imagery active:',
-                    baseTime
-                );
-        
-            } catch (error) {
-        
-                console.error(
-                    '🚨 [HIMAWARI] Failed:',
-                    error
-                );
-            }
+            return window.himawariSatelliteLayer;
         }
 
         async function getLatestMeteosatTime() {
