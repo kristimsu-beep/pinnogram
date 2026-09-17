@@ -1,0 +1,3422 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+
+<title>SkyWorld Flight Simulator</title>
+
+<style>
+
+*{
+    box-sizing:border-box;
+    user-select:none;
+}
+
+html,
+body{
+    margin:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:#82cdf7;
+    font-family:Arial,sans-serif;
+}
+
+#game{
+    position:fixed;
+    inset:0;
+    z-index:1;
+}
+
+/* =====================================================
+   STATIC UI
+===================================================== */
+
+#ui{
+    position:fixed;
+    inset:0;
+    z-index:100;
+    pointer-events:none;
+}
+
+#menu{
+    position:fixed;
+    inset:0;
+    z-index:200;
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    background:
+        radial-gradient(
+            circle at center,
+            #276f9b 0%,
+            #102b42 70%
+        );
+
+    color:white;
+
+    pointer-events:auto;
+}
+
+.menuBox{
+    width:470px;
+    max-width:90%;
+
+    padding:40px;
+
+    border-radius:24px;
+
+    background:rgba(5,15,25,.88);
+
+    border:1px solid rgba(255,255,255,.18);
+
+    box-shadow:
+        0 20px 80px rgba(0,0,0,.5);
+
+    text-align:center;
+}
+
+.menuBox h1{
+    margin:0 0 10px;
+    font-size:42px;
+}
+
+.menuBox p{
+    opacity:.8;
+    line-height:1.6;
+}
+
+button{
+    border:0;
+    border-radius:12px;
+
+    padding:15px 35px;
+
+    font-size:18px;
+    font-weight:bold;
+
+    cursor:pointer;
+
+    background:#36a8ff;
+    color:white;
+}
+
+button:hover{
+    background:#65bcff;
+}
+
+/* =====================================================
+   HUD
+===================================================== */
+
+#hud{
+
+    position:absolute;
+
+    left:20px;
+    top:20px;
+
+    width:235px;
+
+    color:white;
+
+    background:rgba(0,0,0,.48);
+
+    padding:14px 18px;
+
+    border-radius:14px;
+
+    font-size:14px;
+
+    line-height:1.65;
+
+    pointer-events:none;
+}
+
+#hud b{
+    color:#72d4ff;
+}
+
+/* =====================================================
+   NAVIGATION
+===================================================== */
+
+#nav{
+
+    position:absolute;
+
+    right:20px;
+    top:20px;
+
+    width:270px;
+
+    padding:10px;
+
+    border-radius:15px;
+
+    background:rgba(0,0,0,.48);
+
+    pointer-events:none;
+}
+
+#navTitle{
+
+    color:white;
+
+    text-align:center;
+
+    font-size:13px;
+
+    margin-bottom:6px;
+}
+
+#navCanvas{
+
+    display:block;
+
+    width:250px;
+    height:250px;
+
+    border-radius:10px;
+}
+
+/* =====================================================
+   CONTROLS
+===================================================== */
+
+#controls{
+
+    position:absolute;
+
+    left:20px;
+    bottom:20px;
+
+    color:white;
+
+    background:rgba(0,0,0,.45);
+
+    padding:12px 16px;
+
+    border-radius:12px;
+
+    font-size:13px;
+
+    line-height:1.65;
+}
+
+#cameraInfo{
+
+    position:absolute;
+
+    right:20px;
+    bottom:20px;
+
+    color:white;
+
+    background:rgba(0,0,0,.42);
+
+    padding:10px 14px;
+
+    border-radius:10px;
+
+    font-size:12px;
+}
+
+/* =====================================================
+   TIME
+===================================================== */
+
+#timeBox{
+
+    position:absolute;
+
+    left:50%;
+
+    top:20px;
+
+    transform:translateX(-50%);
+
+    min-width:145px;
+
+    text-align:center;
+
+    color:white;
+
+    background:rgba(0,0,0,.48);
+
+    padding:8px 14px;
+
+    border-radius:12px;
+
+    font-size:13px;
+}
+
+#timeBox b{
+    color:#fff;
+    font-size:16px;
+}
+
+/* =====================================================
+   MESSAGE
+===================================================== */
+
+#message{
+
+    position:absolute;
+
+    left:50%;
+    top:18%;
+
+    transform:translateX(-50%);
+
+    color:white;
+
+    background:rgba(0,0,0,.55);
+
+    padding:12px 20px;
+
+    border-radius:12px;
+
+    opacity:0;
+
+    transition:opacity .25s;
+
+    white-space:nowrap;
+}
+
+/* =====================================================
+   CROSSHAIR
+===================================================== */
+
+#crosshair{
+
+    position:absolute;
+
+    left:50%;
+    top:50%;
+
+    width:18px;
+    height:18px;
+
+    transform:translate(-50%,-50%);
+}
+
+#crosshair:before,
+#crosshair:after{
+
+    content:"";
+
+    position:absolute;
+
+    background:rgba(255,255,255,.75);
+}
+
+#crosshair:before{
+
+    width:18px;
+    height:1px;
+
+    left:0;
+    top:9px;
+}
+
+#crosshair:after{
+
+    width:1px;
+    height:18px;
+
+    left:9px;
+    top:0;
+}
+
+body.cameraDragging{
+    cursor:grabbing;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="game"></div>
+
+
+<!-- =====================================================
+     UI
+===================================================== -->
+
+<div id="ui">
+
+    <div id="menu">
+
+        <div class="menuBox">
+
+            <h1>✈️ SkyWorld</h1>
+
+            <p>
+                Оригинальный 3D flight simulator.
+                Горы, пустыни, джунгли,
+                Антарктида и смена суток.
+            </p>
+
+            <p>
+
+                <b>W/S</b> — набор / снижение<br>
+
+                <b>R/Y</b> — тяга<br>
+
+                <b>A/D</b> — крен<br>
+
+                <b>Q/E</b> — рыскание<br>
+
+                <b>SPACE</b> — двигатель
+
+            </p>
+
+            <p>
+
+                🖱️ ЛКМ + движение —
+                вращение камеры<br>
+
+                🖱️ Колесо —
+                приближение / отдаление
+
+            </p>
+
+            <button id="startBtn">
+                НАЧАТЬ ПОЛЁТ
+            </button>
+
+        </div>
+
+    </div>
+
+
+    <div id="hud">
+
+        <div>
+            ALTITUDE:
+            <b id="altitude">0</b> m
+        </div>
+
+        <div>
+            AIRSPEED:
+            <b id="speed">0</b> km/h
+        </div>
+
+        <div>
+            HEADING:
+            <b id="heading">0</b>°
+        </div>
+
+        <div>
+            VERTICAL:
+            <b id="vertical">0</b> m/s
+        </div>
+
+        <div>
+            THROTTLE:
+            <b id="throttle">0</b>%
+        </div>
+
+        <div>
+            FUEL:
+            <b id="fuel">100</b>%
+        </div>
+
+        <div>
+            ENGINE:
+            <b id="engine">OFF</b>
+        </div>
+
+        <div>
+            BIOME:
+            <b id="biome">PLAINS</b>
+        </div>
+
+    </div>
+
+
+    <div id="timeBox">
+
+        🕐
+        <b id="gameTime">
+            12:00
+        </b>
+
+        <div id="period">
+            DAY
+        </div>
+
+    </div>
+
+
+    <div id="nav">
+
+        <div id="navTitle">
+            NAVIGATION / TERRAIN
+        </div>
+
+        <canvas
+            id="navCanvas"
+            width="250"
+            height="250">
+        </canvas>
+
+    </div>
+
+
+    <div id="controls">
+
+        W/S — pitch<br>
+        R/Y — throttle<br>
+        A/D — roll<br>
+        Q/E — yaw<br>
+        SPACE — engine
+
+    </div>
+
+
+    <div id="cameraInfo">
+
+        🖱️ ЛКМ + движение — камера<br>
+        Колесо — zoom
+
+    </div>
+
+
+    <div id="crosshair"></div>
+
+    <div id="message"></div>
+
+</div>
+
+
+<script type="module">
+
+import * as THREE from
+"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+
+
+/* =====================================================
+   SCENE
+===================================================== */
+
+const scene =
+    new THREE.Scene();
+
+
+scene.background =
+    new THREE.Color(
+        0x82cdf7
+    );
+
+
+scene.fog =
+    new THREE.Fog(
+        0x82cdf7,
+        900,
+        6500
+    );
+
+
+const camera =
+    new THREE.PerspectiveCamera(
+        65,
+        innerWidth/innerHeight,
+        .1,
+        15000
+    );
+
+
+const renderer =
+    new THREE.WebGLRenderer({
+        antialias:true
+    });
+
+
+renderer.setSize(
+    innerWidth,
+    innerHeight
+);
+
+
+renderer.setPixelRatio(
+    Math.min(
+        devicePixelRatio,
+        2
+    )
+);
+
+
+renderer.shadowMap.enabled=true;
+
+
+document
+.getElementById("game")
+.appendChild(
+    renderer.domElement
+);
+
+
+/* =====================================================
+   LIGHTS
+===================================================== */
+
+const hemi =
+    new THREE.HemisphereLight(
+        0xcceeff,
+        0x35442b,
+        1.6
+    );
+
+
+scene.add(hemi);
+
+
+const sun =
+    new THREE.DirectionalLight(
+        0xffffff,
+        2
+    );
+
+
+sun.position.set(
+    1500,
+    3500,
+    -1500
+);
+
+
+sun.castShadow=true;
+
+scene.add(sun);
+
+
+/* =====================================================
+   MOON
+===================================================== */
+
+const moonLight =
+    new THREE.DirectionalLight(
+        0x8eafff,
+        0
+    );
+
+
+moonLight.position.set(
+    -1200,
+    1200,
+    1500
+);
+
+
+scene.add(moonLight);
+
+
+/* =====================================================
+   STARS
+===================================================== */
+
+const starGeometry =
+    new THREE.BufferGeometry();
+
+
+const starPositions=[];
+
+
+for(
+    let i=0;
+    i<1800;
+    i++
+){
+
+    const radius=
+        7000+
+        Math.random()*3000;
+
+    const theta=
+        Math.random()*Math.PI*2;
+
+    const phi=
+        Math.random()*
+        Math.PI;
+
+
+    starPositions.push(
+
+        Math.sin(phi)*
+        Math.cos(theta)*
+        radius,
+
+        Math.cos(phi)*
+        radius,
+
+        Math.sin(phi)*
+        Math.sin(theta)*
+        radius
+
+    );
+}
+
+
+starGeometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(
+        starPositions,
+        3
+    )
+);
+
+
+const starMaterial =
+    new THREE.PointsMaterial({
+
+        color:0xffffff,
+
+        size:5,
+
+        sizeAttenuation:false,
+
+        transparent:true,
+
+        opacity:0
+
+    });
+
+
+const stars =
+    new THREE.Points(
+        starGeometry,
+        starMaterial
+    );
+
+
+scene.add(stars);
+
+
+/* =====================================================
+   MOON
+===================================================== */
+
+const moon =
+    new THREE.Mesh(
+
+        new THREE.SphereGeometry(
+            130,
+            32,
+            32
+        ),
+
+        new THREE.MeshBasicMaterial({
+            color:0xe7ecff,
+            transparent:true,
+            opacity:0
+        })
+
+    );
+
+
+scene.add(moon);
+
+
+/* =====================================================
+   TERRAIN
+===================================================== */
+
+const terrainSize=
+    6500;
+
+const terrainSegments=
+    200;
+
+
+function terrainHeight(x,z){
+
+    let h=0;
+
+
+    h +=
+        Math.sin(
+            x*.0012
+        )*35;
+
+
+    h +=
+        Math.cos(
+            z*.0015
+        )*30;
+
+
+    h +=
+        Math.sin(
+            (x+z)*.0021
+        )*18;
+
+
+    h +=
+        Math.sin(
+            x*.004+z*.001
+        )*10;
+
+
+    const m1=
+        Math.exp(
+            -(
+                Math.pow(
+                    (x+900)/700,
+                    2
+                )+
+                Math.pow(
+                    (z+100)/1200,
+                    2
+                )
+            )
+        );
+
+
+    h+=m1*390;
+
+
+    const m2=
+        Math.exp(
+            -(
+                Math.pow(
+                    (x-1200)/900,
+                    2
+                )+
+                Math.pow(
+                    (z-900)/700,
+                    2
+                )
+            )
+        );
+
+
+    h+=m2*300;
+
+
+    h+=
+        Math.sin(
+            x*.006
+        )*
+        Math.cos(
+            z*.005
+        )*
+        20;
+
+
+    /* =================================================
+       ANTARCTICA
+    ================================================= */
+
+    if(z>1900){
+
+        const amount=
+            Math.min(
+                1,
+                (z-1900)/1800
+            );
+
+
+        h+=
+            amount*180;
+
+
+        h+=
+            Math.sin(
+                x*.0028
+            )*
+            Math.cos(
+                z*.0032
+            )*
+            100*
+            amount;
+
+
+        h+=
+            Math.sin(
+                (x-z)*.006
+            )*
+            45*
+            amount;
+    }
+
+
+    return h;
+}
+
+
+/* =====================================================
+   TERRAIN MESH
+===================================================== */
+
+const terrainGeometry=
+    new THREE.PlaneGeometry(
+        terrainSize,
+        terrainSize,
+        terrainSegments,
+        terrainSegments
+    );
+
+
+terrainGeometry.rotateX(
+    -Math.PI/2
+);
+
+
+const positions=
+    terrainGeometry.attributes.position;
+
+
+const terrainColors=[];
+
+
+for(
+    let i=0;
+    i<positions.count;
+    i++
+){
+
+    const x=
+        positions.getX(i);
+
+    const z=
+        positions.getZ(i);
+
+    const h=
+        terrainHeight(
+            x,z
+        );
+
+
+    positions.setY(
+        i,h
+    );
+
+
+    let color;
+
+
+    /* ANTARCTICA */
+
+    if(z>1900){
+
+        if(h>330){
+
+            color=
+                new THREE.Color(
+                    0xf1faff
+                );
+
+        }else{
+
+            color=
+                new THREE.Color(
+                    0xdcecf4
+                );
+        }
+
+    }
+
+
+    /* DESERT */
+
+    else if(
+        x>600 &&
+        z>400
+    ){
+
+        color=
+            new THREE.Color(
+                0xd2a85b
+            );
+
+    }
+
+
+    /* JUNGLE */
+
+    else if(
+        x<-500 &&
+        z>300
+    ){
+
+        color=
+            new THREE.Color(
+                0x24763c
+            );
+
+    }
+
+
+    /* MOUNTAINS */
+
+    else if(h>260){
+
+        color=
+            new THREE.Color(
+                0x85847c
+            );
+
+    }
+
+
+    /* HILLS */
+
+    else if(h>140){
+
+        color=
+            new THREE.Color(
+                0x777844
+            );
+
+    }
+
+
+    /* PLAINS */
+
+    else{
+
+        color=
+            new THREE.Color(
+                0x4d9347
+            );
+    }
+
+
+    terrainColors.push(
+        color.r,
+        color.g,
+        color.b
+    );
+}
+
+
+terrainGeometry.computeVertexNormals();
+
+
+terrainGeometry.setAttribute(
+    "color",
+    new THREE.Float32BufferAttribute(
+        terrainColors,
+        3
+    )
+);
+
+
+const terrainMaterial=
+    new THREE.MeshStandardMaterial({
+
+        vertexColors:true,
+
+        roughness:1,
+
+        metalness:0
+
+    });
+
+
+const terrain=
+    new THREE.Mesh(
+        terrainGeometry,
+        terrainMaterial
+    );
+
+
+terrain.receiveShadow=true;
+
+scene.add(terrain);
+
+
+/* =====================================================
+   OCEAN
+===================================================== */
+
+const oceanGeometry=
+    new THREE.PlaneGeometry(
+        16000,
+        16000
+    );
+
+
+oceanGeometry.rotateX(
+    -Math.PI/2
+);
+
+
+const oceanMaterial=
+    new THREE.MeshStandardMaterial({
+
+        color:0x176b9b,
+
+        roughness:.25,
+
+        metalness:.1
+
+    });
+
+
+const ocean=
+    new THREE.Mesh(
+        oceanGeometry,
+        oceanMaterial
+    );
+
+
+ocean.position.y=-12;
+
+scene.add(ocean);
+
+
+/* =====================================================
+   ANTARCTIC ICE
+===================================================== */
+
+const iceGeometry=
+    new THREE.PlaneGeometry(
+        4500,
+        1000,
+        30,
+        8
+    );
+
+
+iceGeometry.rotateX(
+    -Math.PI/2
+);
+
+
+const icePositions=
+    iceGeometry.attributes.position;
+
+
+for(
+    let i=0;
+    i<icePositions.count;
+    i++
+){
+
+    const x=
+        icePositions.getX(i);
+
+    const z=
+        icePositions.getZ(i);
+
+
+    icePositions.setY(
+        i,
+        5+
+        Math.sin(x*.004)*4+
+        Math.cos(z*.007)*3
+    );
+}
+
+
+const ice=
+    new THREE.Mesh(
+
+        iceGeometry,
+
+        new THREE.MeshStandardMaterial({
+            color:0xe8f7ff,
+            roughness:.8
+        })
+
+    );
+
+
+ice.position.z=2400;
+
+scene.add(ice);
+
+
+/* =====================================================
+   TREES
+===================================================== */
+
+function createTree(x,z){
+
+    const y=
+        terrainHeight(
+            x,z
+        );
+
+
+    if(y>180)
+        return;
+
+
+    const group=
+        new THREE.Group();
+
+
+    const trunk=
+        new THREE.Mesh(
+
+            new THREE.CylinderGeometry(
+                2,
+                3,
+                30,
+                7
+            ),
+
+            new THREE.MeshStandardMaterial({
+                color:0x75482b
+            })
+
+        );
+
+
+    trunk.position.y=15;
+
+
+    const crown=
+        new THREE.Mesh(
+
+            new THREE.ConeGeometry(
+                15,
+                38,
+                8
+            ),
+
+            new THREE.MeshStandardMaterial({
+                color:0x236c31
+            })
+
+        );
+
+
+    crown.position.y=42;
+
+
+    group.add(
+        trunk,
+        crown
+    );
+
+
+    group.position.set(
+        x,
+        y,
+        z
+    );
+
+
+    scene.add(group);
+}
+
+
+for(
+    let i=0;
+    i<220;
+    i++
+){
+
+    const x=
+        (Math.random()-.5)*
+        5000;
+
+    const z=
+        (Math.random()-.5)*
+        4000;
+
+
+    if(
+        x<-500 &&
+        z>300
+    )
+        continue;
+
+
+    if(z>1900)
+        continue;
+
+
+    createTree(x,z);
+}
+
+
+/* =====================================================
+   PALMS
+===================================================== */
+
+function createPalm(x,z){
+
+    const y=
+        terrainHeight(
+            x,z
+        );
+
+
+    if(y>150)
+        return;
+
+
+    const group=
+        new THREE.Group();
+
+
+    const trunk=
+        new THREE.Mesh(
+
+            new THREE.CylinderGeometry(
+                1.5,
+                2.5,
+                30,
+                7
+            ),
+
+            new THREE.MeshStandardMaterial({
+                color:0x7c522f
+            })
+
+        );
+
+
+    trunk.position.y=15;
+
+
+    group.add(trunk);
+
+
+    for(
+        let i=0;
+        i<7;
+        i++
+    ){
+
+        const leaf=
+            new THREE.Mesh(
+
+                new THREE.BoxGeometry(
+                    3,
+                    1,
+                    24
+                ),
+
+                new THREE.MeshStandardMaterial({
+                    color:0x1e7a35
+                })
+
+            );
+
+
+        leaf.position.y=32;
+
+        leaf.rotation.y=
+            i*Math.PI*2/7;
+
+        leaf.rotation.x=.15;
+
+
+        group.add(leaf);
+    }
+
+
+    group.position.set(
+        x,
+        y,
+        z
+    );
+
+
+    scene.add(group);
+}
+
+
+for(
+    let i=0;
+    i<130;
+    i++
+){
+
+    const x=
+        -500-
+        Math.random()*2000;
+
+    const z=
+        300+
+        Math.random()*1500;
+
+
+    createPalm(x,z);
+}
+
+
+/* =====================================================
+   CITIES
+===================================================== */
+
+const cities=[
+
+    {
+        name:"AURORA",
+        x:-900,
+        z:-400
+    },
+
+    {
+        name:"NOVA CITY",
+        x:800,
+        z:1200
+    },
+
+    {
+        name:"RIVER CITY",
+        x:-1500,
+        z:-1300
+    }
+
+];
+
+
+function createCity(city){
+
+    const group=
+        new THREE.Group();
+
+
+    for(
+        let i=0;
+        i<22;
+        i++
+    ){
+
+        const height=
+            15+
+            Math.random()*90;
+
+
+        const building=
+            new THREE.Mesh(
+
+                new THREE.BoxGeometry(
+                    15,
+                    height,
+                    15
+                ),
+
+                new THREE.MeshStandardMaterial({
+                    color:0x65747e
+                })
+
+            );
+
+
+        building.position.set(
+
+            (Math.random()-.5)*220,
+
+            height/2,
+
+            (Math.random()-.5)*220
+
+        );
+
+
+        group.add(building);
+    }
+
+
+    group.position.set(
+
+        city.x,
+
+        terrainHeight(
+            city.x,
+            city.z
+        ),
+
+        city.z
+
+    );
+
+
+    scene.add(group);
+}
+
+
+cities.forEach(
+    createCity
+);
+
+
+/* =====================================================
+   AIRPORTS
+===================================================== */
+
+const airports=[
+
+    {
+        name:"AURORA INTL",
+        x:-900,
+        z:-400,
+        heading:0
+    },
+
+    {
+        name:"NOVA FIELD",
+        x:1000,
+        z:1000,
+        heading:Math.PI/2
+    },
+
+    {
+        name:"COASTAL AIRPORT",
+        x:-1800,
+        z:-1100,
+        heading:-Math.PI/4
+    }
+
+];
+
+
+function createAirport(a){
+
+    const group=
+        new THREE.Group();
+
+
+    const runway=
+        new THREE.Mesh(
+
+            new THREE.BoxGeometry(
+                90,
+                2,
+                1000
+            ),
+
+            new THREE.MeshStandardMaterial({
+                color:0x292929
+            })
+
+        );
+
+
+    runway.position.y=1;
+
+    group.add(runway);
+
+
+    for(
+        let i=-4;
+        i<=4;
+        i++
+    ){
+
+        const stripe=
+            new THREE.Mesh(
+
+                new THREE.BoxGeometry(
+                    7,
+                    .5,
+                    45
+                ),
+
+                new THREE.MeshStandardMaterial({
+                    color:0xffffff
+                })
+
+            );
+
+
+        stripe.position.set(
+            0,
+            2,
+            i*100
+        );
+
+
+        group.add(stripe);
+    }
+
+
+    const terminal=
+        new THREE.Mesh(
+
+            new THREE.BoxGeometry(
+                150,
+                30,
+                80
+            ),
+
+            new THREE.MeshStandardMaterial({
+                color:0xbec7cc
+            })
+
+        );
+
+
+    terminal.position.set(
+        120,
+        15,
+        0
+    );
+
+
+    group.add(terminal);
+
+
+    const tower=
+        new THREE.Mesh(
+
+            new THREE.CylinderGeometry(
+                7,
+                10,
+                100,
+                12
+            ),
+
+            new THREE.MeshStandardMaterial({
+                color:0x777777
+            })
+
+        );
+
+
+    tower.position.set(
+        -130,
+        50,
+        -100
+    );
+
+
+    group.add(tower);
+
+
+    group.rotation.y=
+        a.heading;
+
+
+    group.position.set(
+        a.x,
+        terrainHeight(
+            a.x,
+            a.z
+        ),
+        a.z
+    );
+
+
+    scene.add(group);
+}
+
+
+airports.forEach(
+    createAirport
+);
+
+
+/* =====================================================
+   AIRPLANE
+===================================================== */
+
+const airplane=
+    new THREE.Group();
+
+
+const fuselage=
+    new THREE.Mesh(
+
+        new THREE.CylinderGeometry(
+            5,
+            6,
+            45,
+            12
+        ),
+
+        new THREE.MeshStandardMaterial({
+            color:0xe5e5e5
+        })
+
+    );
+
+
+fuselage.rotation.z=
+    Math.PI/2;
+
+
+airplane.add(fuselage);
+
+
+const nose=
+    new THREE.Mesh(
+
+        new THREE.ConeGeometry(
+            6,
+            15,
+            12
+        ),
+
+        new THREE.MeshStandardMaterial({
+            color:0xf1f1f1
+        })
+
+    );
+
+
+nose.rotation.z=
+    -Math.PI/2;
+
+nose.position.x=29;
+
+airplane.add(nose);
+
+
+const wing=
+    new THREE.Mesh(
+
+        new THREE.BoxGeometry(
+            8,
+            1.5,
+            70
+        ),
+
+        new THREE.MeshStandardMaterial({
+            color:0xc7c7c7
+        })
+
+    );
+
+
+airplane.add(wing);
+
+
+const tail=
+    new THREE.Mesh(
+
+        new THREE.BoxGeometry(
+            7,
+            1.5,
+            25
+        ),
+
+        new THREE.MeshStandardMaterial({
+            color:0xc7c7c7
+        })
+
+    );
+
+
+tail.position.x=-18;
+
+airplane.add(tail);
+
+
+const stabilizer=
+    new THREE.Mesh(
+
+        new THREE.BoxGeometry(
+            12,
+            16,
+            2
+        ),
+
+        new THREE.MeshStandardMaterial({
+            color:0xd0d0d0
+        })
+
+    );
+
+
+stabilizer.position.set(
+    -19,
+    8,
+    0
+);
+
+
+airplane.add(stabilizer);
+
+
+for(
+    const z of [-20,20]
+){
+
+    const engine=
+        new THREE.Mesh(
+
+            new THREE.CylinderGeometry(
+                3,
+                3,
+                16,
+                12
+            ),
+
+            new THREE.MeshStandardMaterial({
+                color:0x555555
+            })
+
+        );
+
+
+    engine.rotation.z=
+        Math.PI/2;
+
+
+    engine.position.set(
+        8,
+        -4,
+        z
+    );
+
+
+    airplane.add(engine);
+}
+
+
+scene.add(airplane);
+
+
+/* =====================================================
+   FLIGHT STATE
+===================================================== */
+
+const flight={
+
+    speed:0,
+
+    altitude:180,
+
+    heading:0,
+
+    pitch:0,
+
+    roll:0,
+
+    throttle:0,
+
+    verticalSpeed:0,
+
+    fuel:100,
+
+    engine:false
+
+};
+
+
+airplane.position.set(
+    airports[0].x,
+    180,
+    airports[0].z
+);
+
+
+/* =====================================================
+   INPUT
+===================================================== */
+
+const keys={};
+
+
+window.addEventListener(
+    "keydown",
+    e=>{
+
+        keys[
+            e.key.toLowerCase()
+        ]=true;
+
+
+        if(e.code==="Space"){
+
+            e.preventDefault();
+
+
+            flight.engine=
+                !flight.engine;
+
+
+            showMessage(
+
+                flight.engine
+                ?
+                "ENGINE STARTED"
+                :
+                "ENGINE OFF"
+
+            );
+        }
+
+    }
+);
+
+
+window.addEventListener(
+    "keyup",
+    e=>{
+
+        keys[
+            e.key.toLowerCase()
+        ]=false;
+
+    }
+);
+
+
+/* =====================================================
+   CAMERA
+===================================================== */
+
+let cameraYaw=0;
+
+let cameraPitch=
+    THREE.MathUtils.degToRad(18);
+
+let cameraDistance=55;
+
+let dragging=false;
+
+let previousMouseX=0;
+
+let previousMouseY=0;
+
+
+renderer.domElement.addEventListener(
+    "mousedown",
+    e=>{
+
+        if(e.button!==0)
+            return;
+
+
+        dragging=true;
+
+
+        previousMouseX=
+            e.clientX;
+
+        previousMouseY=
+            e.clientY;
+
+
+        document.body.classList.add(
+            "cameraDragging"
+        );
+
+    }
+);
+
+
+window.addEventListener(
+    "mouseup",
+    ()=>{
+
+        dragging=false;
+
+        document.body.classList.remove(
+            "cameraDragging"
+        );
+
+    }
+);
+
+
+window.addEventListener(
+    "mousemove",
+    e=>{
+
+        if(!dragging)
+            return;
+
+
+        const dx=
+            e.clientX-
+            previousMouseX;
+
+
+        const dy=
+            e.clientY-
+            previousMouseY;
+
+
+        previousMouseX=
+            e.clientX;
+
+        previousMouseY=
+            e.clientY;
+
+
+        cameraYaw -=
+            dx*.006;
+
+
+        cameraPitch -=
+            dy*.006;
+
+
+        cameraPitch=
+            THREE.MathUtils.clamp(
+
+                cameraPitch,
+
+                THREE.MathUtils.degToRad(-75),
+
+                THREE.MathUtils.degToRad(75)
+
+            );
+
+    }
+);
+
+
+renderer.domElement.addEventListener(
+    "wheel",
+    e=>{
+
+        cameraDistance +=
+            e.deltaY*.06;
+
+
+        cameraDistance=
+            THREE.MathUtils.clamp(
+                cameraDistance,
+                15,
+                180
+            );
+
+    },
+    {
+        passive:true
+    }
+);
+
+
+/* =====================================================
+   CAMERA UPDATE
+===================================================== */
+
+function updateCamera(){
+
+    const horizontal=
+        Math.cos(
+            cameraPitch
+        )*
+        cameraDistance;
+
+
+    const x=
+        Math.sin(
+            cameraYaw
+        )*
+        horizontal;
+
+
+    const y=
+        Math.sin(
+            cameraPitch
+        )*
+        cameraDistance;
+
+
+    const z=
+        Math.cos(
+            cameraYaw
+        )*
+        horizontal;
+
+
+    const desired=
+        airplane.position.clone();
+
+
+    desired.x+=x;
+
+    desired.y+=y+8;
+
+    desired.z+=z;
+
+
+    camera.position.lerp(
+        desired,
+        .10
+    );
+
+
+    camera.lookAt(
+        airplane.position
+    );
+}
+
+
+/* =====================================================
+   FLIGHT UPDATE
+===================================================== */
+
+function updateFlight(dt){
+
+    if(keys["r"])
+        flight.throttle+=
+            .008*dt;
+
+
+    if(keys["y"])
+        flight.throttle-=
+            .012*dt;
+
+
+    flight.throttle=
+        THREE.MathUtils.clamp(
+            flight.throttle,
+            0,
+            1
+        );
+
+
+    if(keys["w"])
+        flight.pitch+=
+            .018*dt;
+
+
+    if(keys["s"])
+        flight.pitch-=
+            .018*dt;
+
+
+    if(
+        !keys["w"] &&
+        !keys["s"]
+    ){
+
+        flight.pitch*=
+            Math.pow(.985,dt);
+    }
+
+
+    flight.pitch=
+        THREE.MathUtils.clamp(
+            flight.pitch,
+            -.7,
+            .7
+        );
+
+
+    if(keys["a"])
+        flight.roll+=
+            .025*dt;
+
+
+    if(keys["d"])
+        flight.roll-=
+            .025*dt;
+
+
+    if(
+        !keys["a"] &&
+        !keys["d"]
+    ){
+
+        flight.roll*=
+            Math.pow(.98,dt);
+    }
+
+
+    flight.roll=
+        THREE.MathUtils.clamp(
+            flight.roll,
+            -1.2,
+            1.2
+        );
+
+
+    if(keys["q"])
+        flight.heading+=
+            .012*dt;
+
+
+    if(keys["e"])
+        flight.heading-=
+            .012*dt;
+
+
+    if(flight.engine){
+
+        flight.speed+=
+            (
+                flight.throttle*240
+                -
+                flight.speed*.25
+            )*
+            dt*.01;
+
+
+        flight.fuel-=
+            .0015*
+            flight.throttle*
+            dt;
+
+    }
+    else{
+
+        flight.speed*=
+            Math.pow(
+                .998,
+                dt
+            );
+    }
+
+
+    flight.speed=
+        THREE.MathUtils.clamp(
+            flight.speed,
+            0,
+            420
+        );
+
+
+    const lift=
+        Math.sin(
+            flight.pitch
+        )*
+        flight.speed*
+        .045;
+
+
+    flight.verticalSpeed=
+        lift;
+
+
+    if(flight.speed<70)
+        flight.verticalSpeed-=8;
+
+
+    flight.altitude+=
+        flight.verticalSpeed*
+        dt*.08;
+
+
+    const ground=
+        terrainHeight(
+            airplane.position.x,
+            airplane.position.z
+        );
+
+
+    if(
+        flight.altitude<
+        ground+25
+    ){
+
+        flight.altitude=
+            ground+25;
+
+        flight.verticalSpeed=0;
+    }
+
+
+    const distance=
+        flight.speed*
+        dt*
+        .035;
+
+
+    airplane.position.x+=
+        Math.cos(
+            flight.heading
+        )*
+        distance;
+
+
+    airplane.position.z+=
+        Math.sin(
+            flight.heading
+        )*
+        distance;
+
+
+    airplane.position.y=
+        flight.altitude;
+
+
+    airplane.rotation.order=
+        "YXZ";
+
+
+    airplane.rotation.y=
+        -flight.heading;
+
+
+    airplane.rotation.x=
+        flight.pitch;
+
+
+    airplane.rotation.z=
+        flight.roll;
+
+
+    if(flight.fuel<0)
+        flight.fuel=0;
+}
+
+
+/* =====================================================
+   DAY / NIGHT SYSTEM
+===================================================== */
+
+/*
+
+   5 REAL MINUTES
+   =
+   24 GAME HOURS
+
+   300 seconds = 86400 seconds
+
+*/
+
+const DAY_LENGTH=
+    5*60;
+
+
+let gameSeconds=
+    7*3600;
+
+
+/* =====================================================
+   SKY COLORS
+===================================================== */
+
+const SKY_NIGHT=
+    new THREE.Color(
+        0x050817
+    );
+
+const SKY_DAWN=
+    new THREE.Color(
+        0xeaa36f
+    );
+
+const SKY_DAY=
+    new THREE.Color(
+        0x82cdf7
+    );
+
+const SKY_SUNSET=
+    new THREE.Color(
+        0xe58c62
+    );
+
+
+const skyCurrent=
+    new THREE.Color();
+
+
+function smoothStep(t){
+
+    return t*t*(3-2*t);
+}
+
+
+/* =====================================================
+   TIME UPDATE
+===================================================== */
+
+function updateDayNight(dt){
+
+    /*
+        dt is approximately 1/60 sec.
+
+        Convert real seconds
+        into game seconds.
+    */
+
+    gameSeconds+=
+        dt/60*86400/DAY_LENGTH;
+
+
+    while(
+        gameSeconds>=86400
+    ){
+
+        gameSeconds-=86400;
+    }
+
+
+    const hour=
+        gameSeconds/3600;
+
+
+    /*
+        SUN POSITION
+
+        6:00 = sunrise
+        12:00 = highest
+        18:00 = sunset
+        00:00 = midnight
+    */
+
+    const sunAngle=
+        (
+            hour-6
+        )/24*
+        Math.PI*2;
+
+
+    const sunX=
+        Math.cos(
+            sunAngle
+        )*
+        4000;
+
+
+    const sunY=
+        Math.sin(
+            sunAngle
+        )*
+        4000;
+
+
+    const sunZ=
+        -1200;
+
+
+    sun.position.set(
+        sunX,
+        sunY,
+        sunZ
+    );
+
+
+    /*
+        DAYLIGHT
+
+        0 = night
+        1 = full day
+    */
+
+    const daylight=
+        Math.max(
+            0,
+            Math.sin(
+                (
+                    hour-6
+                )/
+                12*
+                Math.PI
+            )
+        );
+
+
+    /*
+        STAR VISIBILITY
+    */
+
+    const starVisibility=
+        THREE.MathUtils.clamp(
+            1-daylight*2.2,
+            0,
+            1
+        );
+
+
+    starMaterial.opacity=
+        starVisibility;
+
+
+    /*
+        MOON
+    */
+
+    const moonAngle=
+        sunAngle+
+        Math.PI;
+
+
+    moon.position.set(
+
+        Math.cos(
+            moonAngle
+        )*3500,
+
+        Math.sin(
+            moonAngle
+        )*3500,
+
+        1000
+
+    );
+
+
+    const moonVisibility=
+        THREE.MathUtils.clamp(
+            .15+(.85*(1-daylight)),
+            0,
+            1
+        );
+
+
+    moon.material.opacity=
+        moonVisibility;
+
+
+    /*
+        LIGHT INTENSITY
+    */
+
+    sun.intensity=
+        .15+
+        daylight*1.85;
+
+
+    moonLight.intensity=
+        .05+
+        (1-daylight)*.45;
+
+
+    /*
+        HEMISPHERE LIGHT
+    */
+
+    hemi.intensity=
+        .25+
+        daylight*1.35;
+
+
+    /*
+        SKY
+    */
+
+    let targetSky;
+
+
+    /*
+        NIGHT
+    */
+
+    if(
+        hour<5 ||
+        hour>=21
+    ){
+
+        targetSky=
+            SKY_NIGHT;
+
+    }
+
+
+    /*
+        DAWN
+    */
+
+    else if(
+        hour<7
+    ){
+
+        const t=
+            smoothStep(
+                (hour-5)/2
+            );
+
+
+        targetSky=
+            SKY_NIGHT.clone()
+                .lerp(
+                    SKY_DAWN,
+                    t
+                );
+
+    }
+
+
+    /*
+        MORNING
+    */
+
+    else if(
+        hour<9
+    ){
+
+        const t=
+            smoothStep(
+                (hour-7)/2
+            );
+
+
+        targetSky=
+            SKY_DAWN.clone()
+                .lerp(
+                    SKY_DAY,
+                    t
+                );
+
+    }
+
+
+    /*
+        DAY
+    */
+
+    else if(
+        hour<17
+    ){
+
+        targetSky=
+            SKY_DAY;
+
+    }
+
+
+    /*
+        SUNSET
+    */
+
+    else if(
+        hour<19
+    ){
+
+        const t=
+            smoothStep(
+                (hour-17)/2
+            );
+
+
+        targetSky=
+            SKY_DAY.clone()
+                .lerp(
+                    SKY_SUNSET,
+                    t
+                );
+
+    }
+
+
+    /*
+        DUSK
+    */
+
+    else{
+
+        const t=
+            smoothStep(
+                (hour-19)/2
+            );
+
+
+        targetSky=
+            SKY_SUNSET.clone()
+                .lerp(
+                    SKY_NIGHT,
+                    t
+                );
+    }
+
+
+    skyCurrent.lerp(
+        targetSky,
+        .025
+    );
+
+
+    scene.background.copy(
+        skyCurrent
+    );
+
+
+    scene.fog.color.copy(
+        skyCurrent
+    );
+
+
+    /*
+        TIME TEXT
+    */
+
+    const hours=
+        Math.floor(
+            gameSeconds/3600
+        );
+
+
+    const minutes=
+        Math.floor(
+            (gameSeconds%3600)/60
+        );
+
+
+    document.getElementById(
+        "gameTime"
+    ).textContent=
+        String(hours).padStart(2,"0")
+        +
+        ":"
+        +
+        String(minutes).padStart(2,"0");
+
+
+    let period;
+
+
+    if(
+        hour>=5 &&
+        hour<7
+    ){
+
+        period="🌅 DAWN";
+
+    }
+    else if(
+        hour>=7 &&
+        hour<17
+    ){
+
+        period="☀️ DAY";
+
+    }
+    else if(
+        hour>=17 &&
+        hour<19
+    ){
+
+        period="🌇 SUNSET";
+
+    }
+    else if(
+        hour>=19 &&
+        hour<21
+    ){
+
+        period="🌆 DUSK";
+
+    }
+    else{
+
+        period="🌙 NIGHT";
+    }
+
+
+    document.getElementById(
+        "period"
+    ).textContent=
+        period;
+}
+
+
+/* =====================================================
+   BIOME
+===================================================== */
+
+function getBiome(
+    x,
+    z,
+    h
+){
+
+    if(z>1900)
+        return "ANTARCTICA";
+
+
+    if(h>260)
+        return "MOUNTAINS";
+
+
+    if(
+        x>600 &&
+        z>400
+    )
+        return "DESERT";
+
+
+    if(
+        x<-500 &&
+        z>300
+    )
+        return "JUNGLE";
+
+
+    if(h>140)
+        return "HILLS";
+
+
+    return "PLAINS";
+}
+
+
+/* =====================================================
+   HUD
+===================================================== */
+
+function updateHUD(){
+
+    document.getElementById(
+        "altitude"
+    ).textContent=
+        Math.round(
+            flight.altitude
+        );
+
+
+    document.getElementById(
+        "speed"
+    ).textContent=
+        Math.round(
+            flight.speed
+        );
+
+
+    const degrees=
+        (
+            THREE.MathUtils.radToDeg(
+                flight.heading
+            )+
+            360
+        )%360;
+
+
+    document.getElementById(
+        "heading"
+    ).textContent=
+        Math.round(
+            degrees
+        );
+
+
+    document.getElementById(
+        "vertical"
+    ).textContent=
+        flight.verticalSpeed
+            .toFixed(1);
+
+
+    document.getElementById(
+        "throttle"
+    ).textContent=
+        Math.round(
+            flight.throttle*100
+        );
+
+
+    document.getElementById(
+        "fuel"
+    ).textContent=
+        Math.max(
+            0,
+            Math.round(
+                flight.fuel
+            )
+        );
+
+
+    document.getElementById(
+        "engine"
+    ).textContent=
+        flight.engine
+        ?"ON"
+        :"OFF";
+
+
+    document.getElementById(
+        "biome"
+    ).textContent=
+        getBiome(
+
+            airplane.position.x,
+
+            airplane.position.z,
+
+            terrainHeight(
+                airplane.position.x,
+                airplane.position.z
+            )
+
+        );
+}
+
+
+/* =====================================================
+   NAVIGATION MAP
+===================================================== */
+
+const navCanvas=
+    document.getElementById(
+        "navCanvas"
+    );
+
+
+const navCtx=
+    navCanvas.getContext(
+        "2d"
+    );
+
+
+function drawNavigation(){
+
+    const w=
+        navCanvas.width;
+
+    const h=
+        navCanvas.height;
+
+
+    const scale=.045;
+
+
+    const centerX=
+        airplane.position.x;
+
+
+    const centerZ=
+        airplane.position.z;
+
+
+    const step=5;
+
+
+    for(
+        let py=0;
+        py<h;
+        py+=step
+    ){
+
+        for(
+            let px=0;
+            px<w;
+            px+=step
+        ){
+
+            const worldX=
+                centerX+
+                (px-w/2)/scale;
+
+
+            const worldZ=
+                centerZ+
+                (py-h/2)/scale;
+
+
+            const height=
+                terrainHeight(
+                    worldX,
+                    worldZ
+                );
+
+
+            let color;
+
+
+            /*
+                ANTARCTICA
+            */
+
+            if(worldZ>1900){
+
+                if(height>330){
+
+                    color="#f0fbff";
+
+                }else{
+
+                    color="#d6eaf2";
+                }
+
+            }
+
+
+            else if(height<0){
+
+                color="#123f61";
+
+            }
+
+            else if(height<60){
+
+                color="#438448";
+
+            }
+
+            else if(height<140){
+
+                color="#658846";
+
+            }
+
+            else if(height<250){
+
+                color="#8b7950";
+
+            }
+
+            else if(height<380){
+
+                color="#9b9687";
+
+            }
+
+            else{
+
+                color="#d0d0ca";
+            }
+
+
+            /*
+                DESERT
+            */
+
+            if(
+                worldX>600 &&
+                worldZ>400 &&
+                worldZ<1900 &&
+                height<260
+            ){
+
+                color="#c39a55";
+            }
+
+
+            /*
+                JUNGLE
+            */
+
+            if(
+                worldX<-500 &&
+                worldZ>300 &&
+                worldZ<1900 &&
+                height<180
+            ){
+
+                color="#226b39";
+            }
+
+
+            navCtx.fillStyle=
+                color;
+
+
+            navCtx.fillRect(
+                px,
+                py,
+                step,
+                step
+            );
+        }
+    }
+
+
+    /*
+        GRID
+    */
+
+    navCtx.strokeStyle=
+        "rgba(255,255,255,.15)";
+
+
+    navCtx.lineWidth=1;
+
+
+    for(
+        let i=0;
+        i<=w;
+        i+=50
+    ){
+
+        navCtx.beginPath();
+
+        navCtx.moveTo(
+            i,
+            0
+        );
+
+        navCtx.lineTo(
+            i,
+            h
+        );
+
+        navCtx.stroke();
+    }
+
+
+    for(
+        let i=0;
+        i<=h;
+        i+=50
+    ){
+
+        navCtx.beginPath();
+
+        navCtx.moveTo(
+            0,
+            i
+        );
+
+        navCtx.lineTo(
+            w,
+            i
+        );
+
+        navCtx.stroke();
+    }
+
+
+    /*
+        AIRPORTS
+    */
+
+    for(
+        const airport of airports
+    ){
+
+        const dx=
+            (
+                airport.x-centerX
+            )*
+            scale;
+
+
+        const dz=
+            (
+                airport.z-centerZ
+            )*
+            scale;
+
+
+        const x=
+            w/2+dx;
+
+
+        const y=
+            h/2+dz;
+
+
+        if(
+            x>=0 &&
+            x<=w &&
+            y>=0 &&
+            y<=h
+        ){
+
+            navCtx.fillStyle=
+                "#ffffff";
+
+
+            navCtx.beginPath();
+
+
+            navCtx.arc(
+                x,
+                y,
+                4,
+                0,
+                Math.PI*2
+            );
+
+
+            navCtx.fill();
+
+
+            navCtx.font=
+                "10px Arial";
+
+
+            navCtx.fillText(
+                airport.name,
+                x+7,
+                y+3
+            );
+        }
+    }
+
+
+    /*
+        ANTARCTICA LABEL
+    */
+
+    navCtx.fillStyle=
+        "rgba(30,70,100,.75)";
+
+
+    navCtx.fillRect(
+        55,
+        h-38,
+        140,
+        23
+    );
+
+
+    navCtx.fillStyle=
+        "#ffffff";
+
+
+    navCtx.font=
+        "bold 11px Arial";
+
+
+    navCtx.fillText(
+        "ANTARCTICA",
+        82,
+        h-23
+    );
+
+
+    /*
+        PLANE
+    */
+
+    navCtx.save();
+
+
+    navCtx.translate(
+        w/2,
+        h/2
+    );
+
+
+    navCtx.rotate(
+        -flight.heading
+    );
+
+
+    navCtx.fillStyle=
+        "#ff3030";
+
+
+    navCtx.beginPath();
+
+
+    navCtx.moveTo(
+        0,
+        -10
+    );
+
+
+    navCtx.lineTo(
+        6,
+        8
+    );
+
+
+    navCtx.lineTo(
+        0,
+        5
+    );
+
+
+    navCtx.lineTo(
+        -6,
+        8
+    );
+
+
+    navCtx.closePath();
+
+
+    navCtx.fill();
+
+
+    navCtx.restore();
+
+
+    /*
+        CENTER
+    */
+
+    navCtx.strokeStyle=
+        "rgba(255,255,255,.8)";
+
+
+    navCtx.beginPath();
+
+
+    navCtx.moveTo(
+        w/2-8,
+        h/2
+    );
+
+
+    navCtx.lineTo(
+        w/2+8,
+        h/2
+    );
+
+
+    navCtx.moveTo(
+        w/2,
+        h/2-8
+    );
+
+
+    navCtx.lineTo(
+        w/2,
+        h/2+8
+    );
+
+
+    navCtx.stroke();
+
+
+    /*
+        COMPASS
+    */
+
+    navCtx.fillStyle=
+        "#ffffff";
+
+
+    navCtx.font=
+        "bold 13px Arial";
+
+
+    navCtx.fillText(
+        "N",
+        w/2-5,
+        17
+    );
+}
+
+
+/* =====================================================
+   MESSAGE
+===================================================== */
+
+const message=
+    document.getElementById(
+        "message"
+    );
+
+
+let messageTimer;
+
+
+function showMessage(text){
+
+    message.textContent=
+        text;
+
+
+    message.style.opacity=1;
+
+
+    clearTimeout(
+        messageTimer
+    );
+
+
+    messageTimer=
+        setTimeout(
+            ()=>{
+
+                message.style.opacity=0;
+
+            },
+            1800
+        );
+}
+
+
+/* =====================================================
+   START
+===================================================== */
+
+let running=false;
+
+
+document
+.getElementById("startBtn")
+.addEventListener(
+    "click",
+    ()=>{
+
+        document
+        .getElementById("menu")
+        .style.display="none";
+
+
+        running=true;
+
+
+        showMessage(
+            "WELCOME TO SKYWORLD"
+        );
+    }
+);
+
+
+/* =====================================================
+   RESIZE
+===================================================== */
+
+window.addEventListener(
+    "resize",
+    ()=>{
+
+        camera.aspect=
+            innerWidth/
+            innerHeight;
+
+
+        camera.updateProjectionMatrix();
+
+
+        renderer.setSize(
+            innerWidth,
+            innerHeight
+        );
+
+    }
+);
+
+
+/* =====================================================
+   GAME LOOP
+===================================================== */
+
+let lastTime=
+    performance.now();
+
+
+function animate(now){
+
+    requestAnimationFrame(
+        animate
+    );
+
+
+    /*
+        dt is normalized
+        to approximately
+        60 FPS.
+    */
+
+    const dt=
+        Math.min(
+            (now-lastTime)/16.67,
+            3
+        );
+
+
+    lastTime=now;
+
+
+    if(running){
+
+        updateFlight(dt);
+
+        updateDayNight(
+            dt
+        );
+
+        updateHUD();
+
+        drawNavigation();
+
+        updateCamera();
+    }
+
+
+    renderer.render(
+        scene,
+        camera
+    );
+}
+
+
+animate(
+    performance.now()
+);
+
+</script>
+
+</body>
+</html>
