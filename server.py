@@ -7872,16 +7872,16 @@ async def ctw2_himawari_proxy(
     timestamp: str
 ):
     """
-    JMA Himawari full-disk JPEG -> Leaflet XYZ tile.
+    Himawari-9 PSvis full-disk JPEG -> Leaflet XYZ tile.
 
-    The JMA public JPEG archive provides full-disk imagery.
-    This endpoint downloads the full-disk image, crops the
-    requested Web-Mercator tile area, and returns a JPEG tile.
+    JMA Himawari imagery uses a normalized geostationary
+    projection. This converts the requested Web-Mercator
+    tile into the corresponding Himawari image coordinates.
     """
 
     try:
         # ---------------------------------------------------------
-        # Validate parameters
+        # VALIDATION
         # ---------------------------------------------------------
 
         if z < 0 or z > 6:
@@ -7898,40 +7898,31 @@ async def ctw2_himawari_proxy(
                 media_type="text/plain"
             )
 
-        # Round requested time to a 10-minute Himawari observation.
-        year = int(timestamp[0:4])
-        month = int(timestamp[4:6])
-        day = int(timestamp[6:8])
-        hour = int(timestamp[8:10])
+        # Round to nearest previous 10-minute observation
         minute = int(timestamp[10:12])
-
         minute = (minute // 10) * 10
 
         timestamp = (
-            f"{year:04d}"
-            f"{month:02d}"
-            f"{day:02d}"
-            f"{hour:02d}"
-            f"{minute:02d}00"
+            timestamp[:10]
+            + f"{minute:02d}"
+            + "00"
         )
 
         # ---------------------------------------------------------
-        # JMA public full-disk JPEG
+        # JMA FULL-DISK VISIBLE IMAGE
         # ---------------------------------------------------------
 
         jma_url = (
-            "https://www.data.jma.go.jp/sat/data/HimawariJDDS/jpeg/fd/"
-            f"Z__C_RJTD_{timestamp}_OBS_SAT_PSvis_RDfd_JRsdus_image.jpg"
+            "https://www.data.jma.go.jp/"
+            "sat/data/HimawariJDDS/jpeg/fd/"
+            f"Z__C_RJTD_{timestamp}_OBS_SAT_"
+            "PSvis_RDfd_JRsdus_image.jpg"
         )
 
         print(
             "🛰️ [CTW2 HIMAWARI] Fetching:",
             jma_url
         )
-
-        # ---------------------------------------------------------
-        # Download JMA image
-        # ---------------------------------------------------------
 
         async with httpx.AsyncClient(
             timeout=30.0,
@@ -7941,7 +7932,8 @@ async def ctw2_himawari_proxy(
             response = await client.get(
                 jma_url,
                 headers={
-                    "User-Agent": "Mozilla/5.0 CTW2 Satellite Viewer"
+                    "User-Agent":
+                        "Mozilla/5.0 CTW2 Satellite Viewer"
                 }
             )
 
@@ -7954,7 +7946,7 @@ async def ctw2_himawari_proxy(
 
             return Response(
                 content=(
-                    "JMA full-disk image returned HTTP "
+                    "JMA image returned HTTP "
                     f"{response.status_code}"
                 ),
                 status_code=response.status_code,
@@ -7962,33 +7954,34 @@ async def ctw2_himawari_proxy(
             )
 
         # ---------------------------------------------------------
-        # Open JMA image
+        # LOAD IMAGE
         # ---------------------------------------------------------
 
         source = Image.open(
             io.BytesIO(response.content)
         ).convert("RGB")
 
-        source_width, source_height = source.size
+        width, height = source.size
 
         print(
-            "🛰️ [CTW2 HIMAWARI] Source image:",
-            source_width,
+            "🛰️ [CTW2 HIMAWARI] Image:",
+            width,
             "x",
-            source_height
+            height
         )
 
         # ---------------------------------------------------------
-        # Web Mercator XYZ tile
+        # LEAFLET TILE
         # ---------------------------------------------------------
 
-        tile_size = 256
-        world_size = tile_size * (2 ** z)
+        TILE = 256
 
-        # Prevent invalid XYZ coordinates
-        max_tile = (2 ** z) - 1
+        n = 2 ** z
+
+        max_tile = n - 1
 
         if x < 0 or x > max_tile or y < 0 or y > max_tile:
+
             return Response(
                 content="Invalid tile coordinates",
                 status_code=400,
@@ -7996,167 +7989,275 @@ async def ctw2_himawari_proxy(
             )
 
         # ---------------------------------------------------------
-        # Convert XYZ tile boundaries to longitude/latitude
+        # HIMAWARI PROJECTION CONSTANTS
+        #
+        # JMA visible-band full disk:
+        #
+        # sub_lon = 140.7°
+        # CFAC    = 40932513
+        # LFAC    = 40932513
+        # COFF    = 5500.5
+        # LOFF    = 5500.5
+        #
+        # These are the normalized geostationary projection
+        # parameters documented by JMA.
         # ---------------------------------------------------------
 
-        lon_left = (x / (2 ** z)) * 360.0 - 180.0
-        lon_right = ((x + 1) / (2 ** z)) * 360.0 - 180.0
+        SUB_LON = math.radians(140.7)
 
-        def tile_y_to_lat(tile_y):
-            n = math.pi - (
-                2.0 * math.pi * tile_y / (2 ** z)
-            )
+        CFAC = 40932513.0
+        LFAC = 40932513.0
 
-            return math.degrees(
-                math.atan(math.sinh(n))
-            )
-
-        lat_top = tile_y_to_lat(y)
-        lat_bottom = tile_y_to_lat(y + 1)
+        COFF = 5500.5
+        LOFF = 5500.5
 
         # ---------------------------------------------------------
         # IMPORTANT:
         #
-        # JMA full-disk imagery is NOT a normal equirectangular
-        # world map. It is a geostationary-disk projection.
+        # The public JPEG is much smaller than the native
+        # 11000x11000 Himawari grid.
         #
-        # Therefore this first implementation uses the geographic
-        # longitude/latitude extent of the visible disk.
+        # Therefore scale the JMA projection coordinates
+        # into the actual JPEG dimensions.
         # ---------------------------------------------------------
 
-        # Himawari-9 nominal sub-satellite longitude.
-        satellite_lon = 140.7
+        native_size = 11000.0
 
-        # Approximate visible geographic extent.
-        disk_lon_min = 80.0
-        disk_lon_max = 200.0
-        disk_lat_min = -60.0
-        disk_lat_max = 60.0
+        scale_x = width / native_size
+        scale_y = height / native_size
 
-        # If tile is completely outside Himawari coverage,
-        # return transparent tile.
-        if (
-            lon_right < disk_lon_min
-            or lon_left > disk_lon_max
-            or lat_top < disk_lat_min
-            or lat_bottom > disk_lat_max
+        # ---------------------------------------------------------
+        # XYZ -> geographic coordinates
+        # ---------------------------------------------------------
+
+        def xyz_to_latlon(px, py):
+
+            lon = (
+                px / TILE
+                + x
+            ) / n
+
+            lat_norm = (
+                py / TILE
+                + y
+            ) / n
+
+            longitude = (
+                lon * 360.0
+            ) - 180.0
+
+            merc_y = (
+                math.pi
+                * (1.0 - 2.0 * lat_norm)
+            )
+
+            latitude = math.degrees(
+                math.atan(
+                    math.sinh(merc_y)
+                )
+            )
+
+            return latitude, longitude
+
+        # ---------------------------------------------------------
+        # GEO -> HIMAWARI IMAGE COORDINATE
+        # ---------------------------------------------------------
+
+        def latlon_to_himawari(
+            latitude,
+            longitude
         ):
-            transparent = Image.new(
-                "RGBA",
-                (tile_size, tile_size),
-                (0, 0, 0, 0)
+
+            lat = math.radians(latitude)
+            lon = math.radians(longitude)
+
+            dlon = lon - SUB_LON
+
+            # Earth / satellite geometry
+            re = 6378.137
+            rp = 6356.7523
+            h = 42164.0
+
+            cos_lat = math.cos(lat)
+            sin_lat = math.sin(lat)
+            cos_dlon = math.cos(dlon)
+            sin_dlon = math.sin(dlon)
+
+            # Geocentric latitude correction
+            geocentric_lat = math.atan(
+                (rp * rp / (re * re))
+                * math.tan(lat)
             )
 
-            output = io.BytesIO()
-            transparent.save(output, format="PNG")
+            rc = rp / math.sqrt(
+                1.0
+                -
+                (
+                    1.0
+                    -
+                    (rp * rp / (re * re))
+                )
+                * math.cos(geocentric_lat)
+                ** 2
+            )
 
-            return Response(
-                content=output.getvalue(),
-                media_type="image/png",
-                headers={
-                    "Cache-Control": "public, max-age=300"
-                }
+            sx = (
+                h
+                - rc * math.cos(geocentric_lat)
+                * cos_dlon
+            )
+
+            sy = (
+                rc
+                * math.cos(geocentric_lat)
+                * sin_dlon
+            )
+
+            sz = (
+                rc
+                * math.sin(geocentric_lat)
+            )
+
+            visible = (
+                (h - sx) * sx
+                - sy * sy
+                - sz * sz
+            )
+
+            if visible <= 0:
+                return None
+
+            x_angle = math.atan2(
+                -sy,
+                sx
+            )
+
+            y_angle = math.asin(
+                -sz / math.sqrt(
+                    sx * sx
+                    + sy * sy
+                    + sz * sz
+                )
+            )
+
+            column = (
+                COFF
+                + CFAC
+                * x_angle
+                / (2.0 ** 16)
+            )
+
+            line = (
+                LOFF
+                + LFAC
+                * y_angle
+                / (2.0 ** 16)
+            )
+
+            return (
+                column * scale_x,
+                line * scale_y
             )
 
         # ---------------------------------------------------------
-        # Map geographic coordinates onto the JMA image.
+        # CREATE OUTPUT TILE
+        # ---------------------------------------------------------
+
+        output_tile = Image.new(
+            "RGB",
+            (TILE, TILE),
+            (0, 0, 0)
+        )
+
+        # ---------------------------------------------------------
+        # SAMPLE OUTPUT TILE
         #
-        # This is an initial geographic approximation. We will
-        # refine the geostationary projection after confirming that
-        # JMA imagery is successfully being returned.
+        # 2x supersampling gives smoother results.
         # ---------------------------------------------------------
 
-        crop_left = (
-            (lon_left - disk_lon_min)
-            / (disk_lon_max - disk_lon_min)
-            * source_width
-        )
+        for py in range(TILE):
 
-        crop_right = (
-            (lon_right - disk_lon_min)
-            / (disk_lon_max - disk_lon_min)
-            * source_width
-        )
+            for px in range(TILE):
 
-        crop_top = (
-            (disk_lat_max - lat_top)
-            / (disk_lat_max - disk_lat_min)
-            * source_height
-        )
+                latitude, longitude = xyz_to_latlon(
+                    px + 0.5,
+                    py + 0.5
+                )
 
-        crop_bottom = (
-            (disk_lat_max - lat_bottom)
-            / (disk_lat_max - disk_lat_min)
-            * source_height
-        )
+                # Himawari coverage is roughly centered
+                # on 140.7E.
+                if longitude < 70 or longitude > 210:
+                    continue
 
-        # Clamp
-        crop_left = max(0, min(source_width, crop_left))
-        crop_right = max(0, min(source_width, crop_right))
-        crop_top = max(0, min(source_height, crop_top))
-        crop_bottom = max(0, min(source_height, crop_bottom))
+                if latitude < -70 or latitude > 70:
+                    continue
 
-        if crop_right <= crop_left or crop_bottom <= crop_top:
-            transparent = Image.new(
-                "RGBA",
-                (tile_size, tile_size),
-                (0, 0, 0, 0)
-            )
+                result = latlon_to_himawari(
+                    latitude,
+                    longitude
+                )
 
-            output = io.BytesIO()
-            transparent.save(output, format="PNG")
+                if result is None:
+                    continue
 
-            return Response(
-                content=output.getvalue(),
-                media_type="image/png"
-            )
+                sx, sy = result
 
-        # ---------------------------------------------------------
-        # Crop and resize
-        # ---------------------------------------------------------
+                if (
+                    sx < 0
+                    or sy < 0
+                    or sx >= width
+                    or sy >= height
+                ):
+                    continue
 
-        cropped = source.crop((
-            int(crop_left),
-            int(crop_top),
-            int(crop_right),
-            int(crop_bottom)
-        ))
+                ix = int(sx)
+                iy = int(sy)
 
-        tile = cropped.resize(
-            (tile_size, tile_size),
-            Image.Resampling.BILINEAR
-        )
+                output_tile.putpixel(
+                    (px, py),
+                    source.getpixel(
+                        (ix, iy)
+                    )
+                )
 
         # ---------------------------------------------------------
-        # Return JPEG tile
+        # RETURN TILE
         # ---------------------------------------------------------
 
-        output = io.BytesIO()
+        buffer = io.BytesIO()
 
-        tile.save(
-            output,
+        output_tile.save(
+            buffer,
             format="JPEG",
             quality=88,
             optimize=True
         )
 
         return Response(
-            content=output.getvalue(),
+            content=buffer.getvalue(),
             media_type="image/jpeg",
             headers={
-                "Cache-Control": "public, max-age=300"
+                "Cache-Control":
+                    "public, max-age=300"
             }
         )
 
     except Exception as e:
-    
+
         import traceback
-    
-        print("❌ [CTW2 HIMAWARI PROXY] Error:", repr(e))
+
+        print(
+            "❌ [CTW2 HIMAWARI PROXY] Error:",
+            repr(e)
+        )
+
         traceback.print_exc()
-    
+
         return Response(
-            content=f"Himawari proxy error: {repr(e)}",
+            content=(
+                "Himawari proxy error: "
+                + repr(e)
+            ),
             status_code=502,
             media_type="text/plain"
         )
