@@ -453,9 +453,7 @@ const renderer =
    Было 2. Теперь максимум 1.5.
    Сам рендер и разрешение сцены не меняются.
 */
-renderer.setPixelRatio(
-    Math.min(devicePixelRatio, 1.5)
-);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.25));
 
 renderer.setSize(
     innerWidth,
@@ -463,9 +461,7 @@ renderer.setSize(
 );
 
 renderer.shadowMap.enabled = true;
-
-renderer.shadowMap.type =
-    THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.BasicShadowMap;
 
 renderer.outputColorSpace =
     THREE.SRGBColorSpace;
@@ -983,8 +979,8 @@ function createTree(x, z) {
     );
 
     trunk.position.y = trunkHeight / 2;
-    trunk.castShadow = true;
-    trunk.receiveShadow = true;
+    trunk.castShadow = false;
+    trunk.receiveShadow = false;
     tree.add(trunk);
 
     // Крона
@@ -998,8 +994,8 @@ function createTree(x, z) {
 
     crown.position.y = trunkHeight + 8;
     crown.scale.y = 1.15;
-    crown.castShadow = true;
-    crown.receiveShadow = true;
+    crown.castShadow = false;
+    crown.receiveShadow = false;
     tree.add(crown);
 
     // Ставим дерево точно на новый островной рельеф
@@ -1303,8 +1299,8 @@ function createMegaCity(cx, cz) {
                 z
             );
 
-            building.castShadow = true;
-            building.receiveShadow = true;
+            building.castShadow = false;
+            building.receiveShadow = false;
 
             city.add(building);
 
@@ -1394,8 +1390,8 @@ function createMegaCity(cx, cz) {
             z
         );
 
-        tower.castShadow = true;
-        tower.receiveShadow = true;
+        tower.castShadow = false;
+        tower.receiveShadow = false;
 
         city.add(tower);
 
@@ -1444,8 +1440,8 @@ function createMegaCity(cx, cz) {
         0
     );
 
-    centralTower.castShadow = true;
-    centralTower.receiveShadow = true;
+    centralTower.castShadow = false;
+    centralTower.receiveShadow = false;
 
     city.add(centralTower);
 
@@ -1469,7 +1465,8 @@ function createMegaCity(cx, cz) {
         0
     );
 
-    towerTop.castShadow = true;
+    towerTop.castShadow = false;
+    towerTop.receiveShadow = false;
     city.add(towerTop);
 
     // Красный маяк
@@ -1533,19 +1530,20 @@ function createMegaCity(cx, cz) {
 
     for (const [x, z] of streetLightPositions) {
 
-        const light = new THREE.PointLight(
-            0xffcc88,
-            1.2,
-            150
+        const lamp = new THREE.Mesh(
+            new THREE.SphereGeometry(2.5, 6, 6),
+            new THREE.MeshBasicMaterial({
+                color: 0xffcc88
+            })
         );
-
-        light.position.set(
+        
+        lamp.position.set(
             x,
             12,
             z
         );
-
-        city.add(light);
+        
+        city.add(lamp);
     }
 
     // =========================================================
@@ -2854,11 +2852,12 @@ function updateFlight(dt) {
     // ПОВОРОТ САМОЛЁТА
     // =========================================================
     airplane.rotation.order = "YXZ";
-
+    
     airplane.rotation.y = flight.heading;
-
-    airplane.rotation.x = -flight.pitch;
-
+    
+    // Положительный pitch = нос вверх
+    airplane.rotation.x = flight.pitch;
+    
     airplane.rotation.z = flight.roll;
 }
 
