@@ -7863,49 +7863,94 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
         }
 
 @app.get("/api/ctw2/satellite/himawari")
-async def ctw2_himawari_proxy(url: str):
+async def ctw2_himawari_proxy(
+    z: int,
+    x: int,
+    y: int,
+    timestamp: str
+):
     """
-    Proxy Himawari/CIRA imagery through our own server.
+    Proxy official JMA Himawari-9 True Color Reproduction tiles.
 
-    This prevents browser CORS problems when the external
-    imagery provider does not send Access-Control-Allow-Origin.
+    JMA format:
+    /satimg/{timestamp}/fd/{timestamp}/REP/ETC/{z}/{x}/{y}.jpg
     """
 
     try:
-        # Only allow the CIRA/RAMMB host.
-        allowed_prefix = (
-            "https://rammb-slider.cira.colostate.edu/"
-        )
 
-        if not url.startswith(allowed_prefix):
+        # ---------------------------------------------------------
+        # Basic validation
+        # ---------------------------------------------------------
+
+        if z < 3 or z > 5:
             return Response(
-                content="Invalid Himawari URL",
+                content="Invalid Himawari zoom level",
                 status_code=400,
                 media_type="text/plain"
             )
 
+        if len(timestamp) != 14 or not timestamp.isdigit():
+            return Response(
+                content="Invalid Himawari timestamp",
+                status_code=400,
+                media_type="text/plain"
+            )
+
+        # ---------------------------------------------------------
+        # Official JMA Himawari True Color tile
+        # ---------------------------------------------------------
+
+        jma_url = (
+            "https://www.jma.go.jp/bosai/himawari/data/satimg/"
+            f"{timestamp}/fd/{timestamp}/"
+            f"REP/ETC/{z}/{x}/{y}.jpg"
+        )
+
+        print(
+            "🛰️ [CTW2 HIMAWARI] Fetching:",
+            jma_url
+        )
+
+        # ---------------------------------------------------------
+        # Download from JMA
+        # ---------------------------------------------------------
+
         async with httpx.AsyncClient(
-            timeout=30.0,
+            timeout=20.0,
             follow_redirects=True
         ) as client:
 
-            response = await client.get(url)
+            response = await client.get(
+                jma_url,
+                headers={
+                    "User-Agent":
+                        "Mozilla/5.0 CTW2 Satellite Viewer"
+                }
+            )
 
         if response.status_code != 200:
+
+            print(
+                "⚠️ [CTW2 HIMAWARI] JMA returned:",
+                response.status_code
+            )
+
             return Response(
-                content=f"Himawari source returned HTTP {response.status_code}",
+                content=(
+                    "JMA Himawari returned HTTP "
+                    f"{response.status_code}"
+                ),
                 status_code=response.status_code,
                 media_type="text/plain"
             )
 
-        content_type = response.headers.get(
-            "content-type",
-            "image/jpeg"
-        )
+        # ---------------------------------------------------------
+        # Return image to browser
+        # ---------------------------------------------------------
 
         return Response(
             content=response.content,
-            media_type=content_type,
+            media_type="image/jpeg",
             headers={
                 "Cache-Control": "public, max-age=300"
             }
