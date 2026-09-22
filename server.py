@@ -7864,6 +7864,98 @@ async def ctw2_get_dynamic_weather_map(bounds: dict):
             "error": str(e)
         }
 
+# =========================================================
+# CTW2 REAL TEMPERATURE MAP
+# OpenWeather Weather Maps 2.0
+# =========================================================
+
+from fastapi.responses import RedirectResponse
+
+
+@app.get("/map")
+async def ctw2_temperature_map():
+    """
+    Test page for the real air-temperature map.
+
+    The actual temperature data comes from OpenWeather
+    Weather Maps 2.0, layer TA2.
+    """
+
+    return {
+        "status": "ok",
+        "map": "CTW2 Real Temperature Map",
+        "source": "OpenWeather Weather Maps 2.0",
+        "layer": "TA2",
+        "description": "Air temperature at 2 meters",
+        "units": "°C",
+        "tiles": "/map/{z}/{x}/{y}.png"
+    }
+
+
+@app.get("/map/{z}/{x}/{y}.png")
+async def ctw2_temperature_map_tile(z: int, x: int, y: int):
+    """
+    Redirect Leaflet directly to an OpenWeather temperature tile.
+
+    TA2 = air temperature at 2 meters.
+    """
+
+    import os
+
+    api_key = os.getenv("OPENWEATHER_API_KEY")
+
+    if not api_key:
+        return {
+            "error": "OPENWEATHER_API_KEY is not configured"
+        }
+
+    # CTW2 temperature color palette.
+    #
+    # White
+    #   ↓
+    # Blue
+    #   ↓
+    # Cyan
+    #   ↓
+    # Green
+    #   ↓
+    # Yellow
+    #   ↓
+    # Orange
+    #   ↓
+    # Red
+    #   ↓
+    # Dark red
+
+    palette = (
+        "-50:FFFFFF;"
+        "-30:BFE3FF;"
+        "-20:73B7FF;"
+        "-10:36D6FF;"
+        "0:5BE37A;"
+        "10:9FE33F;"
+        "20:FFF04A;"
+        "25:FFC12E;"
+        "30:FF8A24;"
+        "35:F0442E;"
+        "40:C91F2B;"
+        "50:780000"
+    )
+
+    tile_url = (
+        "https://maps.openweathermap.org/"
+        f"maps/2.0/weather/TA2/{z}/{x}/{y}"
+        f"?appid={api_key}"
+        "&opacity=0.85"
+        "&fill_bound=true"
+        f"&palette={palette}"
+    )
+
+    return RedirectResponse(
+        url=tile_url,
+        status_code=307
+    )
+
 @app.get("/api/ctw2/satellite/himawari")
 async def ctw2_himawari_proxy(
     z: int,
