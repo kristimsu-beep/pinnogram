@@ -7895,12 +7895,13 @@ async def ctw2_temperature_map():
 @app.get("/map/{z}/{x}/{y}.png")
 async def ctw2_temperature_map_tile(z: int, x: int, y: int):
     """
-    Redirect Leaflet directly to an OpenWeather temperature tile.
+    CTW2 real air-temperature tile.
+
+    FastAPI requests the OpenWeather Weather Maps 2.0
+    TA2 tile and returns the PNG directly to Leaflet.
 
     TA2 = air temperature at 2 meters.
     """
-
-    import os
 
     api_key = os.getenv("OPENWEATHER_API_KEY")
 
@@ -7908,24 +7909,6 @@ async def ctw2_temperature_map_tile(z: int, x: int, y: int):
         return {
             "error": "OPENWEATHER_API_KEY is not configured"
         }
-
-    # CTW2 temperature color palette.
-    #
-    # White
-    #   ↓
-    # Blue
-    #   ↓
-    # Cyan
-    #   ↓
-    # Green
-    #   ↓
-    # Yellow
-    #   ↓
-    # Orange
-    #   ↓
-    # Red
-    #   ↓
-    # Dark red
 
     palette = (
         "-50:FFFFFF;"
@@ -7951,10 +7934,31 @@ async def ctw2_temperature_map_tile(z: int, x: int, y: int):
         f"&palette={palette}"
     )
 
-    return RedirectResponse(
-        url=tile_url,
-        status_code=307
-    )
+    try:
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            follow_redirects=True
+        ) as client:
+
+            response = await client.get(tile_url)
+
+        if response.status_code != 200:
+            return {
+                "error": "OpenWeather request failed",
+                "status_code": response.status_code,
+                "response": response.text[:500]
+            }
+
+        return Response(
+            content=response.content,
+            media_type="image/png"
+        )
+
+    except Exception as e:
+        return {
+            "error": "Failed to request OpenWeather tile",
+            "details": str(e)
+        }
 
 @app.get("/api/ctw2/satellite/himawari")
 async def ctw2_himawari_proxy(
