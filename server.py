@@ -7926,12 +7926,9 @@ async def ctw2_temperature_map_tile(z: int, x: int, y: int):
     )
 
     tile_url = (
-        "https://maps.openweathermap.org/"
-        f"maps/2.0/weather/TA2/{z}/{x}/{y}"
+        "https://tile.openweathermap.org/map/"
+        f"temp_new/{z}/{x}/{y}.png"
         f"?appid={api_key}"
-        "&opacity=0.85"
-        "&fill_bound=true"
-        f"&palette={palette}"
     )
 
     try:
