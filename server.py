@@ -7894,6 +7894,175 @@ async def get_temperature_map_page():
             "Файл map.html не найден в папке games"
     }
 
+# =========================================================
+# TEMPERATURE PROBE CACHE
+# =========================================================
+
+temperature_probe_cache = {}
+
+TEMPERATURE_PROBE_CACHE_TTL = 600
+TEMPERATURE_PROBE_GRID = 0.25
+
+
+# =========================================================
+# TEMPERATURE AT MAP COORDINATES
+# =========================================================
+
+@app.get("/map/temperature")
+async def ctw2_temperature_probe(
+    lat: float,
+    lon: float
+):
+    """
+    Returns the current air temperature for map coordinates.
+
+    OpenWeather Current Weather API is used internally.
+    Results are cached for 10 minutes on a 0.25° grid.
+    """
+
+    api_key = os.getenv("OPENWEATHER_API_KEY")
+
+    if not api_key:
+        return {
+            "error": "OPENWEATHER_API_KEY is not configured"
+        }
+
+    # -----------------------------------------------------
+    # Validate coordinates
+    # -----------------------------------------------------
+
+    if lat < -90 or lat > 90:
+        return {
+            "error": "Invalid latitude"
+        }
+
+    if lon < -180 or lon > 180:
+        return {
+            "error": "Invalid longitude"
+        }
+
+    # -----------------------------------------------------
+    # Round coordinates to a small grid.
+    # This greatly reduces API requests while moving
+    # the cursor around the map.
+    # -----------------------------------------------------
+
+    grid_lat = round(
+        lat / TEMPERATURE_PROBE_GRID
+    ) * TEMPERATURE_PROBE_GRID
+
+    grid_lon = round(
+        lon / TEMPERATURE_PROBE_GRID
+    ) * TEMPERATURE_PROBE_GRID
+
+    cache_key = (
+        round(grid_lat, 2),
+        round(grid_lon, 2)
+    )
+
+    # -----------------------------------------------------
+    # Check cache
+    # -----------------------------------------------------
+
+    import time
+
+    now = time.time()
+
+    cached = temperature_probe_cache.get(
+        cache_key
+    )
+
+    if cached:
+        cached_time = cached["time"]
+
+        if now - cached_time < TEMPERATURE_PROBE_CACHE_TTL:
+            return {
+                "temperature": cached["temperature"],
+                "source": "cache",
+                "lat": grid_lat,
+                "lon": grid_lon
+            }
+
+    # -----------------------------------------------------
+    # Request OpenWeather
+    # -----------------------------------------------------
+
+    weather_url = (
+        "https://api.openweathermap.org/"
+        "data/2.5/weather"
+    )
+
+    params = {
+        "lat": grid_lat,
+        "lon": grid_lon,
+        "appid": api_key,
+        "units": "metric"
+    }
+
+    try:
+
+        async with httpx.AsyncClient(
+            timeout=10.0
+        ) as client:
+
+            response = await client.get(
+                weather_url,
+                params=params
+            )
+
+        if response.status_code != 200:
+
+            return {
+                "error": "OpenWeather temperature request failed",
+                "status_code": response.status_code,
+                "response": response.text[:500]
+            }
+
+        data = response.json()
+
+        temperature = data.get(
+            "main",
+            {}
+        ).get(
+            "temp"
+        )
+
+        if temperature is None:
+
+            return {
+                "error": "Temperature not found in OpenWeather response"
+            }
+
+        temperature = round(
+            float(temperature),
+            1
+        )
+
+        # -------------------------------------------------
+        # Save in cache
+        # -------------------------------------------------
+
+        temperature_probe_cache[
+            cache_key
+        ] = {
+            "temperature": temperature,
+            "time": now
+        }
+
+        return {
+            "temperature": temperature,
+            "source": "openweather",
+            "lat": grid_lat,
+            "lon": grid_lon
+        }
+
+    except Exception as e:
+
+        return {
+            "error": "Failed to request temperature",
+            "details": str(e)
+        }
+
 @app.get("/map/{z}/{x}/{y}.png")
 async def ctw2_temperature_map_tile(z: int, x: int, y: int):
     """
