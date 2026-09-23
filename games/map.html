@@ -26,6 +26,13 @@
     </script>
     <script src="https://unpkg.com/@joergdietrich/leaflet.terminator"></script>
 
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.css"
+    >
+
+    <script src="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.js"></script>
+
     <!-- =====================================================
          STYLE
     ====================================================== -->
@@ -205,6 +212,204 @@
             transform: translate(14px, -50%);
         }
 
+        /* =========================================================
+           CTW2 PANORAMA EXPLORER
+           ========================================================= */
+        
+        #panoramaExplorer {
+            position: fixed;
+        
+            inset: 0;
+        
+            z-index: 5000;
+        
+            display: none;
+        
+            flex-direction: column;
+        
+            background: #050609;
+        
+            color: white;
+        }
+        
+        
+        /* =========================================================
+           HEADER
+           ========================================================= */
+        
+        #panoramaExplorerHeader {
+            height: 58px;
+        
+            flex: 0 0 58px;
+        
+            display: flex;
+        
+            align-items: center;
+        
+            justify-content: space-between;
+        
+            padding: 0 18px;
+        
+            background:
+                rgba(10, 12, 18, 0.96);
+        
+            border-bottom:
+                1px solid rgba(255, 255, 255, 0.12);
+        }
+        
+        
+        /* =========================================================
+           LOCATION TEXT
+           ========================================================= */
+        
+        #panoramaExplorerLocation {
+            display: block;
+        
+            margin-top: 2px;
+        
+            font-size: 12px;
+        
+            opacity: 0.65;
+        }
+        
+        
+        /* =========================================================
+           CLOSE BUTTON
+           ========================================================= */
+        
+        #panoramaExplorerClose {
+            width: 40px;
+        
+            height: 40px;
+        
+            border: none;
+        
+            border-radius: 10px;
+        
+            background:
+                rgba(255, 255, 255, 0.10);
+        
+            color: white;
+        
+            font-size: 20px;
+        
+            cursor: pointer;
+        
+            transition:
+                background 0.15s ease,
+                transform 0.15s ease;
+        }
+        
+        #panoramaExplorerClose:hover {
+            background:
+                rgba(255, 255, 255, 0.20);
+        
+            transform: scale(1.05);
+        }
+        
+        
+        /* =========================================================
+           CONTENT
+           ========================================================= */
+        
+        #panoramaExplorerContent {
+            position: relative;
+        
+            flex: 1;
+        
+            min-height: 0;
+        
+            display: flex;
+        
+            flex-direction: column;
+        }
+        
+        
+        /* =========================================================
+           VIEWER PANES
+           ========================================================= */
+        
+        .explorerPane {
+            position: relative;
+        
+            min-height: 0;
+        
+            overflow: hidden;
+        
+            background: #08090c;
+        }
+        
+        
+        /* Panorama = larger area */
+        
+        #streetViewContainer {
+            flex: 3;
+        }
+        
+        
+        /* Terrain = smaller area */
+        
+        #terrainContainer {
+            flex: 1;
+        
+            border-top:
+                1px solid rgba(255, 255, 255, 0.15);
+        }
+        
+        
+        /* =========================================================
+           LOADING
+           ========================================================= */
+        
+        .explorerLoading {
+            position: absolute;
+        
+            inset: 0;
+        
+            display: flex;
+        
+            align-items: center;
+        
+            justify-content: center;
+        
+            font-size: 15px;
+        
+            color: rgba(255, 255, 255, 0.75);
+        
+            pointer-events: none;
+        }
+        
+        
+        /* =========================================================
+           MAPLIBRE
+           ========================================================= */
+        
+        #terrainContainer .maplibregl-map {
+            width: 100%;
+        
+            height: 100%;
+        }
+        
+        
+        /* =========================================================
+           MOBILE
+           ========================================================= */
+        
+        @media (max-width: 800px) {
+        
+            #panoramaExplorerContent {
+                flex-direction: column;
+            }
+        
+            #streetViewContainer {
+                flex: 2;
+            }
+        
+            #terrainContainer {
+                flex: 1;
+            }
+        }
+
     </style>
 
 </head>
@@ -235,6 +440,53 @@
 
     <div id="map"></div>
 
+    <!-- =========================================================
+         CTW2 PANORAMA EXPLORER
+    ========================================================= -->
+    
+    <div id="panoramaExplorer">
+    
+        <div id="panoramaExplorerHeader">
+            <div>
+                <strong>🌍 CTW2 Local Explorer</strong>
+                <span id="panoramaExplorerLocation">
+                    Loading location...
+                </span>
+            </div>
+    
+            <button
+                id="panoramaExplorerClose"
+                type="button"
+            >
+                ✕
+            </button>
+        </div>
+    
+    
+        <div id="panoramaExplorerContent">
+    
+            <div
+                id="streetViewContainer"
+                class="explorerPane"
+            >
+                <div class="explorerLoading">
+                    🔎 Ищем ближайшую панораму...
+                </div>
+            </div>
+    
+    
+            <div
+                id="terrainContainer"
+                class="explorerPane"
+            >
+                <div class="explorerLoading">
+                    ⛰️ Загружаем 3D-рельеф...
+                </div>
+            </div>
+    
+        </div>
+    
+    </div>
 
     <!-- =====================================================
          LEGEND
@@ -640,6 +892,698 @@
                         "🌡️ [CTW2 MAP] Temperature probe disabled."
                     );
                 }
+            }
+        );
+
+        // =========================================================
+        // CTW2 LOCAL EXPLORER
+        // =========================================================
+        
+        const panoramaExplorer =
+            document.getElementById(
+                "panoramaExplorer"
+            );
+        
+        const panoramaExplorerClose =
+            document.getElementById(
+                "panoramaExplorerClose"
+            );
+        
+        const panoramaExplorerLocation =
+            document.getElementById(
+                "panoramaExplorerLocation"
+            );
+        
+        const streetViewContainer =
+            document.getElementById(
+                "streetViewContainer"
+            );
+        
+        const terrainContainer =
+            document.getElementById(
+                "terrainContainer"
+            );
+        
+        
+        let explorerPressTimer = null;
+        
+        let explorerPressStart = null;
+        
+        let explorerPressLatLng = null;
+        
+        let explorerLongPressTriggered = false;
+        
+        let explorerPanorama = null;
+        
+        let explorerTerrainMap = null;
+        
+        let explorerTerrainMarker = null;
+        
+        let explorerGoogleMapsLoaded = false;
+        
+        
+        // =========================================================
+        // LOAD GOOGLE MAPS
+        // =========================================================
+        
+        function loadGoogleMaps(apiKey) {
+        
+            return new Promise(
+                function(resolve, reject) {
+        
+                    if (
+                        window.google &&
+                        window.google.maps
+                    ) {
+                        explorerGoogleMapsLoaded =
+                            true;
+        
+                        resolve();
+        
+                        return;
+                    }
+        
+                    window.ctw2GoogleMapsReady =
+                        function() {
+        
+                            explorerGoogleMapsLoaded =
+                                true;
+        
+                            resolve();
+                        };
+        
+        
+                    const script =
+                        document.createElement("script");
+        
+                    script.src =
+                        "https://maps.googleapis.com/maps/api/js"
+                        + `?key=${encodeURIComponent(apiKey)}`
+                        + "&libraries=streetView"
+                        + "&callback=ctw2GoogleMapsReady"
+                        + "&v=weekly";
+        
+                    script.async = true;
+        
+                    script.defer = true;
+        
+                    script.onerror =
+                        function() {
+        
+                            reject(
+                                new Error(
+                                    "Google Maps failed to load."
+                                )
+                            );
+        
+                        };
+        
+                    document.head.appendChild(
+                        script
+                    );
+                }
+            );
+        }
+        
+        
+        // =========================================================
+        // CLEAR PANORAMA CONTAINER
+        // =========================================================
+        
+        function clearStreetView() {
+        
+            streetViewContainer.innerHTML = "";
+        
+        }
+        
+        
+        // =========================================================
+        // CLEAR TERRAIN CONTAINER
+        // =========================================================
+        
+        function clearTerrain() {
+        
+            terrainContainer.innerHTML = "";
+        
+        }
+        
+        
+        // =========================================================
+        // SHOW EXPLORER
+        // =========================================================
+        
+        function showExplorer() {
+        
+            panoramaExplorer.style.display =
+                "flex";
+        
+            document.body.style.overflow =
+                "hidden";
+        }
+        
+        
+        // =========================================================
+        // CLOSE EXPLORER
+        // =========================================================
+        
+        function closeExplorer() {
+        
+            panoramaExplorer.style.display =
+                "none";
+        
+            document.body.style.overflow =
+                "";
+        
+            if (explorerPanorama) {
+        
+                explorerPanorama.setVisible(
+                    false
+                );
+            }
+        
+            explorerPanorama = null;
+        
+            explorerTerrainMap = null;
+        
+            explorerTerrainMarker = null;
+        
+            clearStreetView();
+        
+            clearTerrain();
+        }
+        
+        
+        panoramaExplorerClose.addEventListener(
+            "click",
+            closeExplorer
+        );
+        
+        
+        // =========================================================
+        // LOAD 3D TERRAIN
+        // =========================================================
+        
+        function loadTerrain(
+            lat,
+            lon,
+            maptilerKey
+        ) {
+        
+            clearTerrain();
+        
+            explorerTerrainMap =
+                new maplibregl.Map({
+        
+                    container:
+                        terrainContainer,
+        
+                    style:
+                        "https://api.maptiler.com/maps/"
+                        + "streets-v4/style.json"
+                        + `?key=${encodeURIComponent(maptilerKey)}`,
+        
+                    center: [
+                        lon,
+                        lat
+                    ],
+        
+                    zoom: 13,
+        
+                    pitch: 62,
+        
+                    bearing: 0,
+        
+                    antialias: true
+                });
+        
+        
+            explorerTerrainMap.on(
+                "load",
+                function() {
+        
+                    explorerTerrainMap.addSource(
+                        "ctw2-terrain",
+                        {
+                            type: "raster-dem",
+        
+                            url:
+                                "https://api.maptiler.com/"
+                                + "tiles/terrain-rgb-v2/"
+                                + "tiles.json"
+                                + `?key=${encodeURIComponent(maptilerKey)}`,
+        
+                            tileSize: 512,
+        
+                            maxzoom: 14
+                        }
+                    );
+        
+        
+                    explorerTerrainMap.setTerrain({
+                        source:
+                            "ctw2-terrain",
+        
+                        exaggeration: 1.35
+                    });
+        
+        
+                    explorerTerrainMarker =
+                        new maplibregl.Marker({
+                            color: "#ff3333"
+                        })
+                        .setLngLat([
+                            lon,
+                            lat
+                        ])
+                        .addTo(
+                            explorerTerrainMap
+                        );
+        
+        
+                    explorerTerrainMap.addControl(
+                        new maplibregl.NavigationControl(),
+                        "top-right"
+                    );
+        
+        
+                    setTimeout(
+                        function() {
+        
+                            explorerTerrainMap.resize();
+        
+                        },
+                        100
+                    );
+                }
+            );
+        }
+        
+        
+        // =========================================================
+        // FIND STREET VIEW
+        // =========================================================
+        
+        async function loadStreetView(
+            lat,
+            lon,
+            googleKey
+        ) {
+        
+            clearStreetView();
+        
+            streetViewContainer.innerHTML = `
+                <div class="explorerLoading">
+                    🔎 Ищем ближайшую 360° панораму...
+                </div>
+            `;
+        
+        
+            await loadGoogleMaps(
+                googleKey
+            );
+        
+        
+            const service =
+                new google.maps.StreetViewService();
+        
+        
+            return new Promise(
+                function(resolve) {
+        
+                    service.getPanorama(
+                        {
+                            location: {
+                                lat: lat,
+                                lng: lon
+                            },
+        
+                            radius: 250,
+        
+                            source:
+                                google.maps.StreetViewSource
+                                    .OUTDOOR
+                        },
+        
+                        function(
+                            data,
+                            status
+                        ) {
+        
+                            if (
+                                status !==
+                                google.maps.StreetViewStatus.OK
+                            ) {
+        
+                                streetViewContainer.innerHTML = `
+                                    <div class="explorerLoading">
+                                        📍 Панорама рядом не найдена
+                                    </div>
+                                `;
+        
+                                resolve(false);
+        
+                                return;
+                            }
+        
+        
+                            streetViewContainer.innerHTML =
+                                "";
+        
+        
+                            explorerPanorama =
+                                new google.maps.StreetViewPanorama(
+                                    streetViewContainer,
+                                    {
+                                        pano:
+                                            data.location.pano,
+        
+                                        addressControl:
+                                            true,
+        
+                                        linksControl:
+                                            true,
+        
+                                        panControl:
+                                            true,
+        
+                                        zoomControl:
+                                            true,
+        
+                                        fullscreenControl:
+                                            false,
+        
+                                        clickToGo:
+                                            true,
+        
+                                        scrollwheel:
+                                            true,
+        
+                                        motionTracking:
+                                            false,
+        
+                                        showRoadLabels:
+                                            true,
+        
+                                        pov: {
+                                            heading:
+                                                0,
+        
+                                            pitch:
+                                                0
+                                        }
+                                    }
+                                );
+        
+        
+                            resolve(true);
+                        }
+                    );
+                }
+            );
+        }
+        
+        
+        // =========================================================
+        // OPEN EXPLORER AT POINT
+        // =========================================================
+        
+        async function openExplorerAt(
+            lat,
+            lon
+        ) {
+        
+            showExplorer();
+        
+        
+            panoramaExplorerLocation.textContent =
+                `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+        
+        
+            try {
+        
+                const configResponse =
+                    await fetch(
+                        "/map/config"
+                    );
+        
+        
+                const config =
+                    await configResponse.json();
+        
+        
+                if (
+                    !config.google_maps_api_key
+                ) {
+        
+                    throw new Error(
+                        "GOOGLE_MAPS_API_KEY is not configured."
+                    );
+                }
+        
+        
+                if (
+                    !config.maptiler_api_key
+                ) {
+        
+                    throw new Error(
+                        "MAPTILER_API_KEY is not configured."
+                    );
+                }
+        
+        
+                await Promise.all([
+                    loadStreetView(
+                        lat,
+                        lon,
+                        config.google_maps_api_key
+                    ),
+        
+                    loadTerrain(
+                        lat,
+                        lon,
+                        config.maptiler_api_key
+                    )
+                ]);
+        
+        
+            } catch (error) {
+        
+                console.error(
+                    "🌍 [CTW2 EXPLORER] Failed:",
+                    error
+                );
+        
+        
+                streetViewContainer.innerHTML = `
+                    <div class="explorerLoading">
+                        ❌ Не удалось загрузить панораму
+                    </div>
+                `;
+        
+                terrainContainer.innerHTML = `
+                    <div class="explorerLoading">
+                        ❌ Не удалось загрузить 3D-рельеф
+                    </div>
+                `;
+            }
+        }
+        
+        
+        // =========================================================
+        // LONG PRESS HANDLING
+        // =========================================================
+        
+        const mapElement =
+            map.getContainer();
+        
+        
+        mapElement.addEventListener(
+            "pointerdown",
+            function(event) {
+        
+                // Only primary mouse button,
+                // touch and pen.
+                if (
+                    event.pointerType === "mouse" &&
+                    event.button !== 0
+                ) {
+                    return;
+                }
+        
+        
+                explorerLongPressTriggered =
+                    false;
+        
+        
+                const rect =
+                    mapElement.getBoundingClientRect();
+        
+        
+                const x =
+                    event.clientX -
+                    rect.left;
+        
+        
+                const y =
+                    event.clientY -
+                    rect.top;
+        
+        
+                explorerPressStart = {
+                    x: x,
+                    y: y
+                };
+        
+        
+                explorerPressLatLng =
+                    map.containerPointToLatLng(
+                        [x, y]
+                    );
+        
+        
+                clearTimeout(
+                    explorerPressTimer
+                );
+        
+        
+                explorerPressTimer =
+                    setTimeout(
+                        function() {
+        
+                            explorerLongPressTriggered =
+                                true;
+        
+                            const point =
+                                explorerPressLatLng;
+        
+        
+                            console.log(
+                                "🌍 [CTW2 EXPLORER] Long press:",
+                                point.lat,
+                                point.lng
+                            );
+        
+        
+                            openExplorerAt(
+                                point.lat,
+                                point.lng
+                            );
+        
+                        },
+                        3000
+                    );
+            }
+        );
+        
+        
+        mapElement.addEventListener(
+            "pointermove",
+            function(event) {
+        
+                if (
+                    !explorerPressStart
+                ) {
+                    return;
+                }
+        
+        
+                const rect =
+                    mapElement.getBoundingClientRect();
+        
+        
+                const x =
+                    event.clientX -
+                    rect.left;
+        
+        
+                const y =
+                    event.clientY -
+                    rect.top;
+        
+        
+                const dx =
+                    x -
+                    explorerPressStart.x;
+        
+        
+                const dy =
+                    y -
+                    explorerPressStart.y;
+        
+        
+                const distance =
+                    Math.sqrt(
+                        dx * dx +
+                        dy * dy
+                    );
+        
+        
+                // Moving the map cancels
+                // the long press.
+                if (
+                    distance > 10
+                ) {
+        
+                    clearTimeout(
+                        explorerPressTimer
+                    );
+        
+                    explorerPressTimer =
+                        null;
+        
+                    explorerPressStart =
+                        null;
+        
+                    explorerPressLatLng =
+                        null;
+                }
+            }
+        );
+        
+        
+        function cancelExplorerPress() {
+        
+            clearTimeout(
+                explorerPressTimer
+            );
+        
+            explorerPressTimer =
+                null;
+        
+            explorerPressStart =
+                null;
+        
+            explorerPressLatLng =
+                null;
+        }
+        
+        
+        mapElement.addEventListener(
+            "pointerup",
+            function() {
+        
+                cancelExplorerPress();
+        
+            }
+        );
+        
+        
+        mapElement.addEventListener(
+            "pointercancel",
+            function() {
+        
+                cancelExplorerPress();
+        
+            }
+        );
+        
+        
+        mapElement.addEventListener(
+            "pointerleave",
+            function() {
+        
+                cancelExplorerPress();
+        
             }
         );
 
