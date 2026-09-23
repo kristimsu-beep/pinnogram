@@ -24,7 +24,7 @@
     <script
         src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
     </script>
-
+    <script src="https://unpkg.com/@joergdietrich/leaflet.terminator"></script>
 
     <!-- =====================================================
          STYLE
@@ -314,6 +314,18 @@
 
         );
 
+        // =========================================================
+        // NIGHT ZONE
+        // =========================================================
+        
+        const nightLayer = L.terminator({
+            resolution: 2,
+            fillColor: "#000000",
+            fillOpacity: 0.48,
+            color: "#111111",
+            weight: 0,
+            opacity: 0
+        });
 
         temperatureLayer.addTo(map);
 
@@ -332,6 +344,36 @@
         console.log(
             "🗺️ [CTW2 MAP] Real temperature source:",
             "/map/{z}/{x}/{y}.png"
+        );
+
+        // =========================================================
+        // MAP LAYER SWITCHER
+        // =========================================================
+        
+        L.control.layers(
+            null,
+            {
+                "🌡️ Temperature": temperatureLayer,
+                "🌙 Night Zone": nightLayer
+            },
+            {
+                collapsed: false
+            }
+        ).addTo(map);
+
+        // =========================================================
+        // UPDATE NIGHT ZONE
+        // =========================================================
+        
+        function updateNightZone() {
+            nightLayer.setTime(new Date());
+        }
+        
+        updateNightZone();
+        
+        setInterval(
+            updateNightZone,
+            60 * 1000
         );
 
     </script>
