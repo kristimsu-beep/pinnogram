@@ -26,6 +26,8 @@ from scripts.import_ctw2_cities import initialize_ctw2_cities
 from shapely.geometry import Point, Polygon
 from PIL import Image
 import io
+from PIL import Image, ImageEnhance
+from io import BytesIO
 
 # Вечное облачное хранилище для видео и голосовых Pinnogram
 SUPABASE_URL = "https://zzcfdrryfsychezckjov.supabase.co"
@@ -7897,10 +7899,9 @@ async def ctw2_temperature_map_tile(z: int, x: int, y: int):
     """
     CTW2 real air-temperature tile.
 
-    FastAPI requests the OpenWeather Weather Maps 2.0
-    TA2 tile and returns the PNG directly to Leaflet.
-
-    TA2 = air temperature at 2 meters.
+    OpenWeather provides the temperature PNG.
+    The server processes the PNG to make the
+    temperature colors more saturated and contrasted.
     """
 
     api_key = os.getenv("OPENWEATHER_API_KEY")
@@ -7909,21 +7910,6 @@ async def ctw2_temperature_map_tile(z: int, x: int, y: int):
         return {
             "error": "OPENWEATHER_API_KEY is not configured"
         }
-
-    palette = (
-        "-50:FFFFFF;"
-        "-30:BFE3FF;"
-        "-20:73B7FF;"
-        "-10:36D6FF;"
-        "0:5BE37A;"
-        "10:9FE33F;"
-        "20:FFF04A;"
-        "25:FFC12E;"
-        "30:FF8A24;"
-        "35:F0442E;"
-        "40:C91F2B;"
-        "50:780000"
-    )
 
     tile_url = (
         "https://tile.openweathermap.org/map/"
@@ -7946,14 +7932,60 @@ async def ctw2_temperature_map_tile(z: int, x: int, y: int):
                 "response": response.text[:500]
             }
 
+        # =====================================================
+        # LOAD OPENWEATHER PNG
+        # =====================================================
+
+        image = Image.open(
+            BytesIO(response.content)
+        ).convert("RGBA")
+
+        # =====================================================
+        # INCREASE COLOR SATURATION
+        # =====================================================
+
+        image = ImageEnhance.Color(
+            image
+        ).enhance(2.5)
+
+        # =====================================================
+        # INCREASE CONTRAST
+        # =====================================================
+
+        image = ImageEnhance.Contrast(
+            image
+        ).enhance(1.35)
+
+        # =====================================================
+        # SLIGHT BRIGHTNESS BOOST
+        # =====================================================
+
+        image = ImageEnhance.Brightness(
+            image
+        ).enhance(1.08)
+
+        # =====================================================
+        # RETURN PROCESSED PNG
+        # =====================================================
+
+        output = BytesIO()
+
+        image.save(
+            output,
+            format="PNG",
+            optimize=True
+        )
+
+        output.seek(0)
+
         return Response(
-            content=response.content,
+            content=output.getvalue(),
             media_type="image/png"
         )
 
     except Exception as e:
         return {
-            "error": "Failed to request OpenWeather tile",
+            "error": "Failed to process temperature tile",
             "details": str(e)
         }
 
