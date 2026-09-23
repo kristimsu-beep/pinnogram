@@ -7900,18 +7900,12 @@ async def get_temperature_map_page():
 
 @app.get("/map/config")
 async def get_map_config():
-    google_maps_api_key = os.getenv(
-        "GOOGLE_MAPS_API_KEY"
-    )
 
     maptiler_api_key = os.getenv(
         "MAPTILER_API_KEY"
     )
 
     return {
-        "google_maps_api_key":
-            google_maps_api_key,
-
         "maptiler_api_key":
             maptiler_api_key
     }
@@ -8083,6 +8077,213 @@ async def ctw2_temperature_probe(
         return {
             "error": "Failed to request temperature",
             "details": str(e)
+        }
+
+# =========================================================
+# PANORAMAX NEAREST PANORAMA
+# =========================================================
+
+@app.get("/map/panorama")
+async def ctw2_panorama(
+    lat: float,
+    lon: float
+):
+    """
+    Find the nearest public Panoramax picture
+    around the requested map coordinates.
+
+    The federated Panoramax catalog is searched
+    using progressively larger bounding boxes.
+    """
+
+    if lat < -90 or lat > 90:
+        return {
+            "error": "Invalid latitude"
+        }
+
+    if lon < -180 or lon > 180:
+        return {
+            "error": "Invalid longitude"
+        }
+
+    search_url = (
+        "https://api.panoramax.xyz/api/search"
+    )
+
+    # Search radius in degrees.
+    # Approximately:
+    # 0.002 = ~220 m
+    # 0.01  = ~1.1 km
+    # 0.05  = ~5.5 km
+    search_sizes = [
+        0.002,
+        0.01,
+        0.05
+    ]
+
+    def distance_m(
+        lat1,
+        lon1,
+        lat2,
+        lon2
+    ):
+        from math import (
+            radians,
+            sin,
+            cos,
+            sqrt,
+            atan2
+        )
+
+        earth_radius = 6371000
+
+        dlat = radians(
+            lat2 - lat1
+        )
+
+        dlon = radians(
+            lon2 - lon1
+        )
+
+        a = (
+            sin(dlat / 2) ** 2
+            +
+            cos(radians(lat1))
+            *
+            cos(radians(lat2))
+            *
+            sin(dlon / 2) ** 2
+        )
+
+        c = 2 * atan2(
+            sqrt(a),
+            sqrt(1 - a)
+        )
+
+        return earth_radius * c
+
+    try:
+
+        async with httpx.AsyncClient(
+            timeout=15.0
+        ) as client:
+
+            for size in search_sizes:
+
+                min_lon = lon - size
+                max_lon = lon + size
+
+                min_lat = lat - size
+                max_lat = lat + size
+
+                params = {
+                    "bbox": (
+                        f"{min_lon},"
+                        f"{min_lat},"
+                        f"{max_lon},"
+                        f"{max_lat}"
+                    ),
+                    "limit": 100
+                }
+
+                response = await client.get(
+                    search_url,
+                    params=params
+                )
+
+                if response.status_code != 200:
+                    continue
+
+                data = response.json()
+
+                features = data.get(
+                    "features",
+                    []
+                )
+
+                if not features:
+                    continue
+
+                nearest = None
+
+                for feature in features:
+
+                    geometry = feature.get(
+                        "geometry"
+                    )
+
+                    if not geometry:
+                        continue
+
+                    coordinates = geometry.get(
+                        "coordinates"
+                    )
+
+                    if (
+                        not coordinates
+                        or len(coordinates) < 2
+                    ):
+                        continue
+
+                    picture_lon = float(
+                        coordinates[0]
+                    )
+
+                    picture_lat = float(
+                        coordinates[1]
+                    )
+
+                    distance = distance_m(
+                        lat,
+                        lon,
+                        picture_lat,
+                        picture_lon
+                    )
+
+                    if (
+                        nearest is None
+                        or distance
+                        < nearest["distance_m"]
+                    ):
+                        nearest = {
+                            "picture_id":
+                                feature.get("id"),
+
+                            "sequence_id":
+                                feature.get(
+                                    "collection"
+                                ),
+
+                            "latitude":
+                                picture_lat,
+
+                            "longitude":
+                                picture_lon,
+
+                            "distance_m":
+                                distance
+                        }
+
+                if nearest:
+
+                    return {
+                        "status": "ok",
+                        **nearest
+                    }
+
+        return {
+            "status": "not_found",
+            "message":
+                "No Panoramax picture found nearby."
+        }
+
+    except Exception as e:
+
+        return {
+            "error":
+                "Failed to search Panoramax",
+            "details":
+                str(e)
         }
 
 @app.get("/map/{z}/{x}/{y}.png")
