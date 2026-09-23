@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>CTW2 Real Temperature Map</title>
+
+    <!-- =====================================================
+         LEAFLET
+    ====================================================== -->
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
+
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+    </script>
+
+
+    <!-- =====================================================
+         STYLE
+    ====================================================== -->
+
+    <style>
+
+        html,
+        body {
+
+            width: 100%;
+            height: 100%;
+
+            margin: 0;
+            padding: 0;
+
+            overflow: hidden;
+
+            background: #111;
+        }
+
+
+        #map {
+
+            width: 100%;
+            height: 100%;
+        }
+
+
+        /* =================================================
+           TITLE
+        ================================================= */
+
+        .map-title {
+
+            position: absolute;
+
+            top: 15px;
+            left: 15px;
+
+            z-index: 1000;
+
+            padding: 10px 14px;
+
+            border-radius: 10px;
+
+            background: rgba(20, 20, 20, 0.88);
+
+            color: white;
+
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
+
+            font-size: 15px;
+
+            font-weight: 700;
+
+            box-shadow:
+                0 4px 20px
+                rgba(0, 0, 0, 0.35);
+        }
+
+
+        /* =================================================
+           TEMPERATURE LEGEND
+        ================================================= */
+
+        .temperature-legend {
+
+            position: absolute;
+
+            right: 20px;
+            bottom: 25px;
+
+            z-index: 1000;
+
+            width: 180px;
+
+            padding: 12px;
+
+            border-radius: 10px;
+
+            background:
+                rgba(20, 20, 20, 0.90);
+
+            color: white;
+
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
+
+            box-shadow:
+                0 4px 20px
+                rgba(0, 0, 0, 0.35);
+        }
+
+
+        .temperature-legend-title {
+
+            margin-bottom: 8px;
+
+            font-size: 13px;
+
+            font-weight: 700;
+        }
+
+
+        .temperature-gradient {
+
+            width: 100%;
+            height: 14px;
+
+            border-radius: 5px;
+
+            background:
+                linear-gradient(
+                    to right,
+
+                    #821692,
+                    #0000ff,
+                    #00ffff,
+                    #00ff00,
+                    #ffff00,
+                    #ff8000,
+                    #ff0000
+                );
+        }
+
+
+        .temperature-labels {
+
+            display: flex;
+
+            justify-content:
+                space-between;
+
+            margin-top: 5px;
+
+            font-size: 10px;
+
+            color: #ddd;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+    <!-- =====================================================
+         TITLE
+    ====================================================== -->
+
+    <div class="map-title">
+
+        🌡️ CTW2 Real Temperature Map
+
+    </div>
+
+
+    <!-- =====================================================
+         MAP
+    ====================================================== -->
+
+    <div id="map"></div>
+
+
+    <!-- =====================================================
+         LEGEND
+    ====================================================== -->
+
+    <div class="temperature-legend">
+
+        <div class="temperature-legend-title">
+
+            Air temperature
+
+        </div>
+
+
+        <div class="temperature-gradient"></div>
+
+
+        <div class="temperature-labels">
+
+            <span>-50°C</span>
+
+            <span>0°C</span>
+
+            <span>+50°C</span>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         MAP SCRIPT
+    ====================================================== -->
+
+    <script>
+
+        /*
+         * ====================================================
+         * CREATE MAP
+         * ====================================================
+         */
+
+        const map = L.map(
+            "map",
+            {
+                center: [20, 0],
+
+                zoom: 2,
+
+                minZoom: 2,
+
+                maxZoom: 8,
+
+                worldCopyJump: true
+            }
+        );
+
+
+        /*
+         * ====================================================
+         * BASE MAP
+         * ====================================================
+         *
+         * We use OpenStreetMap as the geographical base.
+         *
+         * The temperature layer is placed above it.
+         */
+
+        const baseLayer = L.tileLayer(
+
+            "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+
+            {
+                maxZoom: 19,
+
+                attribution:
+                    '&copy; OpenStreetMap contributors'
+            }
+
+        );
+
+
+        baseLayer.addTo(map);
+
+
+        /*
+         * ====================================================
+         * REAL TEMPERATURE
+         * ====================================================
+         *
+         * This goes through our FastAPI proxy:
+         *
+         * /map/{z}/{x}/{y}.png
+         *
+         * FastAPI then requests:
+         *
+         * OpenWeather temp_new
+         */
+
+        const temperatureLayer = L.tileLayer(
+
+            "/map/{z}/{x}/{y}.png",
+
+            {
+                opacity: 0.75,
+
+                tileSize: 256,
+
+                updateWhenIdle: true,
+
+                updateWhenZooming: false,
+
+                attribution:
+                    "Weather data © OpenWeather"
+            }
+
+        );
+
+
+        temperatureLayer.addTo(map);
+
+
+        /*
+         * ====================================================
+         * DEBUG
+         * ====================================================
+         */
+
+        console.log(
+            "🌡️ [CTW2 MAP] Temperature layer loaded."
+        );
+
+
+        console.log(
+            "🗺️ [CTW2 MAP] Real temperature source:",
+            "/map/{z}/{x}/{y}.png"
+        );
+
+    </script>
+
+
+</body>
+
+</html>
