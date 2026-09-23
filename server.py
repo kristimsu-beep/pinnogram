@@ -7873,24 +7873,24 @@ from fastapi.responses import RedirectResponse
 
 
 @app.get("/map")
-async def ctw2_temperature_map():
-    """
-    Test page for the real air-temperature map.
+async def get_temperature_map_page():
+    from fastapi.responses import FileResponse
+    import os
 
-    The actual temperature data comes from OpenWeather
-    Weather Maps 2.0, layer TA2.
-    """
+    file_path = os.path.join(
+        "games",
+        "map.html"
+    )
+
+    if os.path.exists(file_path):
+        return FileResponse(
+            file_path
+        )
 
     return {
-        "status": "ok",
-        "map": "CTW2 Real Temperature Map",
-        "source": "OpenWeather Weather Maps 2.0",
-        "layer": "TA2",
-        "description": "Air temperature at 2 meters",
-        "units": "°C",
-        "tiles": "/map/{z}/{x}/{y}.png"
+        "error":
+            "Файл map.html не найден в папке games"
     }
-
 
 @app.get("/map/{z}/{x}/{y}.png")
 async def ctw2_temperature_map_tile(z: int, x: int, y: int):
