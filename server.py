@@ -7895,6 +7895,28 @@ async def get_temperature_map_page():
     }
 
 # =========================================================
+# CTW2 MAP CLIENT CONFIG
+# =========================================================
+
+@app.get("/map/config")
+async def get_map_config():
+    google_maps_api_key = os.getenv(
+        "GOOGLE_MAPS_API_KEY"
+    )
+
+    maptiler_api_key = os.getenv(
+        "MAPTILER_API_KEY"
+    )
+
+    return {
+        "google_maps_api_key":
+            google_maps_api_key,
+
+        "maptiler_api_key":
+            maptiler_api_key
+    }
+
+# =========================================================
 # TEMPERATURE PROBE CACHE
 # =========================================================
 
