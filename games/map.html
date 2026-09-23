@@ -171,6 +171,40 @@
             color: #ddd;
         }
 
+        /* =========================================================
+           CURSOR TEMPERATURE
+           ========================================================= */
+        
+        #temperatureProbe {
+            position: absolute;
+        
+            z-index: 1000;
+        
+            display: none;
+        
+            padding: 7px 10px;
+        
+            border-radius: 8px;
+        
+            background: rgba(15, 15, 20, 0.90);
+        
+            color: white;
+        
+            font-size: 14px;
+        
+            font-weight: 700;
+        
+            white-space: nowrap;
+        
+            pointer-events: none;
+        
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+        
+            backdrop-filter: blur(6px);
+        
+            transform: translate(14px, -50%);
+        }
+
     </style>
 
 </head>
@@ -185,8 +219,13 @@
 
     <div class="map-title">
 
+
         🌡️ CTW2 Real Temperature Map
 
+    </div>
+
+    <div id="temperatureProbe">
+        🌡️ <span id="temperatureProbeValue">--.-°C</span>
     </div>
 
 
@@ -374,6 +413,234 @@
         setInterval(
             updateNightZone,
             60 * 1000
+        );
+
+        // =========================================================
+        // CURSOR TEMPERATURE
+        // =========================================================
+        
+        const temperatureProbe =
+            document.getElementById(
+                "temperatureProbe"
+            );
+        
+        const temperatureProbeValue =
+            document.getElementById(
+                "temperatureProbeValue"
+            );
+        
+        let temperatureProbeTimer = null;
+        
+        let temperatureProbeRequestId = 0;
+        
+        
+        // =========================================================
+        // HIDE PROBE
+        // =========================================================
+        
+        function hideTemperatureProbe() {
+        
+            temperatureProbe.style.display =
+                "none";
+        }
+        
+        
+        // =========================================================
+        // SHOW PROBE
+        // =========================================================
+        
+        function showTemperatureProbe(
+            containerPoint,
+            text
+        ) {
+        
+            temperatureProbe.style.left =
+                `${containerPoint.x}px`;
+        
+            temperatureProbe.style.top =
+                `${containerPoint.y}px`;
+        
+            temperatureProbeValue.textContent =
+                text;
+        
+            temperatureProbe.style.display =
+                "block";
+        }
+        
+        
+        // =========================================================
+        // REQUEST TEMPERATURE
+        // =========================================================
+        
+        async function requestCursorTemperature(
+            lat,
+            lon,
+            containerPoint
+        ) {
+        
+            const requestId =
+                ++temperatureProbeRequestId;
+        
+            showTemperatureProbe(
+                containerPoint,
+                "..."
+            );
+        
+            try {
+        
+                const response = await fetch(
+                    `/map/temperature?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`
+                );
+        
+                const data =
+                    await response.json();
+        
+                // Ignore old requests
+                if (
+                    requestId !==
+                    temperatureProbeRequestId
+                ) {
+                    return;
+                }
+        
+                if (
+                    data.error ||
+                    typeof data.temperature !== "number"
+                ) {
+                    hideTemperatureProbe();
+                    return;
+                }
+        
+                showTemperatureProbe(
+                    containerPoint,
+                    `${data.temperature.toFixed(1)}°C`
+                );
+        
+            } catch (error) {
+        
+                console.error(
+                    "🌡️ [CTW2 MAP] Temperature probe error:",
+                    error
+                );
+        
+                hideTemperatureProbe();
+            }
+        }
+        
+        
+        // =========================================================
+        // MAP MOUSE MOVE
+        // =========================================================
+        
+        map.on(
+            "mousemove",
+            function (event) {
+        
+                // Temperature layer disabled
+                if (
+                    !map.hasLayer(
+                        temperatureLayer
+                    )
+                ) {
+                    hideTemperatureProbe();
+                    return;
+                }
+        
+                // Move the existing label immediately
+                if (
+                    temperatureProbe.style.display ===
+                    "block"
+                ) {
+                    temperatureProbe.style.left =
+                        `${event.containerPoint.x}px`;
+        
+                    temperatureProbe.style.top =
+                        `${event.containerPoint.y}px`;
+                }
+        
+                // Cancel previous delayed request
+                if (temperatureProbeTimer) {
+                    clearTimeout(
+                        temperatureProbeTimer
+                    );
+                }
+        
+                // Wait a little while before requesting
+                // a new temperature.
+                temperatureProbeTimer =
+                    setTimeout(
+                        function () {
+        
+                            requestCursorTemperature(
+                                event.latlng.lat,
+                                event.latlng.lng,
+                                event.containerPoint
+                            );
+        
+                        },
+                        450
+                    );
+            }
+        );
+        
+        
+        // =========================================================
+        // MOUSE LEAVE
+        // =========================================================
+        
+        map.on(
+            "mouseout",
+            function () {
+                hideTemperatureProbe();
+        
+                if (temperatureProbeTimer) {
+        
+                    clearTimeout(
+                        temperatureProbeTimer
+                    );
+        
+                    temperatureProbeTimer =
+                        null;
+                }
+            }
+        );
+        
+        
+        // =========================================================
+        // LAYER VISIBILITY
+        // =========================================================
+        
+        map.on(
+            "overlayadd",
+            function (event) {
+        
+                if (
+                    event.layer ===
+                    temperatureLayer
+                ) {
+                    console.log(
+                        "🌡️ [CTW2 MAP] Temperature probe enabled."
+                    );
+                }
+            }
+        );
+        
+        
+        map.on(
+            "overlayremove",
+            function (event) {
+        
+                if (
+                    event.layer ===
+                    temperatureLayer
+                ) {
+                    hideTemperatureProbe();
+        
+                    console.log(
+                        "🌡️ [CTW2 MAP] Temperature probe disabled."
+                    );
+                }
+            }
         );
 
     </script>
