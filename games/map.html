@@ -33,6 +33,10 @@
 
     <script src="https://unpkg.com/maplibre-gl@5.12.0/dist/maplibre-gl.js"></script>
 
+    <script
+        type="module"
+        src="https://cdn.jsdelivr.net/npm/@panoramax/web-viewer@5.2.0/build/esm/index_photoviewer.js"
+    ></script>
 
     <!-- =====================================================
          STYLE
@@ -344,6 +348,7 @@
         /* Panorama = larger area */
         
         #streetViewContainer {
+            position: relative;
             flex: 3;
         }
         
@@ -411,6 +416,33 @@
             }
         }
 
+        /* =========================================================
+           PANORAMAX VIEWER
+           ========================================================= */
+        
+        #panoramaxViewerContainer {
+            position: absolute;
+            inset: 0;
+        
+            width: 100%;
+            height: 100%;
+        
+            overflow: hidden;
+        
+            background: #000;
+        
+            z-index: 10;
+        }
+        
+        #panoramaxViewerContainer pnx-photo-viewer {
+            display: block;
+        
+            width: 100%;
+            height: 100%;
+        
+            min-height: 300px;
+        }
+
     </style>
 
 </head>
@@ -465,16 +497,19 @@
     
     
         <div id="panoramaExplorerContent">
-    
+
             <div
                 id="streetViewContainer"
                 class="explorerPane"
             >
-                <div class="explorerLoading">
-                    🔎 Ищем ближайшую панораму...
+                <div
+                    id="panoramaxViewerContainer"
+                >
+                    <div class="explorerLoading">
+                        🔎 Ищем ближайшую панораму...
+                    </div>
                 </div>
             </div>
-    
     
             <div
                 id="terrainContainer"
@@ -966,15 +1001,25 @@
         // SHOW EXPLORER
         // =========================================================
         
-        function showExplorer() {
+        function showExplorer(latitude, longitude) {
         
             panoramaExplorer.style.display =
                 "flex";
         
             document.body.style.overflow =
                 "hidden";
-        }
         
+            if (
+                typeof latitude === "number" &&
+                typeof longitude === "number"
+            ) {
+                loadPanoramaxForLocation(
+                    latitude,
+                    longitude
+                );
+            }
+        }
+                
         
         // =========================================================
         // CLOSE EXPLORER
@@ -997,9 +1042,551 @@
             clearStreetView();
         
             clearTerrain();
+
+            clearPanoramaxViewer();
+        }
+        
+        /* =========================================================
+           PANORAMAX
+           ========================================================= */
+        
+        const PANORAMAX_ENDPOINT =
+            "https://api.panoramax.xyz/api";
+        
+        let panoramaxViewer = null;
+        
+        
+        /**
+         * Wait until the Panoramax Web Component
+         * has been registered by the ESM module.
+         */
+        async function waitForPanoramax() {
+        
+            if (
+                customElements.get("pnx-photo-viewer")
+            ) {
+                return true;
+            }
+        
+            await customElements.whenDefined(
+                "pnx-photo-viewer"
+            );
+        
+            return true;
         }
         
         
+        /**
+         * Find the closest Panoramax picture
+         * to the supplied coordinates.
+         */
+        async function findNearestPanoramaxPicture(
+            latitude,
+            longitude
+        ) {
+        
+            console.log(
+                "[PANORAMAX] Searching near:",
+                latitude,
+                longitude
+            );
+        
+            await waitForPanoramax();
+        
+            try {
+        
+                /*
+                 * Panoramax's own API helper.
+                 */
+                if (
+                    window.Panoramax &&
+                    window.Panoramax.utils &&
+                    window.Panoramax.utils.API
+                ) {
+        
+                    const api =
+                        new window.Panoramax.utils.API(
+                            PANORAMAX_ENDPOINT
+                        );
+        
+                    await api.onceReady();
+        
+                    const result =
+                        await api.getPicturesAroundCoordinates(
+                            latitude,
+                            longitude,
+                            0.01,
+                            20
+                        );
+        
+                    console.log(
+                        "[PANORAMAX] Search result:",
+                        result
+                    );
+        
+                    if (
+                        !result ||
+                        !result.features ||
+                        !result.features.length
+                    ) {
+        
+                        return null;
+                    }
+        
+                    /*
+                     * Find the geographically closest picture.
+                     */
+                    let closest = null;
+                    let closestDistance = Infinity;
+        
+                    for (
+                        const feature of result.features
+                    ) {
+        
+                        if (
+                            !feature.geometry ||
+                            !feature.geometry.coordinates
+                        ) {
+                            continue;
+                        }
+        
+                        const [
+                            pictureLongitude,
+                            pictureLatitude
+                        ] = feature.geometry.coordinates;
+        
+                        const distance =
+                            Math.pow(
+                                pictureLatitude - latitude,
+                                2
+                            ) +
+                            Math.pow(
+                                pictureLongitude - longitude,
+                                2
+                            );
+        
+                        if (
+                            distance <
+                            closestDistance
+                        ) {
+        
+                            closestDistance = distance;
+                            closest = feature;
+                        }
+                    }
+        
+                    if (!closest) {
+                        return null;
+                    }
+        
+                    return closest;
+                }
+        
+                /*
+                 * Fallback:
+                 * directly query the Panoramax STAC API.
+                 */
+                const delta = 0.01;
+        
+                const bbox = [
+                    longitude - delta,
+                    latitude - delta,
+                    longitude + delta,
+                    latitude + delta
+                ].join(",");
+        
+                const url =
+                    `${PANORAMAX_ENDPOINT}/search` +
+                    `?bbox=${encodeURIComponent(bbox)}` +
+                    `&limit=20`;
+        
+                console.log(
+                    "[PANORAMAX] Fallback search:",
+                    url
+                );
+        
+                const response =
+                    await fetch(url);
+        
+                if (!response.ok) {
+        
+                    throw new Error(
+                        `Panoramax API returned ${response.status}`
+                    );
+                }
+        
+                const data =
+                    await response.json();
+        
+                if (
+                    !data ||
+                    !data.features ||
+                    !data.features.length
+                ) {
+        
+                    return null;
+                }
+        
+                let closest = null;
+                let closestDistance = Infinity;
+        
+                for (
+                    const feature of data.features
+                ) {
+        
+                    if (
+                        !feature.geometry ||
+                        !feature.geometry.coordinates
+                    ) {
+                        continue;
+                    }
+        
+                    const [
+                        pictureLongitude,
+                        pictureLatitude
+                    ] = feature.geometry.coordinates;
+        
+                    const distance =
+                        Math.pow(
+                            pictureLatitude - latitude,
+                            2
+                        ) +
+                        Math.pow(
+                            pictureLongitude - longitude,
+                            2
+                        );
+        
+                    if (
+                        distance <
+                        closestDistance
+                    ) {
+        
+                        closestDistance = distance;
+                        closest = feature;
+                    }
+                }
+        
+                return closest;
+        
+            } catch (error) {
+        
+                console.error(
+                    "[PANORAMAX] Search failed:",
+                    error
+                );
+        
+                return null;
+            }
+        }
+        
+        
+        /**
+         * Extract Panoramax IDs from a STAC feature.
+         */
+        function extractPanoramaxIds(feature) {
+        
+            if (!feature) {
+                return null;
+            }
+        
+            const pictureId =
+                feature.id ||
+                feature.properties?.id ||
+                null;
+        
+            let sequenceId =
+                feature.collection ||
+                feature.properties?.collection ||
+                null;
+        
+            /*
+             * Some Panoramax responses provide
+             * the sequence through links.
+             */
+            if (
+                !sequenceId &&
+                Array.isArray(feature.links)
+            ) {
+        
+                const collectionLink =
+                    feature.links.find(
+                        link =>
+                            link.rel === "collection"
+                    );
+        
+                if (collectionLink) {
+        
+                    const href =
+                        collectionLink.href || "";
+        
+                    const parts =
+                        href.split("/");
+        
+                    sequenceId =
+                        parts[parts.length - 1] ||
+                        null;
+                }
+            }
+        
+            if (
+                !pictureId ||
+                !sequenceId
+            ) {
+        
+                console.warn(
+                    "[PANORAMAX] Could not extract IDs:",
+                    feature
+                );
+        
+                return null;
+            }
+        
+            return {
+                pictureId,
+                sequenceId
+            };
+        }
+        
+        
+        /**
+         * Load a Panoramax picture into the explorer.
+         */
+        async function loadPanoramaxForLocation(
+            latitude,
+            longitude
+        ) {
+        
+            console.log(
+                "[PANORAMAX] Loading location:",
+                latitude,
+                longitude
+            );
+        
+            const container =
+                document.getElementById(
+                    "panoramaxViewerContainer"
+                );
+        
+            if (!container) {
+        
+                console.error(
+                    "[PANORAMAX] Viewer container not found."
+                );
+        
+                return;
+            }
+        
+            container.innerHTML = `
+                <div
+                    style="
+                        width:100%;
+                        height:100%;
+                        display:flex;
+                        align-items:center;
+                        justify-content:center;
+                        color:white;
+                        background:#000;
+                        font-family:system-ui,sans-serif;
+                    "
+                >
+                    Searching for nearby panorama...
+                </div>
+            `;
+        
+            const feature =
+                await findNearestPanoramaxPicture(
+                    latitude,
+                    longitude
+                );
+        
+            if (!feature) {
+        
+                container.innerHTML = `
+                    <div
+                        style="
+                            width:100%;
+                            height:100%;
+                            display:flex;
+                            flex-direction:column;
+                            align-items:center;
+                            justify-content:center;
+                            color:white;
+                            background:#000;
+                            font-family:system-ui,sans-serif;
+                            text-align:center;
+                            padding:30px;
+                            box-sizing:border-box;
+                        "
+                    >
+                        <div style="font-size:42px;">
+                            🌐
+                        </div>
+        
+                        <div
+                            style="
+                                margin-top:12px;
+                                font-size:18px;
+                                font-weight:600;
+                            "
+                        >
+                            No Panoramax imagery nearby
+                        </div>
+        
+                        <div
+                            style="
+                                margin-top:8px;
+                                opacity:.65;
+                                font-size:13px;
+                            "
+                        >
+                            Try selecting another location.
+                        </div>
+                    </div>
+                `;
+        
+                console.log(
+                    "[PANORAMAX] No nearby picture."
+                );
+        
+                return;
+            }
+        
+            console.log(
+                "[PANORAMAX] Closest feature:",
+                feature
+            );
+        
+            const ids =
+                extractPanoramaxIds(feature);
+        
+            if (!ids) {
+        
+                container.innerHTML = `
+                    <div
+                        style="
+                            width:100%;
+                            height:100%;
+                            display:flex;
+                            align-items:center;
+                            justify-content:center;
+                            color:white;
+                            background:#000;
+                            font-family:system-ui,sans-serif;
+                        "
+                    >
+                        Panoramax image data is unavailable.
+                    </div>
+                `;
+        
+                return;
+            }
+        
+            console.log(
+                "[PANORAMAX] Sequence:",
+                ids.sequenceId
+            );
+        
+            console.log(
+                "[PANORAMAX] Picture:",
+                ids.pictureId
+            );
+        
+            /*
+             * Create the actual Panoramax Web Component.
+             */
+            const viewer =
+                document.createElement(
+                    "pnx-photo-viewer"
+                );
+        
+            viewer.setAttribute(
+                "endpoint",
+                PANORAMAX_ENDPOINT
+            );
+        
+            viewer.setAttribute(
+                "sequence",
+                ids.sequenceId
+            );
+        
+            viewer.setAttribute(
+                "picture",
+                ids.pictureId
+            );
+        
+            viewer.setAttribute(
+                "widgets",
+                "true"
+            );
+        
+            viewer.setAttribute(
+                "url-parameters",
+                "false"
+            );
+        
+            viewer.setAttribute(
+                "lang",
+                "en"
+            );
+        
+            viewer.style.width = "100%";
+            viewer.style.height = "100%";
+            viewer.style.display = "block";
+        
+            container.innerHTML = "";
+        
+            container.appendChild(viewer);
+        
+            panoramaxViewer = viewer;
+        
+            /*
+             * Wait for the component to finish loading.
+             */
+            try {
+        
+                if (
+                    typeof viewer.onceReady ===
+                    "function"
+                ) {
+        
+                    await viewer.onceReady();
+        
+                    console.log(
+                        "[PANORAMAX] Viewer ready."
+                    );
+                }
+        
+            } catch (error) {
+        
+                console.error(
+                    "[PANORAMAX] Viewer failed:",
+                    error
+                );
+            }
+        }
+        
+        
+        /**
+         * Remove the current Panoramax viewer.
+         */
+        function clearPanoramaxViewer() {
+        
+            const container =
+                document.getElementById(
+                    "panoramaxViewerContainer"
+                );
+        
+            if (container) {
+                container.innerHTML = "";
+            }
+        
+            panoramaxViewer = null;
+        
+            console.log(
+                "[PANORAMAX] Viewer cleared."
+            );
+        }
+
         panoramaExplorerClose.addEventListener(
             "click",
             closeExplorer
