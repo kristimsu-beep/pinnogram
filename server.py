@@ -28,6 +28,7 @@ from PIL import Image
 import io
 from PIL import Image, ImageEnhance
 from io import BytesIO
+from uuid import uuid4
 
 # Вечное облачное хранилище для видео и голосовых Pinnogram
 SUPABASE_URL = "https://zzcfdrryfsychezckjov.supabase.co"
@@ -3777,7 +3778,7 @@ from uuid import uuid4
 from pydantic import BaseModel
 
 # ⚠️ Вставь сюда скопированную ссылку с экрана MongoDB и замени <db_password> на свой пароль!
-MONGO_URI = "mongodb+srv://admin:kJqO55yhAEPpEr6L@robux.wb9rz4o.mongodb.net/?appName=Robux"
+MONGO_URI = "mongodb+srv://admin:ZLSJpY8bZBmwuZBN@robux.wb9rz4o.mongodb.net/?appName=Robux"
 try:
     print("[🗄️ MONGO-БАЗА] Инициализация подключения к облачному кластеру...")
     mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
