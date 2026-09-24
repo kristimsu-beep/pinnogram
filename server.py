@@ -3784,6 +3784,15 @@ try:
     db = mongo_client["robux_hub_db"]
     cities_db = mongo_client["ctw2_cities_db"]
     sessions_collection = db["user_sessions"]
+    # =========================================================
+    # CTW3 — MONGODB
+    # =========================================================
+    
+    ctw3_db = mongo_client["ctw3_db"]
+    
+    ctw3_countries = ctw3_db["countries"]
+    
+    print("[🌍 CTW3] MongoDB database initialized: ctw3_db")
     print("[🎉 MONGO-УСПЕХ] Облачный шлюз MongoDB успешно запущен!")
 except Exception as e:
     print(f"[💥 MONGO-КРАШ] Не удалось подключиться к MongoDB Atlas: {e}")
@@ -3802,6 +3811,305 @@ class AuthRobloxModel(BaseModel):
 class LibraryLogModel(BaseModel):
     status: str
     version: str
+
+# =========================================================
+# CTW3 — COUNTRY REGISTRATION MODELS
+# =========================================================
+
+class CTW3CountryCreate(BaseModel):
+
+    name: str
+
+    flag: str
+
+    language: str
+
+# =========================================================
+# CTW3 — CREATE COUNTRY
+# =========================================================
+
+@app.post("/api/ctw3/country")
+async def ctw3_create_country(
+    data: CTW3CountryCreate,
+    request: Request
+):
+
+    name = data.name.strip()
+    flag = data.flag.strip()
+    language = data.language.strip()
+
+
+    # -----------------------------------------------------
+    # Проверка названия
+    # -----------------------------------------------------
+
+    if not name:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Название государства не может быть пустым"
+        )
+
+
+    if len(name) > 40:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Название государства слишком длинное"
+        )
+
+
+    # -----------------------------------------------------
+    # Определяем игрока
+    # -----------------------------------------------------
+
+    player_id = (
+        request.cookies.get("forum_user_id")
+        or request.cookies.get("forum_user_name")
+    )
+
+
+    if not player_id:
+
+        # Если пользователь не авторизован на форуме,
+        # создаём постоянный идентификатор CTW3.
+
+        player_id = str(uuid4())
+
+
+    # -----------------------------------------------------
+    # Проверяем, есть ли уже государство
+    # -----------------------------------------------------
+
+    existing_country = await ctw3_countries.find_one(
+        {
+            "player_id": player_id
+        }
+    )
+
+
+    if existing_country:
+
+        raise HTTPException(
+            status_code=409,
+            detail="У этого игрока уже есть государство"
+        )
+
+
+    # -----------------------------------------------------
+    # Проверяем уникальность названия
+    # -----------------------------------------------------
+
+    existing_name = await ctw3_countries.find_one(
+        {
+            "name_lower": name.lower()
+        }
+    )
+
+
+    if existing_name:
+
+        raise HTTPException(
+            status_code=409,
+            detail="Это название государства уже занято"
+        )
+
+
+    # -----------------------------------------------------
+    # Создаём государство
+    # -----------------------------------------------------
+
+    country = {
+
+        "player_id": player_id,
+
+        "name": name,
+
+        "name_lower": name.lower(),
+
+        "flag": flag,
+
+        "language": language,
+
+
+        # Территория пока отсутствует.
+        "territory": None,
+
+
+        # =================================================
+        # ЭКОНОМИКА
+        # =================================================
+
+        "budget": 100_000_000,
+
+        "inflation": 0.0,
+
+
+        # =================================================
+        # НАСЕЛЕНИЕ
+        # =================================================
+
+        "population": 0,
+
+
+        # =================================================
+        # ОБЪЕКТЫ
+        # =================================================
+
+        "cities": [],
+
+        "airports": [],
+
+        "factories": [],
+
+        "missiles": [],
+
+        "air_defenses": [],
+
+
+        # =================================================
+        # ПРОИЗВОДСТВО
+        # =================================================
+
+        "factory_profit": 0,
+
+        "factory_missiles": 0,
+
+        "factory_air_defense": 0,
+
+
+        # =================================================
+        # ДАТА
+        # =================================================
+
+        "created_at": datetime.utcnow()
+
+
+    }
+
+
+    result = await ctw3_countries.insert_one(
+        country
+    )
+
+
+    country["_id"] = str(
+        result.inserted_id
+    )
+
+
+    # -----------------------------------------------------
+    # Сохраняем CTW3 player ID
+    # -----------------------------------------------------
+
+    response_data = {
+
+        "status": "success",
+
+        "country": {
+
+            "id": country["_id"],
+
+            "name": country["name"],
+
+            "flag": country["flag"],
+
+            "language": country["language"],
+
+            "territory": country["territory"],
+
+            "budget": country["budget"],
+
+            "population": country["population"],
+
+            "inflation": country["inflation"]
+
+        }
+
+    }
+
+
+    return response_data
+
+# =========================================================
+# CTW3 — GET PLAYER COUNTRY
+# =========================================================
+
+@app.get("/api/ctw3/country")
+async def ctw3_get_country(
+    request: Request,
+    response: Response
+):
+
+    player_id = (
+        request.cookies.get("forum_user_id")
+        or request.cookies.get("forum_user_name")
+        or request.cookies.get("ctw3_player_id")
+    )
+
+
+    # -----------------------------------------------------
+    # Если ID ещё нет — создаём его
+    # -----------------------------------------------------
+
+    if not player_id:
+
+        player_id = str(
+            uuid4()
+        )
+
+
+    country = await ctw3_countries.find_one(
+        {
+            "player_id": player_id
+        }
+    )
+
+
+    # -----------------------------------------------------
+    # Новому игроку устанавливаем постоянный ID
+    # -----------------------------------------------------
+
+    if not request.cookies.get("forum_user_id") \
+       and not request.cookies.get("forum_user_name"):
+
+        response.set_cookie(
+            key="ctw3_player_id",
+            value=player_id,
+            max_age=31536000,
+            path="/",
+            httponly=True,
+            samesite="lax"
+        )
+
+
+    # -----------------------------------------------------
+    # Государство ещё не создано
+    # -----------------------------------------------------
+
+    if not country:
+
+        return {
+            "registered": False
+        }
+
+
+    # -----------------------------------------------------
+    # Преобразуем ObjectId
+    # -----------------------------------------------------
+
+    country["id"] = str(
+        country.pop("_id")
+    )
+
+
+    return {
+
+        "registered": True,
+
+        "country": country
+
+    }
 
 # 🛑 ОТЛАДОЧНЫЙ ШЛЮЗ: Логирует статус загрузки 3D графики прямо в консоль Render
 @app.post("/api/robux/debug-log")
