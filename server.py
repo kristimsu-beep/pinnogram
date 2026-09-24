@@ -6152,6 +6152,27 @@ async def get_ctw2_game_page():
         return FileResponse(file_path)
     return {"error": "Файл ctw2.html не найден в папке games"}
 
+# =========================================================
+# CTW3 — CONQUER THE WORLD 3
+# =========================================================
+
+@app.get("/ctw3")
+async def get_ctw3_game_page():
+    from fastapi.responses import FileResponse
+    import os
+
+    file_path = os.path.join(
+        "games",
+        "ctw3.html"
+    )
+
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+
+    return {
+        "error": "Файл ctw3.html не найден в папке games"
+    }
+
 # 2. API: Признание государства в MongoDB Atlas (Сохранение границ полигона)
 @app.post("/api/ctw2/country/save")
 async def ctw2_save_country(data: dict):
