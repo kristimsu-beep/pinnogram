@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    >
+
+    <title>CTW3 — Conquer The World</title>
+
+
+    <!-- =====================================================
+         LEAFLET
+    ====================================================== -->
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
+
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    ></script>
+
+
+    <!-- =====================================================
+         DAY / NIGHT TERMINATOR
+    ====================================================== -->
+
+    <script
+        src="https://unpkg.com/@joergdietrich/leaflet.terminator"
+    ></script>
+
+
+    <!-- =====================================================
+         FONT AWESOME
+    ====================================================== -->
+
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+    >
+
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+
+        html,
+        body {
+
+            width: 100%;
+            height: 100%;
+
+            margin: 0;
+
+            overflow: hidden;
+
+            font-family:
+                Inter,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+
+            background: #05070b;
+
+            color: white;
+        }
+
+
+        /* =====================================================
+           MAP
+        ====================================================== */
+
+        #ctw3Map {
+
+            position: fixed;
+
+            inset: 0;
+
+            width: 100%;
+            height: 100%;
+
+            z-index: 1;
+
+            background: #b9d9e8;
+        }
+
+
+        /* =====================================================
+           TOP BAR
+        ====================================================== */
+
+        #ctw3TopBar {
+
+            position: fixed;
+
+            top: 16px;
+            left: 50%;
+
+            transform: translateX(-50%);
+
+            z-index: 1000;
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 8px;
+
+            padding: 6px;
+
+            background:
+                rgba(8, 12, 20, 0.78);
+
+            border:
+                1px solid rgba(255,255,255,0.12);
+
+            border-radius: 14px;
+
+            backdrop-filter:
+                blur(18px);
+
+            -webkit-backdrop-filter:
+                blur(18px);
+
+            box-shadow:
+                0 10px 35px rgba(0,0,0,0.35);
+        }
+
+
+        .ctw3-mode-button {
+
+            border: none;
+
+            background: transparent;
+
+            color:
+                rgba(255,255,255,0.55);
+
+            padding:
+                9px 16px;
+
+            border-radius: 10px;
+
+            font-size: 12px;
+
+            font-weight: 700;
+
+            cursor: pointer;
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 8px;
+
+            transition:
+                0.2s ease;
+        }
+
+
+        .ctw3-mode-button:hover {
+
+            color: white;
+
+            background:
+                rgba(255,255,255,0.07);
+        }
+
+
+        .ctw3-mode-button.active {
+
+            color: white;
+
+            background:
+                rgba(0,180,255,0.18);
+
+            box-shadow:
+                inset 0 0 0 1px
+                rgba(0,200,255,0.28);
+        }
+
+
+        /* =====================================================
+           GAME TITLE
+        ====================================================== */
+
+        #ctw3Title {
+
+            position: fixed;
+
+            top: 18px;
+            left: 18px;
+
+            z-index: 1000;
+
+            display: flex;
+
+            align-items: center;
+
+            gap: 10px;
+
+            padding:
+                10px 14px;
+
+            background:
+                rgba(8,12,20,0.78);
+
+            border:
+                1px solid rgba(255,255,255,0.10);
+
+            border-radius: 12px;
+
+            backdrop-filter:
+                blur(16px);
+
+            -webkit-backdrop-filter:
+                blur(16px);
+
+            box-shadow:
+                0 10px 30px
+                rgba(0,0,0,0.30);
+        }
+
+
+        #ctw3TitleIcon {
+
+            width: 34px;
+            height: 34px;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            border-radius: 9px;
+
+            background:
+                rgba(0,190,255,0.15);
+
+            color:
+                #54d7ff;
+
+            font-size: 16px;
+        }
+
+
+        #ctw3TitleText {
+
+            display: flex;
+
+            flex-direction: column;
+
+            gap: 2px;
+        }
+
+
+        #ctw3TitleText strong {
+
+            font-size: 14px;
+
+            font-weight: 800;
+        }
+
+
+        #ctw3TitleText span {
+
+            font-size: 10px;
+
+            color:
+                rgba(255,255,255,0.42);
+
+            letter-spacing:
+                0.5px;
+        }
+
+
+        /* =====================================================
+           STATUS
+        ====================================================== */
+
+        #ctw3Status {
+
+            position: fixed;
+
+            bottom: 18px;
+            left: 18px;
+
+            z-index: 1000;
+
+            padding:
+                8px 12px;
+
+            background:
+                rgba(8,12,20,0.78);
+
+            border:
+                1px solid rgba(255,255,255,0.10);
+
+            border-radius: 10px;
+
+            backdrop-filter:
+                blur(14px);
+
+            -webkit-backdrop-filter:
+                blur(14px);
+
+            font-size: 11px;
+
+            color:
+                rgba(255,255,255,0.65);
+        }
+
+
+        /* =====================================================
+           MAP MODE LABEL
+        ====================================================== */
+
+        #ctw3ModeLabel {
+
+            position: fixed;
+
+            bottom: 18px;
+            right: 18px;
+
+            z-index: 1000;
+
+            padding:
+                8px 12px;
+
+            border-radius: 10px;
+
+            background:
+                rgba(8,12,20,0.78);
+
+            border:
+                1px solid rgba(255,255,255,0.10);
+
+            backdrop-filter:
+                blur(14px);
+
+            -webkit-backdrop-filter:
+                blur(14px);
+
+            font-size: 11px;
+
+            color:
+                rgba(255,255,255,0.7);
+        }
+
+
+        /* =====================================================
+           LEAFLET CONTROLS
+        ====================================================== */
+
+        .leaflet-control-zoom {
+
+            border: none !important;
+
+            box-shadow:
+                0 8px 25px
+                rgba(0,0,0,0.35) !important;
+        }
+
+
+        .leaflet-control-zoom a {
+
+            background:
+                rgba(8,12,20,0.85) !important;
+
+            color:
+                white !important;
+
+            border-color:
+                rgba(255,255,255,0.10) !important;
+        }
+
+
+        .leaflet-control-attribution {
+
+            background:
+                rgba(0,0,0,0.55) !important;
+
+            color:
+                rgba(255,255,255,0.6) !important;
+        }
+
+
+        .leaflet-control-attribution a {
+
+            color:
+                #8bdfff !important;
+        }
+
+
+        /* =====================================================
+           NIGHT OVERLAY
+        ====================================================== */
+
+        .ctw3-night {
+
+            mix-blend-mode:
+                multiply;
+        }
+
+
+        /* =====================================================
+           MOBILE
+        ====================================================== */
+
+        @media (max-width: 700px) {
+
+            #ctw3Title {
+
+                top: 10px;
+                left: 10px;
+
+                padding:
+                    8px 10px;
+            }
+
+
+            #ctw3TitleText span {
+
+                display: none;
+            }
+
+
+            #ctw3TopBar {
+
+                top: 70px;
+            }
+
+
+            .ctw3-mode-button {
+
+                padding:
+                    8px 11px;
+            }
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+
+    <!-- =====================================================
+         MAP
+    ====================================================== -->
+
+    <div id="ctw3Map"></div>
+
+
+    <!-- =====================================================
+         GAME TITLE
+    ====================================================== -->
+
+    <div id="ctw3Title">
+
+        <div id="ctw3TitleIcon">
+            <i class="fa-solid fa-earth-americas"></i>
+        </div>
+
+        <div id="ctw3TitleText">
+
+            <strong>
+                CTW3
+            </strong>
+
+            <span>
+                CONQUER THE WORLD
+            </span>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         MAP MODE SWITCHER
+    ====================================================== -->
+
+    <div id="ctw3TopBar">
+
+        <button
+            class="ctw3-mode-button active"
+            id="ctw3NormalButton"
+            onclick="setCTW3MapMode('normal')"
+        >
+
+            <i class="fa-solid fa-map"></i>
+
+            Обычная
+
+        </button>
+
+
+        <button
+            class="ctw3-mode-button"
+            id="ctw3SatelliteButton"
+            onclick="setCTW3MapMode('satellite')"
+        >
+
+            <i class="fa-solid fa-satellite"></i>
+
+            Спутник
+
+        </button>
+
+    </div>
+
+
+    <!-- =====================================================
+         STATUS
+    ====================================================== -->
+
+    <div id="ctw3Status">
+
+        🌍 CTW3 загружается...
+
+    </div>
+
+
+    <!-- =====================================================
+         CURRENT MODE
+    ====================================================== -->
+
+    <div id="ctw3ModeLabel">
+
+        🗺️ Обычная карта
+
+    </div>
+
+
+    <script>
+
+        // =====================================================
+        // CTW3 MAP
+        // =====================================================
+
+        let ctw3Map;
+
+        let ctw3NormalLayer;
+
+        let ctw3SatelliteLayer;
+
+        let ctw3NightLayer;
+
+
+        // =====================================================
+        // LOCAL STORAGE
+        // =====================================================
+
+        const CTW3_MAP_MODE_KEY =
+            "ctw3_map_mode";
+
+
+        let ctw3CurrentMode =
+            localStorage.getItem(
+                CTW3_MAP_MODE_KEY
+            ) || "normal";
+
+
+        // =====================================================
+        // INITIALIZATION
+        // =====================================================
+
+        function initCTW3() {
+
+            ctw3Map =
+                L.map(
+                    "ctw3Map",
+                    {
+                        center: [20, 0],
+
+                        zoom: 2,
+
+                        minZoom: 2,
+
+                        maxZoom: 18,
+
+                        worldCopyJump: true,
+
+                        zoomControl: true
+                    }
+                );
+
+
+            // =================================================
+            // NORMAL MAP
+            // =================================================
+
+            ctw3NormalLayer =
+                L.tileLayer(
+                    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                    {
+                        maxZoom: 19,
+
+                        attribution:
+                            '&copy; OpenStreetMap contributors'
+                    }
+                );
+
+
+            // =================================================
+            // SATELLITE MAP
+            // =================================================
+
+            ctw3SatelliteLayer =
+                L.tileLayer(
+                    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                    {
+                        maxZoom: 19,
+
+                        attribution:
+                            'Tiles &copy; Esri'
+                    }
+                );
+
+
+            // =================================================
+            // NIGHT
+            // =================================================
+
+            ctw3NightLayer =
+                L.terminator(
+                    {
+                        fillColor: "#000000",
+
+                        fillOpacity: 0.42,
+
+                        color: "#000000",
+
+                        opacity: 0,
+
+                        weight: 0
+                    }
+                );
+
+
+            // =================================================
+            // APPLY SAVED MODE
+            // =================================================
+
+            applyCTW3MapMode(
+                ctw3CurrentMode
+            );
+
+
+            // =================================================
+            // NIGHT LAYER
+            // =================================================
+
+            ctw3NightLayer.addTo(
+                ctw3Map
+            );
+
+
+            // =================================================
+            // UPDATE NIGHT POSITION
+            // =================================================
+
+            setInterval(
+                updateCTW3Night,
+                60 * 1000
+            );
+
+
+            updateCTW3Night();
+
+
+            // =================================================
+            // STATUS
+            // =================================================
+
+            updateCTW3Status(
+                "🌍 CTW3 готов"
+            );
+
+
+            console.log(
+                "[CTW3] Map initialized"
+            );
+
+        }
+
+
+        // =====================================================
+        // MAP MODE
+        // =====================================================
+
+        function setCTW3MapMode(
+            mode
+        ) {
+
+            if (
+                mode !== "normal" &&
+                mode !== "satellite"
+            ) {
+
+                mode = "normal";
+
+            }
+
+
+            ctw3CurrentMode =
+                mode;
+
+
+            localStorage.setItem(
+                CTW3_MAP_MODE_KEY,
+                mode
+            );
+
+
+            applyCTW3MapMode(
+                mode
+            );
+
+        }
+
+
+        // =====================================================
+        // APPLY MAP MODE
+        // =====================================================
+
+        function applyCTW3MapMode(
+            mode
+        ) {
+
+            if (!ctw3Map) {
+                return;
+            }
+
+
+            if (
+                ctw3Map.hasLayer(
+                    ctw3NormalLayer
+                )
+            ) {
+
+                ctw3Map.removeLayer(
+                    ctw3NormalLayer
+                );
+
+            }
+
+
+            if (
+                ctw3Map.hasLayer(
+                    ctw3SatelliteLayer
+                )
+            ) {
+
+                ctw3Map.removeLayer(
+                    ctw3SatelliteLayer
+                );
+
+            }
+
+
+            if (
+                mode === "satellite"
+            ) {
+
+                ctw3SatelliteLayer.addTo(
+                    ctw3Map
+                );
+
+
+                document
+                    .getElementById(
+                        "ctw3SatelliteButton"
+                    )
+                    .classList.add(
+                        "active"
+                    );
+
+
+                document
+                    .getElementById(
+                        "ctw3NormalButton"
+                    )
+                    .classList.remove(
+                        "active"
+                    );
+
+
+                document
+                    .getElementById(
+                        "ctw3ModeLabel"
+                    )
+                    .textContent =
+                        "🛰️ Спутниковая карта";
+
+            } else {
+
+                ctw3NormalLayer.addTo(
+                    ctw3Map
+                );
+
+
+                document
+                    .getElementById(
+                        "ctw3NormalButton"
+                    )
+                    .classList.add(
+                        "active"
+                    );
+
+
+                document
+                    .getElementById(
+                        "ctw3SatelliteButton"
+                    )
+                    .classList.remove(
+                        "active"
+                    );
+
+
+                document
+                    .getElementById(
+                        "ctw3ModeLabel"
+                    )
+                    .textContent =
+                        "🗺️ Обычная карта";
+
+            }
+
+        }
+
+
+        // =====================================================
+        // DAY / NIGHT
+        // =====================================================
+
+        function updateCTW3Night() {
+
+            if (
+                !ctw3NightLayer
+            ) {
+                return;
+            }
+
+
+            try {
+
+                ctw3NightLayer.setTime(
+                    new Date()
+                );
+
+            } catch (error) {
+
+                console.warn(
+                    "[CTW3] Night update error:",
+                    error
+                );
+
+            }
+
+        }
+
+
+        // =====================================================
+        // STATUS
+        // =====================================================
+
+        function updateCTW3Status(
+            text
+        ) {
+
+            const element =
+                document.getElementById(
+                    "ctw3Status"
+                );
+
+
+            if (element) {
+
+                element.textContent =
+                    text;
+
+            }
+
+        }
+
+
+        // =====================================================
+        // START
+        // =====================================================
+
+        window.addEventListener(
+            "DOMContentLoaded",
+            function() {
+
+                initCTW3();
+
+            }
+        );
+
+    </script>
+
+</body>
+
+</html>
