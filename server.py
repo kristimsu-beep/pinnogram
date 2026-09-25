@@ -7777,6 +7777,110 @@ async def get_ctw3_game_page():
         "error": "Файл ctw3.html не найден в папке games"
     }
 
+# =========================
+# CTW3 — ONLINE MULTIPLAYER
+# =========================
+
+ctw3_players = {}
+ctw3_world = {
+    "countries": {}
+}
+
+
+async def ctw3_broadcast():
+    message = json.dumps({
+        "type": "world_update",
+        "countries": ctw3_world["countries"]
+    })
+
+    disconnected = []
+
+    for player_id, websocket in ctw3_players.items():
+        try:
+            await websocket.send_text(message)
+        except Exception:
+            disconnected.append(player_id)
+
+    for player_id in disconnected:
+        ctw3_players.pop(player_id, None)
+
+
+@app.websocket("/ws/ctw3")
+async def ctw3_websocket(websocket: WebSocket):
+    await websocket.accept()
+
+    player_id = None
+
+    try:
+        while True:
+            raw_message = await websocket.receive_text()
+
+            try:
+                data = json.loads(raw_message)
+            except json.JSONDecodeError:
+                continue
+
+            message_type = data.get("type")
+
+            # -------------------------
+            # Подключение игрока
+            # -------------------------
+
+            if message_type == "join":
+                player_id = str(data.get("player_id"))
+
+                if not player_id:
+                    continue
+
+                ctw3_players[player_id] = websocket
+
+                # Сразу отправляем новому игроку
+                # текущее состояние всей карты
+                await websocket.send_text(json.dumps({
+                    "type": "world_update",
+                    "countries": ctw3_world["countries"]
+                }))
+
+                # Сообщаем остальным игрокам
+                await ctw3_broadcast()
+
+            # -------------------------
+            # Обновление страны
+            # -------------------------
+
+            elif message_type == "country_update":
+
+                if not player_id:
+                    continue
+
+                country_id = data.get("country_id")
+                country_data = data.get("country")
+
+                if country_id is None or country_data is None:
+                    continue
+
+                ctw3_world["countries"][str(country_id)] = country_data
+
+                # Отправляем обновлённый мир всем
+                await ctw3_broadcast()
+
+    except WebSocketDisconnect:
+
+        if player_id:
+            ctw3_players.pop(player_id, None)
+
+            await ctw3_broadcast()
+
+    except Exception:
+
+        if player_id:
+            ctw3_players.pop(player_id, None)
+
+            try:
+                await ctw3_broadcast()
+            except Exception:
+                pass
+
 # 2. API: Признание государства в MongoDB Atlas (Сохранение границ полигона)
 @app.post("/api/ctw2/country/save")
 async def ctw2_save_country(data: dict):
