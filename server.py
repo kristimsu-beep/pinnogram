@@ -29,6 +29,7 @@ import io
 from PIL import Image, ImageEnhance
 from io import BytesIO
 from uuid import uuid4
+from bson import ObjectId
 
 # Вечное облачное хранилище для видео и голосовых Pinnogram
 SUPABASE_URL = "https://zzcfdrryfsychezckjov.supabase.co"
@@ -3835,7 +3836,6 @@ class LibraryLogModel(BaseModel):
     status: str
     version: str
 
-
 # =========================================================
 # CTW3 MODELS
 # =========================================================
@@ -3850,8 +3850,10 @@ class CTW3TerritorySelect(BaseModel):
     country_code: str
     country_name: str
 
+
 class CTW3TerritoryDraw(BaseModel):
     coordinates: list[list[float]]
+
 
 class CTW3MapAction(BaseModel):
     action: str
@@ -3892,42 +3894,92 @@ def get_ctw3_player_id(request: Request):
     )
 
 
+def ctw3_json_safe(value):
+    """
+    Преобразует MongoDB/Python объекты
+    в значения, которые можно безопасно
+    отправить через JSON/FastAPI.
+    """
+
+    # MongoDB ObjectId -> string
+    if isinstance(value, ObjectId):
+        return str(value)
+
+    # datetime -> ISO string
+    if isinstance(value, datetime):
+        return value.isoformat()
+
+    # Dictionary
+    if isinstance(value, dict):
+        return {
+            str(key): ctw3_json_safe(item)
+            for key, item in value.items()
+        }
+
+    # List
+    if isinstance(value, list):
+        return [
+            ctw3_json_safe(item)
+            for item in value
+        ]
+
+    # Tuple
+    if isinstance(value, tuple):
+        return [
+            ctw3_json_safe(item)
+            for item in value
+        ]
+
+    return value
+
+
 def ctw3_public_country(country):
     if not country:
         return None
 
     result = dict(country)
 
-    if "_id" in result:
-        result["id"] = str(result.pop("_id"))
+    # =====================================================
+    # MONGODB ID
+    # =====================================================
 
+    if "_id" in result:
+        result["id"] = str(
+            result.pop("_id")
+        )
+
+    # =====================================================
+    # HIDDEN SERVER DATA
+    # =====================================================
+
+    # Player ID is never exposed to browser.
     result.pop("player_id", None)
+
+    # Internal lowercase name is never exposed.
     result.pop("name_lower", None)
 
-    if isinstance(result.get("created_at"), datetime):
-        result["created_at"] = result["created_at"].isoformat()
+    # =====================================================
+    # MAKE EVERYTHING JSON SAFE
+    # =====================================================
 
-    for key in (
-        "last_economic_tick",
-        "last_population_tick",
-        "last_production_tick",
-    ):
-        if isinstance(result.get(key), datetime):
-            result[key] = result[key].isoformat()
+    result = ctw3_json_safe(result)
 
     return result
 
 
 def ctw3_country_for_client(country):
     result = ctw3_public_country(country)
+
     if result is None:
         return None
 
-    # Player ID is intentionally not exposed to the browser.
     return result
 
 
-async def ctw3_get_country_for_request(request: Request):
+async def ctw3_get_country_for_request(
+    request: Request
+):
+
     player_id = get_ctw3_player_id(request)
 
     country = await ctw3_countries.find_one({
@@ -3950,9 +4002,20 @@ async def ctw3_tick_country(country):
 
     now = datetime.utcnow()
 
-    last_economic = country.get("last_economic_tick") or now
-    last_population = country.get("last_population_tick") or now
-    last_production = country.get("last_production_tick") or now
+    last_economic = (
+        country.get("last_economic_tick")
+        or now
+    )
+
+    last_population = (
+        country.get("last_population_tick")
+        or now
+    )
+
+    last_production = (
+        country.get("last_production_tick")
+        or now
+    )
 
     economic_seconds = max(
         0,
@@ -3969,21 +4032,65 @@ async def ctw3_tick_country(country):
         (now - last_production).total_seconds()
     )
 
-    economic_ticks = int(economic_seconds // 10)
-    population_ticks = int(population_seconds // 5)
-    production_ticks = int(production_seconds // 10)
+    economic_ticks = int(
+        economic_seconds // 10
+    )
 
-    budget = float(country.get("budget", 100_000_000))
-    inflation = float(country.get("inflation", 0.0))
+    population_ticks = int(
+        population_seconds // 5
+    )
 
-    factories_profit = int(country.get("factory_profit", 0))
-    population = int(country.get("population", 0))
+    production_ticks = int(
+        production_seconds // 10
+    )
 
-    cities = list(country.get("cities", []))
+    budget = float(
+        country.get(
+            "budget",
+            100_000_000
+        )
+    )
 
-    missile_stock = int(country.get("missile_stock", 0))
+    inflation = float(
+        country.get(
+            "inflation",
+            0.0
+        )
+    )
+
+    factories_profit = int(
+        country.get(
+            "factory_profit",
+            0
+        )
+    )
+
+    population = int(
+        country.get(
+            "population",
+            0
+        )
+    )
+
+    cities = list(
+        country.get(
+            "cities",
+            []
+        )
+    )
+
+    missile_stock = int(
+        country.get(
+            "missile_stock",
+            0
+        )
+    )
+
     air_defense_stock = int(
-        country.get("air_defense_stock", 0)
+        country.get(
+            "air_defense_stock",
+            0
+        )
     )
 
     # -----------------------------------------------------
@@ -4007,17 +4114,19 @@ async def ctw3_tick_country(country):
         budget += profit
         budget -= population_cost
 
-        # Negative budget increases inflation.
         if budget < 0:
+
             inflation += (
-                abs(budget) / 100_000_000
+                abs(budget)
+                / 100_000_000
             ) * 0.25 * economic_ticks
 
         else:
-            # Very slow stabilization while budget is positive.
+
             inflation = max(
                 0.0,
-                inflation - 0.02 * economic_ticks
+                inflation
+                - 0.02 * economic_ticks
             )
 
         last_economic = (
@@ -4040,21 +4149,30 @@ async def ctw3_tick_country(country):
         for city in cities:
 
             current = int(
-                city.get("population", 1000)
+                city.get(
+                    "population",
+                    1000
+                )
             )
 
-            # Small natural random movement.
-            for _ in range(population_ticks):
-                delta = _ctw3_random.randint(
-                    -25,
-                    50
+            for _ in range(
+                population_ticks
+            ):
+
+                delta = (
+                    _ctw3_random.randint(
+                        -25,
+                        50
+                    )
                 )
+
                 current = max(
                     0,
                     current + delta
                 )
 
             city["population"] = current
+
             total_delta += current
 
         population = total_delta
@@ -4084,12 +4202,22 @@ async def ctw3_tick_country(country):
     if production_ticks > 0:
 
         missile_stock += (
-            int(country.get("factory_missiles", 0))
+            int(
+                country.get(
+                    "factory_missiles",
+                    0
+                )
+            )
             * production_ticks
         )
 
         air_defense_stock += (
-            int(country.get("factory_air_defense", 0))
+            int(
+                country.get(
+                    "factory_air_defense",
+                    0
+                )
+            )
             * production_ticks
         )
 
@@ -4118,10 +4246,14 @@ async def ctw3_tick_country(country):
                 "air_defense_stock": air_defense_stock,
                 "last_economic_tick": last_economic,
                 "last_population_tick": last_population,
-                "last_production_tick": last_production,
+                "last_production_tick": last_production
             }
         }
     )
+
+    # -----------------------------------------------------
+    # UPDATE LOCAL OBJECT
+    # -----------------------------------------------------
 
     country["budget"] = budget
     country["inflation"] = inflation
@@ -4137,20 +4269,29 @@ async def ctw3_tick_country(country):
 
 
 def ctw3_require_territory(country):
+
     if not country:
+
         raise HTTPException(
             status_code=404,
             detail="Государство не найдено"
         )
 
     if not country.get("territory"):
+
         raise HTTPException(
             status_code=400,
             detail="Сначала выберите территорию"
         )
 
 
-def ctw3_distance_km(lat1, lon1, lat2, lon2):
+def ctw3_distance_km(
+    lat1,
+    lon1,
+    lat2,
+    lon2
+):
+
     import math
 
     r = 6371.0
@@ -4158,8 +4299,13 @@ def ctw3_distance_km(lat1, lon1, lat2, lon2):
     p1 = math.radians(lat1)
     p2 = math.radians(lat2)
 
-    dp = math.radians(lat2 - lat1)
-    dl = math.radians(lon2 - lon1)
+    dp = math.radians(
+        lat2 - lat1
+    )
+
+    dl = math.radians(
+        lon2 - lon1
+    )
 
     a = (
         math.sin(dp / 2) ** 2
@@ -4168,10 +4314,88 @@ def ctw3_distance_km(lat1, lon1, lat2, lon2):
         * math.sin(dl / 2) ** 2
     )
 
-    return 2 * r * math.asin(
-        math.sqrt(a)
+    return (
+        2
+        * r
+        * math.asin(
+            math.sqrt(a)
+        )
     )
 
+
+# =========================================================
+# CTW3 — POINT INSIDE CUSTOM TERRITORY
+# =========================================================
+
+def ctw3_point_in_polygon(
+    latitude: float,
+    longitude: float,
+    polygon: list[list[float]]
+):
+    """
+    Проверяет, находится ли точка
+    внутри пользовательской территории.
+
+    polygon использует GeoJSON формат:
+
+    [
+        [longitude, latitude],
+        [longitude, latitude],
+        ...
+    ]
+    """
+
+    if not polygon or len(polygon) < 3:
+        return False
+
+    inside = False
+
+    j = len(polygon) - 1
+
+    for i in range(len(polygon)):
+
+        xi = float(
+            polygon[i][0]
+        )
+
+        yi = float(
+            polygon[i][1]
+        )
+
+        xj = float(
+            polygon[j][0]
+        )
+
+        yj = float(
+            polygon[j][1]
+        )
+
+        intersects = (
+            (
+                (yi > latitude)
+                !=
+                (yj > latitude)
+            )
+            and
+            (
+                longitude
+                <
+                (
+                    (xj - xi)
+                    * (latitude - yi)
+                    /
+                    ((yj - yi) or 0.0000001)
+                    + xi
+                )
+            )
+        )
+
+        if intersects:
+            inside = not inside
+
+        j = i
+
+    return inside
 
 # =========================================================
 # CTW3 — COUNTRY CREATION
@@ -4508,16 +4732,18 @@ async def ctw3_get_countries(
 
     async for country in cursor:
 
-        country["id"] = str(
-            country.pop("_id")
+        public_country = ctw3_country_for_client(
+            country
         )
 
-        countries.append(country)
+        if public_country:
+            countries.append(
+                public_country
+            )
 
     return {
         "countries": countries
     }
-
 
 # =========================================================
 # CTW3 — GET FULL STATE
