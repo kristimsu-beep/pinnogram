@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+>
+
+<title>NewMap</title>
+
+<style>
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #111;
+    font-family: Arial, sans-serif;
+}
+
+#map {
+    position: fixed;
+    inset: 0;
+
+    overflow: hidden;
+
+    touch-action: none;
+
+    background: #111;
+
+    cursor: grab;
+}
+
+#map.dragging {
+    cursor: grabbing;
+}
+
+#world {
+
+    position: absolute;
+
+    left: 0;
+    top: 0;
+
+    transform-origin: 0 0;
+
+    will-change: transform;
+
+    user-select: none;
+
+    pointer-events: none;
+}
+
+
+/* =========================================================
+   ZOOM 1
+========================================================= */
+
+.zoom-level-1 {
+
+    display: flex;
+
+    flex-direction: row;
+
+    width: max-content;
+    height: max-content;
+
+}
+
+
+/* =========================================================
+   ZOOM 2
+========================================================= */
+
+.zoom-level-2 {
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, 512px);
+
+    grid-template-rows:
+        repeat(3, 512px);
+
+    width: 1536px;
+    height: 1536px;
+
+}
+
+
+.map-tile {
+
+    display: block;
+
+    width: 512px;
+    height: 512px;
+
+    object-fit: cover;
+
+    user-select: none;
+
+    -webkit-user-drag: none;
+
+}
+
+
+/* =========================================================
+   UI
+========================================================= */
+
+#topbar {
+
+    position: fixed;
+
+    top: 15px;
+    left: 50%;
+
+    transform: translateX(-50%);
+
+    z-index: 1000;
+
+    background:
+        rgba(20,20,20,.82);
+
+    color: white;
+
+    padding:
+        9px 16px;
+
+    border-radius: 12px;
+
+    backdrop-filter:
+        blur(10px);
+
+    font-size: 14px;
+
+    box-shadow:
+        0 5px 20px rgba(0,0,0,.35);
+
+}
+
+#zoomInfo {
+
+    font-weight: bold;
+
+}
+
+#loading {
+
+    position: fixed;
+
+    inset: 0;
+
+    z-index: 2000;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    background: #111;
+
+    color: white;
+
+    font-size: 18px;
+
+    transition:
+        opacity .25s ease;
+
+}
+
+#loading.hidden {
+
+    opacity: 0;
+
+    pointer-events: none;
+
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="loading">
+    Загрузка карты…
+</div>
+
+<div id="topbar">
+    Zoom: <span id="zoomInfo">1</span>
+</div>
+
+<div id="map">
+
+    <div id="world"></div>
+
+</div>
+
+
+<script>
+
+/* =========================================================
+   CONFIG
+========================================================= */
+
+const MAP_PATH = "/maps/";
+
+const zoom1Files = [
+
+    "IMG_20260925_154144.jpg",
+
+    "Screenshot_2026-09-25-16-13-04-920_com.google.android.apps.photos-edit.jpg",
+
+    "Screenshot_2026-09-25-16-13-19-124_com.google.android.apps.photos-edit.jpg",
+
+    "Screenshot_2026-09-25-16-13-31-491_com.google.android.apps.photos-edit.jpg",
+
+    "Screenshot_2026-09-25-16-14-28-031_com.google.android.apps.photos-edit.jpg"
+
+];
+
+
+const zoom2Files = [
+
+    "Screenshot_2026-09-25-16-14-36-441_com.google.android.apps.photos-edit.jpg",
+
+    "Screenshot_2026-09-25-16-14-45-865_com.google.android.apps.photos-edit.jpg",
+
+    "Screenshot_2026-09-25-16-14-53-876_com.google.android.apps.photos-edit.jpg",
+
+    "Screenshot_2026-09-25-16-15-10-219_com.google.android.apps.photos-edit.jpg",
+
+    "Screenshot_2026-09-25-16-15-19-902_com.google.android.apps.photos-edit.jpg",
+
+    "Screenshot_2026-09-25-16-15-29-963_com.google.android.apps.photos-edit.jpg",
+
+    "Screenshot_2026-09-25-16-15-41-325_com.google.android.apps.photos-edit.jpg",
+
+    "Screenshot_2026-09-25-16-15-54-504_com.google.android.apps.photos-edit.jpg",
+
+    "Screenshot_2026-09-25-16-16-04-916_com.google.android.apps.photos-edit.jpg"
+
+];
+
+
+/* =========================================================
+   STATE
+========================================================= */
+
+const map =
+    document.getElementById("map");
+
+const world =
+    document.getElementById("world");
+
+const zoomInfo =
+    document.getElementById("zoomInfo");
+
+const loading =
+    document.getElementById("loading");
+
+
+let currentZoom = 1;
+
+let scale = 1;
+
+let offsetX = 0;
+let offsetY = 0;
+
+
+/* Drag */
+
+let dragging = false;
+
+let startX = 0;
+let startY = 0;
+
+let startOffsetX = 0;
+let startOffsetY = 0;
+
+
+/* =========================================================
+   IMAGE CREATION
+========================================================= */
+
+function createImage(file) {
+
+    const img =
+        document.createElement("img");
+
+    img.className =
+        "map-tile";
+
+    img.draggable = false;
+
+    img.src =
+        MAP_PATH +
+        encodeURIComponent(file);
+
+    return img;
+}
+
+
+/* =========================================================
+   LOAD ZOOM 1
+========================================================= */
+
+function loadZoom1() {
+
+    world.innerHTML = "";
+
+    world.className =
+        "zoom-level-1";
+
+    for (
+        const file of zoom1Files
+    ) {
+
+        world.appendChild(
+            createImage(file)
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   LOAD ZOOM 2
+========================================================= */
+
+function loadZoom2() {
+
+    world.innerHTML = "";
+
+    world.className =
+        "zoom-level-2";
+
+    for (
+        const file of zoom2Files
+    ) {
+
+        world.appendChild(
+            createImage(file)
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   ZOOM SWITCH
+========================================================= */
+
+function setZoomLevel(level) {
+
+    level =
+        Math.max(
+            1,
+            Math.min(
+                2,
+                level
+            )
+        );
+
+
+    if (
+        level === currentZoom
+    ) {
+
+        return;
+
+    }
+
+
+    currentZoom =
+        level;
+
+
+    zoomInfo.textContent =
+        currentZoom;
+
+
+    if (
+        currentZoom === 1
+    ) {
+
+        loadZoom1();
+
+    } else {
+
+        loadZoom2();
+
+    }
+
+
+    applyTransform();
+
+}
+
+
+/* =========================================================
+   TRANSFORM
+========================================================= */
+
+function applyTransform() {
+
+    world.style.transform =
+        `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+
+}
+
+
+/* =========================================================
+   DRAG
+========================================================= */
+
+map.addEventListener(
+    "pointerdown",
+    event => {
+
+        dragging = true;
+
+        map.classList.add(
+            "dragging"
+        );
+
+        startX =
+            event.clientX;
+
+        startY =
+            event.clientY;
+
+        startOffsetX =
+            offsetX;
+
+        startOffsetY =
+            offsetY;
+
+        map.setPointerCapture(
+            event.pointerId
+        );
+
+    }
+);
+
+
+map.addEventListener(
+    "pointermove",
+    event => {
+
+        if (!dragging) {
+
+            return;
+
+        }
+
+
+        offsetX =
+            startOffsetX +
+            (
+                event.clientX -
+                startX
+            );
+
+        offsetY =
+            startOffsetY +
+            (
+                event.clientY -
+                startY
+            );
+
+
+        applyTransform();
+
+    }
+);
+
+
+function stopDragging() {
+
+    dragging = false;
+
+    map.classList.remove(
+        "dragging"
+    );
+
+}
+
+
+map.addEventListener(
+    "pointerup",
+    stopDragging
+);
+
+map.addEventListener(
+    "pointercancel",
+    stopDragging
+);
+
+
+/* =========================================================
+   MOUSE WHEEL
+========================================================= */
+
+map.addEventListener(
+    "wheel",
+    event => {
+
+        event.preventDefault();
+
+
+        if (
+            event.deltaY < 0
+        ) {
+
+            setZoomLevel(2);
+
+        } else {
+
+            setZoomLevel(1);
+
+        }
+
+    },
+    {
+        passive: false
+    }
+);
+
+
+/* =========================================================
+   PINCH ZOOM
+========================================================= */
+
+let pinchStartDistance = null;
+
+
+function getDistance(
+    a,
+    b
+) {
+
+    const dx =
+        a.clientX -
+        b.clientX;
+
+    const dy =
+        a.clientY -
+        b.clientY;
+
+    return Math.sqrt(
+        dx * dx +
+        dy * dy
+    );
+
+}
+
+
+map.addEventListener(
+    "pointerdown",
+    event => {
+
+        if (
+            event.pointerType !==
+            "touch"
+        ) {
+
+            return;
+
+        }
+
+        const touches =
+            map.getCoalescedEvents
+            ? []
+            : [];
+
+    }
+);
+
+
+/* =========================================================
+   INITIAL LOAD
+========================================================= */
+
+async function init() {
+
+    loadZoom1();
+
+    /*
+        Начальный масштаб.
+    */
+
+    scale = 1;
+
+    offsetX =
+        (
+            window.innerWidth -
+            5 * 512
+        ) / 2;
+
+    offsetY =
+        (
+            window.innerHeight -
+            512
+        ) / 2;
+
+
+    applyTransform();
+
+
+    /*
+        Даём браузеру время
+        начать загрузку изображений.
+    */
+
+    setTimeout(
+        () => {
+
+            loading.classList.add(
+                "hidden"
+            );
+
+        },
+        400
+    );
+
+}
+
+
+init();
+
+</script>
+
+</body>
+</html>
