@@ -3850,6 +3850,8 @@ class CTW3TerritorySelect(BaseModel):
     country_code: str
     country_name: str
 
+class CTW3TerritoryDraw(BaseModel):
+    coordinates: list[list[float]]
 
 class CTW3MapAction(BaseModel):
     action: str
@@ -4341,20 +4343,18 @@ async def ctw3_get_country(
 
 
 # =========================================================
-# CTW3 — SELECT TERRITORY
+# CTW3 — DRAW CUSTOM TERRITORY
 # =========================================================
 
 @app.post("/api/ctw3/territory")
-async def ctw3_select_territory(
-    data: CTW3TerritorySelect,
+async def ctw3_draw_territory(
+    data: CTW3TerritoryDraw,
     request: Request
 ):
 
     player_id, country = await ctw3_get_country_for_request(
         request
     )
-
-    ctw3_require_territory(country) if country and country.get("territory") else None
 
     if not country:
         raise HTTPException(
@@ -4368,34 +4368,99 @@ async def ctw3_select_territory(
             detail="Территория уже выбрана"
         )
 
-    code = data.country_code.strip().upper()
-    name = data.country_name.strip()
+    coordinates = data.coordinates
 
-    if not code or not name:
+    # -----------------------------------------------------
+    # BASIC VALIDATION
+    # -----------------------------------------------------
+
+    if not coordinates:
         raise HTTPException(
             status_code=400,
-            detail="Некорректная территория"
+            detail="Территория не содержит координат"
         )
 
-    # One territory can belong to only one player.
-    occupied = await ctw3_countries.find_one({
-        "territory.country_code": code
-    })
-
-    if occupied:
+    if len(coordinates) < 4:
         raise HTTPException(
-            status_code=409,
-            detail="Эта территория уже занята"
+            status_code=400,
+            detail="Территория должна содержать минимум 3 точки"
         )
+
+    # -----------------------------------------------------
+    # VALIDATE COORDINATES
+    # -----------------------------------------------------
+
+    normalized = []
+
+    for point in coordinates:
+
+        if not isinstance(point, list) or len(point) != 2:
+            raise HTTPException(
+                status_code=400,
+                detail="Некорректная координата территории"
+            )
+
+        longitude = float(point[0])
+        latitude = float(point[1])
+
+        if longitude < -180 or longitude > 180:
+            raise HTTPException(
+                status_code=400,
+                detail="Некорректная долгота"
+            )
+
+        if latitude < -90 or latitude > 90:
+            raise HTTPException(
+                status_code=400,
+                detail="Некорректная широта"
+            )
+
+        normalized.append([
+            longitude,
+            latitude
+        ])
+
+    # -----------------------------------------------------
+    # CLOSE POLYGON
+    # -----------------------------------------------------
+
+    first = normalized[0]
+    last = normalized[-1]
+
+    if first != last:
+        normalized.append(first)
+
+    if len(normalized) < 4:
+        raise HTTPException(
+            status_code=400,
+            detail="Некорректный замкнутый полигон"
+        )
+
+    # -----------------------------------------------------
+    # GEOJSON POLYGON
+    # -----------------------------------------------------
+
+    geometry = {
+        "type": "Polygon",
+        "coordinates": [
+            normalized
+        ]
+    }
 
     territory = {
-        "country_code": code,
-        "name": name,
+        "type": "custom",
+        "geometry": geometry,
         "selected_at": datetime.utcnow()
     }
 
+    # -----------------------------------------------------
+    # SAVE
+    # -----------------------------------------------------
+
     await ctw3_countries.update_one(
-        {"_id": country["_id"]},
+        {
+            "_id": country["_id"]
+        },
         {
             "$set": {
                 "territory": territory
