@@ -1078,38 +1078,38 @@ function initMap(){
        RIGHT CLICK
     ===================================================== */
 
-    map.on(
-        "contextmenu",
-        e=>{
-
-            if(
-                drawingTerritory ||
-                !country ||
-                !country.territory
-            ){
-                return;
-            }
-
-            contextLatLng=e.latlng;
-
-            const c=$("context");
-
-            c.style.left=
-                Math.min(
-                    e.containerPoint.x+10,
-                    window.innerWidth-205
-                )+"px";
-
-            c.style.top=
-                Math.min(
-                    e.containerPoint.y+10,
-                    window.innerHeight-250
-                )+"px";
-
-            c.style.display="block";
-
-        }
-    );
+      map.on(
+          "contextmenu",
+          e=>{
+      
+              if(
+                  drawingTerritory ||
+                  !country ||
+                  !country.territory
+              ){
+                  return;
+              }
+      
+              contextLatLng=e.latlng;
+      
+              const c=$("context");
+      
+              c.style.left=
+                  Math.min(
+                      e.containerPoint.x+10,
+                      window.innerWidth-205
+                  )+"px";
+      
+              c.style.top=
+                  Math.min(
+                      e.containerPoint.y+10,
+                      window.innerHeight-250
+                  )+"px";
+      
+              c.style.display="block";
+      
+          }
+      );
 
 
     map.on(
@@ -1123,6 +1123,68 @@ function initMap(){
 
 }
 
+function pointInsideTerritory(
+    latitude,
+    longitude,
+    polygon
+) {
+    if (
+        !polygon ||
+        polygon.length < 3
+    ) {
+        return false;
+    }
+
+    let inside = false;
+
+    let j = polygon.length - 1;
+
+    for (
+        let i = 0;
+        i < polygon.length;
+        i++
+    ) {
+
+        const xi =
+            Number(polygon[i][0]);
+
+        const yi =
+            Number(polygon[i][1]);
+
+        const xj =
+            Number(polygon[j][0]);
+
+        const yj =
+            Number(polygon[j][1]);
+
+        const intersect =
+            (
+                (yi > latitude)
+                !==
+                (yj > latitude)
+            )
+            &&
+            (
+                longitude <
+                (
+                    (xj - xi)
+                    *
+                    (latitude - yi)
+                    /
+                    ((yj - yi) || 0.0000001)
+                    + xi
+                )
+            );
+
+        if (intersect) {
+            inside = !inside;
+        }
+
+        j = i;
+    }
+
+    return inside;
+}
 
 /* =========================================================
    MAP MODE
