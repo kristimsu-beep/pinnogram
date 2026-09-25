@@ -113,6 +113,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Карты /newmap
+maps_path = os.path.join(BASE_DIR, "maps")
+
+if not os.path.exists(maps_path):
+    os.makedirs(maps_path, exist_ok=True)
+
+app.mount(
+    "/maps",
+    StaticFiles(directory=maps_path),
+    name="maps"
+)
+
 # Умные пути для сервера и локального ПК
 BASE_DIR = "/data" if os.path.exists("/data") else os.getcwd()
 
@@ -7755,6 +7767,20 @@ async def get_ctw2_game_page():
     if os.path.exists(file_path):
         return FileResponse(file_path)
     return {"error": "Файл ctw2.html не найден в папке games"}
+
+@app.get("/newmap")
+async def get_newmap():
+    file_path = os.path.join(
+        "games",
+        "newmap.html"
+    )
+
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+
+    return {
+        "error": "Файл newmap.html не найден в папке games"
+    }
 
 # =========================================================
 # CTW3 — CONQUER THE WORLD 3
