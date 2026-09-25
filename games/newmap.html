@@ -1,644 +1,817 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
->
-
-<title>NewMap</title>
-
-<style>
-
-* {
-    box-sizing: border-box;
-}
-
-html,
-body {
-    margin: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background: #111;
-    font-family: Arial, sans-serif;
-}
-
-#map {
-    position: fixed;
-    inset: 0;
-
-    overflow: hidden;
-
-    touch-action: none;
-
-    background: #111;
-
-    cursor: grab;
-}
-
-#map.dragging {
-    cursor: grabbing;
-}
-
-#world {
-
-    position: absolute;
-
-    left: 0;
-    top: 0;
-
-    transform-origin: 0 0;
-
-    will-change: transform;
-
-    user-select: none;
-
-    pointer-events: none;
-}
-
-
-/* =========================================================
-   ZOOM 1
-========================================================= */
-
-.zoom-level-1 {
-
-    display: flex;
-
-    flex-direction: row;
-
-    width: max-content;
-    height: max-content;
-
-}
-
-
-/* =========================================================
-   ZOOM 2
-========================================================= */
-
-.zoom-level-2 {
-
-    display: grid;
-
-    grid-template-columns:
-        repeat(3, 512px);
-
-    grid-template-rows:
-        repeat(3, 512px);
-
-    width: 1536px;
-    height: 1536px;
-
-}
-
-
-.map-tile {
-
-    display: block;
-
-    width: 512px;
-    height: 512px;
-
-    object-fit: cover;
-
-    user-select: none;
-
-    -webkit-user-drag: none;
-
-}
-
-
-/* =========================================================
-   UI
-========================================================= */
-
-#topbar {
-
-    position: fixed;
-
-    top: 15px;
-    left: 50%;
-
-    transform: translateX(-50%);
-
-    z-index: 1000;
-
-    background:
-        rgba(20,20,20,.82);
-
-    color: white;
-
-    padding:
-        9px 16px;
-
-    border-radius: 12px;
-
-    backdrop-filter:
-        blur(10px);
-
-    font-size: 14px;
-
-    box-shadow:
-        0 5px 20px rgba(0,0,0,.35);
-
-}
-
-#zoomInfo {
-
-    font-weight: bold;
-
-}
-
-#loading {
-
-    position: fixed;
-
-    inset: 0;
-
-    z-index: 2000;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    background: #111;
-
-    color: white;
-
-    font-size: 18px;
-
-    transition:
-        opacity .25s ease;
-
-}
-
-#loading.hidden {
-
-    opacity: 0;
-
-    pointer-events: none;
-
-}
-
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <title>New Map</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #111;
+            font-family: Arial, sans-serif;
+            touch-action: none;
+        }
+
+        #mapViewport {
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+            background: #111;
+            cursor: grab;
+        }
+
+        #mapViewport.dragging {
+            cursor: grabbing;
+        }
+
+        #mapWorld {
+            position: absolute;
+            left: 0;
+            top: 0;
+
+            display: flex;
+
+            transform-origin: 0 0;
+            will-change: transform;
+            user-select: none;
+        }
+
+        .map-row {
+            display: flex;
+            flex-direction: row;
+            flex-shrink: 0;
+        }
+
+        .map-tile {
+            display: block;
+            flex-shrink: 0;
+
+            user-select: none;
+            -webkit-user-drag: none;
+            pointer-events: none;
+
+            object-fit: contain;
+        }
+
+        #loading {
+            position: fixed;
+            inset: 0;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            background: #111;
+            color: white;
+
+            font-size: 18px;
+            z-index: 100;
+        }
+
+        #zoomInfo {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+
+            padding: 8px 12px;
+
+            border-radius: 8px;
+
+            background: rgba(0, 0, 0, 0.65);
+            color: white;
+
+            font-size: 14px;
+
+            z-index: 50;
+            pointer-events: none;
+        }
+    </style>
 </head>
 
 <body>
 
 <div id="loading">
-    Загрузка карты…
+    Загрузка карты...
 </div>
 
-<div id="topbar">
-    Zoom: <span id="zoomInfo">1</span>
+<div id="zoomInfo">
+    Zoom 1
 </div>
 
-<div id="map">
-
-    <div id="world"></div>
-
+<div id="mapViewport">
+    <div id="mapWorld"></div>
 </div>
-
 
 <script>
+    /*
+     * =========================================================
+     * NEW MAP
+     * =========================================================
+     *
+     * Все изображения находятся в папке:
+     *
+     * /map/
+     *
+     * Zoom 1:
+     * первые 5 изображений
+     *
+     * Zoom 2:
+     * следующие 9 изображений,
+     * расположенные 3 × 3
+     */
 
-/* =========================================================
-   CONFIG
-========================================================= */
+    const MAP_PATH = "/map/";
 
-const MAP_PATH = "/maps/";
+    const zoom1Files = [
+        "IMG_20260925_154144.jpg",
 
-const zoom1Files = [
+        "Screenshot_2026-09-25-16-13-04-920_com.google.android.apps.photos-edit.jpg",
 
-    "IMG_20260925_154144.jpg",
+        "Screenshot_2026-09-25-16-13-19-124_com.google.android.apps.photos-edit.jpg",
 
-    "Screenshot_2026-09-25-16-13-04-920_com.google.android.apps.photos-edit.jpg",
+        "Screenshot_2026-09-25-16-13-31-491_com.google.android.apps.photos-edit.jpg",
 
-    "Screenshot_2026-09-25-16-13-19-124_com.google.android.apps.photos-edit.jpg",
+        "Screenshot_2026-09-25-16-14-28-031_com.google.android.apps.photos-edit.jpg"
+    ];
 
-    "Screenshot_2026-09-25-16-13-31-491_com.google.android.apps.photos-edit.jpg",
+    const zoom2Files = [
+        "Screenshot_2026-09-25-16-14-36-441_com.google.android.apps.photos-edit.jpg",
 
-    "Screenshot_2026-09-25-16-14-28-031_com.google.android.apps.photos-edit.jpg"
+        "Screenshot_2026-09-25-16-14-45-865_com.google.android.apps.photos-edit.jpg",
 
-];
+        "Screenshot_2026-09-25-16-14-53-876_com.google.android.apps.photos-edit.jpg",
 
+        "Screenshot_2026-09-25-16-15-10-219_com.google.android.apps.photos-edit.jpg",
 
-const zoom2Files = [
+        "Screenshot_2026-09-25-16-15-19-902_com.google.android.apps.photos-edit.jpg",
 
-    "Screenshot_2026-09-25-16-14-36-441_com.google.android.apps.photos-edit.jpg",
+        "Screenshot_2026-09-25-16-15-29-963_com.google.android.apps.photos-edit.jpg",
 
-    "Screenshot_2026-09-25-16-14-45-865_com.google.android.apps.photos-edit.jpg",
+        "Screenshot_2026-09-25-16-15-41-325_com.google.android.apps.photos-edit.jpg",
 
-    "Screenshot_2026-09-25-16-14-53-876_com.google.android.apps.photos-edit.jpg",
+        "Screenshot_2026-09-25-16-15-54-504_com.google.android.apps.photos-edit.jpg",
 
-    "Screenshot_2026-09-25-16-15-10-219_com.google.android.apps.photos-edit.jpg",
+        "Screenshot_2026-09-25-16-16-04-916_com.google.android.apps.photos-edit.jpg"
+    ];
 
-    "Screenshot_2026-09-25-16-15-19-902_com.google.android.apps.photos-edit.jpg",
+    const viewport = document.getElementById("mapViewport");
+    const world = document.getElementById("mapWorld");
+    const loading = document.getElementById("loading");
+    const zoomInfo = document.getElementById("zoomInfo");
 
-    "Screenshot_2026-09-25-16-15-29-963_com.google.android.apps.photos-edit.jpg",
+    let currentZoom = 1;
 
-    "Screenshot_2026-09-25-16-15-41-325_com.google.android.apps.photos-edit.jpg",
+    let scale = 1;
 
-    "Screenshot_2026-09-25-16-15-54-504_com.google.android.apps.photos-edit.jpg",
+    let offsetX = 0;
+    let offsetY = 0;
 
-    "Screenshot_2026-09-25-16-16-04-916_com.google.android.apps.photos-edit.jpg"
+    let dragging = false;
 
-];
+    let lastPointerX = 0;
+    let lastPointerY = 0;
 
+    let pointers = new Map();
 
-/* =========================================================
-   STATE
-========================================================= */
+    let pinchStartDistance = 0;
+    let pinchStartScale = 1;
 
-const map =
-    document.getElementById("map");
+    let loadedImages = [];
 
-const world =
-    document.getElementById("world");
+    /*
+     * ---------------------------------------------------------
+     * Создание изображения
+     * ---------------------------------------------------------
+     */
 
-const zoomInfo =
-    document.getElementById("zoomInfo");
+    function createImage(filename) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
 
-const loading =
-    document.getElementById("loading");
+            img.className = "map-tile";
 
+            img.draggable = false;
 
-let currentZoom = 1;
+            img.onload = () => {
+                resolve(img);
+            };
 
-let scale = 1;
-
-let offsetX = 0;
-let offsetY = 0;
-
-
-/* Drag */
-
-let dragging = false;
-
-let startX = 0;
-let startY = 0;
-
-let startOffsetX = 0;
-let startOffsetY = 0;
-
-
-/* =========================================================
-   IMAGE CREATION
-========================================================= */
-
-function createImage(file) {
-
-    const img =
-        document.createElement("img");
-
-    img.className =
-        "map-tile";
-
-    img.draggable = false;
-
-    img.src =
-        MAP_PATH +
-        encodeURIComponent(file);
-
-    return img;
-}
-
-
-/* =========================================================
-   LOAD ZOOM 1
-========================================================= */
-
-function loadZoom1() {
-
-    world.innerHTML = "";
-
-    world.className =
-        "zoom-level-1";
-
-    for (
-        const file of zoom1Files
-    ) {
-
-        world.appendChild(
-            createImage(file)
-        );
-
-    }
-
-}
-
-
-/* =========================================================
-   LOAD ZOOM 2
-========================================================= */
-
-function loadZoom2() {
-
-    world.innerHTML = "";
-
-    world.className =
-        "zoom-level-2";
-
-    for (
-        const file of zoom2Files
-    ) {
-
-        world.appendChild(
-            createImage(file)
-        );
-
-    }
-
-}
-
-
-/* =========================================================
-   ZOOM SWITCH
-========================================================= */
-
-function setZoomLevel(level) {
-
-    level =
-        Math.max(
-            1,
-            Math.min(
-                2,
-                level
-            )
-        );
-
-
-    if (
-        level === currentZoom
-    ) {
-
-        return;
-
+            img.onerror = () => {
+                reject(
+                    new Error(
+                        "Не удалось загрузить: " +
+                        MAP_PATH +
+                        filename
+                    )
+                );
+            };
+
+            img.src =
+                MAP_PATH +
+                encodeURIComponent(filename)
+                    .replace(/%2F/g, "/");
+        });
     }
 
 
-    currentZoom =
-        level;
+    /*
+     * ---------------------------------------------------------
+     * Очистка карты
+     * ---------------------------------------------------------
+     */
 
-
-    zoomInfo.textContent =
-        currentZoom;
-
-
-    if (
-        currentZoom === 1
-    ) {
-
-        loadZoom1();
-
-    } else {
-
-        loadZoom2();
-
+    function clearWorld() {
+        world.innerHTML = "";
+        loadedImages = [];
     }
 
 
-    applyTransform();
+    /*
+     * ---------------------------------------------------------
+     * Подгонка размера изображения
+     * ---------------------------------------------------------
+     *
+     * Мы НЕ задаём 512x512.
+     *
+     * Используется настоящий размер JPG.
+     */
 
-}
-
-
-/* =========================================================
-   TRANSFORM
-========================================================= */
-
-function applyTransform() {
-
-    world.style.transform =
-        `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
-
-}
-
-
-/* =========================================================
-   DRAG
-========================================================= */
-
-map.addEventListener(
-    "pointerdown",
-    event => {
-
-        dragging = true;
-
-        map.classList.add(
-            "dragging"
-        );
-
-        startX =
-            event.clientX;
-
-        startY =
-            event.clientY;
-
-        startOffsetX =
-            offsetX;
-
-        startOffsetY =
-            offsetY;
-
-        map.setPointerCapture(
-            event.pointerId
-        );
-
+    function prepareImage(img) {
+        img.style.width = img.naturalWidth + "px";
+        img.style.height = img.naturalHeight + "px";
     }
-);
 
 
-map.addEventListener(
-    "pointermove",
-    event => {
+    /*
+     * ---------------------------------------------------------
+     * Zoom 1
+     * ---------------------------------------------------------
+     *
+     * 5 изображений в один ряд.
+     * ---------------------------------------------------------
+     */
 
-        if (!dragging) {
+    async function loadZoom1() {
+        clearWorld();
 
-            return;
+        world.style.display = "flex";
+        world.style.flexDirection = "row";
 
+        const row = document.createElement("div");
+
+        row.className = "map-row";
+
+        for (const filename of zoom1Files) {
+
+            const img = await createImage(filename);
+
+            prepareImage(img);
+
+            row.appendChild(img);
+
+            loadedImages.push(img);
         }
 
+        world.appendChild(row);
+
+        currentZoom = 1;
+
+        zoomInfo.textContent = "Zoom 1";
+
+        loading.style.display = "none";
+
+        updateTransform();
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * Zoom 2
+     * ---------------------------------------------------------
+     *
+     * 9 изображений:
+     *
+     * 1 2 3
+     * 4 5 6
+     * 7 8 9
+     * ---------------------------------------------------------
+     */
+
+    async function loadZoom2() {
+        loading.style.display = "flex";
+        loading.textContent = "Загрузка увеличенной карты...";
+
+        clearWorld();
+
+        world.style.display = "block";
+
+        const grid = document.createElement("div");
+
+        grid.style.display = "grid";
+        grid.style.gridTemplateColumns = "repeat(3, max-content)";
+        grid.style.gridTemplateRows = "repeat(3, max-content)";
+        grid.style.width = "max-content";
+        grid.style.height = "max-content";
+
+        for (const filename of zoom2Files) {
+
+            const img = await createImage(filename);
+
+            prepareImage(img);
+
+            grid.appendChild(img);
+
+            loadedImages.push(img);
+        }
+
+        world.appendChild(grid);
+
+        currentZoom = 2;
+
+        zoomInfo.textContent = "Zoom 2";
+
+        loading.style.display = "none";
+
+        updateTransform();
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * Центрирование
+     * ---------------------------------------------------------
+     */
+
+    function centerMap() {
+
+        const rect = world.getBoundingClientRect();
+
+        const worldWidth =
+            rect.width / scale;
+
+        const worldHeight =
+            rect.height / scale;
 
         offsetX =
-            startOffsetX +
-            (
-                event.clientX -
-                startX
-            );
+            (window.innerWidth - worldWidth * scale) / 2;
 
         offsetY =
-            startOffsetY +
-            (
-                event.clientY -
-                startY
-            );
+            (window.innerHeight - worldHeight * scale) / 2;
 
-
-        applyTransform();
-
+        updateTransform();
     }
-);
 
 
-function stopDragging() {
+    /*
+     * ---------------------------------------------------------
+     * Transform
+     * ---------------------------------------------------------
+     */
 
-    dragging = false;
+    function updateTransform() {
 
-    map.classList.remove(
-        "dragging"
-    );
-
-}
-
-
-map.addEventListener(
-    "pointerup",
-    stopDragging
-);
-
-map.addEventListener(
-    "pointercancel",
-    stopDragging
-);
+        world.style.transform =
+            `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${scale})`;
+    }
 
 
-/* =========================================================
-   MOUSE WHEEL
-========================================================= */
+    /*
+     * ---------------------------------------------------------
+     * Zoom переключение
+     * ---------------------------------------------------------
+     */
 
-map.addEventListener(
-    "wheel",
-    event => {
+    async function switchZoom(newZoom, centerX, centerY) {
 
-        event.preventDefault();
+        if (newZoom === currentZoom) {
+            return;
+        }
 
+        /*
+         * Сохраняем точку карты,
+         * находящуюся под пальцем/мышью.
+         */
 
-        if (
-            event.deltaY < 0
-        ) {
+        const worldX =
+            (centerX - offsetX) / scale;
 
-            setZoomLevel(2);
+        const worldY =
+            (centerY - offsetY) / scale;
+
+        if (newZoom === 2) {
+
+            await loadZoom2();
 
         } else {
 
-            setZoomLevel(1);
-
+            await loadZoom1();
         }
 
-    },
-    {
-        passive: false
+        /*
+         * После загрузки нового уровня
+         * сохраняем приблизительный центр.
+         */
+
+        offsetX =
+            centerX -
+            worldX * scale;
+
+        offsetY =
+            centerY -
+            worldY * scale;
+
+        updateTransform();
     }
-);
-
-
-/* =========================================================
-   PINCH ZOOM
-========================================================= */
-
-let pinchStartDistance = null;
-
-
-function getDistance(
-    a,
-    b
-) {
-
-    const dx =
-        a.clientX -
-        b.clientX;
-
-    const dy =
-        a.clientY -
-        b.clientY;
-
-    return Math.sqrt(
-        dx * dx +
-        dy * dy
-    );
-
-}
-
-
-map.addEventListener(
-    "pointerdown",
-    event => {
-
-        if (
-            event.pointerType !==
-            "touch"
-        ) {
-
-            return;
-
-        }
-
-        const touches =
-            map.getCoalescedEvents
-            ? []
-            : [];
-
-    }
-);
-
-
-/* =========================================================
-   INITIAL LOAD
-========================================================= */
-
-async function init() {
-
-    loadZoom1();
-
-    /*
-        Начальный масштаб.
-    */
-
-    scale = 1;
-
-    offsetX =
-        (
-            window.innerWidth -
-            5 * 512
-        ) / 2;
-
-    offsetY =
-        (
-            window.innerHeight -
-            512
-        ) / 2;
-
-
-    applyTransform();
 
 
     /*
-        Даём браузеру время
-        начать загрузку изображений.
-    */
+     * ---------------------------------------------------------
+     * Колесо мыши
+     * ---------------------------------------------------------
+     */
 
-    setTimeout(
-        () => {
+    viewport.addEventListener(
+        "wheel",
+        async (event) => {
 
-            loading.classList.add(
-                "hidden"
-            );
+            event.preventDefault();
+
+            const rect =
+                viewport.getBoundingClientRect();
+
+            const x =
+                event.clientX -
+                rect.left;
+
+            const y =
+                event.clientY -
+                rect.top;
+
+            if (event.deltaY < 0) {
+
+                if (currentZoom === 1) {
+
+                    scale = 1.7;
+
+                    await switchZoom(
+                        2,
+                        x,
+                        y
+                    );
+                }
+
+            } else {
+
+                if (currentZoom === 2) {
+
+                    scale = 1;
+
+                    await switchZoom(
+                        1,
+                        x,
+                        y
+                    );
+                }
+            }
 
         },
-        400
+        {
+            passive: false
+        }
     );
 
-}
+
+    /*
+     * ---------------------------------------------------------
+     * Перемещение карты
+     * ---------------------------------------------------------
+     */
+
+    viewport.addEventListener(
+        "pointerdown",
+        (event) => {
+
+            pointers.set(
+                event.pointerId,
+                {
+                    x: event.clientX,
+                    y: event.clientY
+                }
+            );
+
+            viewport.setPointerCapture(
+                event.pointerId
+            );
+
+            if (pointers.size === 1) {
+
+                dragging = true;
+
+                viewport.classList.add(
+                    "dragging"
+                );
+
+                lastPointerX =
+                    event.clientX;
+
+                lastPointerY =
+                    event.clientY;
+            }
+
+            if (pointers.size === 2) {
+
+                dragging = false;
+
+                const values =
+                    [...pointers.values()];
+
+                pinchStartDistance =
+                    distance(
+                        values[0],
+                        values[1]
+                    );
+
+                pinchStartScale = scale;
+            }
+        }
+    );
 
 
-init();
+    viewport.addEventListener(
+        "pointermove",
+        async (event) => {
+
+            if (!pointers.has(event.pointerId)) {
+                return;
+            }
+
+            pointers.set(
+                event.pointerId,
+                {
+                    x: event.clientX,
+                    y: event.clientY
+                }
+            );
+
+            /*
+             * Два пальца = pinch zoom
+             */
+
+            if (pointers.size >= 2) {
+
+                const values =
+                    [...pointers.values()];
+
+                const currentDistance =
+                    distance(
+                        values[0],
+                        values[1]
+                    );
+
+                if (!pinchStartDistance) {
+                    return;
+                }
+
+                const ratio =
+                    currentDistance /
+                    pinchStartDistance;
+
+                let newScale =
+                    pinchStartScale * ratio;
+
+                /*
+                 * На Zoom 1 масштаб ограничиваем
+                 * до перехода на Zoom 2.
+                 */
+
+                if (currentZoom === 1) {
+
+                    if (newScale >= 1.6) {
+
+                        const centerX =
+                            (
+                                values[0].x +
+                                values[1].x
+                            ) / 2;
+
+                        const centerY =
+                            (
+                                values[0].y +
+                                values[1].y
+                            ) / 2;
+
+                        scale = 1.7;
+
+                        await switchZoom(
+                            2,
+                            centerX,
+                            centerY
+                        );
+
+                        pinchStartDistance =
+                            currentDistance;
+
+                        pinchStartScale =
+                            scale;
+
+                        return;
+                    }
+
+                    scale =
+                        Math.max(
+                            0.7,
+                            Math.min(
+                                1.6,
+                                newScale
+                            )
+                        );
+                }
+
+                /*
+                 * На Zoom 2 можно немного
+                 * приблизить карту.
+                 */
+
+                else {
+
+                    scale =
+                        Math.max(
+                            1.7,
+                            Math.min(
+                                4,
+                                newScale
+                            )
+                        );
+                }
+
+                updateTransform();
+
+                return;
+            }
+
+            /*
+             * Один палец = перемещение
+             */
+
+            if (
+                pointers.size === 1 &&
+                dragging
+            ) {
+
+                const dx =
+                    event.clientX -
+                    lastPointerX;
+
+                const dy =
+                    event.clientY -
+                    lastPointerY;
+
+                offsetX += dx;
+                offsetY += dy;
+
+                lastPointerX =
+                    event.clientX;
+
+                lastPointerY =
+                    event.clientY;
+
+                updateTransform();
+            }
+        }
+    );
+
+
+    /*
+     * ---------------------------------------------------------
+     * Завершение pointer
+     * ---------------------------------------------------------
+     */
+
+    function removePointer(event) {
+
+        pointers.delete(
+            event.pointerId
+        );
+
+        if (pointers.size === 0) {
+
+            dragging = false;
+
+            viewport.classList.remove(
+                "dragging"
+            );
+        }
+
+        if (pointers.size < 2) {
+
+            pinchStartDistance = 0;
+        }
+    }
+
+
+    viewport.addEventListener(
+        "pointerup",
+        removePointer
+    );
+
+    viewport.addEventListener(
+        "pointercancel",
+        removePointer
+    );
+
+    viewport.addEventListener(
+        "pointerleave",
+        (event) => {
+
+            if (
+                event.buttons === 0 &&
+                pointers.has(event.pointerId)
+            ) {
+                removePointer(event);
+            }
+        }
+    );
+
+
+    /*
+     * ---------------------------------------------------------
+     * Расстояние между пальцами
+     * ---------------------------------------------------------
+     */
+
+    function distance(a, b) {
+
+        const dx =
+            a.x - b.x;
+
+        const dy =
+            a.y - b.y;
+
+        return Math.sqrt(
+            dx * dx +
+            dy * dy
+        );
+    }
+
+
+    /*
+     * ---------------------------------------------------------
+     * Resize
+     * ---------------------------------------------------------
+     */
+
+    window.addEventListener(
+        "resize",
+        () => {
+            updateTransform();
+        }
+    );
+
+
+    /*
+     * ---------------------------------------------------------
+     * Запуск
+     * ---------------------------------------------------------
+     */
+
+    async function init() {
+
+        try {
+
+            await loadZoom1();
+
+            /*
+             * После загрузки центрируем карту.
+             */
+
+            requestAnimationFrame(() => {
+                centerMap();
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            loading.textContent =
+                "Ошибка загрузки карты: " +
+                error.message;
+        }
+    }
+
+
+    init();
 
 </script>
 
