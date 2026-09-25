@@ -3779,301 +3779,445 @@ from pydantic import BaseModel
 
 # ⚠️ Вставь сюда скопированную ссылку с экрана MongoDB и замени <db_password> на свой пароль!
 MONGO_URI = "mongodb+srv://admin:ZLSJpY8bZBmwuZBN@robux.wb9rz4o.mongodb.net/?appName=Robux"
+# =========================================================
+# MONGO DATABASE INITIALIZATION
+# =========================================================
+
+# =========================================================
+# CTW3 — MONGODB / FULL GAME BACKEND
+# =========================================================
+
+# This block replaces ONLY the current CTW3 block.
+# Keep the MONGO_URI itself as-is for now; move it to Render
+# Environment Variables after the game is working.
+
 try:
     print("[🗄️ MONGO-БАЗА] Инициализация подключения к облачному кластеру...")
     mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
+
     db = mongo_client["robux_hub_db"]
     cities_db = mongo_client["ctw2_cities_db"]
     sessions_collection = db["user_sessions"]
-    # =========================================================
-    # CTW3 — MONGODB
-    # =========================================================
-    
+
+    # =====================================================
+    # CTW3
+    # =====================================================
+
     ctw3_db = mongo_client["ctw3_db"]
-    
     ctw3_countries = ctw3_db["countries"]
-    
+    ctw3_chat = ctw3_db["chat"]
+
     print("[🌍 CTW3] MongoDB database initialized: ctw3_db")
     print("[🎉 MONGO-УСПЕХ] Облачный шлюз MongoDB успешно запущен!")
+
 except Exception as e:
     print(f"[💥 MONGO-КРАШ] Не удалось подключиться к MongoDB Atlas: {e}")
-    
+
+
+# =========================================================
+# EXISTING MODELS — KEEP THESE BECAUSE OTHER SERVER CODE
+# MAY USE THEM
+# =========================================================
+
 class RegisterModel(BaseModel):
     username: str
-    
-# Модель для кручения рулетки
+
+
 class SpinRequest(BaseModel):
     username: str
-    
-# 🔥 ДОБАВЛЕНО: Модель для валидации никнейма при авторизации робуксов
+
+
 class AuthRobloxModel(BaseModel):
     username: str
-# Модель для приёма системного статуса от телефона
+
+
 class LibraryLogModel(BaseModel):
     status: str
     version: str
 
+
 # =========================================================
-# CTW3 — COUNTRY REGISTRATION MODELS
+# CTW3 MODELS
 # =========================================================
 
 class CTW3CountryCreate(BaseModel):
-
     name: str
-
     flag: str
-
     language: str
 
+
+class CTW3TerritorySelect(BaseModel):
+    country_code: str
+    country_name: str
+
+
+class CTW3MapAction(BaseModel):
+    action: str
+    latitude: float
+    longitude: float
+    name: str | None = None
+    object_id: str | None = None
+
+
+class CTW3ProductionSettings(BaseModel):
+    profit: int
+    missiles: int
+    air_defense: int
+
+
+class CTW3ChatMessage(BaseModel):
+    text: str
+
+
+class CTW3Attack(BaseModel):
+    missile_id: str
+    target_country_id: str
+    latitude: float
+    longitude: float
+    target_object_id: str | None = None
+
+
 # =========================================================
-# CTW3 — CREATE COUNTRY
+# CTW3 HELPERS
+# =========================================================
+
+def get_ctw3_player_id(request: Request):
+    return (
+        request.cookies.get("forum_user_id")
+        or request.cookies.get("forum_user_name")
+        or request.cookies.get("ctw3_player_id")
+        or str(uuid4())
+    )
+
+
+def ctw3_public_country(country):
+    if not country:
+        return None
+
+    result = dict(country)
+
+    if "_id" in result:
+        result["id"] = str(result.pop("_id"))
+
+    result.pop("player_id", None)
+    result.pop("name_lower", None)
+
+    if isinstance(result.get("created_at"), datetime):
+        result["created_at"] = result["created_at"].isoformat()
+
+    for key in (
+        "last_economic_tick",
+        "last_population_tick",
+        "last_production_tick",
+    ):
+        if isinstance(result.get(key), datetime):
+            result[key] = result[key].isoformat()
+
+    return result
+
+
+def ctw3_country_for_client(country):
+    result = ctw3_public_country(country)
+    if result is None:
+        return None
+
+    # Player ID is intentionally not exposed to the browser.
+    return result
+
+
+async def ctw3_get_country_for_request(request: Request):
+    player_id = get_ctw3_player_id(request)
+
+    country = await ctw3_countries.find_one({
+        "player_id": player_id
+    })
+
+    return player_id, country
+
+
+async def ctw3_tick_country(country):
+    """
+    Server-side persistent economy.
+
+    The game does not depend on a browser tab staying open.
+    We calculate elapsed 5/10 second periods from MongoDB timestamps.
+    """
+
+    if not country:
+        return None
+
+    now = datetime.utcnow()
+
+    last_economic = country.get("last_economic_tick") or now
+    last_population = country.get("last_population_tick") or now
+    last_production = country.get("last_production_tick") or now
+
+    economic_seconds = max(
+        0,
+        (now - last_economic).total_seconds()
+    )
+
+    population_seconds = max(
+        0,
+        (now - last_population).total_seconds()
+    )
+
+    production_seconds = max(
+        0,
+        (now - last_production).total_seconds()
+    )
+
+    economic_ticks = int(economic_seconds // 10)
+    population_ticks = int(population_seconds // 5)
+    production_ticks = int(production_seconds // 10)
+
+    budget = float(country.get("budget", 100_000_000))
+    inflation = float(country.get("inflation", 0.0))
+
+    factories_profit = int(country.get("factory_profit", 0))
+    population = int(country.get("population", 0))
+
+    cities = list(country.get("cities", []))
+
+    missile_stock = int(country.get("missile_stock", 0))
+    air_defense_stock = int(
+        country.get("air_defense_stock", 0)
+    )
+
+    # -----------------------------------------------------
+    # ECONOMY — every 10 seconds
+    # -----------------------------------------------------
+
+    if economic_ticks > 0:
+
+        profit = (
+            factories_profit
+            * 1_000_000
+            * economic_ticks
+        )
+
+        population_cost = (
+            population
+            * 100
+            * economic_ticks
+        )
+
+        budget += profit
+        budget -= population_cost
+
+        # Negative budget increases inflation.
+        if budget < 0:
+            inflation += (
+                abs(budget) / 100_000_000
+            ) * 0.25 * economic_ticks
+
+        else:
+            # Very slow stabilization while budget is positive.
+            inflation = max(
+                0.0,
+                inflation - 0.02 * economic_ticks
+            )
+
+        last_economic = (
+            last_economic
+            + timedelta(
+                seconds=economic_ticks * 10
+            )
+        )
+
+    # -----------------------------------------------------
+    # CITY POPULATION — every 5 seconds
+    # -----------------------------------------------------
+
+    if population_ticks > 0 and cities:
+
+        import random as _ctw3_random
+
+        total_delta = 0
+
+        for city in cities:
+
+            current = int(
+                city.get("population", 1000)
+            )
+
+            # Small natural random movement.
+            for _ in range(population_ticks):
+                delta = _ctw3_random.randint(
+                    -25,
+                    50
+                )
+                current = max(
+                    0,
+                    current + delta
+                )
+
+            city["population"] = current
+            total_delta += current
+
+        population = total_delta
+
+        last_population = (
+            last_population
+            + timedelta(
+                seconds=population_ticks * 5
+            )
+        )
+
+    elif population_ticks > 0:
+
+        population = 0
+
+        last_population = (
+            last_population
+            + timedelta(
+                seconds=population_ticks * 5
+            )
+        )
+
+    # -----------------------------------------------------
+    # PRODUCTION — every 10 seconds
+    # -----------------------------------------------------
+
+    if production_ticks > 0:
+
+        missile_stock += (
+            int(country.get("factory_missiles", 0))
+            * production_ticks
+        )
+
+        air_defense_stock += (
+            int(country.get("factory_air_defense", 0))
+            * production_ticks
+        )
+
+        last_production = (
+            last_production
+            + timedelta(
+                seconds=production_ticks * 10
+            )
+        )
+
+    # -----------------------------------------------------
+    # SAVE EVERYTHING
+    # -----------------------------------------------------
+
+    await ctw3_countries.update_one(
+        {
+            "_id": country["_id"]
+        },
+        {
+            "$set": {
+                "budget": budget,
+                "inflation": inflation,
+                "population": population,
+                "cities": cities,
+                "missile_stock": missile_stock,
+                "air_defense_stock": air_defense_stock,
+                "last_economic_tick": last_economic,
+                "last_population_tick": last_population,
+                "last_production_tick": last_production,
+            }
+        }
+    )
+
+    country["budget"] = budget
+    country["inflation"] = inflation
+    country["population"] = population
+    country["cities"] = cities
+    country["missile_stock"] = missile_stock
+    country["air_defense_stock"] = air_defense_stock
+    country["last_economic_tick"] = last_economic
+    country["last_population_tick"] = last_population
+    country["last_production_tick"] = last_production
+
+    return country
+
+
+def ctw3_require_territory(country):
+    if not country:
+        raise HTTPException(
+            status_code=404,
+            detail="Государство не найдено"
+        )
+
+    if not country.get("territory"):
+        raise HTTPException(
+            status_code=400,
+            detail="Сначала выберите территорию"
+        )
+
+
+def ctw3_distance_km(lat1, lon1, lat2, lon2):
+    import math
+
+    r = 6371.0
+
+    p1 = math.radians(lat1)
+    p2 = math.radians(lat2)
+
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+
+    a = (
+        math.sin(dp / 2) ** 2
+        + math.cos(p1)
+        * math.cos(p2)
+        * math.sin(dl / 2) ** 2
+    )
+
+    return 2 * r * math.asin(
+        math.sqrt(a)
+    )
+
+
+# =========================================================
+# CTW3 — COUNTRY CREATION
 # =========================================================
 
 @app.post("/api/ctw3/country")
 async def ctw3_create_country(
     data: CTW3CountryCreate,
-    request: Request
+    request: Request,
+    response: Response
 ):
 
     name = data.name.strip()
     flag = data.flag.strip()
     language = data.language.strip()
 
-
-    # -----------------------------------------------------
-    # Проверка названия
-    # -----------------------------------------------------
-
     if not name:
-
         raise HTTPException(
             status_code=400,
             detail="Название государства не может быть пустым"
         )
 
-
     if len(name) > 40:
-
         raise HTTPException(
             status_code=400,
             detail="Название государства слишком длинное"
         )
 
+    if not flag:
+        raise HTTPException(
+            status_code=400,
+            detail="Необходимо указать флаг"
+        )
 
-    # -----------------------------------------------------
-    # Определяем игрока
-    # -----------------------------------------------------
+    if not language:
+        raise HTTPException(
+            status_code=400,
+            detail="Необходимо указать язык"
+        )
 
-    player_id = (
+    player_id = get_ctw3_player_id(request)
+
+    has_forum_identity = (
         request.cookies.get("forum_user_id")
         or request.cookies.get("forum_user_name")
     )
 
-
-    if not player_id:
-
-        # Если пользователь не авторизован на форуме,
-        # создаём постоянный идентификатор CTW3.
-
-        player_id = str(uuid4())
-
-
-    # -----------------------------------------------------
-    # Проверяем, есть ли уже государство
-    # -----------------------------------------------------
-
-    existing_country = await ctw3_countries.find_one(
-        {
-            "player_id": player_id
-        }
-    )
-
-
-    if existing_country:
-
-        raise HTTPException(
-            status_code=409,
-            detail="У этого игрока уже есть государство"
-        )
-
-
-    # -----------------------------------------------------
-    # Проверяем уникальность названия
-    # -----------------------------------------------------
-
-    existing_name = await ctw3_countries.find_one(
-        {
-            "name_lower": name.lower()
-        }
-    )
-
-
-    if existing_name:
-
-        raise HTTPException(
-            status_code=409,
-            detail="Это название государства уже занято"
-        )
-
-
-    # -----------------------------------------------------
-    # Создаём государство
-    # -----------------------------------------------------
-
-    country = {
-
-        "player_id": player_id,
-
-        "name": name,
-
-        "name_lower": name.lower(),
-
-        "flag": flag,
-
-        "language": language,
-
-
-        # Территория пока отсутствует.
-        "territory": None,
-
-
-        # =================================================
-        # ЭКОНОМИКА
-        # =================================================
-
-        "budget": 100_000_000,
-
-        "inflation": 0.0,
-
-
-        # =================================================
-        # НАСЕЛЕНИЕ
-        # =================================================
-
-        "population": 0,
-
-
-        # =================================================
-        # ОБЪЕКТЫ
-        # =================================================
-
-        "cities": [],
-
-        "airports": [],
-
-        "factories": [],
-
-        "missiles": [],
-
-        "air_defenses": [],
-
-
-        # =================================================
-        # ПРОИЗВОДСТВО
-        # =================================================
-
-        "factory_profit": 0,
-
-        "factory_missiles": 0,
-
-        "factory_air_defense": 0,
-
-
-        # =================================================
-        # ДАТА
-        # =================================================
-
-        "created_at": datetime.utcnow()
-
-
-    }
-
-
-    result = await ctw3_countries.insert_one(
-        country
-    )
-
-
-    country["_id"] = str(
-        result.inserted_id
-    )
-
-
-    # -----------------------------------------------------
-    # Сохраняем CTW3 player ID
-    # -----------------------------------------------------
-
-    response_data = {
-
-        "status": "success",
-
-        "country": {
-
-            "id": country["_id"],
-
-            "name": country["name"],
-
-            "flag": country["flag"],
-
-            "language": country["language"],
-
-            "territory": country["territory"],
-
-            "budget": country["budget"],
-
-            "population": country["population"],
-
-            "inflation": country["inflation"]
-
-        }
-
-    }
-
-
-    return response_data
-
-# =========================================================
-# CTW3 — GET PLAYER COUNTRY
-# =========================================================
-
-@app.get("/api/ctw3/country")
-async def ctw3_get_country(
-    request: Request,
-    response: Response
-):
-
-    player_id = (
-        request.cookies.get("forum_user_id")
-        or request.cookies.get("forum_user_name")
-        or request.cookies.get("ctw3_player_id")
-    )
-
-
-    # -----------------------------------------------------
-    # Если ID ещё нет — создаём его
-    # -----------------------------------------------------
-
-    if not player_id:
-
-        player_id = str(
-            uuid4()
-        )
-
-
-    country = await ctw3_countries.find_one(
-        {
-            "player_id": player_id
-        }
-    )
-
-
-    # -----------------------------------------------------
-    # Новому игроку устанавливаем постоянный ID
-    # -----------------------------------------------------
-
-    if not request.cookies.get("forum_user_id") \
-       and not request.cookies.get("forum_user_name"):
-
+    if not has_forum_identity:
         response.set_cookie(
             key="ctw3_player_id",
             value=player_id,
@@ -4083,33 +4227,890 @@ async def ctw3_get_country(
             samesite="lax"
         )
 
+    existing_country = await ctw3_countries.find_one({
+        "player_id": player_id
+    })
 
-    # -----------------------------------------------------
-    # Государство ещё не создано
-    # -----------------------------------------------------
+    if existing_country:
+        raise HTTPException(
+            status_code=409,
+            detail="У этого игрока уже есть государство"
+        )
+
+    existing_name = await ctw3_countries.find_one({
+        "name_lower": name.lower()
+    })
+
+    if existing_name:
+        raise HTTPException(
+            status_code=409,
+            detail="Это название государства уже занято"
+        )
+
+    now = datetime.utcnow()
+
+    country = {
+        "player_id": player_id,
+
+        "name": name,
+        "name_lower": name.lower(),
+        "flag": flag,
+        "language": language,
+
+        "territory": None,
+
+        "budget": 100_000_000,
+        "inflation": 0.0,
+
+        "population": 0,
+
+        "cities": [],
+        "airports": [],
+        "factories": [],
+        "missiles": [],
+        "air_defenses": [],
+
+        "missile_stock": 0,
+        "air_defense_stock": 0,
+
+        "factory_profit": 0,
+        "factory_missiles": 0,
+        "factory_air_defense": 0,
+
+        "last_economic_tick": now,
+        "last_population_tick": now,
+        "last_production_tick": now,
+
+        "created_at": now
+    }
+
+    result = await ctw3_countries.insert_one(country)
+
+    return {
+        "status": "success",
+        "country": ctw3_country_for_client({
+            **country,
+            "_id": result.inserted_id
+        })
+    }
+
+
+# =========================================================
+# CTW3 — GET CURRENT COUNTRY
+# =========================================================
+
+@app.get("/api/ctw3/country")
+async def ctw3_get_country(
+    request: Request,
+    response: Response
+):
+
+    player_id = get_ctw3_player_id(request)
+
+    has_forum_identity = (
+        request.cookies.get("forum_user_id")
+        or request.cookies.get("forum_user_name")
+    )
+
+    if not has_forum_identity:
+        response.set_cookie(
+            key="ctw3_player_id",
+            value=player_id,
+            max_age=31536000,
+            path="/",
+            httponly=True,
+            samesite="lax"
+        )
+
+    country = await ctw3_countries.find_one({
+        "player_id": player_id
+    })
 
     if not country:
+        return {
+            "registered": False,
+            "player_id": player_id
+        }
 
+    country = await ctw3_tick_country(country)
+
+    return {
+        "registered": True,
+        "country": ctw3_country_for_client(country)
+    }
+
+
+# =========================================================
+# CTW3 — SELECT TERRITORY
+# =========================================================
+
+@app.post("/api/ctw3/territory")
+async def ctw3_select_territory(
+    data: CTW3TerritorySelect,
+    request: Request
+):
+
+    player_id, country = await ctw3_get_country_for_request(
+        request
+    )
+
+    ctw3_require_territory(country) if country and country.get("territory") else None
+
+    if not country:
+        raise HTTPException(
+            status_code=404,
+            detail="Государство не найдено"
+        )
+
+    if country.get("territory"):
+        raise HTTPException(
+            status_code=409,
+            detail="Территория уже выбрана"
+        )
+
+    code = data.country_code.strip().upper()
+    name = data.country_name.strip()
+
+    if not code or not name:
+        raise HTTPException(
+            status_code=400,
+            detail="Некорректная территория"
+        )
+
+    # One territory can belong to only one player.
+    occupied = await ctw3_countries.find_one({
+        "territory.country_code": code
+    })
+
+    if occupied:
+        raise HTTPException(
+            status_code=409,
+            detail="Эта территория уже занята"
+        )
+
+    territory = {
+        "country_code": code,
+        "name": name,
+        "selected_at": datetime.utcnow()
+    }
+
+    await ctw3_countries.update_one(
+        {"_id": country["_id"]},
+        {
+            "$set": {
+                "territory": territory
+            }
+        }
+    )
+
+    country["territory"] = territory
+
+    return {
+        "status": "success",
+        "country": ctw3_country_for_client(country)
+    }
+
+
+# =========================================================
+# CTW3 — GET PUBLIC COUNTRIES
+# =========================================================
+
+@app.get("/api/ctw3/countries")
+async def ctw3_get_countries(
+    request: Request
+):
+
+    countries = []
+
+    cursor = ctw3_countries.find(
+        {},
+        {
+            "_id": 1,
+            "name": 1,
+            "flag": 1,
+            "language": 1,
+            "territory": 1,
+            "population": 1,
+            "budget": 1,
+            "inflation": 1,
+            "cities": 1,
+            "airports": 1,
+            "factories": 1,
+            "missiles": 1,
+            "air_defenses": 1
+        }
+    )
+
+    async for country in cursor:
+
+        country["id"] = str(
+            country.pop("_id")
+        )
+
+        countries.append(country)
+
+    return {
+        "countries": countries
+    }
+
+
+# =========================================================
+# CTW3 — GET FULL STATE
+# =========================================================
+
+@app.get("/api/ctw3/state")
+async def ctw3_get_state(
+    request: Request,
+    response: Response
+):
+
+    player_id = get_ctw3_player_id(request)
+
+    country = await ctw3_countries.find_one({
+        "player_id": player_id
+    })
+
+    if not country:
         return {
             "registered": False
         }
 
+    country = await ctw3_tick_country(country)
 
-    # -----------------------------------------------------
-    # Преобразуем ObjectId
-    # -----------------------------------------------------
+    return {
+        "registered": True,
+        "country": ctw3_country_for_client(country)
+    }
 
-    country["id"] = str(
-        country.pop("_id")
+
+# =========================================================
+# CTW3 — MAP ACTIONS
+# =========================================================
+
+@app.post("/api/ctw3/action")
+async def ctw3_map_action(
+    data: CTW3MapAction,
+    request: Request
+):
+
+    player_id, country = await ctw3_get_country_for_request(
+        request
+    )
+
+    if not country:
+        raise HTTPException(
+            status_code=404,
+            detail="Государство не найдено"
+        )
+
+    country = await ctw3_tick_country(country)
+
+    ctw3_require_territory(country)
+
+    action = data.action.strip().lower()
+
+    if action == "city":
+
+        city_name = (
+            data.name.strip()
+            if data.name
+            else f"Город {len(country.get('cities', [])) + 1}"
+        )
+
+        city = {
+            "id": str(uuid4()),
+            "name": city_name,
+            "latitude": data.latitude,
+            "longitude": data.longitude,
+            "population": 1000,
+            "damage": 0,
+            "created_at": datetime.utcnow()
+        }
+
+        cities = list(country.get("cities", []))
+        cities.append(city)
+
+        population = sum(
+            int(c.get("population", 0))
+            for c in cities
+        )
+
+        await ctw3_countries.update_one(
+            {"_id": country["_id"]},
+            {
+                "$set": {
+                    "cities": cities,
+                    "population": population
+                }
+            }
+        )
+
+        return {
+            "status": "success",
+            "object_type": "city",
+            "object": city
+        }
+
+
+    if action == "factory":
+
+        cost = 10_000_000
+
+        if float(country.get("budget", 0)) < cost:
+            raise HTTPException(
+                status_code=400,
+                detail="Недостаточно средств"
+            )
+
+        factory = {
+            "id": str(uuid4()),
+            "latitude": data.latitude,
+            "longitude": data.longitude,
+            "mode": "profit",
+            "created_at": datetime.utcnow()
+        }
+
+        factories = list(country.get("factories", []))
+        factories.append(factory)
+
+        await ctw3_countries.update_one(
+            {"_id": country["_id"]},
+            {
+                "$set": {
+                    "factories": factories,
+                    "factory_profit": int(
+                        country.get("factory_profit", 0)
+                    ) + 1,
+                    "budget": float(
+                        country.get("budget", 0)
+                    ) - cost
+                }
+            }
+        )
+
+        return {
+            "status": "success",
+            "object_type": "factory",
+            "object": factory
+        }
+
+
+    if action == "airport":
+
+        cost = 25_000_000
+
+        if float(country.get("budget", 0)) < cost:
+            raise HTTPException(
+                status_code=400,
+                detail="Недостаточно средств"
+            )
+
+        airport = {
+            "id": str(uuid4()),
+            "latitude": data.latitude,
+            "longitude": data.longitude,
+            "created_at": datetime.utcnow()
+        }
+
+        airports = list(country.get("airports", []))
+        airports.append(airport)
+
+        await ctw3_countries.update_one(
+            {"_id": country["_id"]},
+            {
+                "$set": {
+                    "airports": airports,
+                    "budget": float(
+                        country.get("budget", 0)
+                    ) - cost
+                }
+            }
+        )
+
+        return {
+            "status": "success",
+            "object_type": "airport",
+            "object": airport
+        }
+
+
+    if action == "air_defense":
+
+        stock = int(
+            country.get("air_defense_stock", 0)
+        )
+
+        if stock <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Нет готовых комплексов ПВО"
+            )
+
+        item = {
+            "id": str(uuid4()),
+            "latitude": data.latitude,
+            "longitude": data.longitude,
+            "created_at": datetime.utcnow()
+        }
+
+        defenses = list(
+            country.get("air_defenses", [])
+        )
+        defenses.append(item)
+
+        await ctw3_countries.update_one(
+            {"_id": country["_id"]},
+            {
+                "$set": {
+                    "air_defenses": defenses,
+                    "air_defense_stock": stock - 1
+                }
+            }
+        )
+
+        return {
+            "status": "success",
+            "object_type": "air_defense",
+            "object": item
+        }
+
+
+    if action == "missile":
+
+        stock = int(
+            country.get("missile_stock", 0)
+        )
+
+        if stock <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Нет готовых ракет"
+            )
+
+        item = {
+            "id": str(uuid4()),
+            "latitude": data.latitude,
+            "longitude": data.longitude,
+            "created_at": datetime.utcnow()
+        }
+
+        missiles = list(
+            country.get("missiles", [])
+        )
+        missiles.append(item)
+
+        await ctw3_countries.update_one(
+            {"_id": country["_id"]},
+            {
+                "$set": {
+                    "missiles": missiles,
+                    "missile_stock": stock - 1
+                }
+            }
+        )
+
+        return {
+            "status": "success",
+            "object_type": "missile",
+            "object": item
+        }
+
+
+    raise HTTPException(
+        status_code=400,
+        detail="Неизвестное действие"
     )
 
 
+# =========================================================
+# CTW3 — FACTORY SETTINGS
+# =========================================================
+
+@app.put("/api/ctw3/production")
+async def ctw3_set_production(
+    data: CTW3ProductionSettings,
+    request: Request
+):
+
+    player_id, country = await ctw3_get_country_for_request(
+        request
+    )
+
+    if not country:
+        raise HTTPException(
+            status_code=404,
+            detail="Государство не найдено"
+        )
+
+    country = await ctw3_tick_country(country)
+
+    total_factories = len(
+        country.get("factories", [])
+    )
+
+    profit = int(data.profit)
+    missiles = int(data.missiles)
+    air_defense = int(data.air_defense)
+
+    if min(
+        profit,
+        missiles,
+        air_defense
+    ) < 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Значения не могут быть отрицательными"
+        )
+
+    if profit + missiles + air_defense != total_factories:
+        raise HTTPException(
+            status_code=400,
+            detail="Сумма распределения должна равняться количеству заводов"
+        )
+
+    factories = list(
+        country.get("factories", [])
+    )
+
+    index = 0
+
+    for factory in factories:
+
+        if index < profit:
+            factory["mode"] = "profit"
+
+        elif index < profit + missiles:
+            factory["mode"] = "missiles"
+
+        else:
+            factory["mode"] = "air_defense"
+
+        index += 1
+
+    await ctw3_countries.update_one(
+        {"_id": country["_id"]},
+        {
+            "$set": {
+                "factories": factories,
+                "factory_profit": profit,
+                "factory_missiles": missiles,
+                "factory_air_defense": air_defense
+            }
+        }
+    )
+
     return {
+        "status": "success",
+        "profit": profit,
+        "missiles": missiles,
+        "air_defense": air_defense
+    }
 
-        "registered": True,
 
-        "country": country
+# =========================================================
+# CTW3 — WORLD CHAT
+# =========================================================
 
+@app.get("/api/ctw3/chat")
+async def ctw3_get_chat():
+
+    messages = []
+
+    cursor = (
+        ctw3_chat
+        .find({})
+        .sort("created_at", -1)
+        .limit(100)
+    )
+
+    async for message in cursor:
+
+        messages.append({
+            "id": str(message["_id"]),
+            "country_name": message.get(
+                "country_name",
+                "Unknown"
+            ),
+            "country_flag": message.get(
+                "country_flag",
+                "🏳️"
+            ),
+            "text": message.get(
+                "text",
+                ""
+            ),
+            "created_at": (
+                message["created_at"].isoformat()
+                if isinstance(
+                    message.get("created_at"),
+                    datetime
+                )
+                else message.get(
+                    "created_at"
+                )
+            )
+        })
+
+    messages.reverse()
+
+    return {
+        "messages": messages
+    }
+
+
+@app.post("/api/ctw3/chat")
+async def ctw3_send_chat(
+    data: CTW3ChatMessage,
+    request: Request
+):
+
+    player_id, country = await ctw3_get_country_for_request(
+        request
+    )
+
+    if not country:
+        raise HTTPException(
+            status_code=404,
+            detail="Государство не найдено"
+        )
+
+    text = data.text.strip()
+
+    if not text:
+        raise HTTPException(
+            status_code=400,
+            detail="Сообщение пустое"
+        )
+
+    if len(text) > 500:
+        raise HTTPException(
+            status_code=400,
+            detail="Сообщение слишком длинное"
+        )
+
+    message = {
+        "country_name": country["name"],
+        "country_flag": country["flag"],
+        "text": text,
+        "created_at": datetime.utcnow()
+    }
+
+    result = await ctw3_chat.insert_one(message)
+
+    return {
+        "status": "success",
+        "message": {
+            "id": str(result.inserted_id),
+            **message,
+            "created_at": message["created_at"].isoformat()
+        }
+    }
+
+
+# =========================================================
+# CTW3 — ATTACK
+# =========================================================
+
+@app.post("/api/ctw3/attack")
+async def ctw3_attack(
+    data: CTW3Attack,
+    request: Request
+):
+
+    player_id, attacker = await ctw3_get_country_for_request(
+        request
+    )
+
+    if not attacker:
+        raise HTTPException(
+            status_code=404,
+            detail="Государство не найдено"
+        )
+
+    attacker = await ctw3_tick_country(attacker)
+
+    ctw3_require_territory(attacker)
+
+    missile = next(
+        (
+            m for m in attacker.get("missiles", [])
+            if m.get("id") == data.missile_id
+        ),
+        None
+    )
+
+    if not missile:
+        raise HTTPException(
+            status_code=404,
+            detail="Ракета не найдена"
+        )
+
+    try:
+        from bson import ObjectId
+
+        target = await ctw3_countries.find_one({
+            "_id": ObjectId(data.target_country_id)
+        })
+
+    except Exception:
+        target = None
+
+    if not target:
+        raise HTTPException(
+            status_code=404,
+            detail="Цель не найдена"
+        )
+
+    if target.get("player_id") == attacker.get("player_id"):
+        raise HTTPException(
+            status_code=400,
+            detail="Нельзя атаковать своё государство"
+        )
+
+    target = await ctw3_tick_country(target)
+
+    # -----------------------------------------------------
+    # Simple persistent interception check.
+    # Nearest deployed air-defense can intercept.
+    # -----------------------------------------------------
+
+    defenses = list(
+        target.get("air_defenses", [])
+    )
+
+    intercepted = False
+    interceptor = None
+
+    for defense in defenses:
+
+        distance = ctw3_distance_km(
+            defense.get("latitude", 0),
+            defense.get("longitude", 0),
+            data.latitude,
+            data.longitude
+        )
+
+        if distance <= 250:
+            intercepted = True
+            interceptor = defense
+            break
+
+    missiles = [
+        m for m in attacker.get("missiles", [])
+        if m.get("id") != data.missile_id
+    ]
+
+    await ctw3_countries.update_one(
+        {"_id": attacker["_id"]},
+        {
+            "$set": {
+                "missiles": missiles
+            }
+        }
+    )
+
+    if intercepted:
+
+        return {
+            "status": "intercepted",
+            "interceptor_id": interceptor.get("id"),
+            "target_country_id": data.target_country_id
+        }
+
+    # -----------------------------------------------------
+    # Destroy target object if supplied.
+    # Cities receive damage instead of being deleted.
+    # -----------------------------------------------------
+
+    target_object_id = data.target_object_id
+
+    if target_object_id:
+
+        cities = list(target.get("cities", []))
+        factories = list(target.get("factories", []))
+        airports = list(target.get("airports", []))
+        target_missiles = list(target.get("missiles", []))
+        target_defenses = list(target.get("air_defenses", []))
+
+        city = next(
+            (
+                c for c in cities
+                if c.get("id") == target_object_id
+            ),
+            None
+        )
+
+        if city:
+
+            city["damage"] = min(
+                100,
+                int(city.get("damage", 0)) + 35
+            )
+
+            await ctw3_countries.update_one(
+                {"_id": target["_id"]},
+                {
+                    "$set": {
+                        "cities": cities
+                    }
+                }
+            )
+
+            return {
+                "status": "hit",
+                "result": "city_damaged",
+                "target_object_id": target_object_id
+            }
+
+        # Other objects are destroyed.
+        factories = [
+            x for x in factories
+            if x.get("id") != target_object_id
+        ]
+
+        airports = [
+            x for x in airports
+            if x.get("id") != target_object_id
+        ]
+
+        target_missiles = [
+            x for x in target_missiles
+            if x.get("id") != target_object_id
+        ]
+
+        target_defenses = [
+            x for x in target_defenses
+            if x.get("id") != target_object_id
+        ]
+
+        await ctw3_countries.update_one(
+            {"_id": target["_id"]},
+            {
+                "$set": {
+                    "factories": factories,
+                    "airports": airports,
+                    "missiles": target_missiles,
+                    "air_defenses": target_defenses,
+                    "factory_profit": sum(
+                        1 for f in factories
+                        if f.get("mode") == "profit"
+                    ),
+                    "factory_missiles": sum(
+                        1 for f in factories
+                        if f.get("mode") == "missiles"
+                    ),
+                    "factory_air_defense": sum(
+                        1 for f in factories
+                        if f.get("mode") == "air_defense"
+                    )
+                }
+            }
+        )
+
+    return {
+        "status": "hit",
+        "result": "target_damaged",
+        "target_country_id": data.target_country_id
     }
 
 # 🛑 ОТЛАДОЧНЫЙ ШЛЮЗ: Логирует статус загрузки 3D графики прямо в консоль Render
