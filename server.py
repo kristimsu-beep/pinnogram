@@ -117,16 +117,22 @@ app.add_middleware(
 # Умные пути для сервера и локального ПК
 BASE_DIR = "/data" if os.path.exists("/data") else os.getcwd()
 
-# Карты /newmap
-maps_path = os.path.join(BASE_DIR, "maps")
+# =========================
+# NEWMAP — карты
+# =========================
 
-if not os.path.exists(maps_path):
-    os.makedirs(maps_path, exist_ok=True)
+map_path = os.path.join(
+    os.getcwd(),
+    "map"
+)
+
+if not os.path.exists(map_path):
+    os.makedirs(map_path, exist_ok=True)
 
 app.mount(
-    "/maps",
-    StaticFiles(directory=maps_path),
-    name="maps"
+    "/map",
+    StaticFiles(directory=map_path),
+    name="map"
 )
 
 # ТВОИ РЕАЛЬНЫЕ КЛЮЧИ (ПРИВАТНЫЙ ВСТАВЛЕН)
