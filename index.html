@@ -909,7 +909,208 @@
         object-fit: contain;
         background: #000;
     }
+/* =========================================================
+   PINNOGRAM — расширенные контролы видеозвонка
+   ========================================================= */
 
+.call-extra-controls {
+    position: absolute;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 10020;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+
+    padding: 8px;
+    border-radius: 22px;
+
+    background: rgba(15, 15, 20, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+
+    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.35);
+}
+
+.call-extra-btn {
+    width: 42px;
+    height: 42px;
+    padding: 0 !important;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 50% !important;
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+
+    font-size: 18px;
+    cursor: pointer;
+    transition: 0.18s ease;
+}
+
+.call-extra-btn:hover {
+    background: rgba(255, 255, 255, 0.22);
+    transform: translateY(-2px);
+}
+
+.call-extra-btn:active {
+    transform: scale(0.92);
+}
+
+.call-extra-btn.active {
+    background: var(--accent, #00aaff);
+}
+
+.call-extra-btn.danger {
+    background: rgba(255, 59, 48, 0.75);
+}
+
+.call-volume-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    height: 42px;
+    padding: 0 10px;
+
+    border-radius: 21px;
+    background: rgba(255, 255, 255, 0.10);
+}
+
+#call-volume {
+    width: 80px;
+    accent-color: #00aaff;
+}
+
+#call-quality {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    z-index: 10020;
+
+    padding: 7px 11px;
+    border-radius: 16px;
+
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+
+    font-size: 12px;
+    font-weight: 600;
+
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+#call-quality.good {
+    color: #7cff9e;
+}
+
+#call-quality.medium {
+    color: #ffd166;
+}
+
+#call-quality.bad {
+    color: #ff6b6b;
+}
+
+#call-stats {
+    display: none;
+
+    position: absolute;
+    top: 58px;
+    left: 18px;
+    z-index: 10025;
+
+    width: 240px;
+    padding: 13px;
+
+    border-radius: 15px;
+
+    background: rgba(10, 10, 15, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+
+    color: white;
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 1.65;
+
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+}
+
+#call-devices-panel {
+    display: none;
+
+    position: absolute;
+    right: 18px;
+    top: 18px;
+    z-index: 10025;
+
+    width: 270px;
+    max-width: calc(100vw - 36px);
+
+    padding: 14px;
+
+    border-radius: 16px;
+
+    background: rgba(10, 10, 15, 0.90);
+    border: 1px solid rgba(255, 255, 255, 0.13);
+
+    color: white;
+
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+}
+
+.call-device-label {
+    display: block;
+    margin: 8px 0 4px;
+
+    font-size: 11px;
+    opacity: 0.65;
+}
+
+.call-device-select {
+    width: 100%;
+    padding: 8px;
+
+    border-radius: 9px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+
+    background: #17171c;
+    color: white;
+    outline: none;
+}
+
+#localVideo.screen-sharing {
+    border-color: #00aaff !important;
+    box-shadow: 0 0 20px rgba(0, 170, 255, 0.45);
+}
+
+@media (max-width: 600px) {
+    .call-extra-controls {
+        bottom: calc(15px + env(safe-area-inset-bottom));
+        max-width: calc(100vw - 20px);
+        overflow-x: auto;
+    }
+
+    .call-extra-btn {
+        width: 40px;
+        height: 40px;
+        flex: 0 0 40px;
+    }
+
+    #call-volume {
+        width: 60px;
+    }
+}
 </style>
 
 </head>
@@ -1107,13 +1308,124 @@
 
 
 
-<div id="video-call-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:10000;">
-    <!-- Ссылка на видео должна быть с четким ID -->
-    <video id="remoteVideo" autoplay playsinline style="width:100vw; height:100vh; object-fit:cover; position:absolute; top:0; left:0;"></video>
-    <video id="localVideo" autoplay playsinline muted style="width:100px; height:140px; position:absolute; bottom:20px; right:20px; border:2px solid white; border-radius:10px; object-fit:cover; z-index:10005;"></video>
-    
-    <!-- Кнопка сброса ДОЛЖНА БЫТЬ ВИДИМОЙ -->
-    <button onclick="endCall()" style="position:absolute; bottom:30px; left:50%; transform:translateX(-50%); background:red; width:70px; height:70px; border-radius:50% !important; z-index:10010; font-size:30px; border:none; color:white; cursor:pointer;">🛑</button>
+<div id="video-call-overlay"
+     style="display:none; position:fixed; inset:0; width:100%; height:100%; background:black; z-index:10000;">
+
+    <!-- СОБЕСЕДНИК -->
+    <video id="remoteVideo"
+           autoplay
+           playsinline
+           style="width:100vw; height:100vh; object-fit:cover; position:absolute; inset:0;">
+    </video>
+
+    <!-- ВАШЕ ВИДЕО -->
+    <video id="localVideo"
+           autoplay
+           playsinline
+           muted
+           style="width:120px; height:165px; position:absolute; bottom:90px; right:18px; border:2px solid white; border-radius:14px; object-fit:cover; z-index:10005; cursor:pointer;"
+           onclick="swapCallVideos()">
+    </video>
+
+    <!-- КАЧЕСТВО -->
+    <div id="call-quality">📶 Подключение...</div>
+
+    <!-- СТАТИСТИКА -->
+    <div id="call-stats"></div>
+
+    <!-- ПАНЕЛЬ УСТРОЙСТВ -->
+    <div id="call-devices-panel">
+
+        <b>🎚️ Устройства</b>
+
+        <label class="call-device-label">
+            Камера
+        </label>
+
+        <select id="call-camera-select"
+                class="call-device-select"
+                onchange="changeCallCamera(this.value)">
+        </select>
+
+        <label class="call-device-label">
+            Микрофон
+        </label>
+
+        <select id="call-mic-select"
+                class="call-device-select"
+                onchange="changeCallMicrophone(this.value)">
+        </select>
+
+        <label class="call-device-label">
+            Динамик
+        </label>
+
+        <select id="call-speaker-select"
+                class="call-device-select"
+                onchange="changeCallSpeaker(this.value)">
+        </select>
+
+    </div>
+
+    <!-- ДОПОЛНИТЕЛЬНЫЕ КОНТРОЛЫ -->
+    <div class="call-extra-controls">
+
+        <button class="call-extra-btn"
+                onclick="switchCamera()"
+                title="Переключить камеру">
+            🔄
+        </button>
+
+        <button class="call-extra-btn"
+                onclick="toggleScreenShare()"
+                id="screen-share-btn"
+                title="Демонстрация экрана">
+            🖥️
+        </button>
+
+        <button class="call-extra-btn"
+                onclick="toggleStats()"
+                title="Статистика">
+            📊
+        </button>
+
+        <button class="call-extra-btn"
+                onclick="toggleDevicesPanel()"
+                title="Устройства">
+            🎚️
+        </button>
+
+        <button class="call-extra-btn"
+                onclick="toggleCallFullscreen()"
+                title="Полный экран">
+            ⛶
+        </button>
+
+        <button class="call-extra-btn"
+                onclick="togglePiP()"
+                title="Picture-in-Picture">
+            🖼️
+        </button>
+
+        <div class="call-volume-box">
+            🔊
+            <input id="call-volume"
+                   type="range"
+                   min="0"
+                   max="1"
+                   step="0.01"
+                   value="1"
+                   oninput="setCallVolume(this.value)">
+        </div>
+
+        <button class="call-extra-btn danger"
+                onclick="endCall()"
+                title="Завершить звонок">
+            📞
+        </button>
+
+    </div>
+
 </div>
 
 
@@ -2155,9 +2467,32 @@
 
 
 
-let currentCallData = null; 
-let iceQueue = []; 
+let currentCallData = null;
+let iceQueue = [];
 let voiceWaves = [];
+
+/* =========================================================
+   PINNOGRAM CALL FEATURES
+   ========================================================= */
+
+let callStatsTimer = null;
+let callStatsVisible = false;
+
+let callDevicesVisible = false;
+
+let screenStream = null;
+let cameraTrackBeforeShare = null;
+
+let callStartedAt = null;
+
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+
+let currentCameraDeviceId = null;
+let currentMicrophoneDeviceId = null;
+let currentSpeakerDeviceId = null;
+
+let callRemoteVolume = 1;
 
 function minimizeCall() {
     const ui = document.getElementById('incoming-call-ui');
@@ -2200,48 +2535,850 @@ function minimizeCall() {
 // УПРАВЛЕНИЕ МИКРОФОНОМ (Neon Style)
 function toggleMic(btn) {
     if (!localStream) return;
+
     const audioTrack = localStream.getAudioTracks()[0];
-    if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        
-        // Переключаем стиль: если выключен — красный неон, если включен — фиолет (как в CSS)
-        if (!audioTrack.enabled) {
-            btn.style.filter = "grayscale(0.8) brightness(0.5)";
-            btn.style.borderColor = "#ff3b30"; // Красный контур
-            btn.style.boxShadow = "0 0 10px rgba(255, 59, 48, 0.4)";
-        } else {
-            btn.style.filter = "";
-            btn.style.borderColor = ""; 
-            btn.style.boxShadow = ""; 
-        }
-        console.log("🎤 Микрофон:", audioTrack.enabled ? "ВКЛ" : "ВЫКЛ");
-    }
+
+    if (!audioTrack) return;
+
+    audioTrack.enabled = !audioTrack.enabled;
+
+    btn.style.filter = audioTrack.enabled
+        ? ""
+        : "grayscale(0.8) brightness(0.5)";
+
+    btn.style.borderColor = audioTrack.enabled
+        ? ""
+        : "#ff3b30";
+
+    console.log(
+        "🎤 Микрофон:",
+        audioTrack.enabled ? "ВКЛ" : "ВЫКЛ"
+    );
 }
 
-// УПРАВЛЕНИЕ КАМЕРОЙ (Neon Style)
+
 function toggleVideo(btn) {
     if (!localStream) return;
+
     const videoTrack = localStream.getVideoTracks()[0];
-    if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        
-        if (!videoTrack.enabled) {
-            btn.style.filter = "grayscale(0.8) brightness(0.5)";
-            btn.style.borderColor = "#ff3b30"; 
-            btn.style.boxShadow = "0 0 10px rgba(255, 59, 48, 0.4)";
-            const lv = document.getElementById('localVideo');
-            if (lv) lv.style.opacity = "0.2";
-        } else {
-            btn.style.filter = "";
-            btn.style.borderColor = "";
-            btn.style.boxShadow = "";
-            const lv = document.getElementById('localVideo');
-            if (lv) lv.style.opacity = "1";
+
+    if (!videoTrack) return;
+
+    videoTrack.enabled = !videoTrack.enabled;
+
+    btn.style.filter = videoTrack.enabled
+        ? ""
+        : "grayscale(0.8) brightness(0.5)";
+
+    btn.style.borderColor = videoTrack.enabled
+        ? ""
+        : "#ff3b30";
+
+    const lv = document.getElementById("localVideo");
+
+    if (lv) {
+        lv.style.opacity = videoTrack.enabled ? "1" : "0.2";
+    }
+
+    console.log(
+        "📷 Камера:",
+        videoTrack.enabled ? "ВКЛ" : "ВЫКЛ"
+    );
+}
+
+/* =========================================================
+   PINNOGRAM — РАСШИРЕННЫЕ ФУНКЦИИ ЗВОНКА
+   ========================================================= */
+
+
+/* ---------- 1. ПЕРЕКЛЮЧЕНИЕ КАМЕРЫ ---------- */
+
+async function switchCamera() {
+    if (!localStream || !pc) return;
+
+    try {
+        const oldTrack = localStream.getVideoTracks()[0];
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+
+        const cameras = devices.filter(
+            d => d.kind === "videoinput"
+        );
+
+        if (cameras.length < 2) {
+            alert("На устройстве доступна только одна камера.");
+            return;
         }
-        console.log("📷 Камера:", videoTrack.enabled ? "ВКЛ" : "ВЫКЛ");
+
+        const currentId = oldTrack?.getSettings()?.deviceId;
+
+        let index = cameras.findIndex(
+            c => c.deviceId === currentId
+        );
+
+        index = (index + 1) % cameras.length;
+
+        const nextCamera = cameras[index];
+
+        const newStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                deviceId: {
+                    exact: nextCamera.deviceId
+                }
+            },
+            audio: false
+        });
+
+        const newTrack = newStream.getVideoTracks()[0];
+
+        const sender = pc.getSenders().find(
+            s => s.track && s.track.kind === "video"
+        );
+
+        if (sender) {
+            await sender.replaceTrack(newTrack);
+        }
+
+        if (oldTrack) {
+            oldTrack.stop();
+        }
+
+        localStream.removeTrack(oldTrack);
+        localStream.addTrack(newTrack);
+
+        const localVideo = document.getElementById("localVideo");
+
+        if (localVideo) {
+            localVideo.srcObject = localStream;
+        }
+
+        currentCameraDeviceId = nextCamera.deviceId;
+
+        await refreshCallDevices();
+
+        console.log("🔄 Камера переключена:", nextCamera.label);
+
+    } catch (err) {
+        console.error("Ошибка переключения камеры:", err);
     }
 }
 
+
+/* ---------- 2. DEMO ЭКРАНА ---------- */
+
+async function toggleScreenShare() {
+    if (!pc || !localStream) return;
+
+    const btn = document.getElementById("screen-share-btn");
+
+    if (screenStream) {
+        await stopScreenShare();
+        return;
+    }
+
+    try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: true
+        });
+
+        const screenTrack = stream.getVideoTracks()[0];
+
+        const sender = pc.getSenders().find(
+            s => s.track && s.track.kind === "video"
+        );
+
+        if (!sender) {
+            screenTrack.stop();
+            return;
+        }
+
+        cameraTrackBeforeShare =
+            localStream.getVideoTracks()[0];
+
+        await sender.replaceTrack(screenTrack);
+
+        screenStream = stream;
+
+        const localVideo = document.getElementById("localVideo");
+
+        if (localVideo) {
+            localVideo.srcObject = stream;
+            localVideo.classList.add("screen-sharing");
+        }
+
+        if (btn) {
+            btn.classList.add("active");
+            btn.textContent = "🛑";
+        }
+
+        screenTrack.onended = () => {
+            stopScreenShare();
+        };
+
+        console.log("🖥️ Демонстрация экрана включена");
+
+    } catch (err) {
+        console.log("Демонстрация экрана отменена:", err);
+    }
+}
+
+
+async function stopScreenShare() {
+    if (!pc || !screenStream) return;
+
+    try {
+        const sender = pc.getSenders().find(
+            s => s.track && s.track.kind === "video"
+        );
+
+        if (
+            sender &&
+            cameraTrackBeforeShare &&
+            cameraTrackBeforeShare.readyState === "live"
+        ) {
+            await sender.replaceTrack(cameraTrackBeforeShare);
+        }
+
+        screenStream.getTracks().forEach(
+            track => track.stop()
+        );
+
+        screenStream = null;
+
+        const localVideo = document.getElementById("localVideo");
+
+        if (localVideo) {
+            localVideo.srcObject = localStream;
+            localVideo.classList.remove("screen-sharing");
+        }
+
+        const btn = document.getElementById("screen-share-btn");
+
+        if (btn) {
+            btn.classList.remove("active");
+            btn.textContent = "🖥️";
+        }
+
+        cameraTrackBeforeShare = null;
+
+        console.log("📷 Возврат к камере");
+
+    } catch (err) {
+        console.error("Ошибка остановки screen share:", err);
+    }
+}
+
+
+/* ---------- 3. ГРОМКОСТЬ СОБЕСЕДНИКА ---------- */
+
+function setCallVolume(value) {
+    callRemoteVolume = Number(value);
+
+    const video = document.getElementById("remoteVideo");
+
+    if (video) {
+        video.volume = callRemoteVolume;
+    }
+}
+
+
+/* ---------- 4. SWAP VIDEO ---------- */
+
+function swapCallVideos() {
+    const remote = document.getElementById("remoteVideo");
+    const local = document.getElementById("localVideo");
+
+    if (!remote || !local) return;
+
+    if (local.dataset.fullscreen === "1") {
+        local.dataset.fullscreen = "0";
+
+        local.style.width = "120px";
+        local.style.height = "165px";
+        local.style.bottom = "90px";
+        local.style.right = "18px";
+
+        remote.style.display = "block";
+    } else {
+        local.dataset.fullscreen = "1";
+
+        local.style.width = "100vw";
+        local.style.height = "100vh";
+        local.style.bottom = "0";
+        local.style.right = "0";
+        local.style.borderRadius = "0";
+
+        local.style.zIndex = "10015";
+
+        remote.style.display = "none";
+    }
+}
+
+
+/* ---------- 5. FULLSCREEN ---------- */
+
+async function toggleCallFullscreen() {
+    const overlay = document.getElementById("video-call-overlay");
+
+    if (!overlay) return;
+
+    try {
+        if (!document.fullscreenElement) {
+            await overlay.requestFullscreen();
+        } else {
+            await document.exitFullscreen();
+        }
+    } catch (err) {
+        console.warn("Fullscreen недоступен:", err);
+    }
+}
+
+
+/* ---------- 6. PICTURE-IN-PICTURE ---------- */
+
+async function togglePiP() {
+    const localVideo = document.getElementById("localVideo");
+
+    if (!localVideo) return;
+
+    try {
+        if (document.pictureInPictureElement) {
+            await document.exitPictureInPicture();
+            return;
+        }
+
+        if (
+            document.pictureInPictureEnabled &&
+            localVideo.readyState >= 2
+        ) {
+            await localVideo.requestPictureInPicture();
+        }
+
+    } catch (err) {
+        console.warn("PiP недоступен:", err);
+    }
+}
+
+
+/* ---------- 7. КАЧЕСТВО СОЕДИНЕНИЯ ---------- */
+
+async function updateCallQuality() {
+    if (!pc) return;
+
+    try {
+        const stats = await pc.getStats();
+
+        let packetsLost = 0;
+        let packetsReceived = 0;
+
+        let roundTripTime = null;
+
+        stats.forEach(report => {
+
+            if (
+                report.type === "inbound-rtp" &&
+                report.kind === "video"
+            ) {
+                packetsLost += report.packetsLost || 0;
+                packetsReceived += report.packetsReceived || 0;
+            }
+
+            if (
+                report.type === "candidate-pair" &&
+                report.state === "succeeded"
+            ) {
+                if (report.currentRoundTripTime != null) {
+                    roundTripTime =
+                        report.currentRoundTripTime * 1000;
+                }
+            }
+
+        });
+
+        let loss = 0;
+
+        if (packetsReceived + packetsLost > 0) {
+            loss =
+                (packetsLost /
+                (packetsReceived + packetsLost)) * 100;
+        }
+
+        const quality = document.getElementById("call-quality");
+
+        if (!quality) return;
+
+        let text = "📶 Отличное соединение";
+        let cls = "good";
+
+        if (
+            (roundTripTime !== null && roundTripTime > 180) ||
+            loss > 5
+        ) {
+            text = "📶 Плохое соединение";
+            cls = "bad";
+
+        } else if (
+            (roundTripTime !== null && roundTripTime > 90) ||
+            loss > 2
+        ) {
+            text = "📶 Среднее соединение";
+            cls = "medium";
+        }
+
+        quality.textContent = text;
+
+        quality.classList.remove(
+            "good",
+            "medium",
+            "bad"
+        );
+
+        quality.classList.add(cls);
+
+    } catch (err) {
+        console.warn("Stats error:", err);
+    }
+}
+
+
+/* ---------- 8. СТАТИСТИКА ---------- */
+
+async function updateCallStats() {
+    if (!pc) return;
+
+    try {
+        const stats = await pc.getStats();
+
+        let rtt = "—";
+        let loss = "—";
+        let resolution = "—";
+        let fps = "—";
+
+        stats.forEach(report => {
+
+            if (
+                report.type === "candidate-pair" &&
+                report.state === "succeeded"
+            ) {
+                if (report.currentRoundTripTime != null) {
+                    rtt =
+                        Math.round(
+                            report.currentRoundTripTime * 1000
+                        ) + " ms";
+                }
+            }
+
+            if (
+                report.type === "inbound-rtp" &&
+                report.kind === "video"
+            ) {
+                if (report.frameWidth && report.frameHeight) {
+                    resolution =
+                        `${report.frameWidth}×${report.frameHeight}`;
+                }
+
+                if (report.framesPerSecond) {
+                    fps =
+                        Math.round(report.framesPerSecond);
+                }
+
+                if (
+                    report.packetsLost != null &&
+                    report.packetsReceived != null
+                ) {
+                    const total =
+                        report.packetsLost +
+                        report.packetsReceived;
+
+                    if (total > 0) {
+                        loss =
+                            (
+                                report.packetsLost /
+                                total *
+                                100
+                            ).toFixed(2) + "%";
+                    }
+                }
+            }
+        });
+
+        const duration = callStartedAt
+            ? Math.floor(
+                (Date.now() - callStartedAt) / 1000
+            )
+            : 0;
+
+        const minutes =
+            String(Math.floor(duration / 60)).padStart(2, "0");
+
+        const seconds =
+            String(duration % 60).padStart(2, "0");
+
+        const box = document.getElementById("call-stats");
+
+        if (box) {
+            box.innerHTML = `
+                <b>📊 Статистика звонка</b><br>
+                ⏱️ Время: ${minutes}:${seconds}<br>
+                📡 RTT: ${rtt}<br>
+                📦 Потери: ${loss}<br>
+                🎥 Видео: ${resolution}<br>
+                🎞️ FPS: ${fps}
+            `;
+        }
+
+    } catch (err) {
+        console.warn("Stats error:", err);
+    }
+}
+
+
+function toggleStats() {
+    const box = document.getElementById("call-stats");
+
+    if (!box) return;
+
+    callStatsVisible = !callStatsVisible;
+
+    box.style.display =
+        callStatsVisible ? "block" : "none";
+}
+
+
+/* ---------- 9. УСТРОЙСТВА ---------- */
+
+async function refreshCallDevices() {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+
+    try {
+        const devices =
+            await navigator.mediaDevices.enumerateDevices();
+
+        const cameraSelect =
+            document.getElementById("call-camera-select");
+
+        const micSelect =
+            document.getElementById("call-mic-select");
+
+        const speakerSelect =
+            document.getElementById("call-speaker-select");
+
+        if (cameraSelect) {
+            cameraSelect.innerHTML = "";
+
+            devices
+                .filter(d => d.kind === "videoinput")
+                .forEach((device, index) => {
+
+                    const option =
+                        document.createElement("option");
+
+                    option.value = device.deviceId;
+
+                    option.textContent =
+                        device.label ||
+                        `Камера ${index + 1}`;
+
+                    cameraSelect.appendChild(option);
+                });
+
+            if (currentCameraDeviceId) {
+                cameraSelect.value =
+                    currentCameraDeviceId;
+            }
+        }
+
+        if (micSelect) {
+            micSelect.innerHTML = "";
+
+            devices
+                .filter(d => d.kind === "audioinput")
+                .forEach((device, index) => {
+
+                    const option =
+                        document.createElement("option");
+
+                    option.value = device.deviceId;
+
+                    option.textContent =
+                        device.label ||
+                        `Микрофон ${index + 1}`;
+
+                    micSelect.appendChild(option);
+                });
+
+            if (currentMicrophoneDeviceId) {
+                micSelect.value =
+                    currentMicrophoneDeviceId;
+            }
+        }
+
+        if (speakerSelect) {
+            speakerSelect.innerHTML = "";
+
+            devices
+                .filter(d => d.kind === "audiooutput")
+                .forEach((device, index) => {
+
+                    const option =
+                        document.createElement("option");
+
+                    option.value = device.deviceId;
+
+                    option.textContent =
+                        device.label ||
+                        `Динамик ${index + 1}`;
+
+                    speakerSelect.appendChild(option);
+                });
+
+            if (currentSpeakerDeviceId) {
+                speakerSelect.value =
+                    currentSpeakerDeviceId;
+            }
+        }
+
+    } catch (err) {
+        console.warn("Не удалось получить устройства:", err);
+    }
+}
+
+
+function toggleDevicesPanel() {
+    const panel =
+        document.getElementById("call-devices-panel");
+
+    if (!panel) return;
+
+    callDevicesVisible = !callDevicesVisible;
+
+    panel.style.display =
+        callDevicesVisible ? "block" : "none";
+
+    if (callDevicesVisible) {
+        refreshCallDevices();
+    }
+}
+
+
+/* ---------- 10. СМЕНА КАМЕРЫ ИЗ СПИСКА ---------- */
+
+async function changeCallCamera(deviceId) {
+    if (!deviceId || !pc || !localStream) return;
+
+    try {
+        const stream =
+            await navigator.mediaDevices.getUserMedia({
+                video: {
+                    deviceId: { exact: deviceId }
+                },
+                audio: false
+            });
+
+        const newTrack =
+            stream.getVideoTracks()[0];
+
+        const sender =
+            pc.getSenders().find(
+                s => s.track?.kind === "video"
+            );
+
+        if (sender) {
+            await sender.replaceTrack(newTrack);
+        }
+
+        const oldTrack =
+            localStream.getVideoTracks()[0];
+
+        if (oldTrack) {
+            oldTrack.stop();
+            localStream.removeTrack(oldTrack);
+        }
+
+        localStream.addTrack(newTrack);
+
+        const localVideo =
+            document.getElementById("localVideo");
+
+        if (localVideo) {
+            localVideo.srcObject = localStream;
+        }
+
+        currentCameraDeviceId = deviceId;
+
+    } catch (err) {
+        console.error("Ошибка смены камеры:", err);
+    }
+}
+
+
+/* ---------- 11. СМЕНА МИКРОФОНА ---------- */
+
+async function changeCallMicrophone(deviceId) {
+    if (!deviceId || !pc || !localStream) return;
+
+    try {
+        const stream =
+            await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    deviceId: { exact: deviceId }
+                },
+                video: false
+            });
+
+        const newTrack =
+            stream.getAudioTracks()[0];
+
+        const sender =
+            pc.getSenders().find(
+                s => s.track?.kind === "audio"
+            );
+
+        if (sender) {
+            await sender.replaceTrack(newTrack);
+        }
+
+        const oldTrack =
+            localStream.getAudioTracks()[0];
+
+        if (oldTrack) {
+            oldTrack.stop();
+            localStream.removeTrack(oldTrack);
+        }
+
+        localStream.addTrack(newTrack);
+
+        currentMicrophoneDeviceId = deviceId;
+
+    } catch (err) {
+        console.error("Ошибка смены микрофона:", err);
+    }
+}
+
+
+/* ---------- 12. СМЕНА ДИНАМИКА ---------- */
+
+async function changeCallSpeaker(deviceId) {
+    const remoteVideo =
+        document.getElementById("remoteVideo");
+
+    if (!remoteVideo) return;
+
+    try {
+        if (typeof remoteVideo.setSinkId === "function") {
+            await remoteVideo.setSinkId(deviceId);
+            currentSpeakerDeviceId = deviceId;
+        } else {
+            console.warn(
+                "Этот браузер не поддерживает выбор динамика."
+            );
+        }
+
+    } catch (err) {
+        console.error("Ошибка смены динамика:", err);
+    }
+}
+
+
+/* ---------- 13. ИНИЦИАЛИЗАЦИЯ ФИШЕК ---------- */
+
+function startCallFeatures() {
+    callStartedAt = Date.now();
+
+    clearInterval(callStatsTimer);
+
+    callStatsTimer = setInterval(() => {
+
+        updateCallQuality();
+
+        if (callStatsVisible) {
+            updateCallStats();
+        }
+
+    }, 2000);
+
+    const remoteVideo =
+        document.getElementById("remoteVideo");
+
+    if (remoteVideo) {
+        remoteVideo.volume = callRemoteVolume;
+    }
+
+    refreshCallDevices();
+
+    navigator.mediaDevices?.addEventListener?.(
+        "devicechange",
+        refreshCallDevices
+    );
+}
+
+
+/* ---------- 14. ОЧИСТКА ФИШЕК ---------- */
+
+function stopCallFeatures() {
+    clearInterval(callStatsTimer);
+    callStatsTimer = null;
+
+    callStatsVisible = false;
+    callDevicesVisible = false;
+
+    const stats =
+        document.getElementById("call-stats");
+
+    if (stats) {
+        stats.style.display = "none";
+    }
+
+    const devices =
+        document.getElementById("call-devices-panel");
+
+    if (devices) {
+        devices.style.display = "none";
+    }
+
+    if (screenStream) {
+        screenStream.getTracks().forEach(
+            t => t.stop()
+        );
+
+        screenStream = null;
+    }
+
+    cameraTrackBeforeShare = null;
+
+    const btn =
+        document.getElementById("screen-share-btn");
+
+    if (btn) {
+        btn.classList.remove("active");
+        btn.textContent = "🖥️";
+    }
+
+    const localVideo =
+        document.getElementById("localVideo");
+
+    if (localVideo) {
+        localVideo.classList.remove("screen-sharing");
+        localVideo.dataset.fullscreen = "0";
+
+        localVideo.style.width = "120px";
+        localVideo.style.height = "165px";
+        localVideo.style.bottom = "90px";
+        localVideo.style.right = "18px";
+        localVideo.style.borderRadius = "14px";
+    }
+
+    const remoteVideo =
+        document.getElementById("remoteVideo");
+
+    if (remoteVideo) {
+        remoteVideo.style.display = "block";
+        remoteVideo.volume = 1;
+    }
+
+    callStartedAt = null;
+    }
 
 async function startCall() {
     // 🎯 ФИКС №1: Если partner не определен, пробуем взять его из заголовка чата
@@ -2287,100 +3424,487 @@ async function startCall() {
 // 2. ИНИЦИАЛИЗАЦИЯ WebRTC (С поддержкой приватности)
 async function initRTCPeer(isCaller, targetUser) {
     console.log("📡 Запуск WebRTC для цели:", targetUser);
+
     try {
-        // 1. Получаем доступ к камере и микрофону
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        
-        // Запускаем пульсацию аватарки (визуализатор)
-        startVoiceVisualization(localStream); 
-        
-        // Показываем превью СВОЕЙ камеры
+        // =====================================================
+        // 1. КАМЕРА + МИКРОФОН
+        // =====================================================
+
+        localStream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true
+        });
+
+        // Запускаем существующий визуализатор голоса
+        startVoiceVisualization(localStream);
+
+        // Показываем собственную камеру
         const localVid = document.getElementById('localVideo');
-        if (localVid) localVid.srcObject = localStream;
+
+        if (localVid) {
+            localVid.srcObject = localStream;
+            localVid.muted = true;
+            localVid.playsInline = true;
+
+            localVid.play().catch(() => {
+                console.log("📱 Автозапуск localVideo заблокирован");
+            });
+        }
+
+
+        // =====================================================
+        // 2. НАСТРОЙКИ WEBRTC
+        // =====================================================
 
         const configuration = {
             iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' }
+                {
+                    urls: 'stun:stun.l.google.com:19302'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                }
             ]
         };
 
+
+        // =====================================================
+        // 3. СОЗДАЁМ PEER CONNECTION
+        // =====================================================
+
         pc = new RTCPeerConnection(configuration);
-        
-        // Добавляем наши треки в соединение
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-        // Когда получаем видео от собеседника
-        pc.ontrack = (event) => {
-            console.log("%c🎬 [WebRTC] ВИДЕО ПОЛУЧЕНО!", "color: lime; font-weight: bold;");
+        console.log("✅ RTCPeerConnection создан");
+
+
+        // =====================================================
+        // 4. ДОБАВЛЯЕМ ЛОКАЛЬНЫЕ ТРЕКИ
+        // =====================================================
+
+        localStream.getTracks().forEach(track => {
+            try {
+                pc.addTrack(track, localStream);
+            } catch (e) {
+                console.warn("⚠️ Не удалось добавить track:", e);
+            }
+        });
+
+
+        // =====================================================
+        // 5. СОСТОЯНИЕ СОЕДИНЕНИЯ
+        // =====================================================
+
+        pc.onconnectionstatechange = () => {
+            if (!pc) return;
+
+            console.log(
+                "📡 WebRTC connectionState:",
+                pc.connectionState
+            );
+
+            const quality = document.getElementById('call-quality');
+
+            if (quality) {
+                quality.classList.remove(
+                    'good',
+                    'medium',
+                    'bad'
+                );
+            }
+
+            if (pc.connectionState === "connected") {
+                console.log("🟢 WebRTC соединение установлено");
+
+                if (quality) {
+                    quality.textContent = "📶 Соединение установлено";
+                    quality.classList.add("good");
+                }
+
+                reconnectAttempts = 0;
+
+                if (typeof startCallFeatures === "function") {
+                    startCallFeatures();
+                }
+            }
+
+            else if (pc.connectionState === "connecting") {
+                if (quality) {
+                    quality.textContent = "🔄 Подключение...";
+                    quality.classList.add("medium");
+                }
+            }
+
+            else if (pc.connectionState === "disconnected") {
+                console.warn("⚠️ WebRTC соединение прервано");
+
+                if (quality) {
+                    quality.textContent = "⚠️ Соединение прервано";
+                    quality.classList.add("medium");
+                }
+            }
+
+            else if (pc.connectionState === "failed") {
+                console.error("❌ WebRTC соединение потеряно");
+
+                if (quality) {
+                    quality.textContent = "❌ Соединение потеряно";
+                    quality.classList.add("bad");
+                }
+
+                if (
+                    typeof attemptCallReconnect === "function" &&
+                    reconnectAttempts < 3
+                ) {
+                    attemptCallReconnect();
+                }
+            }
+
+            else if (pc.connectionState === "closed") {
+                console.log("🔴 WebRTC соединение закрыто");
+            }
+        };
+
+
+        // =====================================================
+        // 6. ICE CONNECTION STATE
+        // =====================================================
+
+        pc.oniceconnectionstatechange = () => {
+            if (!pc) return;
+
+            console.log(
+                "🧊 ICE connectionState:",
+                pc.iceConnectionState
+            );
+
+            if (pc.iceConnectionState === "connected" ||
+                pc.iceConnectionState === "completed") {
+
+                const quality = document.getElementById('call-quality');
+
+                if (quality) {
+                    quality.textContent = "📶 Стабильное соединение";
+                    quality.classList.remove(
+                        'medium',
+                        'bad'
+                    );
+                    quality.classList.add('good');
+                }
+            }
+
+            if (pc.iceConnectionState === "failed") {
+                console.warn("⚠️ ICE connection failed");
+
+                if (
+                    typeof attemptCallReconnect === "function" &&
+                    reconnectAttempts < 3
+                ) {
+                    attemptCallReconnect();
+                }
+            }
+        };
+
+
+        // =====================================================
+        // 7. ICE CANDIDATES
+        // =====================================================
+
+        pc.onicecandidate = event => {
+            if (!event.candidate) {
+                return;
+            }
+
+            const finalTarget = targetUser || currentPartner;
+
+            if (
+                !finalTarget ||
+                finalTarget === "undefined" ||
+                finalTarget === "general"
+            ) {
+                console.warn(
+                    "⚠️ [RTC] Не могу отправить ICE: получатель не определён"
+                );
+                return;
+            }
+
+            const signal = {
+                candidate: event.candidate,
+                from: myName,
+                to: finalTarget
+            };
+
+            console.log(
+                `🧊 [ICE] Отправка кандидата для: ${finalTarget}`
+            );
+
+            if (
+                ws &&
+                ws.readyState === WebSocket.OPEN
+            ) {
+                ws.send(
+                    `TO_USER:${finalTarget}|RTC_SIGNAL:${JSON.stringify(signal)}`
+                );
+            }
+        };
+
+
+        // =====================================================
+        // 8. ПОЛУЧЕНИЕ УДАЛЁННОГО ВИДЕО/АУДИО
+        // =====================================================
+
+        pc.ontrack = event => {
+            console.log(
+                "%c🎬 [WebRTC] Получен удалённый track",
+                "color: lime; font-weight: bold;"
+            );
+
             const remoteVid = document.getElementById('remoteVideo');
-            if (remoteVid) {
-                // 🎯 УМНЫЙ ПОДХОД: Берем поток или создаем его из трека
-                if (event.streams && event.streams[0]) {
-                    remoteVid.srcObject = event.streams[0];
-                } else {
-                    remoteVid.srcObject = new MediaStream([event.track]);
+
+            if (!remoteVid) {
+                console.warn("⚠️ #remoteVideo не найден");
+                return;
+            }
+
+            // Используем существующий поток, если браузер его передал
+            if (event.streams && event.streams[0]) {
+                remoteVid.srcObject = event.streams[0];
+            } else {
+                // Запасной вариант
+                let remoteStream = remoteVid.srcObject;
+
+                if (!(remoteStream instanceof MediaStream)) {
+                    remoteStream = new MediaStream();
+                    remoteVid.srcObject = remoteStream;
                 }
-                
-                // 🎯 ГАРАНТИЯ: Переключаем UI мгновенно
-                document.getElementById('incoming-call-ui').style.display = 'none';
-                document.getElementById('video-call-overlay').style.display = 'block';
-                
-                // Запуск с "пинком" для мобилок
-                remoteVid.play().catch(() => {
-                    console.log("Автозапуск заблокирован, ждем тапа по экрану");
-                    window.addEventListener('click', () => remoteVid.play(), {once: true});
-                });
+
+                const alreadyAdded = remoteStream
+                    .getTracks()
+                    .some(track => track.id === event.track.id);
+
+                if (!alreadyAdded) {
+                    remoteStream.addTrack(event.track);
+                }
+            }
+
+            remoteVid.autoplay = true;
+            remoteVid.playsInline = true;
+
+            // Показываем видеозвонок
+            const incomingUI = document.getElementById(
+                'incoming-call-ui'
+            );
+
+            if (incomingUI) {
+                incomingUI.style.display = 'none';
+            }
+
+            const overlay = document.getElementById(
+                'video-call-overlay'
+            );
+
+            if (overlay) {
+                overlay.style.display = 'block';
+            }
+
+            // Запускаем видео
+            remoteVid.play().catch(() => {
+                console.log(
+                    "📱 Автозапуск remoteVideo заблокирован"
+                );
+
+                const playRemoteVideo = () => {
+                    remoteVid.play().catch(() => {});
+                };
+
+                window.addEventListener(
+                    'click',
+                    playRemoteVideo,
+                    {
+                        once: true
+                    }
+                );
+            });
+
+            // =================================================
+            // Запускаем дополнительные функции звонка
+            // =================================================
+
+            if (typeof startCallFeatures === "function") {
+                startCallFeatures();
+            }
+
+            if (typeof setCallVolume === "function") {
+                const volumeControl = document.getElementById(
+                    'call-volume'
+                );
+
+                setCallVolume(
+                    volumeControl
+                        ? volumeControl.value
+                        : 1
+                );
             }
         };
 
 
+        // =====================================================
+        // 9. ОТСЛЕЖИВАНИЕ ОКОНЧАНИЯ TRACK
+        // =====================================================
 
-        pc.onicecandidate = e => {
-            if (e.candidate) {
-                // 1. ОПРЕДЕЛЯЕМ ПОЛУЧАТЕЛЯ (Берем targetUser из аргументов функции или currentPartner)
-                const finalTarget = targetUser || currentPartner;
+        pc.ontrack = pc.ontrack;
 
-                if (!finalTarget || finalTarget === "undefined" || finalTarget === "general") {
-                    console.warn("⚠️ [RTC] Не могу отправить ICE: Получатель не определен!");
-                    return;
-                }
 
-                // 2. ФОРМИРУЕМ СИГНАЛ (Добавляем поле 'to' для сервера)
-                const signal = JSON.stringify({ 
-                    candidate: e.candidate, 
-                    from: myName,
-                    to: finalTarget // Сервер ищет именно 'to' или 'to_user'
-                });
-
-                console.log(`%c🧊 [ICE] Сетевой путь улетает для: ${finalTarget}`, "color: #32ade6;");
-                
-                // 3. ОТПРАВЛЯЕМ ПО ПРЯМОМУ АДРЕСУ
-                ws.send(`TO_USER:${finalTarget}|RTC_SIGNAL:${signal}`);
-            }
-        };
+        // =====================================================
+        // 10. СОЗДАЁМ OFFER — ТОЛЬКО ЕСЛИ МЫ ЗВОНИМ
+        // =====================================================
 
         if (isCaller) {
+            console.log("📤 Создаём WebRTC OFFER...");
+
             const offer = await pc.createOffer();
+
             await pc.setLocalDescription(offer);
-            
-            // ДОБАВЛЯЕМ ЯВНЫЙ ТИП, чтобы handleSignalingData на телефоне сработал
+
+            const finalTarget = targetUser || currentPartner;
+
+            if (
+                !finalTarget ||
+                finalTarget === "undefined" ||
+                finalTarget === "general"
+            ) {
+                throw new Error(
+                    "Не определён получатель звонка"
+                );
+            }
+
             const offerSignal = {
-                type: "OFFER", // Явно указываем тип
+                type: "OFFER",
                 offer: offer,
                 from: myName,
-                av: localStorage.getItem('pinnogram_avatar') || ""
+                to: finalTarget,
+                av: localStorage.getItem(
+                    'pinnogram_avatar'
+                ) || ""
             };
-            
-            ws.send(`TO_USER:${targetUser}|RTC_SIGNAL:${JSON.stringify(offerSignal)}`);
+
+            console.log(
+                "📤 Отправляем OFFER:",
+                finalTarget
+            );
+
+            if (
+                ws &&
+                ws.readyState === WebSocket.OPEN
+            ) {
+                ws.send(
+                    `TO_USER:${finalTarget}|RTC_SIGNAL:${JSON.stringify(offerSignal)}`
+                );
+            }
         }
 
-    } catch (e) { 
-        console.error("RTC Error:", e); 
-        endCall(); 
-        alert("Ошибка доступа к камере: " + e.message);
+        // =====================================================
+        // 11. НЕБОЛЬШОЙ ЛОГ
+        // =====================================================
+
+        console.log(
+            "✅ WebRTC инициализирован:",
+            isCaller ? "CALLER" : "RECEIVER"
+        );
+
+    } catch (e) {
+        console.error(
+            "❌ RTC Error:",
+            e
+        );
+
+        // Если новые функции уже успели запуститься
+        if (typeof stopCallFeatures === "function") {
+            try {
+                stopCallFeatures();
+            } catch (featureError) {
+                console.warn(
+                    "Ошибка остановки Call Features:",
+                    featureError
+                );
+            }
+        }
+
+        // Завершаем звонок
+        endCall();
+
+        alert(
+            "Ошибка доступа к камере или микрофону: " +
+            e.message
+        );
     }
 }
+
+async function attemptCallReconnect() {
+
+    if (!pc) return;
+
+    if (reconnectTimer) return;
+
+    if (reconnectAttempts >= 3) {
+        console.warn(
+            "❌ Не удалось восстановить WebRTC."
+        );
+        return;
+    }
+
+    reconnectAttempts++;
+
+    console.log(
+        `🔄 Попытка восстановления ${reconnectAttempts}/3`
+    );
+
+    reconnectTimer = setTimeout(async () => {
+
+        reconnectTimer = null;
+
+        try {
+
+            if (!pc) return;
+
+            if (typeof pc.restartIce === "function") {
+                pc.restartIce();
+            }
+
+            const offer =
+                await pc.createOffer({
+                    iceRestart: true
+                });
+
+            await pc.setLocalDescription(offer);
+
+            const target =
+                currentPartner ||
+                currentCallData?.from;
+
+            if (!target || !ws) return;
+
+            ws.send(
+                `TO_USER:${target}|RTC_SIGNAL:${JSON.stringify({
+                    type: "RECONNECT_OFFER",
+                    offer: offer,
+                    from: myName
+                })}`
+            );
+
+        } catch (err) {
+
+            console.error(
+                "Ошибка восстановления:",
+                err
+            );
+
+        }
+
+    }, 1500);
+}
+
 
 function startVoiceVisualization(stream) {
     try {
@@ -2435,65 +3959,231 @@ function startVoiceVisualization(stream) {
 
 // 3. ОБРАБОТЧИК СИГНАЛОВ (Signaling)
 async function handleSignalingData(data) {
-    console.log("%c🔍 АНАЛИЗ ПАКЕТА:", "color: white; background: #222; padding: 4px; border-radius: 4px;");
-    
-    const sender = String(data.from || "").trim().toLowerCase();
-    const me = String(myName || "").trim().toLowerCase();
-    
-    if (sender === me || !data.from) return; // Эхо-стоп
 
-    // 🎯 1. ЛОГИКА ВХОДЯЩЕГО ВЫЗОВА (Усиленная)
-    // Добавили проверку на OFFER и CALL_INIT, чтобы окно вылетало мгновенно
-    if (data.type === "CALL_INIT" || data.type === "OFFER" || (data.offer && !pc)) {
-        console.log("%c🔥 [SIGNAL] ЖЕСТКИЙ ЗАПУСК UI ОТ:", "color: #ff375f; font-weight: bold;", data.from);
-        
-        currentCallData = data; 
-        
-        // Показываем неоновый интерфейс
-        showCallUI(data.from, false, data.av); 
+    console.log(
+        "%c🔍 RTC:",
+        "color:white;background:#222;padding:4px;",
+        data.type || "UNKNOWN"
+    );
 
-        // Звук и вибрация
-        if (typeof ringtone !== 'undefined') {
-            ringtone.play().catch(() => console.log("Браузер ждет клика для звука"));
-        }
-        if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500]);
-        
-        // Если это оффер — сохраняем его, чтобы при нажатии "Принять" он был под рукой
-        if (data.offer) {
-            console.log("📦 [OFFER] Сохранено в текущие данные");
-        }
-        return; // Выходим из функции, чтобы не обрабатывать этот же пакет ниже
+    const sender =
+        String(data.from || "")
+            .trim()
+            .toLowerCase();
+
+    const me =
+        String(myName || "")
+            .trim()
+            .toLowerCase();
+
+    if (sender === me || !data.from) {
+        return;
     }
 
-    // 🎯 2. ОБРАБОТКА ОТКЛОНЕНИЯ
-    if (data.type === "CALL_REJECT") {
-        console.log("❌ Собеседник нажал 'СБРОС'");
-        if (typeof ringtone !== 'undefined') { ringtone.pause(); ringtone.currentTime = 0; }
-        endCall();
-    } 
-    
-    // 🎯 3. ОБРАБОТКА ANSWER (Для того, кто звонил первым)
-    else if (data.answer && pc) {
-        console.log("✅ [ANSWER] Устанавливаю связь...");
+
+    /* =====================================================
+       ПЕРЕПОДКЛЮЧЕНИЕ — НОВЫЙ OFFER
+       ===================================================== */
+
+    if (
+        data.type === "RECONNECT_OFFER" &&
+        pc
+    ) {
+
         try {
-            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-            while (iceQueue.length > 0) { 
-                await pc.addIceCandidate(iceQueue.shift()); 
+
+            await pc.setRemoteDescription(
+                new RTCSessionDescription(data.offer)
+            );
+
+            const answer =
+                await pc.createAnswer();
+
+            await pc.setLocalDescription(answer);
+
+            ws.send(
+                `TO_USER:${data.from}|RTC_SIGNAL:${JSON.stringify({
+                    type: "RECONNECT_ANSWER",
+                    answer: answer,
+                    from: myName
+                })}`
+            );
+
+            console.log(
+                "🔄 Reconnect offer принят."
+            );
+
+        } catch (err) {
+
+            console.error(
+                "Reconnect offer error:",
+                err
+            );
+        }
+
+        return;
+    }
+
+
+    /* =====================================================
+       ПЕРЕПОДКЛЮЧЕНИЕ — ANSWER
+       ===================================================== */
+
+    if (
+        data.type === "RECONNECT_ANSWER" &&
+        pc
+    ) {
+
+        try {
+
+            await pc.setRemoteDescription(
+                new RTCSessionDescription(data.answer)
+            );
+
+            reconnectAttempts = 0;
+
+            console.log(
+                "✅ WebRTC восстановлен."
+            );
+
+        } catch (err) {
+
+            console.error(
+                "Reconnect answer error:",
+                err
+            );
+        }
+
+        return;
+    }
+
+
+    /* =====================================================
+       ВХОДЯЩИЙ ВЫЗОВ
+       ===================================================== */
+
+    if (
+        data.type === "CALL_INIT" ||
+        data.type === "OFFER" ||
+        (data.offer && !pc)
+    ) {
+
+        currentCallData = data;
+
+        showCallUI(
+            data.from,
+            false,
+            data.av
+        );
+
+        if (typeof ringtone !== "undefined") {
+
+            ringtone
+                .play()
+                .catch(() => {});
+        }
+
+        if (navigator.vibrate) {
+            navigator.vibrate([
+                500,
+                300,
+                500
+            ]);
+        }
+
+        return;
+    }
+
+
+    /* =====================================================
+       ОТКЛОНЕНИЕ
+       ===================================================== */
+
+    if (data.type === "CALL_REJECT") {
+
+        if (
+            typeof ringtone !== "undefined" &&
+            ringtone
+        ) {
+            ringtone.pause();
+            ringtone.currentTime = 0;
+        }
+
+        endCall();
+
+        return;
+    }
+
+
+    /* =====================================================
+       ANSWER
+       ===================================================== */
+
+    if (data.answer && pc) {
+
+        try {
+
+            await pc.setRemoteDescription(
+                new RTCSessionDescription(
+                    data.answer
+                )
+            );
+
+            while (iceQueue.length > 0) {
+
+                try {
+
+                    await pc.addIceCandidate(
+                        iceQueue.shift()
+                    );
+
+                } catch (e) {}
             }
-        } catch(e) { console.error("Ошибка Answer:", e); }
-    } 
-    
-    // 🎯 4. ОБРАБОТКА ICE-КАНДИДАТОВ
-    else if (data.candidate) {
-        const cand = new RTCIceCandidate(data.candidate);
-        if (pc && pc.remoteDescription && pc.remoteDescription.type) {
-            try { 
-                await pc.addIceCandidate(cand); 
-                console.log("🧊 [ICE] Добавлен");
-            } catch(e) { console.warn("Ошибка ICE:", e); }
+
+        } catch (e) {
+
+            console.error(
+                "Ошибка Answer:",
+                e
+            );
+        }
+
+        return;
+    }
+
+
+    /* =====================================================
+       ICE
+       ===================================================== */
+
+    if (data.candidate) {
+
+        const cand =
+            new RTCIceCandidate(
+                data.candidate
+            );
+
+        if (
+            pc &&
+            pc.remoteDescription &&
+            pc.remoteDescription.type
+        ) {
+
+            try {
+
+                await pc.addIceCandidate(cand);
+
+            } catch (e) {
+
+                console.warn(
+                    "Ошибка ICE:",
+                    e
+                );
+            }
+
         } else {
+
             iceQueue.push(cand);
-            console.log("🧊 [ICE] В очередь");
         }
     }
 }
@@ -2612,56 +4302,147 @@ function rejectCall() {
 
 
 function endCall() {
-    console.log("📞 Завершение вызова и очистка ресурсов...");
-    
-    // 1. WebRTC & Stream
-    if (pc) { try { pc.close(); } catch(e){} pc = null; }
-    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-    
-    // 2. Audio Context & Визуализатор
-    // 🎯 ФИКС: Явно обнуляем анализатор, чтобы updateWaves остановился
+
+    console.log(
+        "📞 Завершение вызова..."
+    );
+
+    /* Останавливаем новые функции */
+    stopCallFeatures();
+
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+
+    reconnectAttempts = 0;
+
+
+    /* WebRTC */
+
+    if (pc) {
+
+        try {
+            pc.close();
+        } catch (e) {}
+
+        pc = null;
+    }
+
+
+    /* Media */
+
+    if (localStream) {
+
+        localStream
+            .getTracks()
+            .forEach(track => {
+
+                try {
+                    track.stop();
+                } catch (e) {}
+
+            });
+
+        localStream = null;
+    }
+
+
+    /* Audio visualizer */
+
     if (window.audioContextInstance) {
+
         try {
             window.audioContextInstance.close();
-        } catch(e) {}
+        } catch (e) {}
+
         window.audioContextInstance = null;
     }
-    // Если у тебя была переменная для анимации (например, animationId)
-    // if (window.voiceAnimId) cancelAnimationFrame(window.voiceAnimId);
 
-    // 3. ИНТЕРФЕЙС
-    const ui = document.getElementById('incoming-call-ui');
+
+    /* Incoming UI */
+
+    const ui =
+        document.getElementById(
+            "incoming-call-ui"
+        );
+
     if (ui) {
-        ui.style.display = 'none';
-        ui.style.height = '100dvh'; 
-        ui.style.padding = '60px 0';
-        ui.style.justifyContent = 'space-around';
-        ui.onclick = null; 
+
+        ui.style.display = "none";
+        ui.style.height = "100dvh";
+        ui.style.padding = "60px 0";
+        ui.style.justifyContent =
+            "space-around";
+
+        ui.onclick = null;
     }
 
-    const overlay = document.getElementById('video-call-overlay');
-    if (overlay) overlay.style.display = 'none';
 
-    // 4. Очистка данных
+    /* Call overlay */
+
+    const overlay =
+        document.getElementById(
+            "video-call-overlay"
+        );
+
+    if (overlay) {
+        overlay.style.display = "none";
+    }
+
+
+    /* Videos */
+
+    const remoteVideo =
+        document.getElementById(
+            "remoteVideo"
+        );
+
+    const localVideo =
+        document.getElementById(
+            "localVideo"
+        );
+
+    if (remoteVideo) {
+        remoteVideo.pause();
+        remoteVideo.srcObject = null;
+    }
+
+    if (localVideo) {
+        localVideo.pause();
+        localVideo.srcObject = null;
+    }
+
+
+    /* Data */
+
     currentCallData = null;
     iceQueue = [];
-    
-    // 5. Визуальный сброс аватарки
-    const circle = document.getElementById('call-avatar-circle');
+
+
+    /* Avatar reset */
+
+    const circle =
+        document.getElementById(
+            "call-avatar-circle"
+        );
+
     if (circle) {
-        // 🎯 ФИКС: Убираем transition на мгновение, чтобы сброс был четким
-        circle.style.transition = 'none'; 
-        circle.style.transform = 'scale(1)';
-        circle.style.boxShadow = 'none';
-        // Возвращаем плавность через мгновение для будущих звонков
-        setTimeout(() => { circle.style.transition = ''; }, 100);
+
+        circle.style.transition = "none";
+        circle.style.transform = "scale(1)";
+        circle.style.boxShadow = "none";
+
+        setTimeout(() => {
+            circle.style.transition = "";
+        }, 100);
     }
 
-    console.log("🧹 Система стерильна и готова к новому вызову!");
+
+    console.log(
+        "🧹 Pinnogram Call Engine очищен."
+    );
 }
-
-
-
 
 async function startVoice() {
     try {
