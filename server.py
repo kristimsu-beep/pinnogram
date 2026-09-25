@@ -113,6 +113,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# Умные пути для сервера и локального ПК
+BASE_DIR = "/data" if os.path.exists("/data") else os.getcwd()
+
 # Карты /newmap
 maps_path = os.path.join(BASE_DIR, "maps")
 
@@ -124,9 +128,6 @@ app.mount(
     StaticFiles(directory=maps_path),
     name="maps"
 )
-
-# Умные пути для сервера и локального ПК
-BASE_DIR = "/data" if os.path.exists("/data") else os.getcwd()
 
 # ТВОИ РЕАЛЬНЫЕ КЛЮЧИ (ПРИВАТНЫЙ ВСТАВЛЕН)
 VAPID_PRIVATE_KEY = "WD8jC5BNBUQtNX_yIRGjWoeA0TySjfToPNxtNLaH9cY"
