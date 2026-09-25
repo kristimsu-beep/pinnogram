@@ -1073,20 +1073,63 @@ function initMap(){
         60000
     );
 
-
-    /* =====================================================
-       RIGHT CLICK
-    ===================================================== */
-
+      /* =====================================================
+         RIGHT CLICK — CONTEXT MENU
+      ===================================================== */
+      
       map.on(
           "contextmenu",
-          e=>{
+          function(e){
+      
+              if(drawingTerritory){
+                  return;
+              }
       
               if(
-                  drawingTerritory ||
                   !country ||
-                  !country.territory
+                  !country.territory ||
+                  !country.territory.geometry
               ){
+                  return;
+              }
+      
+              const geometry =
+                  country.territory.geometry;
+      
+              if(
+                  geometry.type !== "Polygon" ||
+                  !geometry.coordinates ||
+                  !geometry.coordinates[0]
+              ){
+                  return;
+              }
+      
+              const polygon =
+                  geometry.coordinates[0];
+      
+              const inside =
+                  pointInsideTerritory(
+                      e.latlng.lat,
+                      e.latlng.lng,
+                      polygon
+                  );
+      
+              console.log(
+                  "[CTW3] ПКМ",
+                  e.latlng.lat,
+                  e.latlng.lng,
+                  "inside:",
+                  inside
+              );
+      
+              if(!inside){
+      
+                  $("context").style.display="none";
+      
+                  setStatus(
+                      "⛔ Эта точка находится вне вашей территории"
+                  );
+      
                   return;
               }
       
@@ -1094,20 +1137,23 @@ function initMap(){
       
               const c=$("context");
       
-              c.style.left=
+              c.style.left =
                   Math.min(
-                      e.containerPoint.x+10,
-                      window.innerWidth-205
-                  )+"px";
+                      e.containerPoint.x + 10,
+                      window.innerWidth - 205
+                  ) + "px";
       
-              c.style.top=
+              c.style.top =
                   Math.min(
-                      e.containerPoint.y+10,
-                      window.innerHeight-250
-                  )+"px";
+                      e.containerPoint.y + 10,
+                      window.innerHeight - 250
+                  ) + "px";
       
               c.style.display="block";
       
+              console.log(
+                  "[CTW3] Контекстное меню открыто"
+              );
           }
       );
 
@@ -1603,7 +1649,7 @@ function finishTerritoryDrawing(){
     }
 
 
-    territoryLayer=
+    territoryLayer =
         L.polygon(
             territoryPoints,
             {
@@ -1611,7 +1657,8 @@ function finishTerritoryDrawing(){
                 weight:3,
                 opacity:1,
                 fillColor:"#00aeea",
-                fillOpacity:.25
+                fillOpacity:.25,
+                interactive:false
             }
         ).addTo(map);
 
