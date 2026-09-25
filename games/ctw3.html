@@ -1,2101 +1,551 @@
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
-
-    <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    >
-
-    <title>CTW3 — Conquer The World</title>
-
-
-    <!-- =====================================================
-         LEAFLET
-    ====================================================== -->
-
-    <link
-        rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    >
-
-    <script
-        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    ></script>
-
-
-    <!-- =====================================================
-         DAY / NIGHT TERMINATOR
-    ====================================================== -->
-
-    <script
-        src="https://unpkg.com/@joergdietrich/leaflet.terminator"
-    ></script>
-
-
-    <!-- =====================================================
-         FONT AWESOME
-    ====================================================== -->
-
-    <link
-        rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
-    >
-
-
-    <style>
-
-        * {
-            box-sizing: border-box;
-        }
-
-
-        html,
-        body {
-
-            width: 100%;
-            height: 100%;
-
-            margin: 0;
-
-            overflow: hidden;
-
-            font-family:
-                Inter,
-                -apple-system,
-                BlinkMacSystemFont,
-                "Segoe UI",
-                sans-serif;
-
-            background: #05070b;
-
-            color: white;
-        }
-
-
-        /* =====================================================
-           MAP
-        ====================================================== */
-
-        #ctw3Map {
-
-            position: fixed;
-
-            inset: 0;
-
-            width: 100%;
-            height: 100%;
-
-            z-index: 1;
-
-            background: #b9d9e8;
-        }
-
-
-        /* =====================================================
-           TOP BAR
-        ====================================================== */
-
-        #ctw3TopBar {
-
-            position: fixed;
-
-            top: 16px;
-            left: 50%;
-
-            transform: translateX(-50%);
-
-            z-index: 1000;
-
-            display: flex;
-
-            align-items: center;
-
-            gap: 8px;
-
-            padding: 6px;
-
-            background:
-                rgba(8, 12, 20, 0.78);
-
-            border:
-                1px solid rgba(255,255,255,0.12);
-
-            border-radius: 14px;
-
-            backdrop-filter:
-                blur(18px);
-
-            -webkit-backdrop-filter:
-                blur(18px);
-
-            box-shadow:
-                0 10px 35px
-                rgba(0,0,0,0.35);
-        }
-
-
-        .ctw3-mode-button {
-
-            border: none;
-
-            background: transparent;
-
-            color:
-                rgba(255,255,255,0.55);
-
-            padding:
-                9px 16px;
-
-            border-radius: 10px;
-
-            font-size: 12px;
-
-            font-weight: 700;
-
-            cursor: pointer;
-
-            display: flex;
-
-            align-items: center;
-
-            gap: 8px;
-
-            transition:
-                0.2s ease;
-        }
-
-
-        .ctw3-mode-button:hover {
-
-            color: white;
-
-            background:
-                rgba(255,255,255,0.07);
-        }
-
-
-        .ctw3-mode-button.active {
-
-            color: white;
-
-            background:
-                rgba(0,180,255,0.18);
-
-            box-shadow:
-                inset 0 0 0 1px
-                rgba(0,200,255,0.28);
-        }
-
-
-        /* =====================================================
-           GAME TITLE
-        ====================================================== */
-
-        #ctw3Title {
-
-            position: fixed;
-
-            top: 18px;
-            left: 18px;
-
-            z-index: 1000;
-
-            display: flex;
-
-            align-items: center;
-
-            gap: 10px;
-
-            padding:
-                10px 14px;
-
-            background:
-                rgba(8,12,20,0.78);
-
-            border:
-                1px solid rgba(255,255,255,0.10);
-
-            border-radius: 12px;
-
-            backdrop-filter:
-                blur(16px);
-
-            -webkit-backdrop-filter:
-                blur(16px);
-
-            box-shadow:
-                0 10px 30px
-                rgba(0,0,0,0.30);
-        }
-
-
-        #ctw3TitleIcon {
-
-            width: 34px;
-            height: 34px;
-
-            display: flex;
-
-            align-items: center;
-            justify-content: center;
-
-            border-radius: 9px;
-
-            background:
-                rgba(0,190,255,0.15);
-
-            color:
-                #54d7ff;
-
-            font-size: 16px;
-        }
-
-
-        #ctw3TitleText {
-
-            display: flex;
-
-            flex-direction: column;
-
-            gap: 2px;
-        }
-
-
-        #ctw3TitleText strong {
-
-            font-size: 14px;
-
-            font-weight: 800;
-        }
-
-
-        #ctw3TitleText span {
-
-            font-size: 10px;
-
-            color:
-                rgba(255,255,255,0.42);
-
-            letter-spacing:
-                0.5px;
-        }
-
-
-        /* =====================================================
-           STATUS
-        ====================================================== */
-
-        #ctw3Status {
-
-            position: fixed;
-
-            bottom: 18px;
-            left: 18px;
-
-            z-index: 1000;
-
-            padding:
-                8px 12px;
-
-            background:
-                rgba(8,12,20,0.78);
-
-            border:
-                1px solid rgba(255,255,255,0.10);
-
-            border-radius: 10px;
-
-            backdrop-filter:
-                blur(14px);
-
-            -webkit-backdrop-filter:
-                blur(14px);
-
-            font-size: 11px;
-
-            color:
-                rgba(255,255,255,0.65);
-        }
-
-
-        /* =====================================================
-           MAP MODE LABEL
-        ====================================================== */
-
-        #ctw3ModeLabel {
-
-            position: fixed;
-
-            bottom: 18px;
-            right: 18px;
-
-            z-index: 1000;
-
-            padding:
-                8px 12px;
-
-            border-radius: 10px;
-
-            background:
-                rgba(8,12,20,0.78);
-
-            border:
-                1px solid rgba(255,255,255,0.10);
-
-            backdrop-filter:
-                blur(14px);
-
-            -webkit-backdrop-filter:
-                blur(14px);
-
-            font-size: 11px;
-
-            color:
-                rgba(255,255,255,0.7);
-        }
-
-
-        /* =====================================================
-           LEAFLET CONTROLS
-        ====================================================== */
-
-        .leaflet-control-zoom {
-
-            border: none !important;
-
-            box-shadow:
-                0 8px 25px
-                rgba(0,0,0,0.35) !important;
-        }
-
-
-        .leaflet-control-zoom a {
-
-            background:
-                rgba(8,12,20,0.85) !important;
-
-            color:
-                white !important;
-
-            border-color:
-                rgba(255,255,255,0.10) !important;
-        }
-
-
-        .leaflet-control-attribution {
-
-            background:
-                rgba(0,0,0,0.55) !important;
-
-            color:
-                rgba(255,255,255,0.6) !important;
-        }
-
-
-        .leaflet-control-attribution a {
-
-            color:
-                #8bdfff !important;
-        }
-
-
-        /* =====================================================
-           NIGHT OVERLAY
-        ====================================================== */
-
-        .ctw3-night {
-
-            mix-blend-mode:
-                multiply;
-        }
-
-
-        /* =====================================================
-           COUNTRY REGISTRATION OVERLAY
-        ====================================================== */
-
-        #ctw3RegistrationOverlay {
-
-            position: fixed;
-
-            inset: 0;
-
-            z-index: 5000;
-
-            display: none;
-
-            align-items: center;
-            justify-content: center;
-
-            padding: 20px;
-
-            background:
-                rgba(3, 6, 12, 0.78);
-
-            backdrop-filter:
-                blur(18px);
-
-            -webkit-backdrop-filter:
-                blur(18px);
-        }
-
-
-        /* =====================================================
-           REGISTRATION CARD
-        ====================================================== */
-
-        #ctw3Registration {
-
-            width:
-                min(430px, 100%);
-
-            padding: 30px;
-
-            background:
-                rgba(12, 17, 27, 0.97);
-
-            border:
-                1px solid
-                rgba(255,255,255,0.12);
-
-            border-radius: 22px;
-
-            box-shadow:
-                0 25px 80px
-                rgba(0,0,0,0.55);
-
-            text-align: left;
-        }
-
-
-        /* =====================================================
-           REGISTRATION ICON
-        ====================================================== */
-
-        #ctw3RegistrationIcon {
-
-            width: 64px;
-            height: 64px;
-
-            display: flex;
-
-            align-items: center;
-            justify-content: center;
-
-            margin:
-                0 auto 18px;
-
-            border-radius: 18px;
-
-            background:
-                rgba(0,190,255,0.14);
-
-            border:
-                1px solid
-                rgba(0,210,255,0.20);
-
-            font-size: 32px;
-        }
-
-
-        /* =====================================================
-           REGISTRATION TITLE
-        ====================================================== */
-
-        #ctw3Registration h1 {
-
-            margin: 0;
-
-            text-align: center;
-
-            font-size: 24px;
-
-            font-weight: 800;
-
-            color: white;
-        }
-
-
-        /* =====================================================
-           REGISTRATION DESCRIPTION
-        ====================================================== */
-
-        .ctw3-registration-description {
-
-            margin:
-                10px 0 26px;
-
-            text-align: center;
-
-            color:
-                rgba(255,255,255,0.52);
-
-            font-size: 13px;
-
-            line-height: 1.5;
-        }
-
-
-        /* =====================================================
-           REGISTRATION LABELS
-        ====================================================== */
-
-        #ctw3Registration label {
-
-            display: block;
-
-            margin:
-                16px 0 7px;
-
-            font-size: 12px;
-
-            font-weight: 700;
-
-            color:
-                rgba(255,255,255,0.72);
-        }
-
-
-        /* =====================================================
-           REGISTRATION INPUTS
-        ====================================================== */
-
-        #ctw3Registration input,
-        #ctw3Registration select {
-
-            width: 100%;
-
-            height: 46px;
-
-            padding:
-                0 14px;
-
-            border:
-                1px solid
-                rgba(255,255,255,0.10);
-
-            border-radius: 12px;
-
-            outline: none;
-
-            background:
-                rgba(255,255,255,0.055);
-
-            color: white;
-
-            font-family: inherit;
-
-            font-size: 14px;
-
-            transition:
-                border-color 0.2s ease,
-                background 0.2s ease,
-                box-shadow 0.2s ease;
-        }
-
-
-        #ctw3Registration input::placeholder {
-
-            color:
-                rgba(255,255,255,0.28);
-        }
-
-
-        #ctw3Registration input:focus,
-        #ctw3Registration select:focus {
-
-            border-color:
-                rgba(0,200,255,0.55);
-
-            background:
-                rgba(255,255,255,0.075);
-
-            box-shadow:
-                0 0 0 3px
-                rgba(0,190,255,0.10);
-        }
-
-
-        #ctw3Registration select {
-
-            cursor: pointer;
-        }
-
-
-        /* =====================================================
-           REGISTRATION ERROR
-        ====================================================== */
-
-        .ctw3-registration-error {
-
-            min-height: 20px;
-
-            margin-top: 12px;
-
-            color:
-                #ff7272;
-
-            font-size: 12px;
-
-            line-height: 1.4;
-
-            text-align: center;
-        }
-
-
-        /* =====================================================
-           CREATE BUTTON
-        ====================================================== */
-
-        #ctw3CreateCountryButton {
-
-            width: 100%;
-
-            height: 48px;
-
-            margin-top: 8px;
-
-            border: none;
-
-            border-radius: 13px;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    #00aeea,
-                    #0077ff
-                );
-
-            color: white;
-
-            font-family: inherit;
-
-            font-size: 14px;
-
-            font-weight: 800;
-
-            cursor: pointer;
-
-            box-shadow:
-                0 8px 25px
-                rgba(0,150,255,0.25);
-
-            transition:
-                transform 0.15s ease,
-                filter 0.15s ease,
-                opacity 0.15s ease;
-        }
-
-
-        #ctw3CreateCountryButton:hover {
-
-            filter:
-                brightness(1.08);
-
-            transform:
-                translateY(-1px);
-        }
-
-
-        #ctw3CreateCountryButton:active {
-
-            transform:
-                translateY(0);
-        }
-
-
-        #ctw3CreateCountryButton:disabled {
-
-            opacity:
-                0.55;
-
-            cursor:
-                wait;
-
-            transform:
-                none;
-        }
-
-
-        /* =====================================================
-           MOBILE
-        ====================================================== */
-
-        @media (max-width: 700px) {
-
-            #ctw3Title {
-
-                top: 10px;
-                left: 10px;
-
-                padding:
-                    8px 10px;
-            }
-
-
-            #ctw3TitleText span {
-
-                display: none;
-            }
-
-
-            #ctw3TopBar {
-
-                top: 70px;
-            }
-
-
-            .ctw3-mode-button {
-
-                padding:
-                    8px 11px;
-            }
-
-
-            #ctw3Registration {
-
-                padding: 24px;
-
-                border-radius: 18px;
-            }
-
-
-            #ctw3Registration h1 {
-
-                font-size: 21px;
-            }
-
-        }
-
-    </style>
-
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>CTW3 — Conquer The World</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@joergdietrich/leaflet.terminator"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#05070b;color:#fff}
+#ctw3Map{position:fixed;inset:0;z-index:1}
+#top{position:fixed;top:14px;left:14px;right:14px;z-index:2000;display:flex;align-items:center;gap:10px;pointer-events:none}
+.panel{background:rgba(8,12,20,.88);border:1px solid rgba(255,255,255,.11);border-radius:14px;backdrop-filter:blur(16px);box-shadow:0 12px 35px rgba(0,0,0,.35)}
+#brand{padding:9px 13px;display:flex;gap:9px;align-items:center;pointer-events:auto}
+#brand i{color:#55d9ff}
+#brand b{font-size:14px}
+#brand span{display:block;font-size:9px;color:#738091}
+#stats{display:none;gap:12px;padding:9px 13px;pointer-events:auto;flex:1;overflow:auto}
+.stat{white-space:nowrap}.stat small{display:block;color:#7d8897;font-size:9px}.stat b{font-size:12px}
+#buttons{margin-left:auto;display:flex;gap:5px;padding:5px;pointer-events:auto}
+.btn{border:0;border-radius:9px;background:transparent;color:#9da8b6;padding:8px 10px;cursor:pointer;font-weight:700}
+.btn:hover,.btn.active{background:rgba(0,180,255,.15);color:#fff}
+#countryPanel{position:fixed;top:78px;right:14px;width:300px;max-height:calc(100vh - 100px);overflow:auto;z-index:1900;padding:14px;display:none}
+#countryPanel h3{margin:0 0 10px;font-size:15px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.card{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.07);padding:8px;border-radius:10px}
+.card small{display:block;color:#7f8997;font-size:9px}.card b{font-size:12px}
+.section{margin-top:13px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08)}
+.section h4{margin:0 0 9px;font-size:11px;color:#aeb8c5}
+input,select{width:100%;height:38px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:9px;color:#fff;padding:0 10px;outline:0}
+.action{width:100%;height:38px;border:0;border-radius:9px;background:#087df0;color:#fff;font-weight:800;cursor:pointer;margin-top:7px}
+.action.secondary{background:rgba(255,255,255,.08)}
+#chat{position:fixed;left:14px;bottom:14px;width:320px;height:300px;z-index:1900;display:none;flex-direction:column}
+#chatMessages{flex:1;overflow:auto;padding:12px}
+.chatmsg{font-size:11px;margin-bottom:8px;line-height:1.35}.chatmsg b{color:#67d9ff}
+#chatForm{display:flex;gap:6px;padding:8px;border-top:1px solid rgba(255,255,255,.08)}
+#chatForm input{flex:1}
+#chatForm button{width:40px;border:0;border-radius:8px;background:#087df0;color:#fff}
+#status{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:1800;padding:7px 11px;font-size:10px;color:#aeb8c5}
+#modeLabel{position:fixed;bottom:14px;right:14px;z-index:1800;padding:7px 11px;font-size:10px}
+#overlay{position:fixed;inset:0;z-index:5000;display:none;align-items:center;justify-content:center;background:rgba(3,6,12,.8);backdrop-filter:blur(16px);padding:20px}
+.modal{width:min(450px,100%);padding:26px;border-radius:20px;background:rgba(12,17,27,.98);border:1px solid rgba(255,255,255,.12);box-shadow:0 25px 80px #0009}
+.modal h1{margin:0;text-align:center;font-size:22px}.modal p{text-align:center;color:#8290a0;font-size:12px;line-height:1.5}
+.modal label{display:block;font-size:11px;font-weight:700;color:#aab4c0;margin:13px 0 6px}
+.modal input,.modal select{height:43px}
+#territoryOverlay{z-index:4900}
+#territoryHint{font-size:12px;color:#8d9aaa;text-align:center}
+#context{position:fixed;z-index:6000;display:none;width:190px;padding:6px}
+.contextItem{padding:9px;border-radius:8px;font-size:11px;cursor:pointer}.contextItem:hover{background:rgba(0,170,255,.14)}
+#production{display:none}
+.rangeRow{display:grid;grid-template-columns:1fr 45px;gap:8px;align-items:center;margin:7px 0}.rangeRow input{padding:0}
+#targetPanel{display:none;position:fixed;left:14px;top:78px;z-index:1950;width:260px;padding:13px}
+.countryTarget{display:flex;align-items:center;gap:7px;padding:7px;border-radius:8px;cursor:pointer}.countryTarget:hover{background:rgba(255,255,255,.07)}
+.leaflet-control-attribution{background:rgba(0,0,0,.55)!important}
+@media(max-width:800px){#stats{display:none!important}#countryPanel{width:280px}#chat{width:calc(100vw - 28px)}#top{flex-wrap:wrap}#buttons{margin-left:auto}}
+</style>
 </head>
 
-
 <body>
+<div id="ctw3Map"></div>
 
+<div id="top">
+  <div id="brand" class="panel">
+    <i class="fa-solid fa-earth-americas"></i>
+    <div><b>CTW3</b><span>CONQUER THE WORLD</span></div>
+  </div>
+  <div id="stats" class="panel">
+    <div class="stat"><small>ГОСУДАРСТВО</small><b id="sCountry">—</b></div>
+    <div class="stat"><small>БЮДЖЕТ</small><b id="sBudget">$0</b></div>
+    <div class="stat"><small>НАСЕЛЕНИЕ</small><b id="sPopulation">0</b></div>
+    <div class="stat"><small>ГОРОДА</small><b id="sCities">0</b></div>
+    <div class="stat"><small>ЗАВОДЫ</small><b id="sFactories">0</b></div>
+    <div class="stat"><small>РАКЕТЫ</small><b id="sMissiles">0</b></div>
+    <div class="stat"><small>ПВО</small><b id="sAirDefense">0</b></div>
+  </div>
+  <div id="buttons" class="panel">
+    <button class="btn active" id="normalBtn" onclick="setMapMode('normal')">🗺️</button>
+    <button class="btn" id="satBtn" onclick="setMapMode('satellite')">🛰️</button>
+    <button class="btn" onclick="togglePanel()">📊</button>
+    <button class="btn" onclick="toggleChat()">💬</button>
+    <button class="btn" onclick="openProduction()">⚙️</button>
+  </div>
+</div>
 
-    <!-- =====================================================
-         MAP
-    ====================================================== -->
-
-    <div id="ctw3Map"></div>
-
-
-    <!-- =====================================================
-         GAME TITLE
-    ====================================================== -->
-
-    <div id="ctw3Title">
-
-        <div id="ctw3TitleIcon">
-
-            <i class="fa-solid fa-earth-americas"></i>
-
-        </div>
-
-
-        <div id="ctw3TitleText">
-
-            <strong>
-                CTW3
-            </strong>
-
-            <span>
-                CONQUER THE WORLD
-            </span>
-
-        </div>
-
+<div id="countryPanel" class="panel">
+  <h3 id="panelTitle">Государство</h3>
+  <div class="grid">
+    <div class="card"><small>БЮДЖЕТ</small><b id="pBudget">$0</b></div>
+    <div class="card"><small>ИНФЛЯЦИЯ</small><b id="pInflation">0%</b></div>
+    <div class="card"><small>НАСЕЛЕНИЕ</small><b id="pPopulation">0</b></div>
+    <div class="card"><small>ТЕРРИТОРИЯ</small><b id="pTerritory">—</b></div>
+  </div>
+  <div class="section">
+    <h4>ОБЪЕКТЫ</h4>
+    <div class="grid">
+      <div class="card"><small>ГОРОДА</small><b id="pCities">0</b></div>
+      <div class="card"><small>АЭРОПОРТЫ</small><b id="pAirports">0</b></div>
+      <div class="card"><small>ЗАВОДЫ</small><b id="pFactories">0</b></div>
+      <div class="card"><small>РАКЕТЫ</small><b id="pMissiles">0</b></div>
+      <div class="card"><small>ПВО</small><b id="pDefense">0</b></div>
     </div>
-
-
-    <!-- =====================================================
-         MAP MODE SWITCHER
-    ====================================================== -->
-
-    <div id="ctw3TopBar">
-
-        <button
-            class="ctw3-mode-button active"
-            id="ctw3NormalButton"
-            onclick="setCTW3MapMode('normal')"
-        >
-
-            <i class="fa-solid fa-map"></i>
-
-            Обычная
-
-        </button>
-
-
-        <button
-            class="ctw3-mode-button"
-            id="ctw3SatelliteButton"
-            onclick="setCTW3MapMode('satellite')"
-        >
-
-            <i class="fa-solid fa-satellite"></i>
-
-            Спутник
-
-        </button>
-
-    </div>
-
-
-    <!-- =====================================================
-         STATUS
-    ====================================================== -->
-
-    <div id="ctw3Status">
-
-        🌍 CTW3 загружается...
-
-    </div>
-
-
-    <!-- =====================================================
-         CURRENT MODE
-    ====================================================== -->
-
-    <div id="ctw3ModeLabel">
-
-        🗺️ Обычная карта
-
-    </div>
-
-
-    <!-- =====================================================
-         COUNTRY REGISTRATION
-    ====================================================== -->
-
-    <div id="ctw3RegistrationOverlay">
-
-        <div id="ctw3Registration">
-
-
-            <div id="ctw3RegistrationIcon">
-
-                🌍
-
-            </div>
-
-
-            <h1>
-
-                Создание государства
-
-            </h1>
-
-
-            <p class="ctw3-registration-description">
-
-                Зарегистрируйте своё государство,
-                чтобы начать игру в CTW3.
-
-            </p>
-
-
-            <!-- =================================================
-                 COUNTRY NAME
-            ================================================== -->
-
-            <label
-                for="ctw3CountryName"
-            >
-
-                Название государства
-
-            </label>
-
-
-            <input
-                id="ctw3CountryName"
-                type="text"
-                maxlength="40"
-                placeholder="Например: Израиль"
-                autocomplete="off"
-            >
-
-
-            <!-- =================================================
-                 FLAG
-            ================================================== -->
-
-            <label
-                for="ctw3CountryFlag"
-            >
-
-                Флаг
-
-            </label>
-
-
-            <input
-                id="ctw3CountryFlag"
-                type="text"
-                maxlength="4"
-                value="🏳️"
-                placeholder="🇺🇳"
-                autocomplete="off"
-            >
-
-
-            <!-- =================================================
-                 LANGUAGE
-            ================================================== -->
-
-            <label
-                for="ctw3CountryLanguage"
-            >
-
-                Основной язык
-
-            </label>
-
-
-            <select
-                id="ctw3CountryLanguage"
-            >
-
-                <option value="Русский">
-                    Русский
-                </option>
-
-                <option value="English">
-                    English
-                </option>
-
-                <option value="Deutsch">
-                    Deutsch
-                </option>
-
-                <option value="Français">
-                    Français
-                </option>
-
-                <option value="Español">
-                    Español
-                </option>
-
-                <option value="العربية">
-                    العربية
-                </option>
-
-                <option value="中文">
-                    中文
-                </option>
-
-                <option value="日本語">
-                    日本語
-                </option>
-
-                <option value="Português">
-                    Português
-                </option>
-
-            </select>
-
-
-            <!-- =================================================
-                 ERROR
-            ================================================== -->
-
-            <div
-                id="ctw3RegistrationError"
-                class="ctw3-registration-error"
-            ></div>
-
-
-            <!-- =================================================
-                 CREATE
-            ================================================== -->
-
-            <button
-                id="ctw3CreateCountryButton"
-                type="button"
-                onclick="createCTW3Country()"
-            >
-
-                🌍 Создать государство
-
-            </button>
-
-        </div>
-
-    </div>
-
-
-    <script>
-
-
-        // =====================================================
-        // CTW3 MAP
-        // =====================================================
-
-        let ctw3Map;
-
-        let ctw3NormalLayer;
-
-        let ctw3SatelliteLayer;
-
-        let ctw3NightLayer;
-
-
-        // =====================================================
-        // CURRENT PLAYER COUNTRY
-        // =====================================================
-
-        let ctw3Country = null;
-
-
-        // =====================================================
-        // LOCAL STORAGE
-        // =====================================================
-
-        const CTW3_MAP_MODE_KEY =
-            "ctw3_map_mode";
-
-
-        let ctw3CurrentMode =
-            localStorage.getItem(
-                CTW3_MAP_MODE_KEY
-            ) || "normal";
-
-
-        // =====================================================
-        // INITIALIZATION
-        // =====================================================
-
-        function initCTW3() {
-
-
-            ctw3Map =
-                L.map(
-                    "ctw3Map",
-                    {
-
-                        center:
-                            [20, 0],
-
-                        zoom:
-                            2,
-
-                        minZoom:
-                            2,
-
-                        maxZoom:
-                            18,
-
-                        worldCopyJump:
-                            true,
-
-                        zoomControl:
-                            true
-
-                    }
-                );
-
-
-            // =================================================
-            // NORMAL MAP
-            // =================================================
-
-            ctw3NormalLayer =
-                L.tileLayer(
-                    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-                    {
-
-                        maxZoom:
-                            19,
-
-                        attribution:
-                            "&copy; OpenStreetMap contributors"
-
-                    }
-                );
-
-
-            // =================================================
-            // SATELLITE MAP
-            // =================================================
-
-            ctw3SatelliteLayer =
-                L.tileLayer(
-                    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                    {
-
-                        maxZoom:
-                            19,
-
-                        attribution:
-                            "Tiles &copy; Esri"
-
-                    }
-                );
-
-
-            // =================================================
-            // NIGHT
-            // =================================================
-
-            ctw3NightLayer =
-                L.terminator(
-                    {
-
-                        fillColor:
-                            "#000000",
-
-                        fillOpacity:
-                            0.42,
-
-                        color:
-                            "#000000",
-
-                        opacity:
-                            0,
-
-                        weight:
-                            0
-
-                    }
-                );
-
-
-            // =================================================
-            // APPLY SAVED MAP MODE
-            // =================================================
-
-            applyCTW3MapMode(
-                ctw3CurrentMode
-            );
-
-
-            // =================================================
-            // NIGHT LAYER
-            // =================================================
-
-            ctw3NightLayer.addTo(
-                ctw3Map
-            );
-
-
-            // =================================================
-            // UPDATE NIGHT
-            // =================================================
-
-            setInterval(
-                updateCTW3Night,
-                60 * 1000
-            );
-
-
-            updateCTW3Night();
-
-
-            // =================================================
-            // STATUS
-            // =================================================
-
-            updateCTW3Status(
-                "🌍 CTW3 готов"
-            );
-
-
-            console.log(
-                "[CTW3] Map initialized"
-            );
-
-        }
-
-
-        // =====================================================
-        // MAP MODE
-        // =====================================================
-
-        function setCTW3MapMode(
-            mode
-        ) {
-
-
-            if (
-                mode !== "normal" &&
-                mode !== "satellite"
-            ) {
-
-                mode =
-                    "normal";
-
-            }
-
-
-            ctw3CurrentMode =
-                mode;
-
-
-            localStorage.setItem(
-                CTW3_MAP_MODE_KEY,
-                mode
-            );
-
-
-            applyCTW3MapMode(
-                mode
-            );
-
-        }
-
-
-        // =====================================================
-        // APPLY MAP MODE
-        // =====================================================
-
-        function applyCTW3MapMode(
-            mode
-        ) {
-
-
-            if (!ctw3Map) {
-
-                return;
-
-            }
-
-
-            // =================================================
-            // REMOVE NORMAL
-            // =================================================
-
-            if (
-                ctw3Map.hasLayer(
-                    ctw3NormalLayer
-                )
-            ) {
-
-                ctw3Map.removeLayer(
-                    ctw3NormalLayer
-                );
-
-            }
-
-
-            // =================================================
-            // REMOVE SATELLITE
-            // =================================================
-
-            if (
-                ctw3Map.hasLayer(
-                    ctw3SatelliteLayer
-                )
-            ) {
-
-                ctw3Map.removeLayer(
-                    ctw3SatelliteLayer
-                );
-
-            }
-
-
-            // =================================================
-            // SATELLITE
-            // =================================================
-
-            if (
-                mode === "satellite"
-            ) {
-
-
-                ctw3SatelliteLayer.addTo(
-                    ctw3Map
-                );
-
-
-                document
-                    .getElementById(
-                        "ctw3SatelliteButton"
-                    )
-                    .classList.add(
-                        "active"
-                    );
-
-
-                document
-                    .getElementById(
-                        "ctw3NormalButton"
-                    )
-                    .classList.remove(
-                        "active"
-                    );
-
-
-                document
-                    .getElementById(
-                        "ctw3ModeLabel"
-                    )
-                    .textContent =
-                        "🛰️ Спутниковая карта";
-
-
-            }
-
-            // =================================================
-            // NORMAL
-            // =================================================
-
-            else {
-
-
-                ctw3NormalLayer.addTo(
-                    ctw3Map
-                );
-
-
-                document
-                    .getElementById(
-                        "ctw3NormalButton"
-                    )
-                    .classList.add(
-                        "active"
-                    );
-
-
-                document
-                    .getElementById(
-                        "ctw3SatelliteButton"
-                    )
-                    .classList.remove(
-                        "active"
-                    );
-
-
-                document
-                    .getElementById(
-                        "ctw3ModeLabel"
-                    )
-                    .textContent =
-                        "🗺️ Обычная карта";
-
-            }
-
-        }
-
-
-        // =====================================================
-        // DAY / NIGHT
-        // =====================================================
-
-        function updateCTW3Night() {
-
-
-            if (
-                !ctw3NightLayer
-            ) {
-
-                return;
-
-            }
-
-
-            try {
-
-                ctw3NightLayer.setTime(
-                    new Date()
-                );
-
-            }
-
-            catch (error) {
-
-                console.warn(
-                    "[CTW3] Night update error:",
-                    error
-                );
-
-            }
-
-        }
-
-
-        // =====================================================
-        // STATUS
-        // =====================================================
-
-        function updateCTW3Status(
-            text
-        ) {
-
-
-            const element =
-                document.getElementById(
-                    "ctw3Status"
-                );
-
-
-            if (element) {
-
-                element.textContent =
-                    text;
-
-            }
-
-        }
-
-
-        // =====================================================
-        // REGISTRATION
-        // LOAD PLAYER COUNTRY
-        // =====================================================
-
-        async function loadCTW3Country() {
-
-
-            try {
-
-
-                updateCTW3Status(
-                    "🌍 Проверяем государство..."
-                );
-
-
-                const response =
-                    await fetch(
-                        "/api/ctw3/country",
-                        {
-
-                            method:
-                                "GET",
-
-                            credentials:
-                                "same-origin"
-
-                        }
-                    );
-
-
-                if (!response.ok) {
-
-                    throw new Error(
-                        "HTTP " +
-                        response.status
-                    );
-
-                }
-
-
-                const data =
-                    await response.json();
-
-
-                // =================================================
-                // COUNTRY EXISTS
-                // =================================================
-
-                if (
-                    data.registered === true &&
-                    data.country
-                ) {
-
-
-                    ctw3Country =
-                        data.country;
-
-
-                    window.ctw3Country =
-                        data.country;
-
-
-                    hideCTW3Registration();
-
-
-                    updateCTW3Status(
-                        "🌍 " +
-                        (
-                            data.country.flag ||
-                            "🏳️"
-                        ) +
-                        " " +
-                        data.country.name
-                    );
-
-
-                    console.log(
-                        "[CTW3] Country loaded:",
-                        data.country
-                    );
-
-
-                    return;
-
-                }
-
-
-                // =================================================
-                // NO COUNTRY
-                // =================================================
-
-                showCTW3Registration();
-
-
-                updateCTW3Status(
-                    "🌍 Создайте своё государство"
-                );
-
-            }
-
-
-            catch (error) {
-
-
-                console.error(
-                    "[CTW3] Country loading error:",
-                    error
-                );
-
-
-                showCTW3Registration();
-
-
-                showCTW3RegistrationError(
-                    "Не удалось подключиться к серверу."
-                );
-
-
-                updateCTW3Status(
-                    "⚠️ Ошибка подключения"
-                );
-
-            }
-
-        }
-
-
-        // =====================================================
-        // SHOW REGISTRATION
-        // =====================================================
-
-        function showCTW3Registration() {
-
-
-            const overlay =
-                document.getElementById(
-                    "ctw3RegistrationOverlay"
-                );
-
-
-            if (!overlay) {
-
-                return;
-
-            }
-
-
-            overlay.style.display =
-                "flex";
-
-        }
-
-
-        // =====================================================
-        // HIDE REGISTRATION
-        // =====================================================
-
-        function hideCTW3Registration() {
-
-
-            const overlay =
-                document.getElementById(
-                    "ctw3RegistrationOverlay"
-                );
-
-
-            if (!overlay) {
-
-                return;
-
-            }
-
-
-            overlay.style.display =
-                "none";
-
-        }
-
-
-        // =====================================================
-        // REGISTRATION ERROR
-        // =====================================================
-
-        function showCTW3RegistrationError(
-            message
-        ) {
-
-
-            const element =
-                document.getElementById(
-                    "ctw3RegistrationError"
-                );
-
-
-            if (!element) {
-
-                return;
-
-            }
-
-
-            element.textContent =
-                message || "";
-
-        }
-
-
-        // =====================================================
-        // CREATE COUNTRY
-        // =====================================================
-
-        async function createCTW3Country() {
-
-
-            const nameInput =
-                document.getElementById(
-                    "ctw3CountryName"
-                );
-
-
-            const flagInput =
-                document.getElementById(
-                    "ctw3CountryFlag"
-                );
-
-
-            const languageInput =
-                document.getElementById(
-                    "ctw3CountryLanguage"
-                );
-
-
-            const button =
-                document.getElementById(
-                    "ctw3CreateCountryButton"
-                );
-
-
-            const name =
-                nameInput.value.trim();
-
-
-            const flag =
-                flagInput.value.trim();
-
-
-            const language =
-                languageInput.value.trim();
-
-
-            // =================================================
-            // CLEAR ERROR
-            // =================================================
-
-            showCTW3RegistrationError(
-                ""
-            );
-
-
-            // =================================================
-            // VALIDATE NAME
-            // =================================================
-
-            if (!name) {
-
-
-                showCTW3RegistrationError(
-                    "Введите название государства."
-                );
-
-
-                nameInput.focus();
-
-
-                return;
-
-            }
-
-
-            // =================================================
-            // VALIDATE FLAG
-            // =================================================
-
-            if (!flag) {
-
-
-                showCTW3RegistrationError(
-                    "Укажите флаг государства."
-                );
-
-
-                flagInput.focus();
-
-
-                return;
-
-            }
-
-
-            // =================================================
-            // VALIDATE LANGUAGE
-            // =================================================
-
-            if (!language) {
-
-
-                showCTW3RegistrationError(
-                    "Выберите основной язык."
-                );
-
-
-                languageInput.focus();
-
-
-                return;
-
-            }
-
-
-            // =================================================
-            // LOADING STATE
-            // =================================================
-
-            button.disabled =
-                true;
-
-
-            button.textContent =
-                "🌍 Создание государства...";
-
-
-            updateCTW3Status(
-                "🌍 Создаём государство..."
-            );
-
-
-            try {
-
-
-                const response =
-                    await fetch(
-                        "/api/ctw3/country",
-                        {
-
-                            method:
-                                "POST",
-
-                            credentials:
-                                "same-origin",
-
-                            headers:
-                                {
-                                    "Content-Type":
-                                        "application/json"
-                                },
-
-                            body:
-                                JSON.stringify(
-                                    {
-
-                                        name:
-                                            name,
-
-                                        flag:
-                                            flag,
-
-                                        language:
-                                            language
-
-                                    }
-                                )
-
-                        }
-                    );
-
-
-                let data;
-
-
-                try {
-
-                    data =
-                        await response.json();
-
-                }
-
-                catch {
-
-                    data =
-                        {};
-
-                }
-
-
-                // =================================================
-                // SERVER ERROR
-                // =================================================
-
-                if (!response.ok) {
-
-
-                    throw new Error(
-                        data.detail ||
-                        "Не удалось создать государство."
-                    );
-
-                }
-
-
-                // =================================================
-                // CHECK SERVER RESPONSE
-                // =================================================
-
-                if (
-                    data.status !==
-                        "success" ||
-                    !data.country
-                ) {
-
-
-                    throw new Error(
-                        "Сервер вернул некорректный ответ."
-                    );
-
-                }
-
-
-                // =================================================
-                // SAVE COUNTRY
-                // =================================================
-
-                ctw3Country =
-                    data.country;
-
-
-                window.ctw3Country =
-                    data.country;
-
-
-                // =================================================
-                // HIDE REGISTRATION
-                // =================================================
-
-                hideCTW3Registration();
-
-
-                // =================================================
-                // STATUS
-                // =================================================
-
-                updateCTW3Status(
-                    "🌍 " +
-                    (
-                        data.country.flag ||
-                        "🏳️"
-                    ) +
-                    " " +
-                    data.country.name
-                );
-
-
-                console.log(
-                    "[CTW3] Country created:",
-                    data.country
-                );
-
-
-                // =================================================
-                // TEMPORARY MESSAGE
-                // =================================================
-
-                alert(
-                    "Государство создано!\n\n" +
-                    (
-                        data.country.flag ||
-                        "🏳️"
-                    ) +
-                    " " +
-                    data.country.name +
-                    "\n\n" +
-                    "Следующий этап — выбор территории."
-                );
-
-
-            }
-
-
-            catch (error) {
-
-
-                console.error(
-                    "[CTW3] Country creation error:",
-                    error
-                );
-
-
-                showCTW3RegistrationError(
-                    error.message ||
-                    "Не удалось создать государство."
-                );
-
-
-                updateCTW3Status(
-                    "⚠️ Ошибка создания государства"
-                );
-
-            }
-
-
-            finally {
-
-
-                button.disabled =
-                    false;
-
-
-                button.textContent =
-                    "🌍 Создать государство";
-
-            }
-
-        }
-
-
-        // =====================================================
-        // ENTER KEY
-        // =====================================================
-
-        function setupCTW3RegistrationKeyboard() {
-
-
-            const nameInput =
-                document.getElementById(
-                    "ctw3CountryName"
-                );
-
-
-            const flagInput =
-                document.getElementById(
-                    "ctw3CountryFlag"
-                );
-
-
-            const languageInput =
-                document.getElementById(
-                    "ctw3CountryLanguage"
-                );
-
-
-            if (nameInput) {
-
-                nameInput.addEventListener(
-                    "keydown",
-                    function(event) {
-
-                        if (
-                            event.key ===
-                            "Enter"
-                        ) {
-
-                            createCTW3Country();
-
-                        }
-
-                    }
-                );
-
-            }
-
-
-            if (flagInput) {
-
-                flagInput.addEventListener(
-                    "keydown",
-                    function(event) {
-
-                        if (
-                            event.key ===
-                            "Enter"
-                        ) {
-
-                            createCTW3Country();
-
-                        }
-
-                    }
-                );
-
-            }
-
-
-            if (languageInput) {
-
-                languageInput.addEventListener(
-                    "keydown",
-                    function(event) {
-
-                        if (
-                            event.key ===
-                            "Enter"
-                        ) {
-
-                            createCTW3Country();
-
-                        }
-
-                    }
-                );
-
-            }
-
-        }
-
-
-        // =====================================================
-        // START CTW3
-        // =====================================================
-
-        window.addEventListener(
-            "DOMContentLoaded",
-            async function() {
-
-
-                // -------------------------------------------------
-                // INITIALIZE MAP
-                // -------------------------------------------------
-
-                initCTW3();
-
-
-                // -------------------------------------------------
-                // SETUP REGISTRATION
-                // -------------------------------------------------
-
-                setupCTW3RegistrationKeyboard();
-
-
-                // -------------------------------------------------
-                // LOAD COUNTRY
-                // -------------------------------------------------
-
-                await loadCTW3Country();
-
-            }
-        );
-
-    </script>
-
-
+  </div>
+  <div class="section">
+    <h4>СТРОИТЕЛЬСТВО</h4>
+    <div class="card">ПКМ по карте открывает строительство.</div>
+  </div>
+</div>
+
+<div id="production" class="panel" style="position:fixed;right:14px;bottom:55px;width:300px;padding:14px;z-index:2000">
+  <h3 style="margin:0 0 8px;font-size:14px">⚙️ Производство заводов</h3>
+  <div style="font-size:10px;color:#7f8997;margin-bottom:10px">Все заводы должны быть распределены между тремя режимами.</div>
+  <div class="rangeRow"><span>💰 Прибыль</span><input id="profitRange" type="number" min="0" value="0" onchange="syncProduction()"></div>
+  <div class="rangeRow"><span>🚀 Ракеты</span><input id="missileRange" type="number" min="0" value="0" onchange="syncProduction()"></div>
+  <div class="rangeRow"><span>🛡️ ПВО</span><input id="defenseRange" type="number" min="0" value="0" onchange="syncProduction()"></div>
+  <button class="action" onclick="saveProduction()">Сохранить</button>
+</div>
+
+<div id="targetPanel" class="panel">
+  <h3 style="margin:0 0 8px;font-size:14px">🎯 Выберите цель</h3>
+  <div id="targetList"></div>
+</div>
+
+<div id="chat" class="panel">
+  <div style="padding:10px 12px;border-bottom:1px solid #ffffff12;font-size:12px;font-weight:800">🌍 Мировой чат</div>
+  <div id="chatMessages"></div>
+  <form id="chatForm">
+    <input id="chatInput" maxlength="500" placeholder="Сообщение...">
+    <button>➤</button>
+  </form>
+</div>
+
+<div id="context" class="panel">
+  <div class="contextItem" onclick="mapAction('city')">🏙️ Основать город</div>
+  <div class="contextItem" onclick="mapAction('factory')">🏭 Построить завод — $10M</div>
+  <div class="contextItem" onclick="mapAction('airport')">✈️ Построить аэропорт — $25M</div>
+  <div class="contextItem" onclick="mapAction('air_defense')">🛡️ Разместить ПВО</div>
+  <div class="contextItem" onclick="mapAction('missile')">🚀 Разместить ракету</div>
+</div>
+
+<div id="status" class="panel">🌍 CTW3 загружается...</div>
+<div id="modeLabel" class="panel">🗺️ Обычная карта</div>
+
+<div id="overlay">
+  <div class="modal">
+    <h1>🌍 Создание государства</h1>
+    <p>Создайте государство. После регистрации необходимо выбрать свободную территорию.</p>
+    <label>Название</label>
+    <input id="countryName" maxlength="40" placeholder="Например: Новая Республика">
+    <label>Флаг</label>
+    <input id="countryFlag" maxlength="8" value="🏳️">
+    <label>Основной язык</label>
+    <select id="countryLanguage">
+      <option>Русский</option><option>English</option><option>Deutsch</option>
+      <option>Français</option><option>Español</option><option>العربية</option>
+      <option>中文</option><option>日本語</option><option>Português</option>
+    </select>
+    <div id="registerError" style="min-height:20px;color:#ff7272;font-size:11px;text-align:center;margin:9px"></div>
+    <button class="action" onclick="createCountry()">🌍 Создать государство</button>
+  </div>
+</div>
+
+<div id="territoryOverlay" class="overlay" style="display:none;position:fixed;inset:0;z-index:4900;align-items:center;justify-content:center;background:rgba(3,6,12,.55);pointer-events:none">
+  <div class="modal" style="pointer-events:auto;width:min(400px,calc(100% - 30px))">
+    <h1>🗺️ Выбор территории</h1>
+    <p id="territoryHint">Нажмите на свободную страну на карте.</p>
+    <div id="selectedTerritory" style="text-align:center;font-size:16px;margin:12px 0">—</div>
+    <button id="confirmTerritory" class="action" disabled onclick="confirmTerritory()">Занять территорию</button>
+  </div>
+</div>
+
+<script>
+const MAP_KEY="ctw3_map_mode";
+const GEO_URL="https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson";
+
+let map, normalLayer, satelliteLayer, nightLayer, countryLayer;
+let country=null;
+let countries=[];
+let selectedTerritory=null;
+let contextLatLng=null;
+let targetCountry=null;
+let mapMode=localStorage.getItem(MAP_KEY)||"normal";
+
+function $(id){return document.getElementById(id)}
+function setStatus(t){$("status").textContent=t}
+
+function money(v){
+  const n=Number(v||0);
+  return (n<0?"-$":"$")+Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0});
+}
+function number(v){return Number(v||0).toLocaleString("en-US")}
+
+async function api(url,options={}){
+  const r=await fetch(url,{credentials:"include",...options,headers:{"Content-Type":"application/json",...(options.headers||{})}});
+  let data={}; try{data=await r.json()}catch{}
+  if(!r.ok) throw new Error(data.detail||"Ошибка сервера");
+  return data;
+}
+
+function initMap(){
+  map=L.map("ctw3Map",{center:[20,0],zoom:2,minZoom:2,maxZoom:18,worldCopyJump:true});
+
+  normalLayer=L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap contributors"});
+  satelliteLayer=L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",{maxZoom:19,attribution:"Tiles © Esri"});
+  nightLayer=L.terminator({fillColor:"#000",fillOpacity:.42,color:"#000",opacity:0,weight:0});
+
+  setMapMode(mapMode);
+  nightLayer.addTo(map);
+  updateNight();
+  setInterval(updateNight,60000);
+
+  map.on("contextmenu",e=>{
+    if(!country || !country.territory) return;
+    contextLatLng=e.latlng;
+    const c=$("context");
+    c.style.left=Math.min(e.containerPoint.x+10,window.innerWidth-205)+"px";
+    c.style.top=Math.min(e.containerPoint.y+10,window.innerHeight-250)+"px";
+    c.style.display="block";
+  });
+
+  map.on("click",()=>{$("context").style.display="none"});
+}
+
+function setMapMode(mode){
+  mapMode=mode; localStorage.setItem(MAP_KEY,mode);
+  if(!map) return;
+  if(mode==="satellite"){
+    if(map.hasLayer(normalLayer))map.removeLayer(normalLayer);
+    satelliteLayer.addTo(map);
+    $("normalBtn").classList.remove("active"); $("satBtn").classList.add("active");
+    $("modeLabel").textContent="🛰️ Спутниковая карта";
+  }else{
+    if(map.hasLayer(satelliteLayer))map.removeLayer(satelliteLayer);
+    normalLayer.addTo(map);
+    $("satBtn").classList.remove("active"); $("normalBtn").classList.add("active");
+    $("modeLabel").textContent="🗺️ Обычная карта";
+  }
+  updateNight();
+}
+
+function updateNight(){
+  if(nightLayer) nightLayer.setStyle({fillOpacity:.42});
+}
+
+async function loadGeoJSON(){
+  try{
+    const r=await fetch(GEO_URL);
+    const geo=await r.json();
+    countryLayer=L.geoJSON(geo,{
+      style:featureStyle,
+      onEachFeature:(feature,layer)=>{
+        layer.on("click",()=>territoryClick(feature,layer));
+        layer.bindTooltip(feature.properties.ADMIN||feature.properties.NAME||"Territory",{sticky:true});
+      }
+    }).addTo(map);
+  }catch(e){
+    console.error(e);
+    setStatus("⚠️ Не удалось загрузить границы стран");
+  }
+}
+
+function codeOf(feature){
+  const p=feature.properties||{};
+  return p.ISO_A3||p.ISO_A3_EH||p.ADM0_A3||p.SOV_A3||p.GU_A3||"";
+}
+function nameOf(feature){
+  const p=feature.properties||{};
+  return p.ADMIN||p.NAME||p.NAME_LONG||"Unknown";
+}
+
+function featureStyle(feature){
+  const code=codeOf(feature);
+  const occupied=countries.find(c=>c.territory&&c.territory.country_code===code);
+  const own=country&&country.territory&&country.territory.country_code===code;
+  return {
+    color:own?"#42d8ff":"#ffffff",
+    weight:own?3:1,
+    opacity:.85,
+    fillColor:own?"#00aeea":occupied?"#555":"#18324a",
+    fillOpacity:own?.35:occupied?.16:.10
+  };
+}
+
+function refreshCountryLayer(){
+  if(!countryLayer)return;
+  countryLayer.setStyle(featureStyle);
+}
+
+function territoryClick(feature,layer){
+  if(!country || country.territory) return;
+
+  const code=codeOf(feature);
+  const name=nameOf(feature);
+  const occupied=countries.find(c=>c.territory&&c.territory.country_code===code);
+
+  if(!code || occupied){
+    setStatus(occupied?"⛔ Территория уже занята":"⚠️ Эта территория недоступна");
+    return;
+  }
+
+  selectedTerritory={country_code:code,country_name:name};
+  $("selectedTerritory").textContent="🌍 "+name+" ("+code+")";
+  $("confirmTerritory").disabled=false;
+  setStatus("🗺️ Выбрана территория: "+name);
+}
+
+async function confirmTerritory(){
+  if(!selectedTerritory)return;
+  try{
+    const data=await api("/api/ctw3/territory",{method:"POST",body:JSON.stringify(selectedTerritory)});
+    country=data.country;
+    $("territoryOverlay").style.display="none";
+    selectedTerritory=null;
+    await refreshState();
+    await loadCountries();
+    refreshCountryLayer();
+    setStatus("✅ Территория сохранена в MongoDB");
+  }catch(e){setStatus("❌ "+e.message)}
+}
+
+async function createCountry(){
+  const name=$("countryName").value.trim();
+  const flag=$("countryFlag").value.trim();
+  const language=$("countryLanguage").value;
+  $("registerError").textContent="";
+  try{
+    const data=await api("/api/ctw3/country",{method:"POST",body:JSON.stringify({name,flag,language})});
+    country=data.country;
+    $("overlay").style.display="none";
+    $("territoryOverlay").style.display="flex";
+    await loadCountries();
+    refreshCountryLayer();
+    setStatus("🗺️ Выберите свободную территорию");
+  }catch(e){$("registerError").textContent=e.message}
+}
+
+async function refreshState(){
+  const data=await api("/api/ctw3/state");
+  if(!data.registered){
+    country=null;
+    $("overlay").style.display="flex";
+    $("territoryOverlay").style.display="none";
+    $("stats").style.display="none";
+    return;
+  }
+
+  country=data.country;
+  $("overlay").style.display="none";
+  $("stats").style.display="flex";
+
+  if(!country.territory){
+    $("territoryOverlay").style.display="flex";
+  }else{
+    $("territoryOverlay").style.display="none";
+  }
+
+  updateUI();
+  renderObjects();
+}
+
+function updateUI(){
+  if(!country)return;
+  $("sCountry").textContent=(country.flag||"🏳️")+" "+country.name;
+  $("sBudget").textContent=money(country.budget);
+  $("sPopulation").textContent=number(country.population);
+  $("sCities").textContent=number((country.cities||[]).length);
+  $("sFactories").textContent=number((country.factories||[]).length);
+  $("sMissiles").textContent=number(country.missile_stock);
+  $("sAirDefense").textContent=number(country.air_defense_stock);
+
+  $("panelTitle").textContent=(country.flag||"🏳️")+" "+country.name;
+  $("pBudget").textContent=money(country.budget);
+  $("pInflation").textContent=Number(country.inflation||0).toFixed(2)+"%";
+  $("pPopulation").textContent=number(country.population);
+  $("pTerritory").textContent=country.territory?country.territory.name:"—";
+  $("pCities").textContent=number((country.cities||[]).length);
+  $("pAirports").textContent=number((country.airports||[]).length);
+  $("pFactories").textContent=number((country.factories||[]).length);
+  $("pMissiles").textContent=number((country.missiles||[]).length)+" / "+number(country.missile_stock);
+  $("pDefense").textContent=number((country.air_defenses||[]).length)+" / "+number(country.air_defense_stock);
+}
+
+function iconMarker(emoji,lat,lng,id,type){
+  const m=L.marker([lat,lng],{
+    icon:L.divIcon({className:"ctw3-object",html:"<div style='font-size:22px;text-shadow:0 2px 5px #000'>"+emoji+"</div>",iconSize:[30,30],iconAnchor:[15,15]})
+  });
+  m.on("click",e=>{
+    L.DomEvent.stopPropagation(e);
+    if(type==="missile") startAttack(id);
+  });
+  m.bindTooltip(type+"");
+  m.addTo(map);
+  return m;
+}
+let objectMarkers=[];
+function renderObjects(){
+  objectMarkers.forEach(m=>map.removeLayer(m)); objectMarkers=[];
+  if(!country)return;
+  (country.cities||[]).forEach(x=>objectMarkers.push(iconMarker("🏙️",x.latitude,x.longitude,x.id,"city")));
+  (country.factories||[]).forEach(x=>objectMarkers.push(iconMarker("🏭",x.latitude,x.longitude,x.id,"factory")));
+  (country.airports||[]).forEach(x=>objectMarkers.push(iconMarker("✈️",x.latitude,x.longitude,x.id,"airport")));
+  (country.air_defenses||[]).forEach(x=>objectMarkers.push(iconMarker("🛡️",x.latitude,x.longitude,x.id,"air_defense")));
+  (country.missiles||[]).forEach(x=>objectMarkers.push(iconMarker("🚀",x.latitude,x.longitude,x.id,"missile")));
+}
+
+async function mapAction(action){
+  $("context").style.display="none";
+  if(!contextLatLng)return;
+  try{
+    const data=await api("/api/ctw3/action",{method:"POST",body:JSON.stringify({
+      action,latitude:contextLatLng.lat,longitude:contextLatLng.lng
+    })});
+    await refreshState();
+    setStatus("✅ Объект создан и сохранён в MongoDB");
+  }catch(e){setStatus("❌ "+e.message)}
+}
+
+function togglePanel(){
+  const p=$("countryPanel");
+  p.style.display=p.style.display==="block"?"none":"block";
+}
+function toggleChat(){
+  const c=$("chat");
+  c.style.display=c.style.display==="flex"?"none":"flex";
+  if(c.style.display==="flex")loadChat();
+}
+function openProduction(){
+  const p=$("production");
+  p.style.display=p.style.display==="block"?"none":"block";
+  if(p.style.display==="block")syncProduction();
+}
+function syncProduction(){
+  if(!country)return;
+  const total=(country.factories||[]).length;
+  $("profitRange").value=country.factory_profit||0;
+  $("missileRange").value=country.factory_missiles||0;
+  $("defenseRange").value=country.factory_air_defense||0;
+}
+async function saveProduction(){
+  const profit=Number($("profitRange").value||0);
+  const missiles=Number($("missileRange").value||0);
+  const defense=Number($("defenseRange").value||0);
+  const total=(country.factories||[]).length;
+  if(profit+missiles+defense!==total){
+    setStatus("❌ Сумма должна быть равна "+total);
+    return;
+  }
+  try{
+    await api("/api/ctw3/production",{method:"PUT",body:JSON.stringify({profit,missiles,air_defense:defense})});
+    await refreshState();
+    setStatus("✅ Производство сохранено");
+  }catch(e){setStatus("❌ "+e.message)}
+}
+
+async function loadCountries(){
+  try{
+    const data=await api("/api/ctw3/countries");
+    countries=data.countries||[];
+    refreshCountryLayer();
+  }catch(e){console.error(e)}
+}
+
+async function loadChat(){
+  try{
+    const data=await api("/api/ctw3/chat");
+    $("chatMessages").innerHTML="";
+    (data.messages||[]).forEach(addChatMessage);
+    $("chatMessages").scrollTop=$("chatMessages").scrollHeight;
+  }catch(e){console.error(e)}
+}
+function addChatMessage(m){
+  const d=document.createElement("div");d.className="chatmsg";
+  d.innerHTML="<b>"+escapeHtml(m.country_flag||"🏳️")+" "+escapeHtml(m.country_name||"Unknown")+"</b> "+escapeHtml(m.text);
+  $("chatMessages").appendChild(d);
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
+}
+$("chatForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const input=$("chatInput"); const text=input.value.trim(); if(!text)return;
+  try{
+    const data=await api("/api/ctw3/chat",{method:"POST",body:JSON.stringify({text})});
+    addChatMessage(data.message); input.value="";
+    $("chatMessages").scrollTop=$("chatMessages").scrollHeight;
+  }catch(e){setStatus("❌ "+e.message)}
+});
+
+async function startAttack(missileId){
+  if(!country || !country.missiles) return;
+  const missile=country.missiles.find(x=>x.id===missileId); if(!missile)return;
+  targetCountry=null;
+  const data=await api("/api/ctw3/countries");
+  const list=(data.countries||[]).filter(x=>x.id!==country.id);
+  $("targetList").innerHTML="";
+  list.forEach(c=>{
+    const d=document.createElement("div");d.className="countryTarget";
+    d.innerHTML=escapeHtml(c.flag||"🏳️")+" "+escapeHtml(c.name);
+    d.onclick=()=>selectAttackTarget(c,missile);
+    $("targetList").appendChild(d);
+  });
+  $("targetPanel").style.display="block";
+}
+function selectAttackTarget(c,missile){
+  targetCountry=c;
+  $("targetPanel").style.display="none";
+  setStatus("🎯 Цель выбрана: "+c.name+" — кликните точку удара");
+  const handler=async e=>{
+    map.off("click",handler);
+    try{
+      const result=await api("/api/ctw3/attack",{method:"POST",body:JSON.stringify({
+        missile_id:missile.id,
+        target_country_id:c.id,
+        latitude:e.latlng.lat,
+        longitude:e.latlng.lng
+      })});
+      setStatus(result.status==="intercepted"?"🛡️ Ракета перехвачена":"💥 Удар нанесён");
+      await refreshState();
+    }catch(err){setStatus("❌ "+err.message)}
+  };
+  map.once("click",handler);
+}
+
+document.addEventListener("click",e=>{
+  if(!e.target.closest("#context")) $("context").style.display="none";
+});
+
+async function boot(){
+  initMap();
+  await loadGeoJSON();
+  await refreshState();
+  await loadCountries();
+  setStatus("🌍 CTW3 готов");
+  setInterval(async()=>{
+    if(country){
+      try{
+        await refreshState();
+        await loadCountries();
+      }catch(e){console.error(e)}
+    }
+  },10000);
+}
+
+window.addEventListener("load",boot);
+</script>
 </body>
-
 </html>
