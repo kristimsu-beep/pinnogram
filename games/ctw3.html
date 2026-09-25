@@ -966,6 +966,9 @@ let countryLayer;
 let country=null;
 let countries=[];
 
+let ctw3Socket = null;
+let ctw3PlayerId = null;
+      
 let contextLatLng=null;
 let targetCountry=null;
 
@@ -1026,7 +1029,359 @@ function number(v){
         .toLocaleString("en-US");
 }
 
+/* =========================================================
+   CTW3 ONLINE MULTIPLAYER
+========================================================= */
 
+function getCTW3PlayerId(){
+
+    let id = localStorage.getItem("ctw3_player_id");
+
+    if(!id){
+        id =
+            "ctw3_" +
+            Date.now().toString(36) +
+            "_" +
+            Math.random()
+                .toString(36)
+                .substring(2,10);
+
+        localStorage.setItem(
+            "ctw3_player_id",
+            id
+        );
+    }
+
+    return id;
+}
+
+
+function connectCTW3WebSocket(){
+
+    ctw3PlayerId =
+        getCTW3PlayerId();
+
+    const protocol =
+        location.protocol === "https:"
+        ? "wss:"
+        : "ws:";
+
+    const wsUrl =
+        protocol +
+        "//" +
+        location.host +
+        "/ws/ctw3";
+
+    console.log(
+        "[CTW3 WS] Connecting:",
+        wsUrl
+    );
+
+    ctw3Socket =
+        new WebSocket(wsUrl);
+
+
+    ctw3Socket.onopen = function(){
+
+        console.log(
+            "[CTW3 WS] Connected"
+        );
+
+        setStatus(
+            "🌍 CTW3 онлайн"
+        );
+
+        ctw3Socket.send(
+            JSON.stringify({
+                type:"join",
+                player_id:ctw3PlayerId
+            })
+        );
+    };
+
+
+    ctw3Socket.onmessage = function(event){
+
+        try{
+
+            const data =
+                JSON.parse(
+                    event.data
+                );
+
+            if(
+                data.type ===
+                "world_update"
+            ){
+
+                receiveCTW3World(
+                    data.countries || {}
+                );
+
+            }
+
+        }catch(error){
+
+            console.error(
+                "[CTW3 WS] Message error:",
+                error
+            );
+
+        }
+
+    };
+
+
+    ctw3Socket.onclose = function(){
+
+        console.log(
+            "[CTW3 WS] Disconnected"
+        );
+
+        setStatus(
+            "⚠️ Соединение с миром потеряно"
+        );
+
+        setTimeout(
+            connectCTW3WebSocket,
+            3000
+        );
+
+    };
+
+
+    ctw3Socket.onerror = function(error){
+
+        console.error(
+            "[CTW3 WS] Error:",
+            error
+        );
+
+    };
+
+}
+
+
+/*
+    Получаем единое состояние мира
+    от сервера.
+*/
+function receiveCTW3World(
+    worldCountries
+){
+
+    const list =
+        Object.values(
+            worldCountries || {}
+        );
+
+
+    countries = list;
+
+
+    /*
+        Обновляем визуальные территории
+        всех игроков.
+    */
+    renderAllOnlineCountries();
+
+}
+
+function sendMyCountryToWorld(){
+
+    if(
+        !ctw3Socket ||
+        ctw3Socket.readyState !==
+        WebSocket.OPEN
+    ){
+
+        console.log(
+            "[CTW3 WS] Not connected yet"
+        );
+
+        return;
+
+    }
+
+
+    if(!country){
+
+        return;
+
+    }
+
+
+    if(!country.id){
+
+        return;
+
+    }
+
+
+    ctw3Socket.send(
+        JSON.stringify({
+
+            type:
+                "country_update",
+
+            country_id:
+                String(country.id),
+
+            country:
+                country
+
+        })
+    );
+
+
+    console.log(
+        "[CTW3 WS] Country sent:",
+        country.name
+    );
+
+}
+      
+/*
+    Отрисовываем ВСЕ страны игроков.
+*/
+let onlineCountryLayers = {};
+
+
+function renderAllOnlineCountries(){
+
+    /*
+        Удаляем старые территории.
+    */
+    Object.values(
+        onlineCountryLayers
+    ).forEach(
+        layer => {
+
+            if(
+                map &&
+                map.hasLayer(layer)
+            ){
+
+                map.removeLayer(
+                    layer
+                );
+
+            }
+
+        }
+    );
+
+
+    onlineCountryLayers = {};
+
+
+    countries.forEach(
+        c => {
+
+            if(
+                !c ||
+                !c.id ||
+                !c.territory ||
+                !c.territory.geometry
+            ){
+
+                return;
+
+            }
+
+
+            const geometry =
+                c.territory.geometry;
+
+
+            if(
+                geometry.type !==
+                "Polygon"
+            ){
+
+                return;
+
+            }
+
+
+            if(
+                !geometry.coordinates ||
+                !geometry.coordinates[0]
+            ){
+
+                return;
+
+            }
+
+
+            const latLngs =
+                geometry.coordinates[0]
+                    .map(
+                        point => [
+                            point[1],
+                            point[0]
+                        ]
+                    );
+
+
+            /*
+                Твоя страна выделяется
+                ярче остальных.
+            */
+            const isMine =
+                country &&
+                String(c.id) ===
+                String(country.id);
+
+
+            const layer =
+                L.polygon(
+                    latLngs,
+                    {
+                        color:
+                            isMine
+                            ? "#42d8ff"
+                            : "#ffcc66",
+
+                        weight:
+                            isMine
+                            ? 3
+                            : 2,
+
+                        opacity:1,
+
+                        fillColor:
+                            isMine
+                            ? "#00aeea"
+                            : "#d99422",
+
+                        fillOpacity:
+                            isMine
+                            ? .25
+                            : .18
+                    }
+                ).addTo(map);
+
+
+            /*
+                При клике можно будет
+                позже открыть информацию
+                о стране.
+            */
+            layer.bindTooltip(
+                (c.flag || "🏳️") +
+                " " +
+                (c.name || "Государство")
+            );
+
+
+            onlineCountryLayers[
+                String(c.id)
+            ] = layer;
+
+        }
+    );
+}
 /* =========================================================
    API
 ========================================================= */
@@ -1858,6 +2213,7 @@ async function saveDrawnTerritory(){
 
         renderCountryTerritory();
 
+        sendMyCountryToWorld();
 
         setStatus(
             "✅ Территория сохранена в MongoDB"
@@ -2974,6 +3330,8 @@ document.addEventListener(
 async function boot(){
 
     initMap();
+
+    connectCTW3WebSocket();
 
     await loadGeoJSON();
 
