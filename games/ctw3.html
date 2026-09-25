@@ -2964,19 +2964,22 @@ async function loadCountries(){
                 "/api/ctw3/countries"
             );
 
-
         countries=
-            data.countries||[];
+            data.countries || [];
 
+        // Сразу рисуем все страны,
+        // полученные из MongoDB.
+        renderAllOnlineCountries();
 
     }catch(e){
 
-        console.error(e);
+        console.error(
+            "[CTW3] Ошибка загрузки стран:",
+            e
+        );
 
     }
-
 }
-
 
 /* =========================================================
    CHAT
