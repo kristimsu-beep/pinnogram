@@ -437,6 +437,53 @@ select{
     }
 }
 
+      /* =========================================================
+   CTW3 CONTEXT MENU
+========================================================= */
+
+#context{
+    position:fixed;
+
+    display:none;
+
+    z-index:6000;
+
+    min-width:190px;
+
+    padding:6px;
+
+    background:rgba(10,18,28,.96);
+
+    border:1px solid rgba(255,255,255,.14);
+
+    border-radius:10px;
+
+    box-shadow:
+        0 12px 35px rgba(0,0,0,.45);
+
+    backdrop-filter:blur(10px);
+
+    color:#fff;
+}
+
+#context .contextItem{
+    padding:9px 10px;
+
+    border-radius:7px;
+
+    cursor:pointer;
+
+    font-size:11px;
+
+    white-space:nowrap;
+
+    user-select:none;
+}
+
+#context .contextItem:hover{
+    background:rgba(255,255,255,.10);
+}
+
 </style>
 </head>
 
