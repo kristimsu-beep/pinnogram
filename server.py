@@ -5180,23 +5180,26 @@ async def ctw3_send_chat(
         )
 
     message = {
-        "country_name": country["name"],
-        "country_flag": country["flag"],
+        "country_name": country.get("name", ""),
+        "country_flag": country.get("flag", ""),
         "text": text,
         "created_at": datetime.utcnow()
     }
 
     result = await ctw3_chat.insert_one(message)
 
-    return {
-        "status": "success",
-        "message": {
-            "id": str(result.inserted_id),
-            **message,
-            "created_at": message["created_at"].isoformat()
-        }
+    response_message = {
+        "id": str(result.inserted_id),
+        "country_name": message["country_name"],
+        "country_flag": message["country_flag"],
+        "text": message["text"],
+        "created_at": message["created_at"].isoformat()
     }
 
+    return {
+        "status": "success",
+        "message": ctw3_json_safe(response_message)
+    }
 
 # =========================================================
 # CTW3 — ATTACK
