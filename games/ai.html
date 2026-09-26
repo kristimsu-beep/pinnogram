@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>AI Voice</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden}
+body{
+  font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  background:
+    radial-gradient(circle at 50% 42%,#162b4b 0,#09101e 34%,#03050a 72%);
+  color:#fff;
+}
+#app{height:100%;display:flex;flex-direction:column;align-items:center;position:relative}
+header{
+  width:100%;padding:22px 20px 10px;text-align:center;
+  font-size:20px;font-weight:600;letter-spacing:.3px;
+  position:relative;z-index:5;
+}
+#status{
+  margin-top:5px;font-size:13px;color:#8fa5c6;min-height:20px;
+  transition:.25s;
+}
+#scene{
+  flex:1;width:100%;display:flex;align-items:center;justify-content:center;
+  position:relative;
+}
+#orbButton{
+  width:min(64vw,300px);height:min(64vw,300px);border:0;border-radius:50%;
+  cursor:pointer;position:relative;background:transparent;padding:0;
+  outline:none;-webkit-tap-highlight-color:transparent;
+}
+#orb{
+  position:absolute;inset:14%;
+  border-radius:50%;
+  background:
+    radial-gradient(circle at 32% 28%,#ffffff 0 2%,#aee7ff 7%,#4da8ff 22%,#3268ff 45%,#5d22d8 68%,#0b0c32 100%);
+  box-shadow:
+    0 0 25px #4d9dff,
+    0 0 65px rgba(74,129,255,.65),
+    0 0 130px rgba(83,43,255,.35),
+    inset -20px -25px 45px rgba(0,0,0,.35),
+    inset 12px 10px 30px rgba(255,255,255,.3);
+  transform:scale(1);
+  transition:transform .08s ease,filter .2s ease;
+}
+#orb::before,#orb::after{
+  content:"";position:absolute;inset:-10%;border-radius:50%;
+  border:1px solid rgba(125,190,255,.25);
+  animation:spin 8s linear infinite;
+}
+#orb::after{inset:-18%;border-color:rgba(133,80,255,.15);animation-duration:13s;animation-direction:reverse}
+@keyframes spin{to{transform:rotate(360deg)}}
+#orbButton.active #orb{
+  filter:saturate(1.35) brightness(1.15);
+  box-shadow:0 0 35px #69b9ff,0 0 90px rgba(68,133,255,.85),0 0 170px rgba(101,55,255,.5),inset -20px -25px 45px rgba(0,0,0,.25);
+}
+#orbButton.speaking #orb{animation:breathe .8s ease-in-out infinite alternate}
+@keyframes breathe{from{transform:scale(1)}to{transform:scale(1.12)}}
+#hint{
+  position:absolute;bottom:8%;left:0;right:0;text-align:center;
+  color:#7184a5;font-size:13px;padding:0 20px;
+}
+#conversation{
+  position:absolute;left:14px;right:14px;top:82px;bottom:82px;
+  pointer-events:none;overflow:hidden;display:flex;flex-direction:column;
+  justify-content:flex-end;gap:7px;z-index:3;
+}
+.msg{
+  max-width:min(78%,560px);padding:9px 13px;border-radius:16px;
+  font-size:13px;line-height:1.35;backdrop-filter:blur(12px);
+  background:rgba(17,28,49,.55);border:1px solid rgba(150,180,220,.08);
+}
+.msg.user{align-self:flex-end;color:#dbeaff}
+.msg.ai{align-self:flex-start;color:#d8d4ff}
+footer{
+  width:100%;padding:10px 20px 25px;text-align:center;color:#5d7194;font-size:12px;
+}
+@media(max-width:500px){
+  header{padding-top:18px}
+  #conversation{top:70px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    AI Voice
+    <div id="status">Нажми на шар, чтобы говорить</div>
+  </header>
+
+  <div id="scene">
+    <div id="conversation"></div>
+
+    <button id="orbButton" aria-label="Начать голосовой разговор">
+      <div id="orb"></div>
+    </button>
+
+    <div id="hint">Нажми ещё раз, чтобы остановить запись</div>
+  </div>
+
+  <footer>Groq Whisper + AI + Piper TTS</footer>
+</div>
+
+<script>
+const orbButton = document.getElementById("orbButton");
+const orb = document.getElementById("orb");
+const statusEl = document.getElementById("status");
+const conversationEl = document.getElementById("conversation");
+
+let mediaRecorder = null;
+let stream = null;
+let chunks = [];
+let recording = false;
+let hasSpeech = false;
+let lastSoundTime = 0;
+let silenceTimer = null;
+let audioContext = null;
+let analyser = null;
+let animationFrame = null;
+let history = [];
+let busy = false;
+
+const SILENCE_MS = 1500;
+const SPEECH_THRESHOLD = 0.025;
+
+function setStatus(text){
+  statusEl.textContent = text;
+}
+
+function addMessage(text, type){
+  if(!text) return;
+  const el = document.createElement("div");
+  el.className = "msg " + type;
+  el.textContent = text;
+  conversationEl.appendChild(el);
+
+  while(conversationEl.children.length > 6){
+    conversationEl.removeChild(conversationEl.firstChild);
+  }
+}
+
+function getSupportedMime(){
+  const types = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/ogg;codecs=opus"
+  ];
+  for(const t of types){
+    if(MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return "";
+}
+
+async function startRecording(){
+  if(busy || recording) return;
+
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio:{
+        echoCancellation:true,
+        noiseSuppression:true,
+        autoGainControl:true
+      }
+    });
+
+    chunks = [];
+    hasSpeech = false;
+    lastSoundTime = Date.now();
+
+    const mime = getSupportedMime();
+    mediaRecorder = mime
+      ? new MediaRecorder(stream,{mimeType:mime})
+      : new MediaRecorder(stream);
+
+    mediaRecorder.ondataavailable = e => {
+      if(e.data && e.data.size > 0) chunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      cancelAnimationFrame(animationFrame);
+      clearTimeout(silenceTimer);
+
+      if(stream){
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+      }
+
+      orbButton.classList.remove("active","speaking");
+      recording = false;
+
+      const blob = new Blob(chunks,{
+        type: mediaRecorder.mimeType || "audio/webm"
+      });
+
+      if(blob.size < 1000){
+        setStatus("Не удалось записать звук");
+        return;
+      }
+
+      await sendAudio(blob);
+    };
+
+    mediaRecorder.start(100);
+    recording = true;
+    orbButton.classList.add("active");
+    setStatus("Слушаю…");
+
+    setupAudioVisualizer(stream);
+  }catch(err){
+    console.error(err);
+    setStatus("Нет доступа к микрофону");
+  }
+}
+
+function setupAudioVisualizer(inputStream){
+  try{
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(inputStream);
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+
+    const data = new Uint8Array(analyser.fftSize);
+
+    function animateVoice(){
+      if(!recording || !analyser) return;
+
+      analyser.getByteTimeDomainData(data);
+
+      let sum = 0;
+      for(let i=0;i<data.length;i++){
+        const v = (data[i]-128)/128;
+        sum += v*v;
+      }
+
+      const rms = Math.sqrt(sum/data.length);
+      const scale = 1 + Math.min(rms*3.5, .22);
+
+      orb.style.transform = `scale(${scale})`;
+
+      if(rms > SPEECH_THRESHOLD){
+        hasSpeech = true;
+        lastSoundTime = Date.now();
+        orbButton.classList.add("speaking");
+      }else{
+        orbButton.classList.remove("speaking");
+      }
+
+      if(hasSpeech && Date.now()-lastSoundTime >= SILENCE_MS){
+        stopRecording();
+        return;
+      }
+
+      animationFrame = requestAnimationFrame(animateVoice);
+    }
+
+    animateVoice();
+  }catch(e){
+    console.warn("Visualizer error:",e);
+  }
+}
+
+function stopRecording(){
+  if(!recording || !mediaRecorder) return;
+
+  clearTimeout(silenceTimer);
+  cancelAnimationFrame(animationFrame);
+
+  if(mediaRecorder.state !== "inactive"){
+    mediaRecorder.stop();
+  }
+}
+
+async function sendAudio(blob){
+  busy = true;
+  setStatus("Обрабатываю голос…");
+
+  const form = new FormData();
+  form.append("audio",blob,"voice.webm");
+  form.append("history",JSON.stringify(history));
+
+  try{
+    const response = await fetch("/api/ai/voice",{
+      method:"POST",
+      body:form
+    });
+
+    const data = await response.json();
+
+    if(!response.ok){
+      throw new Error(data.detail || data.error || "Ошибка сервера");
+    }
+
+    const transcript = (data.transcript || "").trim();
+    const answer = (data.text || data.answer || "").trim();
+
+    if(transcript){
+      addMessage(transcript,"user");
+      history.push({role:"user",content:transcript});
+    }
+
+    if(answer){
+      addMessage(answer,"ai");
+      history.push({role:"assistant",content:answer});
+    }
+
+    if(history.length > 12){
+      history = history.slice(-12);
+    }
+
+    if(data.audio){
+      setStatus("Отвечаю…");
+      await playBase64Audio(data.audio);
+    }
+
+    setStatus("Нажми на шар, чтобы говорить");
+  }catch(err){
+    console.error("AI error:",err);
+    setStatus("Ошибка: " + err.message);
+  }finally{
+    busy = false;
+    orbButton.classList.remove("active","speaking");
+    orb.style.transform = "scale(1)";
+  }
+}
+
+async function playBase64Audio(base64){
+  return new Promise((resolve,reject)=>{
+    try{
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+
+      for(let i=0;i<binary.length;i++){
+        bytes[i] = binary.charCodeAt(i);
+      }
+
+      const blob = new Blob([bytes],{type:"audio/wav"});
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+
+      audio.onplay = () => {
+        orbButton.classList.add("active","speaking");
+      };
+
+      audio.onended = () => {
+        orbButton.classList.remove("active","speaking");
+        URL.revokeObjectURL(url);
+        resolve();
+      };
+
+      audio.onerror = e => {
+        orbButton.classList.remove("active","speaking");
+        URL.revokeObjectURL(url);
+        reject(new Error("Не удалось воспроизвести голос"));
+      };
+
+      audio.play().catch(reject);
+    }catch(e){
+      reject(e);
+    }
+  });
+}
+
+orbButton.addEventListener("click",()=>{
+  if(busy) return;
+
+  if(recording){
+    stopRecording();
+  }else{
+    startRecording();
+  }
+});
+
+window.addEventListener("beforeunload",()=>{
+  if(stream){
+    stream.getTracks().forEach(t=>t.stop());
+  }
+  if(audioContext){
+    audioContext.close().catch(()=>{});
+  }
+});
+</script>
+</body>
+</html>
