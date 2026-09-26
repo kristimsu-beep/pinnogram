@@ -32,16 +32,21 @@ from uuid import uuid4
 from bson import ObjectId
 from fastapi import UploadFile, File, Form, HTTPException
 from fastapi.responses import Response
-from openai import OpenAI
+import tempfile
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+from fastapi import UploadFile, File, Form, HTTPException
+from fastapi.responses import JSONResponse
 
-if OPENAI_API_KEY:
-    openai_client = OpenAI(
-        api_key=OPENAI_API_KEY
-    )
-else:
-    openai_client = None
+from groq import Groq
+
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+groq_client = (
+    Groq(api_key=GROQ_API_KEY)
+    if GROQ_API_KEY
+    else None
+)
 
 # Вечное облачное хранилище для видео и голосовых Pinnogram
 SUPABASE_URL = "https://zzcfdrryfsychezckjov.supabase.co"
@@ -7808,300 +7813,229 @@ async def get_ai_page():
         "ai.html"
     )
 
-    if os.path.exists(file_path):
-        return FileResponse(file_path)
-
-    return {
-        "error": "Файл ai.html не найден в папке games"
-    }
-
 @app.post("/api/ai/voice")
 async def ai_voice(
     audio: UploadFile = File(...),
     history: str = Form("[]")
 ):
-
-    if openai_client is None:
+    if not groq_client:
         raise HTTPException(
             status_code=500,
-            detail="OPENAI_API_KEY не настроен на сервере."
+            detail="GROQ_API_KEY не установлен."
         )
-
-
-    # ---------------------------------------------------------
-    # Проверяем файл
-    # ---------------------------------------------------------
-
-    if not audio.filename:
-        raise HTTPException(
-            status_code=400,
-            detail="Аудиофайл не получен."
-        )
-
-
-    audio_bytes = await audio.read()
-
-
-    if not audio_bytes:
-        raise HTTPException(
-            status_code=400,
-            detail="Аудиозапись пустая."
-        )
-
-
-    # Ограничение примерно 20 MB
-    if len(audio_bytes) > 20 * 1024 * 1024:
-        raise HTTPException(
-            status_code=413,
-            detail="Аудиозапись слишком большая."
-        )
-
-
-    # ---------------------------------------------------------
-    # История разговора
-    # ---------------------------------------------------------
 
     try:
+        audio_bytes = await audio.read()
 
-        conversation_history = json.loads(
-            history
-        )
-
-        if not isinstance(
-            conversation_history,
-            list
-        ):
-            conversation_history = []
-
-    except Exception:
-
-        conversation_history = []
-
-
-    # Оставляем последние 20 сообщений
-    conversation_history = (
-        conversation_history[-20:]
-    )
-
-
-    # ---------------------------------------------------------
-    # 1. SPEECH → TEXT
-    # ---------------------------------------------------------
-
-    try:
-
-        audio_file = io.BytesIO(
-            audio_bytes
-        )
-
-        audio_file.name = (
-            audio.filename
-            or "voice.webm"
-        )
-
-
-        transcription = (
-            openai_client
-            .audio
-            .transcriptions
-            .create(
-                model="gpt-4o-transcribe",
-                file=audio_file
+        if not audio_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="Аудиозапись пустая."
             )
-        )
 
+        # ==========================================
+        # 1. SPEECH → TEXT
+        # ==========================================
 
-        transcript = (
-            transcription.text
-            or ""
-        ).strip()
+        suffix = ".webm"
 
+        if audio.filename:
+            if "." in audio.filename:
+                suffix = "." + audio.filename.split(".")[-1]
 
-    except Exception as e:
+        with tempfile.NamedTemporaryFile(
+            suffix=suffix,
+            delete=False
+        ) as temp:
+            temp.write(audio_bytes)
+            temp_path = temp.name
 
-        print(
-            "AI TRANSCRIPTION ERROR:",
-            repr(e)
-        )
+        try:
+            with open(
+                temp_path,
+                "rb"
+            ) as audio_file:
 
-        raise HTTPException(
-            status_code=500,
-            detail="Не удалось распознать речь."
-        )
+                transcription = (
+                    groq_client.audio.transcriptions.create(
+                        file=audio_file,
+                        model="whisper-large-v3-turbo",
+                        language="ru",
+                        response_format="json"
+                    )
+                )
 
+            transcript = (
+                transcription.text or ""
+            ).strip()
 
-    if not transcript:
+        finally:
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
 
-        raise HTTPException(
-            status_code=400,
-            detail="Я не услышал сообщение."
-        )
+        if not transcript:
+            raise HTTPException(
+                status_code=400,
+                detail="Не удалось распознать речь."
+            )
 
+        # ==========================================
+        # 2. LOAD HISTORY
+        # ==========================================
 
-    # ---------------------------------------------------------
-    # 2. AI RESPONSE
-    # ---------------------------------------------------------
-
-    try:
-
-        messages = []
-
-
-        for item in conversation_history:
+        try:
+            old_history = json.loads(history)
 
             if not isinstance(
-                item,
-                dict
+                old_history,
+                list
             ):
-                continue
+                old_history = []
 
+        except Exception:
+            old_history = []
 
-            role = item.get(
-                "role"
-            )
+        # ==========================================
+        # 3. AI RESPONSE
+        # ==========================================
 
-            content = item.get(
-                "content"
-            )
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "Ты дружелюбный голосовой AI-помощник. "
+                    "Отвечай естественно и понятно. "
+                    "Не используй Markdown, если он не нужен. "
+                    "Поскольку ответ будет озвучен голосом, "
+                    "пиши достаточно коротко и разговорно."
+                )
+            }
+        ]
 
+        for item in old_history[-20:]:
 
-            if role not in (
+            role = item.get("role")
+            content = item.get("content")
+
+            if role in (
                 "user",
                 "assistant"
-            ):
-                continue
+            ) and content:
 
-
-            if not content:
-                continue
-
-
-            messages.append({
-                "role": role,
-                "content": str(
-                    content
-                )
-            })
-
+                messages.append({
+                    "role": role,
+                    "content": content
+                })
 
         messages.append({
             "role": "user",
             "content": transcript
         })
 
-
-        response = (
-            openai_client
-            .responses
-            .create(
-                model="gpt-5.6-luna",
-
-                instructions=(
-                    "Ты голосовой AI-помощник. "
-                    "Отвечай естественно и дружелюбно. "
-                    "Отвечай на том же языке, "
-                    "на котором пользователь говорит. "
-                    "Для голосового ответа не используй "
-                    "markdown, длинные списки или сложное "
-                    "форматирование. "
-                    "Если вопрос требует подробного ответа, "
-                    "объясняй понятно и естественно."
-                ),
-
-                input=messages
+        completion = (
+            groq_client.chat.completions.create(
+                model="openai/gpt-oss-20b",
+                messages=messages,
+                temperature=0.7,
+                max_completion_tokens=700
             )
         )
 
-
         answer = (
-            response.output_text
+            completion
+            .choices[0]
+            .message
+            .content
             or ""
         ).strip()
 
-
-    except Exception as e:
-
-        print(
-            "AI RESPONSE ERROR:",
-            repr(e)
-        )
-
-        raise HTTPException(
-            status_code=500,
-            detail="Не удалось получить ответ AI."
-        )
-
-
-    if not answer:
-
-        raise HTTPException(
-            status_code=500,
-            detail="AI не вернул текстовый ответ."
-        )
-
-
-    # ---------------------------------------------------------
-    # 3. TEXT → SPEECH
-    # ---------------------------------------------------------
-
-    try:
-
-        speech = (
-            openai_client
-            .audio
-            .speech
-            .create(
-                model="gpt-4o-mini-tts",
-
-                voice="marin",
-
-                input=answer[:4096],
-
-                instructions=(
-                    "Speak naturally and warmly, "
-                    "like a helpful conversational AI. "
-                    "Use a calm, clear speaking style "
-                    "with natural pauses."
-                ),
-
-                response_format="mp3"
+        if not answer:
+            answer = (
+                "Извините, я не смог подготовить ответ."
             )
-        )
 
+        # ==========================================
+        # 4. TEXT → SPEECH
+        # ==========================================
+        #
+        # Здесь позже подключается Piper.
+        # Он работает локально на сервере.
+        #
 
-        audio_output = speech.read()
+        audio_base64 = None
 
+        try:
+            import subprocess
 
-    except Exception as e:
+            with tempfile.NamedTemporaryFile(
+                suffix=".wav",
+                delete=False
+            ) as output_file:
+                output_path = output_file.name
 
+            process = subprocess.run(
+                [
+                    "piper",
+                    "--model",
+                    "/opt/piper/ru_RU-dmitri-medium.onnx",
+                    "--output_file",
+                    output_path
+                ],
+                input=answer,
+                text=True,
+                capture_output=True,
+                timeout=60
+            )
+
+            if process.returncode == 0:
+                with open(
+                    output_path,
+                    "rb"
+                ) as f:
+                    audio_output = f.read()
+
+                audio_base64 = (
+                    base64.b64encode(
+                        audio_output
+                    ).decode("ascii")
+                )
+
+            try:
+                os.remove(output_path)
+            except Exception:
+                pass
+
+        except Exception as tts_error:
+            print(
+                "PIPER TTS ERROR:",
+                repr(tts_error)
+            )
+
+        # ==========================================
+        # 5. RETURN TO FRONTEND
+        # ==========================================
+
+        return JSONResponse({
+            "transcript": transcript,
+            "text": answer,
+            "audio": audio_base64
+        })
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
         print(
-            "AI TTS ERROR:",
-            repr(e)
+            "AI VOICE ERROR:",
+            repr(error)
         )
 
         raise HTTPException(
             status_code=500,
-            detail="Не удалось озвучить ответ."
+            detail=str(error)
         )
-
-
-    # ---------------------------------------------------------
-    # 4. Возвращаем всё браузеру
-    # ---------------------------------------------------------
-
-    audio_base64 = base64.b64encode(
-        audio_output
-    ).decode("ascii")
-
-
-    return {
-        "transcript": transcript,
-
-        "text": answer,
-
-        "audio": audio_base64
-        }
-
 # =========================================================
 # CTW3 — CONQUER THE WORLD 3
 # =========================================================
