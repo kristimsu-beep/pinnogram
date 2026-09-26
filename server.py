@@ -30,6 +30,18 @@ from PIL import Image, ImageEnhance
 from io import BytesIO
 from uuid import uuid4
 from bson import ObjectId
+from fastapi import UploadFile, File, Form, HTTPException
+from fastapi.responses import Response
+from openai import OpenAI
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+if OPENAI_API_KEY:
+    openai_client = OpenAI(
+        api_key=OPENAI_API_KEY
+    )
+else:
+    openai_client = None
 
 # Вечное облачное хранилище для видео и голосовых Pinnogram
 SUPABASE_URL = "https://zzcfdrryfsychezckjov.supabase.co"
@@ -7788,6 +7800,307 @@ async def get_newmap():
     return {
         "error": "Файл newmap.html не найден в папке games"
     }
+
+@app.get("/ai")
+async def get_ai_page():
+    file_path = os.path.join(
+        "games",
+        "ai.html"
+    )
+
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+
+    return {
+        "error": "Файл ai.html не найден в папке games"
+    }
+
+@app.post("/api/ai/voice")
+async def ai_voice(
+    audio: UploadFile = File(...),
+    history: str = Form("[]")
+):
+
+    if openai_client is None:
+        raise HTTPException(
+            status_code=500,
+            detail="OPENAI_API_KEY не настроен на сервере."
+        )
+
+
+    # ---------------------------------------------------------
+    # Проверяем файл
+    # ---------------------------------------------------------
+
+    if not audio.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Аудиофайл не получен."
+        )
+
+
+    audio_bytes = await audio.read()
+
+
+    if not audio_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="Аудиозапись пустая."
+        )
+
+
+    # Ограничение примерно 20 MB
+    if len(audio_bytes) > 20 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail="Аудиозапись слишком большая."
+        )
+
+
+    # ---------------------------------------------------------
+    # История разговора
+    # ---------------------------------------------------------
+
+    try:
+
+        conversation_history = json.loads(
+            history
+        )
+
+        if not isinstance(
+            conversation_history,
+            list
+        ):
+            conversation_history = []
+
+    except Exception:
+
+        conversation_history = []
+
+
+    # Оставляем последние 20 сообщений
+    conversation_history = (
+        conversation_history[-20:]
+    )
+
+
+    # ---------------------------------------------------------
+    # 1. SPEECH → TEXT
+    # ---------------------------------------------------------
+
+    try:
+
+        audio_file = io.BytesIO(
+            audio_bytes
+        )
+
+        audio_file.name = (
+            audio.filename
+            or "voice.webm"
+        )
+
+
+        transcription = (
+            openai_client
+            .audio
+            .transcriptions
+            .create(
+                model="gpt-4o-transcribe",
+                file=audio_file
+            )
+        )
+
+
+        transcript = (
+            transcription.text
+            or ""
+        ).strip()
+
+
+    except Exception as e:
+
+        print(
+            "AI TRANSCRIPTION ERROR:",
+            repr(e)
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Не удалось распознать речь."
+        )
+
+
+    if not transcript:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Я не услышал сообщение."
+        )
+
+
+    # ---------------------------------------------------------
+    # 2. AI RESPONSE
+    # ---------------------------------------------------------
+
+    try:
+
+        messages = []
+
+
+        for item in conversation_history:
+
+            if not isinstance(
+                item,
+                dict
+            ):
+                continue
+
+
+            role = item.get(
+                "role"
+            )
+
+            content = item.get(
+                "content"
+            )
+
+
+            if role not in (
+                "user",
+                "assistant"
+            ):
+                continue
+
+
+            if not content:
+                continue
+
+
+            messages.append({
+                "role": role,
+                "content": str(
+                    content
+                )
+            })
+
+
+        messages.append({
+            "role": "user",
+            "content": transcript
+        })
+
+
+        response = (
+            openai_client
+            .responses
+            .create(
+                model="gpt-5.6-luna",
+
+                instructions=(
+                    "Ты голосовой AI-помощник. "
+                    "Отвечай естественно и дружелюбно. "
+                    "Отвечай на том же языке, "
+                    "на котором пользователь говорит. "
+                    "Для голосового ответа не используй "
+                    "markdown, длинные списки или сложное "
+                    "форматирование. "
+                    "Если вопрос требует подробного ответа, "
+                    "объясняй понятно и естественно."
+                ),
+
+                input=messages
+            )
+        )
+
+
+        answer = (
+            response.output_text
+            or ""
+        ).strip()
+
+
+    except Exception as e:
+
+        print(
+            "AI RESPONSE ERROR:",
+            repr(e)
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Не удалось получить ответ AI."
+        )
+
+
+    if not answer:
+
+        raise HTTPException(
+            status_code=500,
+            detail="AI не вернул текстовый ответ."
+        )
+
+
+    # ---------------------------------------------------------
+    # 3. TEXT → SPEECH
+    # ---------------------------------------------------------
+
+    try:
+
+        speech = (
+            openai_client
+            .audio
+            .speech
+            .create(
+                model="gpt-4o-mini-tts",
+
+                voice="marin",
+
+                input=answer[:4096],
+
+                instructions=(
+                    "Speak naturally and warmly, "
+                    "like a helpful conversational AI. "
+                    "Use a calm, clear speaking style "
+                    "with natural pauses."
+                ),
+
+                response_format="mp3"
+            )
+        )
+
+
+        audio_output = speech.read()
+
+
+    except Exception as e:
+
+        print(
+            "AI TTS ERROR:",
+            repr(e)
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Не удалось озвучить ответ."
+        )
+
+
+    # ---------------------------------------------------------
+    # 4. Возвращаем всё браузеру
+    # ---------------------------------------------------------
+
+    audio_base64 = base64.b64encode(
+        audio_output
+    ).decode("ascii")
+
+
+    return {
+        "transcript": transcript,
+
+        "text": answer,
+
+        "audio": audio_base64
+        }
 
 # =========================================================
 # CTW3 — CONQUER THE WORLD 3
