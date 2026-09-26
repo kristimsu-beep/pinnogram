@@ -7808,10 +7808,17 @@ async def get_newmap():
 
 @app.get("/ai")
 async def get_ai_page():
-    file_path = os.path.join(
-        "games",
-        "ai.html"
-    )
+    file_path = os.path.join("games", "ai.html")
+
+    if os.path.exists(file_path):
+        return FileResponse(
+            file_path,
+            media_type="text/html"
+        )
+
+    return {
+        "error": "Файл ai.html не найден в папке games"
+    }
 
 @app.post("/api/ai/voice")
 async def ai_voice(
