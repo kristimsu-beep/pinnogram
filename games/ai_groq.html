@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#05070d">
+    <title>AI Voice</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html,
+        body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: Arial, Helvetica, sans-serif;
+            background:
+                radial-gradient(circle at 50% 42%, #17213d 0%, #0a0e1a 32%, #03050a 72%);
+            color: white;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .page {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .background-glow {
+            position: absolute;
+            width: 70vw;
+            height: 70vw;
+            max-width: 650px;
+            max-height: 650px;
+            border-radius: 50%;
+            background: radial-gradient(
+                circle,
+                rgba(92, 126, 255, 0.18) 0%,
+                rgba(64, 91, 220, 0.08) 35%,
+                transparent 70%
+            );
+            filter: blur(20px);
+            pointer-events: none;
+        }
+
+        .top {
+            position: absolute;
+            top: max(24px, env(safe-area-inset-top));
+            left: 0;
+            width: 100%;
+            text-align: center;
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .title {
+            font-size: 21px;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            text-shadow: 0 2px 20px rgba(0,0,0,0.5);
+        }
+
+        .status {
+            margin-top: 8px;
+            color: rgba(255,255,255,0.58);
+            font-size: 14px;
+            min-height: 18px;
+        }
+
+        .orb-wrap {
+            position: relative;
+            width: min(72vw, 390px);
+            height: min(72vw, 390px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2;
+        }
+
+        .orb-shadow {
+            position: absolute;
+            width: 68%;
+            height: 24%;
+            bottom: 2%;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.65);
+            filter: blur(28px);
+            transform: scale(1);
+            transition: transform 0.2s ease;
+        }
+
+        .orb {
+            position: relative;
+            width: 58%;
+            height: 58%;
+            border-radius: 50%;
+            cursor: pointer;
+            user-select: none;
+            touch-action: manipulation;
+
+            background:
+                radial-gradient(
+                    circle at 31% 27%,
+                    rgba(255,255,255,0.98) 0%,
+                    rgba(196,216,255,0.92) 5%,
+                    rgba(99,139,255,0.95) 18%,
+                    rgba(55,83,221,0.98) 42%,
+                    rgba(24,32,111,1) 67%,
+                    rgba(5,7,27,1) 100%
+                );
+
+            box-shadow:
+                0 0 18px rgba(99, 132, 255, 0.9),
+                0 0 45px rgba(75, 105, 255, 0.65),
+                0 0 90px rgba(54, 81, 255, 0.4),
+                inset -22px -24px 50px rgba(0,0,0,0.5),
+                inset 12px 12px 30px rgba(255,255,255,0.28);
+
+            transition:
+                transform 0.16s ease,
+                box-shadow 0.25s ease,
+                filter 0.25s ease;
+        }
+
+        .orb::before {
+            content: "";
+            position: absolute;
+            inset: -8%;
+            border-radius: 50%;
+            background: conic-gradient(
+                from 0deg,
+                transparent,
+                rgba(133,162,255,0.7),
+                transparent,
+                rgba(82,113,255,0.6),
+                transparent
+            );
+            filter: blur(10px);
+            opacity: 0.7;
+            animation: rotateGlow 7s linear infinite;
+        }
+
+        .orb::after {
+            content: "";
+            position: absolute;
+            top: 17%;
+            left: 22%;
+            width: 25%;
+            height: 16%;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.45);
+            filter: blur(10px);
+            transform: rotate(-25deg);
+        }
+
+        @keyframes rotateGlow {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .orb:hover {
+            filter: brightness(1.08);
+        }
+
+        .orb.recording {
+            box-shadow:
+                0 0 22px rgba(99, 160, 255, 1),
+                0 0 60px rgba(65, 125, 255, 0.85),
+                0 0 120px rgba(54, 91, 255, 0.55),
+                inset -22px -24px 50px rgba(0,0,0,0.45),
+                inset 12px 12px 30px rgba(255,255,255,0.3);
+        }
+
+        .orb.thinking {
+            animation: thinkingPulse 1.1s ease-in-out infinite;
+        }
+
+        .orb.speaking {
+            box-shadow:
+                0 0 28px rgba(125, 151, 255, 1),
+                0 0 75px rgba(80, 113, 255, 0.85),
+                0 0 140px rgba(70, 90, 255, 0.5),
+                inset -22px -24px 50px rgba(0,0,0,0.45),
+                inset 12px 12px 30px rgba(255,255,255,0.32);
+        }
+
+        @keyframes thinkingPulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.055);
+            }
+        }
+
+        .hint {
+            position: absolute;
+            bottom: max(48px, calc(env(safe-area-inset-bottom) + 26px));
+            width: 100%;
+            text-align: center;
+            padding: 0 24px;
+            color: rgba(255,255,255,0.48);
+            font-size: 14px;
+            line-height: 1.45;
+            z-index: 5;
+        }
+
+        .conversation {
+            position: absolute;
+            left: 18px;
+            right: 18px;
+            bottom: max(90px, calc(env(safe-area-inset-bottom) + 70px));
+            max-height: 28vh;
+            overflow-y: auto;
+            display: none;
+            z-index: 4;
+            padding: 8px;
+            pointer-events: none;
+        }
+
+        .conversation.visible {
+            display: block;
+        }
+
+        .message {
+            max-width: 85%;
+            margin: 7px auto;
+            padding: 10px 14px;
+            border-radius: 18px;
+            background: rgba(255,255,255,0.07);
+            backdrop-filter: blur(12px);
+            color: rgba(255,255,255,0.85);
+            font-size: 13px;
+            line-height: 1.4;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .message.user {
+            color: rgba(215,225,255,0.92);
+        }
+
+        .message.ai {
+            color: rgba(255,255,255,0.92);
+        }
+
+        .error {
+            position: absolute;
+            left: 20px;
+            right: 20px;
+            top: 78px;
+            display: none;
+            padding: 11px 14px;
+            border-radius: 13px;
+            background: rgba(170, 35, 55, 0.25);
+            border: 1px solid rgba(255, 100, 120, 0.25);
+            color: rgba(255,225,230,0.95);
+            font-size: 13px;
+            text-align: center;
+            z-index: 10;
+        }
+
+        @media (max-width: 480px) {
+            .title {
+                font-size: 19px;
+            }
+
+            .status {
+                font-size: 13px;
+            }
+
+            .hint {
+                font-size: 13px;
+            }
+
+            .conversation {
+                max-height: 23vh;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="page">
+
+    <div class="background-glow"></div>
+
+    <div class="top">
+        <div class="title">AI Voice</div>
+        <div id="status" class="status">Нажмите на сферу, чтобы начать</div>
+    </div>
+
+    <div id="error" class="error"></div>
+
+    <div id="conversation" class="conversation"></div>
+
+    <div class="orb-wrap">
+        <div id="orbShadow" class="orb-shadow"></div>
+
+        <div
+            id="orb"
+            class="orb"
+            role="button"
+            aria-label="Голосовой помощник"
+            tabindex="0"
+        ></div>
+    </div>
+
+    <div id="hint" class="hint">
+        Нажмите на сферу и говорите.<br>
+        Повторное нажатие завершит запись.
+    </div>
+
+</div>
+
+<script>
+/* =========================================================
+   ELEMENTS
+========================================================= */
+
+const orb = document.getElementById("orb");
+const orbShadow = document.getElementById("orbShadow");
+const statusElement = document.getElementById("status");
+const hintElement = document.getElementById("hint");
+const errorElement = document.getElementById("error");
+const conversationElement = document.getElementById("conversation");
+
+/* =========================================================
+   STATE
+========================================================= */
+
+let mediaStream = null;
+let microphoneSource = null;
+let audioContext = null;
+let analyser = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+
+let recording = false;
+let processing = false;
+let speaking = false;
+
+let animationFrame = null;
+let silenceTimer = null;
+let lastSoundTime = 0;
+let hasDetectedSpeech = false;
+
+let currentAudio = null;
+let responseAudioContext = null;
+let responseAnalyser = null;
+let responseSource = null;
+
+let conversation = [];
+
+/*
+   Silence is measured after actual speech is detected.
+   This prevents the recording from stopping immediately
+   if the user waits before saying anything.
+*/
+const SILENCE_DELAY = 1500;
+const SPEECH_THRESHOLD = 10;
+
+/* =========================================================
+   UI HELPERS
+========================================================= */
+
+function setStatus(text) {
+    statusElement.textContent = text;
+}
+
+function showError(message) {
+    errorElement.textContent = message;
+    errorElement.style.display = "block";
+
+    setTimeout(() => {
+        errorElement.style.display = "none";
+    }, 5000);
+}
+
+function addMessage(type, text) {
+    if (!text) return;
+
+    const element = document.createElement("div");
+    element.className = "message " + type;
+    element.textContent = text;
+
+    conversationElement.appendChild(element);
+    conversationElement.classList.add("visible");
+
+    conversationElement.scrollTop =
+        conversationElement.scrollHeight;
+}
+
+/* =========================================================
+   ORB ANIMATION
+========================================================= */
+
+function animateVoice() {
+    if (!analyser) {
+        animationFrame =
+            requestAnimationFrame(animateVoice);
+        return;
+    }
+
+    const data =
+        new Uint8Array(
+            analyser.fftSize
+        );
+
+    analyser.getByteTimeDomainData(data);
+
+    let sum = 0;
+
+    for (let i = 0; i < data.length; i++) {
+        const value =
+            (data[i] - 128) / 128;
+
+        sum += value * value;
+    }
+
+    const rms =
+        Math.sqrt(sum / data.length);
+
+    const level =
+        Math.min(1, rms * 5);
+
+    const scale =
+        1 + level * 0.28;
+
+    const glow =
+        45 + level * 80;
+
+    orb.style.transform =
+        `scale(${scale})`;
+
+    orb.style.boxShadow = `
+        0 0 20px rgba(99, 132, 255, ${0.85 + level * 0.15}),
+        0 0 ${glow}px rgba(75, 105, 255, ${0.45 + level * 0.5}),
+        0 0 ${glow * 1.8}px rgba(54, 81, 255, ${0.2 + level * 0.35}),
+        inset -22px -24px 50px rgba(0,0,0,0.5),
+        inset 12px 12px 30px rgba(255,255,255,0.28)
+    `;
+
+    orbShadow.style.transform =
+        `scaleX(${1 + level * 0.35})`;
+
+    if (recording && rms > SPEECH_THRESHOLD / 1000) {
+        hasDetectedSpeech = true;
+        lastSoundTime = Date.now();
+    }
+
+    if (
+        recording &&
+        hasDetectedSpeech &&
+        Date.now() - lastSoundTime > SILENCE_DELAY
+    ) {
+        stopRecording();
+    }
+
+    animationFrame =
+        requestAnimationFrame(
+            animateVoice
+        );
+}
+
+/* =========================================================
+   MICROPHONE
+========================================================= */
+
+async function getMicrophone() {
+    if (
+        !navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia
+    ) {
+        throw new Error(
+            "Ваш браузер не поддерживает микрофон."
+        );
+    }
+
+    mediaStream =
+        await navigator.mediaDevices.getUserMedia({
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            }
+        });
+
+    audioContext =
+        new (
+            window.AudioContext ||
+            window.webkitAudioContext
+        )();
+
+    if (audioContext.state === "suspended") {
+        await audioContext.resume();
+    }
+
+    microphoneSource =
+        audioContext.createMediaStreamSource(
+            mediaStream
+        );
+
+    analyser =
+        audioContext.createAnalyser();
+
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.75;
+
+    microphoneSource.connect(analyser);
+
+    lastSoundTime = Date.now();
+    hasDetectedSpeech = false;
+
+    animateVoice();
+}
+
+/* =========================================================
+   MIME TYPE
+========================================================= */
+
+function getMimeType() {
+    if (!window.MediaRecorder) {
+        return "";
+    }
+
+    const formats = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus",
+        "audio/mp4"
+    ];
+
+    for (const format of formats) {
+        if (
+            MediaRecorder.isTypeSupported(
+                format
+            )
+        ) {
+            return format;
+        }
+    }
+
+    return "";
+}
+
+/* =========================================================
+   START RECORDING
+========================================================= */
+
+async function startRecording() {
+    if (recording || processing || speaking) {
+        return;
+    }
+
+    try {
+        errorElement.style.display = "none";
+
+        if (!mediaStream) {
+            await getMicrophone();
+        }
+
+        if (
+            audioContext &&
+            audioContext.state === "suspended"
+        ) {
+            await audioContext.resume();
+        }
+
+        recordedChunks = [];
+
+        const mimeType =
+            getMimeType();
+
+        if (mimeType) {
+            mediaRecorder =
+                new MediaRecorder(
+                    mediaStream,
+                    { mimeType }
+                );
+        } else {
+            mediaRecorder =
+                new MediaRecorder(
+                    mediaStream
+                );
+        }
+
+        mediaRecorder.ondataavailable =
+            (event) => {
+                if (
+                    event.data &&
+                    event.data.size > 0
+                ) {
+                    recordedChunks.push(
+                        event.data
+                    );
+                }
+            };
+
+        mediaRecorder.onerror =
+            (event) => {
+                console.error(
+                    "MediaRecorder error:",
+                    event.error
+                );
+
+                recording = false;
+
+                orb.classList.remove(
+                    "recording"
+                );
+
+                setStatus(
+                    "Ошибка записи"
+                );
+            };
+
+        mediaRecorder.onstop =
+            processRecording;
+
+        mediaRecorder.start(100);
+
+        recording = true;
+        hasDetectedSpeech = false;
+        lastSoundTime = Date.now();
+
+        orb.classList.remove(
+            "thinking",
+            "speaking"
+        );
+
+        orb.classList.add(
+            "recording"
+        );
+
+        setStatus(
+            "Слушаю..."
+        );
+
+        hintElement.innerHTML =
+            "Говорите естественно.<br>Запись завершится после паузы.";
+
+    } catch (error) {
+        console.error(error);
+
+        showError(
+            error.message ||
+            "Не удалось получить доступ к микрофону."
+        );
+
+        setStatus(
+            "Микрофон недоступен"
+        );
+    }
+}
+
+/* =========================================================
+   STOP RECORDING
+========================================================= */
+
+function stopRecording() {
+    if (
+        !mediaRecorder ||
+        mediaRecorder.state === "inactive"
+    ) {
+        return;
+    }
+
+    recording = false;
+
+    orb.classList.remove(
+        "recording"
+    );
+
+    orb.classList.add(
+        "thinking"
+    );
+
+    setStatus(
+        "Обрабатываю..."
+    );
+
+    hintElement.textContent =
+        "Пожалуйста, подождите.";
+
+    try {
+        mediaRecorder.stop();
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+/* =========================================================
+   PROCESS RECORDING
+========================================================= */
+
+async function processRecording() {
+    processing = true;
+
+    try {
+        if (!recordedChunks.length) {
+            throw new Error(
+                "Не удалось записать голос."
+            );
+        }
+
+        const mimeType =
+            mediaRecorder &&
+            mediaRecorder.mimeType
+                ? mediaRecorder.mimeType
+                : "audio/webm";
+
+        const blob =
+            new Blob(
+                recordedChunks,
+                {
+                    type: mimeType
+                }
+            );
+
+        if (blob.size < 1000) {
+            throw new Error(
+                "Запись получилась слишком короткой."
+            );
+        }
+
+        const formData =
+            new FormData();
+
+        let extension = "webm";
+
+        if (
+            mimeType.includes("ogg")
+        ) {
+            extension = "ogg";
+        } else if (
+            mimeType.includes("mp4")
+        ) {
+            extension = "mp4";
+        }
+
+        formData.append(
+            "audio",
+            blob,
+            `voice.${extension}`
+        );
+
+        formData.append(
+            "history",
+            JSON.stringify(
+                conversation.slice(-20)
+            )
+        );
+
+        const response =
+            await fetch(
+                "/api/ai/voice",
+                {
+                    method: "POST",
+                    body: formData
+                }
+            );
+
+        let data = null;
+
+        try {
+            data =
+                await response.json();
+        } catch {
+            throw new Error(
+                `Сервер вернул ошибку HTTP ${response.status}.`
+            );
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                data.detail ||
+                data.error ||
+                `Ошибка сервера: ${response.status}`
+            );
+        }
+
+        if (
+            data.transcript &&
+            data.transcript.trim()
+        ) {
+            addMessage(
+                "user",
+                data.transcript
+            );
+
+            conversation.push({
+                role: "user",
+                content: data.transcript
+            });
+        }
+
+        if (
+            data.text &&
+            data.text.trim()
+        ) {
+            addMessage(
+                "ai",
+                data.text
+            );
+
+            conversation.push({
+                role: "assistant",
+                content: data.text
+            });
+        }
+
+        if (conversation.length > 20) {
+            conversation =
+                conversation.slice(-20);
+        }
+
+        if (data.audio) {
+            await playResponse(
+                data.audio
+            );
+        } else {
+            orb.classList.remove(
+                "thinking"
+            );
+
+            setStatus(
+                "Нажмите на сферу, чтобы говорить"
+            );
+
+            hintElement.innerHTML =
+                "Нажмите на сферу и говорите.<br>" +
+                "Повторное нажатие завершит запись.";
+        }
+
+    } catch (error) {
+        console.error(
+            "AI request error:",
+            error
+        );
+
+        showError(
+            error.message ||
+            "Не удалось получить ответ от AI."
+        );
+
+        orb.classList.remove(
+            "thinking",
+            "recording",
+            "speaking"
+        );
+
+        setStatus(
+            "Произошла ошибка"
+        );
+
+        hintElement.innerHTML =
+            "Нажмите на сферу и попробуйте снова.";
+    }
+
+    processing = false;
+}
+
+/* =========================================================
+   PLAY AI RESPONSE
+========================================================= */
+
+async function playResponse(base64) {
+    if (!base64) {
+        return;
+    }
+
+    speaking = true;
+
+    orb.classList.remove(
+        "thinking",
+        "recording"
+    );
+
+    orb.classList.add(
+        "speaking"
+    );
+
+    setStatus(
+        "AI говорит..."
+    );
+
+    hintElement.innerHTML =
+        "Нажмите на сферу, чтобы остановить ответ.";
+
+    try {
+        const binary =
+            atob(base64);
+
+        const bytes =
+            new Uint8Array(
+                binary.length
+            );
+
+        for (
+            let i = 0;
+            i < binary.length;
+            i++
+        ) {
+            bytes[i] =
+                binary.charCodeAt(i);
+        }
+
+        const blob =
+            new Blob(
+                [bytes],
+                {
+                    type: "audio/mpeg"
+                }
+            );
+
+        const url =
+            URL.createObjectURL(
+                blob
+            );
+
+        if (currentAudio) {
+            try {
+                currentAudio.pause();
+            } catch {}
+
+            URL.revokeObjectURL(
+                currentAudio.src
+            );
+        }
+
+        currentAudio =
+            new Audio(url);
+
+        currentAudio.preload =
+            "auto";
+
+        responseAudioContext =
+            new (
+                window.AudioContext ||
+                window.webkitAudioContext
+            )();
+
+        if (
+            responseAudioContext.state ===
+            "suspended"
+        ) {
+            await responseAudioContext.resume();
+        }
+
+        responseAnalyser =
+            responseAudioContext.createAnalyser();
+
+        responseAnalyser.fftSize =
+            256;
+
+        responseAnalyser.smoothingTimeConstant =
+            0.75;
+
+        responseSource =
+            responseAudioContext.createMediaElementSource(
+                currentAudio
+            );
+
+        responseSource.connect(
+            responseAnalyser
+        );
+
+        responseAnalyser.connect(
+            responseAudioContext.destination
+        );
+
+        const animateResponse =
+            () => {
+                if (
+                    !speaking ||
+                    !responseAnalyser
+                ) {
+                    return;
+                }
+
+                const data =
+                    new Uint8Array(
+                        responseAnalyser.fftSize
+                    );
+
+                responseAnalyser.getByteTimeDomainData(
+                    data
+                );
+
+                let sum = 0;
+
+                for (
+                    let i = 0;
+                    i < data.length;
+                    i++
+                ) {
+                    const value =
+                        (data[i] - 128) /
+                        128;
+
+                    sum +=
+                        value * value;
+                }
+
+                const rms =
+                    Math.sqrt(
+                        sum / data.length
+                    );
+
+                const level =
+                    Math.min(
+                        1,
+                        rms * 7
+                    );
+
+                const scale =
+                    1 +
+                    level * 0.24;
+
+                const glow =
+                    55 +
+                    level * 100;
+
+                orb.style.transform =
+                    `scale(${scale})`;
+
+                orb.style.boxShadow = `
+                    0 0 22px rgba(110,145,255,1),
+                    0 0 ${glow}px rgba(75,105,255,${0.55 + level * 0.4}),
+                    0 0 ${glow * 1.7}px rgba(54,81,255,${0.25 + level * 0.35}),
+                    inset -22px -24px 50px rgba(0,0,0,0.5),
+                    inset 12px 12px 30px rgba(255,255,255,0.28)
+                `;
+
+                orbShadow.style.transform =
+                    `scaleX(${1 + level * 0.3})`;
+
+                requestAnimationFrame(
+                    animateResponse
+                );
+            };
+
+        animateResponse();
+
+        currentAudio.onended =
+            () => {
+                finishSpeaking(
+                    url
+                );
+            };
+
+        currentAudio.onerror =
+            () => {
+                finishSpeaking(
+                    url
+                );
+
+                showError(
+                    "Не удалось воспроизвести голос AI."
+                );
+            };
+
+        await currentAudio.play();
+
+    } catch (error) {
+        console.error(
+            "Audio playback error:",
+            error
+        );
+
+        speaking = false;
+
+        orb.classList.remove(
+            "speaking",
+            "thinking",
+            "recording"
+        );
+
+        orb.style.transform =
+            "scale(1)";
+
+        setStatus(
+            "Нажмите на сферу, чтобы говорить"
+        );
+
+        hintElement.innerHTML =
+            "Нажмите на сферу и говорите.<br>" +
+            "Повторное нажатие завершит запись.";
+    }
+}
+
+/* =========================================================
+   FINISH SPEAKING
+========================================================= */
+
+function finishSpeaking(url) {
+    speaking = false;
+
+    orb.classList.remove(
+        "speaking",
+        "thinking",
+        "recording"
+    );
+
+    orb.style.transform =
+        "scale(1)";
+
+    orb.style.boxShadow = "";
+
+    orbShadow.style.transform =
+        "scale(1)";
+
+    setStatus(
+        "Нажмите на сферу, чтобы говорить"
+    );
+
+    hintElement.innerHTML =
+        "Нажмите на сферу и говорите.<br>" +
+        "Повторное нажатие завершит запись.";
+
+    if (url) {
+        try {
+            URL.revokeObjectURL(
+                url
+            );
+        } catch {}
+    }
+
+    if (responseAudioContext) {
+        try {
+            responseAudioContext.close();
+        } catch {}
+
+        responseAudioContext = null;
+    }
+
+    responseAnalyser = null;
+    responseSource = null;
+    currentAudio = null;
+}
+
+/* =========================================================
+   STOP AI SPEECH
+========================================================= */
+
+function stopSpeaking() {
+    if (!speaking) {
+        return;
+    }
+
+    speaking = false;
+
+    if (currentAudio) {
+        try {
+            currentAudio.pause();
+            currentAudio.currentTime = 0;
+        } catch {}
+    }
+
+    if (responseAudioContext) {
+        try {
+            responseAudioContext.close();
+        } catch {}
+
+        responseAudioContext = null;
+    }
+
+    responseAnalyser = null;
+    responseSource = null;
+
+    orb.classList.remove(
+        "speaking",
+        "thinking",
+        "recording"
+    );
+
+    orb.style.transform =
+        "scale(1)";
+
+    orb.style.boxShadow = "";
+
+    orbShadow.style.transform =
+        "scale(1)";
+
+    setStatus(
+        "Нажмите на сферу, чтобы говорить"
+    );
+
+    hintElement.innerHTML =
+        "Нажмите на сферу и говорите.<br>" +
+        "Повторное нажатие завершит запись.";
+}
+
+/* =========================================================
+   ORB CLICK
+========================================================= */
+
+orb.addEventListener(
+    "click",
+    async () => {
+
+        if (speaking) {
+            stopSpeaking();
+            return;
+        }
+
+        if (processing) {
+            return;
+        }
+
+        if (recording) {
+            stopRecording();
+            return;
+        }
+
+        await startRecording();
+    }
+);
+
+/* =========================================================
+   KEYBOARD ACCESS
+========================================================= */
+
+orb.addEventListener(
+    "keydown",
+    async (event) => {
+        if (
+            event.key === "Enter" ||
+            event.key === " "
+        ) {
+            event.preventDefault();
+            orb.click();
+        }
+    }
+);
+
+/* =========================================================
+   CLEANUP
+========================================================= */
+
+window.addEventListener(
+    "beforeunload",
+    () => {
+        if (mediaRecorder) {
+            try {
+                if (
+                    mediaRecorder.state !==
+                    "inactive"
+                ) {
+                    mediaRecorder.stop();
+                }
+            } catch {}
+        }
+
+        if (mediaStream) {
+            mediaStream
+                .getTracks()
+                .forEach(
+                    track => track.stop()
+                );
+        }
+
+        if (audioContext) {
+            try {
+                audioContext.close();
+            } catch {}
+        }
+
+        if (responseAudioContext) {
+            try {
+                responseAudioContext.close();
+            } catch {}
+        }
+
+        if (currentAudio) {
+            try {
+                currentAudio.pause();
+            } catch {}
+        }
+
+        if (animationFrame) {
+            cancelAnimationFrame(
+                animationFrame
+            );
+        }
+
+        if (silenceTimer) {
+            clearTimeout(
+                silenceTimer
+            );
+        }
+    }
+);
+
+/* =========================================================
+   INITIAL STATE
+========================================================= */
+
+setStatus(
+    "Нажмите на сферу, чтобы начать"
+);
+
+hintElement.innerHTML =
+    "Нажмите на сферу и говорите.<br>" +
+    "Повторное нажатие завершит запись.";
+
+</script>
+
+</body>
+</html>
