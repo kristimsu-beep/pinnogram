@@ -7820,229 +7820,10 @@ async def get_ai_page():
         "error": "Файл ai.html не найден в папке games"
     }
 
-@app.post("/api/ai/voice")
-async def ai_voice(
-    audio: UploadFile = File(...),
-    history: str = Form("[]")
-):
-    if not groq_client:
-        raise HTTPException(
-            status_code=500,
-            detail="GROQ_API_KEY не установлен."
-        )
 
-    try:
-        audio_bytes = await audio.read()
+ 
 
-        if not audio_bytes:
-            raise HTTPException(
-                status_code=400,
-                detail="Аудиозапись пустая."
-            )
 
-        # ==========================================
-        # 1. SPEECH → TEXT
-        # ==========================================
-
-        suffix = ".webm"
-
-        if audio.filename:
-            if "." in audio.filename:
-                suffix = "." + audio.filename.split(".")[-1]
-
-        with tempfile.NamedTemporaryFile(
-            suffix=suffix,
-            delete=False
-        ) as temp:
-            temp.write(audio_bytes)
-            temp_path = temp.name
-
-        try:
-            with open(
-                temp_path,
-                "rb"
-            ) as audio_file:
-
-                transcription = (
-                    groq_client.audio.transcriptions.create(
-                        file=audio_file,
-                        model="whisper-large-v3-turbo",
-                        language="ru",
-                        response_format="json"
-                    )
-                )
-
-            transcript = (
-                transcription.text or ""
-            ).strip()
-
-        finally:
-            try:
-                os.remove(temp_path)
-            except Exception:
-                pass
-
-        if not transcript:
-            raise HTTPException(
-                status_code=400,
-                detail="Не удалось распознать речь."
-            )
-
-        # ==========================================
-        # 2. LOAD HISTORY
-        # ==========================================
-
-        try:
-            old_history = json.loads(history)
-
-            if not isinstance(
-                old_history,
-                list
-            ):
-                old_history = []
-
-        except Exception:
-            old_history = []
-
-        # ==========================================
-        # 3. AI RESPONSE
-        # ==========================================
-
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "Ты дружелюбный голосовой AI-помощник. "
-                    "Отвечай естественно и понятно. "
-                    "Не используй Markdown, если он не нужен. "
-                    "Поскольку ответ будет озвучен голосом, "
-                    "пиши достаточно коротко и разговорно."
-                )
-            }
-        ]
-
-        for item in old_history[-20:]:
-
-            role = item.get("role")
-            content = item.get("content")
-
-            if role in (
-                "user",
-                "assistant"
-            ) and content:
-
-                messages.append({
-                    "role": role,
-                    "content": content
-                })
-
-        messages.append({
-            "role": "user",
-            "content": transcript
-        })
-
-        completion = (
-            groq_client.chat.completions.create(
-                model="openai/gpt-oss-20b",
-                messages=messages,
-                temperature=0.7,
-                max_completion_tokens=700
-            )
-        )
-
-        answer = (
-            completion
-            .choices[0]
-            .message
-            .content
-            or ""
-        ).strip()
-
-        if not answer:
-            answer = (
-                "Извините, я не смог подготовить ответ."
-            )
-
-        # ==========================================
-        # 4. TEXT → SPEECH
-        # ==========================================
-        #
-        # Здесь позже подключается Piper.
-        # Он работает локально на сервере.
-        #
-
-        audio_base64 = None
-
-        try:
-            import subprocess
-
-            with tempfile.NamedTemporaryFile(
-                suffix=".wav",
-                delete=False
-            ) as output_file:
-                output_path = output_file.name
-
-            process = subprocess.run(
-                [
-                    "piper",
-                    "--model",
-                    "/opt/piper/ru_RU-dmitri-medium.onnx",
-                    "--output_file",
-                    output_path
-                ],
-                input=answer,
-                text=True,
-                capture_output=True,
-                timeout=60
-            )
-
-            if process.returncode == 0:
-                with open(
-                    output_path,
-                    "rb"
-                ) as f:
-                    audio_output = f.read()
-
-                audio_base64 = (
-                    base64.b64encode(
-                        audio_output
-                    ).decode("ascii")
-                )
-
-            try:
-                os.remove(output_path)
-            except Exception:
-                pass
-
-        except Exception as tts_error:
-            print(
-                "PIPER TTS ERROR:",
-                repr(tts_error)
-            )
-
-        # ==========================================
-        # 5. RETURN TO FRONTEND
-        # ==========================================
-
-        return JSONResponse({
-            "transcript": transcript,
-            "text": answer,
-            "audio": audio_base64
-        })
-
-    except HTTPException:
-        raise
-
-    except Exception as error:
-        print(
-            "AI VOICE ERROR:",
-            repr(error)
-        )
-
-        raise HTTPException(
-            status_code=500,
-            detail=str(error)
-        )
 # =========================================================
 # CTW3 — CONQUER THE WORLD 3
 # =========================================================
@@ -8063,6 +7844,317 @@ async def get_ctw3_game_page():
     return {
         "error": "Файл ctw3.html не найден в папке games"
     }
+
+@app.post("/api/ai/voice")
+async def ai_voice(
+    audio: UploadFile = File(...),
+    history: str = Form("[]")
+):
+    if not groq_client:
+        raise HTTPException(
+            status_code=500,
+            detail="GROQ_API_KEY не установлен на Render."
+        )
+
+    # =========================================
+    # 1. Читаем аудио
+    # =========================================
+
+    try:
+        audio_bytes = await audio.read()
+
+        if not audio_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail="Аудиозапись пустая."
+            )
+
+        print(
+            "AI AUDIO:",
+            len(audio_bytes),
+            "bytes",
+            audio.filename,
+            audio.content_type
+        )
+
+    except Exception as e:
+        print("AI AUDIO READ ERROR:", repr(e))
+
+        raise HTTPException(
+            status_code=500,
+            detail="Не удалось прочитать аудиозапись."
+        )
+
+    # =========================================
+    # 2. Сохраняем временный файл
+    # =========================================
+
+    temp_path = None
+
+    try:
+        suffix = ".webm"
+
+        if audio.filename and "." in audio.filename:
+            suffix = "." + audio.filename.rsplit(".", 1)[1]
+
+        with tempfile.NamedTemporaryFile(
+            suffix=suffix,
+            delete=False
+        ) as temp:
+
+            temp.write(audio_bytes)
+            temp_path = temp.name
+
+        print("AI TEMP FILE:", temp_path)
+
+    except Exception as e:
+        print("AI TEMP FILE ERROR:", repr(e))
+
+        raise HTTPException(
+            status_code=500,
+            detail="Не удалось подготовить аудио."
+        )
+
+    # =========================================
+    # 3. GROQ — распознавание речи
+    # =========================================
+
+    transcript = ""
+
+    try:
+
+        with open(temp_path, "rb") as audio_file:
+
+            transcription = (
+                groq_client.audio.transcriptions.create(
+                    file=audio_file,
+                    model="whisper-large-v3-turbo",
+                    language="ru",
+                    response_format="json",
+                    temperature=0
+                )
+            )
+
+        transcript = (
+            transcription.text or ""
+        ).strip()
+
+        print(
+            "AI TRANSCRIPT:",
+            repr(transcript)
+        )
+
+    except Exception as e:
+
+        print(
+            "AI TRANSCRIPTION ERROR:",
+            repr(e)
+        )
+
+        # Пробуем более точную модель
+        try:
+
+            print(
+                "AI: пробуем whisper-large-v3..."
+            )
+
+            with open(temp_path, "rb") as audio_file:
+
+                transcription = (
+                    groq_client.audio.transcriptions.create(
+                        file=audio_file,
+                        model="whisper-large-v3",
+                        language="ru",
+                        response_format="json",
+                        temperature=0
+                    )
+                )
+
+            transcript = (
+                transcription.text or ""
+            ).strip()
+
+            print(
+                "AI TRANSCRIPT FALLBACK:",
+                repr(transcript)
+            )
+
+        except Exception as e2:
+
+            print(
+                "AI TRANSCRIPTION FALLBACK ERROR:",
+                repr(e2)
+            )
+
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Ошибка распознавания речи через Groq. "
+                    "Проверь Render Logs."
+                )
+            )
+
+    finally:
+
+        if temp_path:
+
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+
+    if not transcript:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Я не услышал речь."
+        )
+
+    # =========================================
+    # 4. История разговора
+    # =========================================
+
+    try:
+        old_history = json.loads(history)
+
+        if not isinstance(old_history, list):
+            old_history = []
+
+    except Exception:
+        old_history = []
+
+    # =========================================
+    # 5. Формируем сообщения
+    # =========================================
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Ты дружелюбный голосовой AI-помощник. "
+                "Отвечай на русском языке, если пользователь "
+                "говорит по-русски. "
+                "Отвечай естественно, кратко и разговорно. "
+                "Не используй Markdown без необходимости."
+            )
+        }
+    ]
+
+    for item in old_history[-10:]:
+
+        if not isinstance(item, dict):
+            continue
+
+        role = item.get("role")
+        content = item.get("content")
+
+        if role in ("user", "assistant") and content:
+
+            messages.append({
+                "role": role,
+                "content": str(content)
+            })
+
+    messages.append({
+        "role": "user",
+        "content": transcript
+    })
+
+    # =========================================
+    # 6. GROQ — AI ответ
+    # =========================================
+
+    answer = ""
+
+    try:
+
+        print(
+            "AI CHAT: openai/gpt-oss-20b"
+        )
+
+        completion = (
+            groq_client.chat.completions.create(
+                model="openai/gpt-oss-20b",
+                messages=messages,
+                temperature=0.6,
+                max_completion_tokens=500
+            )
+        )
+
+        answer = (
+            completion
+            .choices[0]
+            .message
+            .content
+            or ""
+        ).strip()
+
+    except Exception as e:
+
+        print(
+            "AI CHAT ERROR:",
+            repr(e)
+        )
+
+        # Fallback на другую доступную модель
+        try:
+
+            print(
+                "AI CHAT FALLBACK: llama-3.1-8b-instant"
+            )
+
+            completion = (
+                groq_client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=messages,
+                    temperature=0.6,
+                    max_tokens=500
+                )
+            )
+
+            answer = (
+                completion
+                .choices[0]
+                .message
+                .content
+                or ""
+            ).strip()
+
+        except Exception as e2:
+
+            print(
+                "AI CHAT FALLBACK ERROR:",
+                repr(e2)
+            )
+
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Groq не смог создать ответ. "
+                    "Проверь Render Logs."
+                )
+            )
+
+    if not answer:
+
+        answer = (
+            "Извини, я не смог подготовить ответ."
+        )
+
+    print(
+        "AI ANSWER:",
+        repr(answer)
+    )
+
+    # =========================================
+    # 7. Возвращаем результат
+    # =========================================
+
+    return JSONResponse({
+        "transcript": transcript,
+        "text": answer,
+        "audio": None
+    })
 
 # =========================
 # CTW3 — ONLINE MULTIPLAYER
