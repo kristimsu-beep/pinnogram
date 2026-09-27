@@ -3192,6 +3192,17 @@ async function showMapPointInfo(
 
     try{
 
+        /*
+         * ВАЖНО:
+         * Sunrise-Sunset v2 возвращает ISO 8601.
+         *
+         * Мы явно передаём timezone выбранной точки,
+         * а затем форматируем время именно в этот timezone.
+         *
+         * Поэтому время НЕ зависит от часового пояса
+         * компьютера пользователя.
+         */
+
         const sunUrl =
             "https://api.sunrise-sunset.org/v2" +
             "?lat=" +
@@ -3199,11 +3210,13 @@ async function showMapPointInfo(
             "&lng=" +
             encodeURIComponent(longitude) +
             "&date=" +
-            encodeURIComponent(today) +
-            "&tz=" +
-            encodeURIComponent(
-                selectedPointTimezone
-            );
+            encodeURIComponent(today);
+
+
+        console.log(
+            "[CTW3 POINT INFO] Sun request:",
+            sunUrl
+        );
 
 
         const sunResponse =
@@ -3230,124 +3243,210 @@ async function showMapPointInfo(
         );
 
 
+        /*
+         * -------------------------------------------------
+         * POLAR DAY / POLAR NIGHT
+         * -------------------------------------------------
+         */
+
         if(
-            !sunData ||
-            !sunData.sunrise ||
-            !sunData.sunset
+            sunData &&
+            sunData.sun_status === "midnight_sun"
         ){
 
-            if(
-                sunData &&
-                sunData.sun_status
-            ){
+            $("ctw3PointDayStatus")
+                .textContent =
+                "☀️ Полярный день";
 
-                if(
-                    sunData.sun_status ===
-                    "midnight_sun"
-                ){
+            $("ctw3PointSunLabel")
+                .textContent =
+                "🌇 Заката нет";
 
-                    $("ctw3PointDayStatus")
-                        .textContent =
-                        "☀️ Полярный день";
-
-                    $("ctw3PointSunLabel")
-                        .textContent =
-                        "🌇 Заката нет";
-
-                    $("ctw3PointSunValue")
-                        .textContent =
-                        "Солнце не заходит";
-
-                }
-
-
-                if(
-                    sunData.sun_status ===
-                    "polar_night"
-                ){
-
-                    $("ctw3PointDayStatus")
-                        .textContent =
-                        "🌙 Полярная ночь";
-
-                    $("ctw3PointSunLabel")
-                        .textContent =
-                        "🌅 Восхода нет";
-
-                    $("ctw3PointSunValue")
-                        .textContent =
-                        "Солнце не восходит";
-
-                }
-
-
-                return;
-
-            }
-
-
-            throw new Error(
-                "Sun data unavailable"
-            );
+            $("ctw3PointSunValue")
+                .textContent =
+                "Солнце не заходит";
 
         }
 
 
-        const sunrise =
-            new Date(
-                sunData.sunrise
-            );
-
-        const sunset =
-            new Date(
-                sunData.sunset
-            );
-
-
-        const now =
-            new Date();
-
-
-        const isDay =
-            now >= sunrise &&
-            now < sunset;
-
-
-        if(isDay){
+        else if(
+            sunData &&
+            sunData.sun_status === "polar_night"
+        ){
 
             $("ctw3PointDayStatus")
                 .textContent =
-                "☀️ Сейчас светло";
-
+                "🌙 Полярная ночь";
 
             $("ctw3PointSunLabel")
                 .textContent =
-                "🌇 Закат солнца";
-
+                "🌅 Восхода нет";
 
             $("ctw3PointSunValue")
                 .textContent =
-                formatSunTime(
+                "Солнце не восходит";
+
+        }
+
+
+        /*
+         * -------------------------------------------------
+         * NORMAL DAY
+         * -------------------------------------------------
+         */
+
+        else if(
+            sunData &&
+            sunData.sunrise &&
+            sunData.sunset
+        ){
+
+            /*
+             * API v2 возвращает ISO-время с timezone
+             * самой точки.
+             */
+
+            const sunrise =
+                new Date(
+                    sunData.sunrise
+                );
+
+
+            const sunset =
+                new Date(
                     sunData.sunset
                 );
 
-        }else{
 
-            $("ctw3PointDayStatus")
-                .textContent =
-                "🌙 Сейчас темно";
+            /*
+             * Текущее реальное время.
+             *
+             * Date хранит абсолютный момент времени,
+             * поэтому сравнение корректно независимо
+             * от timezone компьютера пользователя.
+             */
+
+            const now =
+                new Date();
 
 
-            $("ctw3PointSunLabel")
-                .textContent =
-                "🌅 Восход солнца";
+            const isDay =
+                now >= sunrise &&
+                now < sunset;
 
 
-            $("ctw3PointSunValue")
-                .textContent =
-                formatSunTime(
-                    sunData.sunrise
-                );
+            /*
+             * Форматируем время именно через
+             * timezone выбранной точки.
+             */
+
+            function formatPointSunTime(
+                isoTime
+            ){
+
+                if(!isoTime){
+                    return "—";
+                }
+
+
+                try{
+
+                    return new Intl.DateTimeFormat(
+                        "ru-RU",
+                        {
+                            timeZone:
+                                selectedPointTimezone,
+
+                            hour:
+                                "2-digit",
+
+                            minute:
+                                "2-digit",
+
+                            hour12:
+                                false
+                        }
+                    ).format(
+                        new Date(isoTime)
+                    );
+
+                }catch(error){
+
+                    console.error(
+                        "[CTW3 POINT INFO] Sun time format:",
+                        error
+                    );
+
+                    return "—";
+
+                }
+
+            }
+
+
+            /*
+             * Сейчас день
+             */
+
+            if(isDay){
+
+                $("ctw3PointDayStatus")
+                    .textContent =
+                    "☀️ Сейчас светло";
+
+
+                $("ctw3PointSunLabel")
+                    .textContent =
+                    "🌇 Закат солнца";
+
+
+                $("ctw3PointSunValue")
+                    .textContent =
+                    formatPointSunTime(
+                        sunData.sunset
+                    );
+
+            }
+
+
+            /*
+             * Сейчас ночь
+             */
+
+            else{
+
+                $("ctw3PointDayStatus")
+                    .textContent =
+                    "🌙 Сейчас темно";
+
+
+                $("ctw3PointSunLabel")
+                    .textContent =
+                    "🌅 Восход солнца";
+
+
+                $("ctw3PointSunValue")
+                    .textContent =
+                    formatPointSunTime(
+                        sunData.sunrise
+                    );
+
+            }
+
+        }
+
+
+        /*
+         * -------------------------------------------------
+         * UNKNOWN / MISSING DATA
+         * -------------------------------------------------
+         */
+
+        else{
+
+            throw new Error(
+                "Sun data unavailable"
+            );
 
         }
 
@@ -3365,12 +3464,16 @@ async function showMapPointInfo(
             "Не удалось определить";
 
 
+        $("ctw3PointSunLabel")
+            .textContent =
+            "🌅 Восход / 🌇 Закат";
+
+
         $("ctw3PointSunValue")
             .textContent =
             "—";
 
     }
-
 
     /* =====================================================
        OPENWEATHER
