@@ -320,6 +320,434 @@ select{
     height:43px
 }
 
+/* =========================================================
+   CTW3 MODERATION COMMAND LINE
+========================================================= */
+
+#moderatorCommandOverlay{
+
+    position:fixed;
+
+    top:0;
+    left:0;
+    right:0;
+
+    z-index:9000;
+
+    display:none;
+
+    justify-content:center;
+
+    padding:
+        14px 18px;
+
+    pointer-events:none;
+
+}
+
+
+#moderatorCommandOverlay.visible{
+
+    display:flex;
+
+}
+
+
+#moderatorCommandBox{
+
+    width:
+        min(720px, calc(100vw - 30px));
+
+    position:relative;
+
+    pointer-events:auto;
+
+}
+
+
+#moderatorCommandInput{
+
+    width:100%;
+
+    height:46px;
+
+    padding:
+        0 15px;
+
+    background:
+        rgba(5,8,13,.96);
+
+    border:
+        1px solid
+        rgba(255,255,255,.18);
+
+    border-radius:
+        12px;
+
+    color:#fff;
+
+    outline:none;
+
+    font-family:
+        "Consolas",
+        "Cascadia Code",
+        monospace;
+
+    font-size:13px;
+
+    font-weight:700;
+
+    box-shadow:
+        0 15px 45px
+        rgba(0,0,0,.55);
+
+}
+
+
+#moderatorCommandInput:focus{
+
+    border-color:
+        rgba(80,190,255,.65);
+
+    box-shadow:
+        0 15px 45px
+        rgba(0,0,0,.55),
+        0 0 0 3px
+        rgba(50,170,255,.08);
+
+}
+
+
+#moderatorCommandSuggestions{
+
+    display:none;
+
+    position:absolute;
+
+    left:0;
+    right:0;
+
+    top:53px;
+
+    max-height:
+        360px;
+
+    overflow:auto;
+
+    padding:6px;
+
+    background:
+        rgba(7,11,18,.98);
+
+    border:
+        1px solid
+        rgba(255,255,255,.12);
+
+    border-radius:
+        12px;
+
+    box-shadow:
+        0 20px 60px
+        rgba(0,0,0,.65);
+
+}
+
+
+#moderatorCommandSuggestions.visible{
+
+    display:block;
+
+}
+
+
+.moderatorUser{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:9px;
+
+    padding:
+        9px 10px;
+
+    border-radius:
+        8px;
+
+    cursor:pointer;
+
+    color:#aeb8c5;
+
+    font-size:11px;
+
+}
+
+
+.moderatorUser:hover{
+
+    background:
+        rgba(255,255,255,.07);
+
+    color:#fff;
+
+}
+
+
+.moderatorUser.selected{
+
+    background:
+        rgba(0,145,255,.17);
+
+    outline:
+        1px solid
+        rgba(70,190,255,.35);
+
+    color:#fff;
+
+}
+
+
+.moderatorUserFlag{
+
+    width:25px;
+
+    flex:0 0 25px;
+
+    text-align:center;
+
+    font-size:17px;
+
+}
+
+
+.moderatorUserInfo{
+
+    min-width:0;
+
+    flex:1;
+
+}
+
+
+.moderatorUserName{
+
+    font-weight:800;
+
+    overflow:hidden;
+
+    white-space:nowrap;
+
+    text-overflow:ellipsis;
+
+}
+
+
+.moderatorUserId{
+
+    margin-top:2px;
+
+    color:#596675;
+
+    font-size:8px;
+
+}
+
+
+#moderatorCommandHint{
+
+    margin-top:6px;
+
+    padding:
+        0 5px;
+
+    color:#667384;
+
+    font-family:
+        monospace;
+
+    font-size:9px;
+
+}
+
+
+/* =========================================================
+   MODERATOR KEY MODAL
+========================================================= */
+
+#moderatorKeyOverlay{
+
+    position:fixed;
+
+    inset:0;
+
+    z-index:9500;
+
+    display:none;
+
+    align-items:center;
+
+    justify-content:center;
+
+    padding:18px;
+
+    background:
+        rgba(0,0,0,.72);
+
+    backdrop-filter:
+        blur(10px);
+
+}
+
+
+#moderatorKeyOverlay.visible{
+
+    display:flex;
+
+}
+
+
+#moderatorKeyModal{
+
+    width:
+        min(390px, calc(100vw - 30px));
+
+    padding:20px;
+
+    background:
+        rgba(10,15,24,.98);
+
+    border:
+        1px solid
+        rgba(255,255,255,.13);
+
+    border-radius:
+        16px;
+
+    box-shadow:
+        0 25px 80px
+        rgba(0,0,0,.7);
+
+}
+
+
+#moderatorKeyModal h3{
+
+    margin:0 0 5px;
+
+    font-size:15px;
+
+}
+
+
+#moderatorKeyModal p{
+
+    margin:0 0 14px;
+
+    color:#7e8b9b;
+
+    font-size:10px;
+
+    line-height:1.45;
+
+}
+
+
+#moderatorKeyInput{
+
+    width:100%;
+
+    height:42px;
+
+    padding:
+        0 11px;
+
+    background:
+        rgba(255,255,255,.06);
+
+    border:
+        1px solid
+        rgba(255,255,255,.12);
+
+    border-radius:9px;
+
+    color:#fff;
+
+    outline:none;
+
+    font-family:monospace;
+
+}
+
+
+#moderatorKeyButtons{
+
+    display:flex;
+
+    gap:7px;
+
+    margin-top:10px;
+
+}
+
+
+.moderatorKeyButton{
+
+    flex:1;
+
+    height:38px;
+
+    border:0;
+
+    border-radius:9px;
+
+    cursor:pointer;
+
+    color:#fff;
+
+    font-weight:800;
+
+    font-size:10px;
+
+    background:
+        rgba(255,255,255,.08);
+
+}
+
+
+.moderatorKeyButton:hover{
+
+    background:
+        rgba(255,255,255,.14);
+
+}
+
+
+#moderatorKeyConfirm{
+
+    background:#087df0;
+
+}
+
+
+#moderatorKeyConfirm:hover{
+
+    background:#1690ff;
+
+}
+
+
+#moderatorKeyError{
+
+    min-height:14px;
+
+    margin-top:8px;
+
+    color:#ff7373;
+
+    font-size:9px;
+
+}
+
 #targetPanel{
     display:none;
     position:fixed;
@@ -2788,6 +3216,85 @@ select{
 
 </div>
 
+<!-- =========================================================
+     CTW3 MODERATION COMMAND LINE
+========================================================= -->
+
+<div id="moderatorCommandOverlay">
+
+    <div id="moderatorCommandBox">
+
+        <input
+            id="moderatorCommandInput"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Введите команду..."
+        >
+
+        <div id="moderatorCommandSuggestions">
+        </div>
+
+        <div id="moderatorCommandHint">
+            Shift + P — закрыть · ↑ ↓ — выбрать · Enter — подтвердить
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     MODERATOR KEY
+========================================================= -->
+
+<div id="moderatorKeyOverlay">
+
+    <div id="moderatorKeyModal">
+
+        <h3>
+            🔐 Ключ модератора
+        </h3>
+
+        <p>
+            Для выполнения команды
+            требуется секретный ключ модератора.
+        </p>
+
+        <input
+            id="moderatorKeyInput"
+            type="password"
+            autocomplete="off"
+            placeholder="Введите секретный ключ"
+        >
+
+        <div id="moderatorKeyError"></div>
+
+        <div id="moderatorKeyButtons">
+
+            <button
+                class="moderatorKeyButton"
+                onclick="closeModeratorKey()">
+
+                Отмена
+
+            </button>
+
+            <button
+                id="moderatorKeyConfirm"
+                class="moderatorKeyButton"
+                onclick="confirmModeratorReset()">
+
+                Подтвердить
+
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
 <script>
 
 /* =========================================================
@@ -2810,6 +3317,18 @@ let selectedPointTimezone = null;
 
 let country=null;
 let countries=[];
+
+/* =========================================================
+   MODERATION COMMAND LINE
+========================================================= */
+
+let moderatorUsers=[];
+
+let moderatorSelectedIndex=-1;
+
+let moderatorSelectedUser=null;
+
+let moderatorCommandOpen=false;
 
 let ctw3Socket = null;
 let ctw3PlayerId = null;
@@ -9354,6 +9873,868 @@ window.addEventListener(
     "load",
     boot
 );
+
+/* =========================================================
+   CTW3 MODERATION COMMAND SYSTEM
+========================================================= */
+
+function openModeratorCommand(){
+
+    const overlay =
+        $("moderatorCommandOverlay");
+
+    const input =
+        $("moderatorCommandInput");
+
+
+    if(
+        overlay.classList.contains(
+            "visible"
+        )
+    ){
+
+        closeModeratorCommand();
+
+        return;
+
+    }
+
+
+    moderatorCommandOpen=true;
+
+
+    overlay.classList
+        .add("visible");
+
+
+    input.value="";
+
+
+    $("moderatorCommandSuggestions")
+        .classList
+        .remove("visible");
+
+
+    moderatorUsers=[];
+
+    moderatorSelectedIndex=-1;
+
+    moderatorSelectedUser=null;
+
+
+    setTimeout(
+        () => {
+
+            input.focus();
+
+        },
+        30
+    );
+
+}
+
+
+function closeModeratorCommand(){
+
+    moderatorCommandOpen=false;
+
+
+    $("moderatorCommandOverlay")
+        .classList
+        .remove("visible");
+
+
+    $("moderatorCommandSuggestions")
+        .classList
+        .remove("visible");
+
+
+    moderatorUsers=[];
+
+    moderatorSelectedIndex=-1;
+
+    moderatorSelectedUser=null;
+
+}
+
+
+/* =========================================================
+   LOAD MODERATION USER LIST
+========================================================= */
+
+async function loadModeratorUsers(){
+
+    try{
+
+        const data =
+            await api(
+                "/api/ctw3/countries"
+            );
+
+
+        moderatorUsers =
+            Array.isArray(
+                data.countries
+            )
+                ? data.countries
+                : [];
+
+
+        moderatorSelectedIndex =
+            moderatorUsers.length
+                ? 0
+                : -1;
+
+
+        renderModeratorUsers();
+
+
+    }catch(error){
+
+        console.error(
+            "[CTW3 MODERATION]",
+            error
+        );
+
+        $("moderatorCommandSuggestions")
+            .innerHTML =
+                `
+                <div
+                    class="moderatorUser"
+                    style="color:#ff7373">
+                    ❌ Не удалось загрузить список пользователей
+                </div>
+                `;
+
+        $("moderatorCommandSuggestions")
+            .classList
+            .add("visible");
+
+    }
+
+}
+
+
+/* =========================================================
+   RENDER USERS
+========================================================= */
+
+function renderModeratorUsers(){
+
+    const container =
+        $("moderatorCommandSuggestions");
+
+
+    container.innerHTML="";
+
+
+    if(
+        !moderatorUsers.length
+    ){
+
+        container.innerHTML =
+            `
+            <div
+                class="moderatorUser"
+                style="color:#7d8998">
+                Нет зарегистрированных пользователей
+            </div>
+            `;
+
+
+        container.classList
+            .add("visible");
+
+
+        return;
+
+    }
+
+
+    moderatorUsers.forEach(
+        (user,index) => {
+
+            const item =
+                document.createElement(
+                    "div"
+                );
+
+
+            item.className =
+                "moderatorUser";
+
+
+            if(
+                index ===
+                moderatorSelectedIndex
+            ){
+
+                item.classList
+                    .add(
+                        "selected"
+                    );
+
+            }
+
+
+            item.innerHTML =
+                `
+                <div
+                    class="moderatorUserFlag">
+
+                    ${escapeHtml(
+                        user.flag ||
+                        "🏳️"
+                    )}
+
+                </div>
+
+                <div
+                    class="moderatorUserInfo">
+
+                    <div
+                        class="moderatorUserName">
+
+                        ${escapeHtml(
+                            user.name ||
+                            "Без названия"
+                        )}
+
+                    </div>
+
+                    <div
+                        class="moderatorUserId">
+
+                        ID:
+                        ${escapeHtml(
+                            String(
+                                user.id ||
+                                ""
+                            )
+                        )}
+
+                    </div>
+
+                </div>
+                `;
+
+
+            item.addEventListener(
+                "click",
+                () => {
+
+                    moderatorSelectedIndex =
+                        index;
+
+
+                    moderatorSelectedUser =
+                        user;
+
+
+                    renderModeratorUsers();
+
+
+                    /*
+                       Двойной клик тоже сразу
+                       открывает подтверждение.
+                    */
+
+                }
+            );
+
+
+            item.addEventListener(
+                "dblclick",
+                () => {
+
+                    moderatorSelectedIndex =
+                        index;
+
+                    moderatorSelectedUser =
+                        user;
+
+                    openModeratorKey();
+
+                }
+            );
+
+
+            container.appendChild(
+                item
+            );
+
+        }
+    );
+
+
+    container.classList
+        .add("visible");
+
+
+    /*
+       Прокручиваем выбранного
+       пользователя в видимую область.
+    */
+
+    const selected =
+        container.children[
+            moderatorSelectedIndex
+        ];
+
+
+    if(selected){
+
+        selected.scrollIntoView(
+            {
+                block:"nearest"
+            }
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   COMMAND INPUT
+========================================================= */
+
+function processModeratorCommand(){
+
+    const input =
+        $("moderatorCommandInput");
+
+
+    const value =
+        input.value
+            .trim()
+            .toLowerCase();
+
+
+    /*
+       Поддерживаем оба варианта:
+
+       !reset
+       /reset
+    */
+
+    if(
+        value === "!reset" ||
+        value === "/reset"
+    ){
+
+        loadModeratorUsers();
+
+        return true;
+
+    }
+
+
+    /*
+       Пока существует только одна команда.
+    */
+
+    if(
+        value.startsWith("!") ||
+        value.startsWith("/")
+    ){
+
+        $("moderatorCommandSuggestions")
+            .innerHTML =
+                `
+                <div
+                    class="moderatorUser"
+                    style="color:#ffb45c">
+
+                    ❓ Неизвестная команда
+
+                </div>
+                `;
+
+
+        $("moderatorCommandSuggestions")
+            .classList
+            .add("visible");
+
+
+        return false;
+
+    }
+
+
+    $("moderatorCommandSuggestions")
+        .classList
+        .remove("visible");
+
+
+    return false;
+
+}
+
+
+/* =========================================================
+   KEYBOARD HANDLER
+========================================================= */
+
+document.addEventListener(
+    "keydown",
+    function(event){
+
+        /*
+           SHIFT + P
+        */
+
+        if(
+            event.shiftKey &&
+            event.key.toLowerCase() === "p"
+        ){
+
+            event.preventDefault();
+
+            event.stopPropagation();
+
+            openModeratorCommand();
+
+            return;
+
+        }
+
+
+        if(
+            !moderatorCommandOpen
+        ){
+
+            return;
+
+        }
+
+
+        /*
+           ESC
+        */
+
+        if(
+            event.key === "Escape"
+        ){
+
+            event.preventDefault();
+
+            closeModeratorCommand();
+
+            return;
+
+        }
+
+
+        /*
+           ENTER
+        */
+
+        if(
+            event.key === "Enter"
+        ){
+
+            event.preventDefault();
+
+
+            const input =
+                $("moderatorCommandInput");
+
+
+            const value =
+                input.value
+                    .trim()
+                    .toLowerCase();
+
+
+            /*
+               Первый Enter после !reset
+               показывает список.
+
+               Если список уже открыт —
+               Enter выбирает пользователя.
+            */
+
+            if(
+                value === "!reset" ||
+                value === "/reset"
+            ){
+
+                if(
+                    !moderatorUsers.length
+                ){
+
+                    loadModeratorUsers();
+
+                    return;
+
+                }
+
+
+                if(
+                    moderatorSelectedIndex < 0
+                ){
+
+                    moderatorSelectedIndex=0;
+
+                }
+
+
+                moderatorSelectedUser =
+                    moderatorUsers[
+                        moderatorSelectedIndex
+                    ];
+
+
+                openModeratorKey();
+
+                return;
+
+            }
+
+
+            processModeratorCommand();
+
+            return;
+
+        }
+
+
+        /*
+           ARROW DOWN
+        */
+
+        if(
+            event.key === "ArrowDown"
+        ){
+
+            if(
+                !moderatorUsers.length
+            ){
+
+                return;
+
+            }
+
+
+            event.preventDefault();
+
+
+            moderatorSelectedIndex =
+                (
+                    moderatorSelectedIndex + 1
+                ) %
+                moderatorUsers.length;
+
+
+            moderatorSelectedUser =
+                moderatorUsers[
+                    moderatorSelectedIndex
+                ];
+
+
+            renderModeratorUsers();
+
+            return;
+
+        }
+
+
+        /*
+           ARROW UP
+        */
+
+        if(
+            event.key === "ArrowUp"
+        ){
+
+            if(
+                !moderatorUsers.length
+            ){
+
+                return;
+
+            }
+
+
+            event.preventDefault();
+
+
+            moderatorSelectedIndex =
+                moderatorSelectedIndex <= 0
+
+                    ? moderatorUsers.length - 1
+
+                    : moderatorSelectedIndex - 1;
+
+
+            moderatorSelectedUser =
+                moderatorUsers[
+                    moderatorSelectedIndex
+                ];
+
+
+            renderModeratorUsers();
+
+            return;
+
+        }
+
+    },
+    true
+);
+
+
+/* =========================================================
+   LIVE COMMAND INPUT
+========================================================= */
+
+document.addEventListener(
+    "input",
+    function(event){
+
+        if(
+            event.target.id !==
+            "moderatorCommandInput"
+        ){
+
+            return;
+
+        }
+
+
+        processModeratorCommand();
+
+    }
+);
+
+
+/* =========================================================
+   OPEN MODERATOR KEY
+========================================================= */
+
+function openModeratorKey(){
+
+    if(
+        !moderatorSelectedUser
+    ){
+
+        setStatus(
+            "⚠️ Сначала выберите пользователя"
+        );
+
+        return;
+
+    }
+
+
+    $("moderatorKeyInput")
+        .value="";
+
+
+    $("moderatorKeyError")
+        .textContent="";
+
+
+    $("moderatorKeyOverlay")
+        .classList
+        .add("visible");
+
+
+    setTimeout(
+        () => {
+
+            $("moderatorKeyInput")
+                .focus();
+
+        },
+        50
+    );
+
+}
+
+
+/* =========================================================
+   CLOSE MODERATOR KEY
+========================================================= */
+
+function closeModeratorKey(){
+
+    $("moderatorKeyOverlay")
+        .classList
+        .remove("visible");
+
+
+    $("moderatorKeyInput")
+        .value="";
+
+
+    $("moderatorKeyError")
+        .textContent="";
+
+}
+
+
+/* =========================================================
+   CONFIRM RESET
+========================================================= */
+
+async function confirmModeratorReset(){
+
+    if(
+        !moderatorSelectedUser
+    ){
+
+        return;
+
+    }
+
+
+    const key =
+        $("moderatorKeyInput")
+            .value;
+
+
+    if(
+        !key
+    ){
+
+        $("moderatorKeyError")
+            .textContent =
+                "Введите ключ модератора.";
+
+        return;
+
+    }
+
+
+    const button =
+        $("moderatorKeyConfirm");
+
+
+    button.disabled=true;
+
+    button.textContent =
+        "Проверка...";
+
+
+    $("moderatorKeyError")
+        .textContent="";
+
+
+    try{
+
+        const result =
+            await api(
+                "/api/ctw3/mod/reset",
+                {
+                    method:"POST",
+
+                    body:
+                        JSON.stringify(
+                            {
+
+                                target_country_id:
+                                    moderatorSelectedUser.id,
+
+                                moderator_key:
+                                    key
+
+                            }
+                        )
+                }
+            );
+
+
+        closeModeratorKey();
+
+        closeModeratorCommand();
+
+
+        setStatus(
+            "🛡️ "+
+            (
+                result.country_name ||
+                "Пользователь"
+            )+
+            " сброшен"
+        );
+
+
+        /*
+           Обновляем карту и список.
+        */
+
+        await refreshState();
+
+        await loadCountries();
+
+
+        /*
+           Если сбросили текущего игрока,
+           refreshState() вернёт registered:false,
+           после чего обычный экран регистрации
+           должен появиться штатно.
+        */
+
+
+    }catch(error){
+
+        console.error(
+            "[CTW3 MOD RESET]",
+            error
+        );
+
+
+        $("moderatorKeyError")
+            .textContent =
+                "❌ "+
+                error.message;
+
+
+    }finally{
+
+        button.disabled=false;
+
+        button.textContent =
+            "Подтвердить";
+
+    }
+
+}
+
+
+/* =========================================================
+   ENTER IN MODERATOR KEY
+========================================================= */
+
+$("moderatorKeyInput")
+    ?.addEventListener(
+        "keydown",
+        function(event){
+
+            if(
+                event.key === "Enter"
+            ){
+
+                event.preventDefault();
+
+                confirmModeratorReset();
+
+            }
+
+            else if(
+                event.key === "Escape"
+            ){
+
+                event.preventDefault();
+
+                closeModeratorKey();
+
+            }
+
+        }
+    );
 
 </script>
 
