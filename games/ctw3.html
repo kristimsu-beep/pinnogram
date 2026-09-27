@@ -8351,58 +8351,82 @@ async function openMissileAttackMap(
     // -----------------------------------------------------
     // CREATE TERRITORY LAYER
     // -----------------------------------------------------
-
+           
       // -----------------------------------------------------
-      // NORMALIZE TERRITORY GEOJSON
+      // EXTRACT CUSTOM TERRITORY GEOJSON
       // -----------------------------------------------------
       
-      let territoryGeoJSON =
-          target.territory;
+      let territoryGeoJSON = null;
       
       
-      // If territory is a GeoJSON Feature
+      // -----------------------------------------------------
+      // CTW3 CUSTOM TERRITORY
+      // -----------------------------------------------------
+      
       if(
-          territoryGeoJSON &&
-          territoryGeoJSON.type === "Feature"
+          target.territory &&
+          target.territory.type === "custom" &&
+          target.territory.geometry
       ){
       
-          // Already valid
+          territoryGeoJSON =
+              target.territory.geometry;
+      
       }
       
       
-      // If territory is only a geometry object
+      // -----------------------------------------------------
+      // DIRECT GEOJSON GEOMETRY
+      // -----------------------------------------------------
+      
       else if(
-          territoryGeoJSON &&
+          target.territory &&
           (
-              territoryGeoJSON.type === "Polygon" ||
-              territoryGeoJSON.type === "MultiPolygon"
+              target.territory.type === "Polygon" ||
+              target.territory.type === "MultiPolygon"
           )
       ){
       
-          territoryGeoJSON = {
-      
-              type: "Feature",
-      
-              properties: {},
-      
-              geometry: territoryGeoJSON
-      
-          };
+          territoryGeoJSON =
+              target.territory;
       
       }
       
       
-      // If territory is a FeatureCollection
+      // -----------------------------------------------------
+      // GEOJSON FEATURE
+      // -----------------------------------------------------
+      
       else if(
-          territoryGeoJSON &&
-          territoryGeoJSON.type === "FeatureCollection"
+          target.territory &&
+          target.territory.type === "Feature"
       ){
       
-          // Already valid
+          territoryGeoJSON =
+              target.territory;
+      
       }
       
       
-      // Anything else is invalid
+      // -----------------------------------------------------
+      // GEOJSON FEATURE COLLECTION
+      // -----------------------------------------------------
+      
+      else if(
+          target.territory &&
+          target.territory.type === "FeatureCollection"
+      ){
+      
+          territoryGeoJSON =
+              target.territory;
+      
+      }
+      
+      
+      // -----------------------------------------------------
+      // INVALID TERRITORY
+      // -----------------------------------------------------
+      
       else{
       
           console.error(
@@ -8445,7 +8469,6 @@ async function openMissileAttackMap(
           ).addTo(
               missileAttackMap
           );
-
 
     // -----------------------------------------------------
     // FIT TERRITORY
