@@ -154,51 +154,118 @@ function stopRecording(){
 }
 
 async function sendAudio(blob){
-  busy=true;
-  setStatus("Обрабатываю голос…");
-  const form=new FormData();
-  form.append("audio",blob,"voice.webm");
-  form.append("history",JSON.stringify(history));
-  try{
-    const response=await fetch("/api/ai/voice",{method:"POST",body:form});
-    const data=await response.json();
-    if(!response.ok) throw new Error(data.detail||data.error||"Ошибка сервера");
+    busy = true;
+    setStatus("Обрабатываю голос…");
 
-    const transcript=(data.transcript||"").trim();
-    if(transcript){
-      addMessage(transcript,"user");
-      history.push({role:"user",content:transcript});
+    const form = new FormData();
+    form.append("audio", blob, "voice.webm");
+    form.append("history", JSON.stringify(history));
+
+    try{
+        const response = await fetch("/api/ai/voice", {
+            method: "POST",
+            body: form
+        });
+
+        const data = await response.json();
+
+        if(!response.ok){
+            throw new Error(
+                data.detail ||
+                data.error ||
+                "Ошибка сервера"
+            );
+        }
+
+        const transcript = (data.transcript || "").trim();
+
+        /*
+         * Показываем сообщение пользователя
+         */
+        if(transcript){
+            addMessage(transcript, "user");
+
+            history.push({
+                role: "user",
+                content: transcript
+            });
+        }
+
+        /*
+         * ============================
+         * ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЯ
+         * ============================
+         */
+        if(data.is_image && data.image){
+
+            addImageMessage(
+                data.image,
+                data.image_prompt || transcript
+            );
+
+            setStatus("Готово");
+
+            return;
+        }
+
+        /*
+         * ============================
+         * ОБЫЧНЫЙ ОТВЕТ AI
+         * ============================
+         *
+         * ВАЖНО:
+         * backend возвращает data.response
+         */
+        const answer = (
+            data.response ||
+            data.text ||
+            data.answer ||
+            ""
+        ).trim();
+
+        if(answer){
+
+            addMessage(answer, "ai");
+
+            history.push({
+                role: "assistant",
+                content: answer
+            });
+
+            /*
+             * Озвучиваем ответ
+             */
+            speakRussian(answer);
+        }
+
+        /*
+         * Ограничиваем историю
+         */
+        if(history.length > 12){
+            history = history.slice(-12);
+        }
+
+        setStatus("Нажми на шар, чтобы говорить");
+
+    }catch(err){
+
+        console.error("AI error:", err);
+
+        setStatus(
+            "Ошибка: " + err.message
+        );
+
+    }finally{
+
+        busy = false;
+
+        orbButton.classList.remove(
+            "active",
+            "speaking"
+        );
+
+        orb.style.transform = "scale(1)";
     }
-
-    if(data.is_image&&data.image){
-      setStatus("Изображение готово");
-      addImageMessage(data.image,data.image_prompt||"");
-      const imageAnswer=(data.text||"Готово! Я создал изображение.").trim();
-      if(imageAnswer){
-        addMessage(imageAnswer,"ai");
-        history.push({role:"assistant",content:imageAnswer});
-        speakRussian(imageAnswer);
-      }
-    }else{
-      const answer=(data.text||data.answer||"").trim();
-      if(answer){
-        addMessage(answer,"ai");
-        history.push({role:"assistant",content:answer});
-        speakRussian(answer);
-      }
-    }
-
-    if(history.length>12) history=history.slice(-12);
-    if(data.audio){setStatus("Отвечаю…");await playBase64Audio(data.audio);}
-    setStatus("Нажми на шар, чтобы говорить");
-  }catch(err){
-    console.error("AI error:",err);
-    setStatus("Ошибка: "+err.message);
-  }finally{
-    busy=false;
-    orbButton.classList.remove("active","speaking");
-    orb.style.transform="scale(1)";
-  }
 }
 
 async function playBase64Audio(base64){
