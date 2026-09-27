@@ -276,155 +276,206 @@ function stopRecording(){
 }
 
 let russianVoices = [];
+let speechTimer = null;
 
 function loadRussianVoices() {
-    const voices = window.speechSynthesis.getVoices();
+    russianVoices = speechSynthesis
+        .getVoices()
+        .filter(v =>
+            v.lang &&
+            v.lang.toLowerCase().startsWith("ru")
+        );
 
-    russianVoices = voices.filter(
-        voice => voice.lang &&
-        voice.lang.toLowerCase().startsWith("ru")
+    console.log(
+        "Russian voices:",
+        russianVoices.map(v => ({
+            name: v.name,
+            lang: v.lang
+        }))
     );
-
-    console.log("Russian voices:", russianVoices);
 }
 
 loadRussianVoices();
 
-if ("onvoiceschanged" in window.speechSynthesis) {
-    window.speechSynthesis.addEventListener(
-        "voiceschanged",
-        loadRussianVoices
-    );
-}
+speechSynthesis.addEventListener(
+    "voiceschanged",
+    loadRussianVoices
+);
+
 
 function speakRussian(text) {
-
-    if (!("speechSynthesis" in window)) {
-        console.error("Speech synthesis недоступен");
-        return;
-    }
 
     if (!text || !text.trim()) {
         return;
     }
 
+    if (!("speechSynthesis" in window)) {
+        console.error(
+            "SpeechSynthesis недоступен"
+        );
+        return;
+    }
+
     const synth = window.speechSynthesis;
 
-    // Останавливаем только предыдущую озвучку.
+    clearTimeout(speechTimer);
+
+    /*
+     * Полностью очищаем старую очередь.
+     */
     synth.cancel();
+
+    /*
+     * Android иногда оставляет synthesis
+     * в состоянии paused после cancel().
+     */
+    try {
+        synth.resume();
+    } catch (e) {
+        console.warn(e);
+    }
 
     const cleanText = text
         .replace(/```[\s\S]*?```/g, "")
         .replace(/[*_#]/g, "")
         .trim();
 
+    if (!cleanText) {
+        return;
+    }
+
+    /*
+     * Ищем русский голос.
+     */
     const voice =
-        russianVoices.find(v =>
-            v.lang.toLowerCase() === "ru-ru"
+        russianVoices.find(
+            v =>
+                v.lang.toLowerCase() === "ru-ru"
         ) ||
-        russianVoices[0] ||
+        russianVoices.find(
+            v =>
+                v.lang.toLowerCase().startsWith("ru")
+        ) ||
         null;
 
+    const utterance =
+        new SpeechSynthesisUtterance(
+            cleanText
+        );
+
     /*
-     * Для длинного ответа разбиваем текст
-     * на небольшие предложения.
-     *
-     * Это намного стабильнее на Android,
-     * чем один огромный SpeechSynthesisUtterance.
+     * ВАЖНО:
+     * весь ответ передаём одним utterance.
      */
+    utterance.text = cleanText;
 
-    const parts = cleanText
-        .match(/[^.!?…]+[.!?…]+|[^.!?…]+$/g)
-        ?.map(x => x.trim())
-        .filter(Boolean) || [cleanText];
+    utterance.lang = "ru-RU";
+    utterance.rate = 0.95;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
 
-    let index = 0;
+    if (voice) {
+        utterance.voice = voice;
+    }
 
-    orbButton.classList.add("active", "speaking");
-    setStatus("Отвечаю…");
+    utterance.onstart = () => {
 
-    function speakNext() {
+        console.log(
+            "TTS START:",
+            cleanText
+        );
 
-        if (index >= parts.length) {
-            orbButton.classList.remove(
-                "active",
-                "speaking"
-            );
+        orbButton.classList.add(
+            "active",
+            "speaking"
+        );
 
-            orb.style.transform = "scale(1)";
-            setStatus("Нажми на шар, чтобы говорить");
+        setStatus("Отвечаю…");
+    };
 
-            return;
+    utterance.onend = () => {
+
+        console.log("TTS END");
+
+        orbButton.classList.remove(
+            "active",
+            "speaking"
+        );
+
+        orb.style.transform =
+            "scale(1)";
+
+        setStatus(
+            "Нажми на шар, чтобы говорить"
+        );
+    };
+
+    utterance.onerror = event => {
+
+        console.error(
+            "TTS ERROR:",
+            event.error
+        );
+
+        orbButton.classList.remove(
+            "active",
+            "speaking"
+        );
+
+        setStatus(
+            "Ошибка озвучки: " +
+            event.error
+        );
+    };
+
+    /*
+     * Ключевой момент:
+     *
+     * Не запускаем speak() прямо в этот же
+     * момент после cancel().
+     *
+     * Даём Android немного времени
+     * очистить предыдущую очередь.
+     */
+    speechTimer = setTimeout(() => {
+
+        /*
+         * Повторно загружаем голоса,
+         * если Android ещё не успел их предоставить.
+         */
+        loadRussianVoices();
+
+        if (!utterance.voice && russianVoices.length) {
+
+            utterance.voice =
+                russianVoices.find(
+                    v =>
+                        v.lang.toLowerCase() ===
+                        "ru-ru"
+                ) ||
+                russianVoices[0];
         }
 
-        const utterance =
-            new SpeechSynthesisUtterance(parts[index]);
-
-        utterance.lang = "ru-RU";
-        utterance.rate = 0.95;
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-
-        if (voice) {
-            utterance.voice = voice;
-        }
-
-        utterance.onstart = () => {
-            orbButton.classList.add(
-                "active",
-                "speaking"
-            );
-        };
-
-        utterance.onend = () => {
-            index++;
-
-            /*
-             * Небольшая пауза между предложениями.
-             * Она помогает Android не пропускать
-             * начало следующего фрагмента.
-             */
-            setTimeout(
-                speakNext,
-                40
-            );
-        };
-
-        utterance.onerror = (event) => {
-            console.error(
-                "Speech error:",
-                event
-            );
-
-            index++;
-
-            setTimeout(
-                speakNext,
-                50
-            );
-        };
+        /*
+         * Очень важно для Android Chrome.
+         */
+        synth.resume();
 
         synth.speak(utterance);
-    }
 
-    /*
-     * Иногда Android ещё не успел загрузить
-     * голосовой движок сразу после открытия страницы.
-     */
-    if (russianVoices.length === 0) {
-
+        /*
+         * Ещё один resume после постановки
+         * utterance в очередь.
+         */
         setTimeout(() => {
 
-            loadRussianVoices();
+            if (!synth.speaking) {
+                synth.resume();
+            }
 
-            speakNext();
+        }, 100);
 
-        }, 150);
-
-    } else {
-
-        speakNext();
-    }
+    }, 300);
 }
 
 async function sendAudio(blob){
