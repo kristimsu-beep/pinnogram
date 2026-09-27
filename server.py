@@ -5022,17 +5022,20 @@ async def ctw3_moderator_reset(
 
         raise HTTPException(
             status_code=503,
-            detail=
-                "CTW3_MODERATOR_KEY не настроен"
+            detail="CTW3_MODERATOR_KEY не настроен"
         )
 
+    # -----------------------------------------------------
+    # GET SUPPLIED KEY
+    # -----------------------------------------------------
+
+    supplied_key = str(
+        data.moderator_key or ""
+    )
 
     # -----------------------------------------------------
-    # CONSTANT-TIME SECRET COMPARISON
+    # CHECK SECRET KEY
     # -----------------------------------------------------
-
-    supplied_key = str(data.moderator_key or "")
-
 
     if not secrets.compare_digest(
         supplied_key,
@@ -5041,10 +5044,8 @@ async def ctw3_moderator_reset(
 
         raise HTTPException(
             status_code=403,
-            detail=
-                "Неверный ключ модератора"
+            detail="Неверный ключ модератора"
         )
-
 
     # -----------------------------------------------------
     # CHECK COUNTRY ID
@@ -5052,71 +5053,67 @@ async def ctw3_moderator_reset(
 
     try:
 
-        target_id = ObjectId(data.target_country_id)
+        target_id = ObjectId(
+            data.target_country_id
+        )
 
     except Exception:
 
         raise HTTPException(
             status_code=400,
-            detail=
-                "Некорректный ID пользователя"
+            detail="Некорректный ID пользователя"
         )
 
-
     # -----------------------------------------------------
-    # FIND TARGET
+    # FIND TARGET COUNTRY / USER
     # -----------------------------------------------------
 
-    target =
-        await ctw3_countries.find_one(
-            {
-                "_id": target_id
-            }
-        )
-
+    target = await ctw3_countries.find_one(
+        {
+            "_id": target_id
+        }
+    )
 
     if not target:
 
         raise HTTPException(
             status_code=404,
-            detail=
-                "Пользователь не найден"
+            detail="Пользователь не найден"
         )
-
-
-    target_name =
-        target.get(
-            "name",
-            "Без названия"
-        )
-
-
-    target_player_id =
-        target.get(
-            "player_id"
-        )
-
 
     # -----------------------------------------------------
-    # DELETE CTW3 COUNTRY
+    # SAVE INFORMATION FOR LOG
     # -----------------------------------------------------
 
-    result =
-        await ctw3_countries.delete_one(
-            {
-                "_id": target_id
-            }
-        )
+    target_name = target.get(
+        "name",
+        "Без названия"
+    )
 
+    target_player_id = target.get(
+        "player_id"
+    )
+
+    # -----------------------------------------------------
+    # DELETE COUNTRY
+    # -----------------------------------------------------
+
+    result = await ctw3_countries.delete_one(
+        {
+            "_id": target_id
+        }
+    )
 
     if result.deleted_count != 1:
 
         raise HTTPException(
             status_code=500,
-            detail=
-                "Не удалось удалить пользователя"
+            detail="Не удалось удалить пользователя"
         )
 
+    # -----------------------------------------------------
+    # SERVER LOG
+    # -----------------------------------------------------
 
     print(
         "[CTW3 MODERATION] RESET:",
@@ -5125,17 +5122,14 @@ async def ctw3_moderator_reset(
         target_player_id
     )
 
+    # -----------------------------------------------------
+    # RESPONSE
+    # -----------------------------------------------------
 
     return {
-
         "status": "success",
-
-        "message":
-            "Пользователь сброшен",
-
-        "country_name":
-            target_name
-
+        "message": "Пользователь сброшен",
+        "country_name": target_name
     }
 
 # =========================================================
