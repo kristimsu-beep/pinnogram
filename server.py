@@ -7965,6 +7965,11 @@ async def ai_voice(
                         file=audio_file,
                         model="whisper-large-v3",
                         language="ru",
+                        prompt=(
+                            "Пользователь говорит на русском языке. "
+                            "Точно распознавай русские слова, имена, названия "
+                            "и технические термины. Не переводи речь."
+                        ),
                         response_format="json",
                         temperature=0
                     )
