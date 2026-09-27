@@ -2594,7 +2594,7 @@ async function showMapPointInfo(
 
 
     /* =====================================================
-       INITIAL STATUS
+       INITIAL STATE
     ===================================================== */
 
     $("ctw3PointTime")
@@ -2619,9 +2619,7 @@ async function showMapPointInfo(
 
     /* =====================================================
        TIMEZONE
-       tz-lookup работает локально в браузере.
-       API KEY НЕ НУЖЕН.
-    ===================================================== */
+       ===================================================== */
 
     try{
 
@@ -2661,10 +2659,6 @@ async function showMapPointInfo(
             timezone;
 
 
-        /* =================================================
-           UPDATE LOCAL CLOCK
-        ================================================= */
-
         updatePointClock();
 
 
@@ -2689,17 +2683,6 @@ async function showMapPointInfo(
             .textContent =
             "—";
 
-    }
-
-
-    /* =====================================================
-       IF TIMEZONE WAS NOT FOUND,
-       STOP SUN CALCULATION
-    ===================================================== */
-
-    if(
-        !selectedPointTimezone
-    ){
 
         $("ctw3PointDayStatus")
             .textContent =
@@ -2717,7 +2700,7 @@ async function showMapPointInfo(
 
 
     /* =====================================================
-       CURRENT DATE IN SELECTED LOCATION
+       CURRENT LOCAL DATE
     ===================================================== */
 
     let today;
@@ -2747,6 +2730,7 @@ async function showMapPointInfo(
                 new Date()
             );
 
+
     }catch(error){
 
         console.error(
@@ -2768,6 +2752,7 @@ async function showMapPointInfo(
 
     /* =====================================================
        SUNRISE / SUNSET
+       API V2
     ===================================================== */
 
     try{
@@ -2793,11 +2778,17 @@ async function showMapPointInfo(
                 today
             )
             +
-            "&tzid="
+            "&tz="
             +
             encodeURIComponent(
                 selectedPointTimezone
             );
+
+
+        console.log(
+            "[CTW3 POINT INFO] Sun request:",
+            sunUrl
+        );
 
 
         const sunResponse =
@@ -2811,7 +2802,7 @@ async function showMapPointInfo(
         ){
 
             throw new Error(
-                "Sun API error: "
+                "Sun API HTTP error: "
                 +
                 sunResponse.status
             );
@@ -2823,11 +2814,89 @@ async function showMapPointInfo(
             await sunResponse.json();
 
 
+        console.log(
+            "[CTW3 POINT INFO] Sun data:",
+            sunData
+        );
+
+
+        /*
+            API V2 не использует:
+                sunData.results
+                sunData.status
+
+            В V2 данные находятся прямо
+            в объекте ответа.
+        */
+
         if(
-            sunData.status !== "OK"
-            ||
-            !sunData.results
+            !sunData ||
+            !sunData.sunrise ||
+            !sunData.sunset
         ){
+
+            /*
+                Возможен полярный день/ночь.
+                В таком случае API может вернуть
+                sunrise или sunset как null.
+            */
+
+            if(
+                sunData &&
+                sunData.sun_status
+            ){
+
+                if(
+                    sunData.sun_status ===
+                    "midnight_sun"
+                ){
+
+                    $("ctw3PointDayStatus")
+                        .textContent =
+                        "☀️ Полярный день";
+
+
+                    $("ctw3PointSunLabel")
+                        .textContent =
+                        "🌇 Заката нет";
+
+
+                    $("ctw3PointSunValue")
+                        .textContent =
+                        "Солнце не заходит";
+
+
+                    return;
+
+                }
+
+
+                if(
+                    sunData.sun_status ===
+                    "polar_night"
+                ){
+
+                    $("ctw3PointDayStatus")
+                        .textContent =
+                        "🌙 Полярная ночь";
+
+
+                    $("ctw3PointSunLabel")
+                        .textContent =
+                        "🌅 Восхода нет";
+
+
+                    $("ctw3PointSunValue")
+                        .textContent =
+                        "Солнце не восходит";
+
+
+                    return;
+
+                }
+
+            }
+
 
             throw new Error(
                 "Sun data unavailable"
@@ -2836,53 +2905,35 @@ async function showMapPointInfo(
         }
 
 
-        const result =
-            sunData.results;
-
-
         /* =================================================
            SUNRISE / SUNSET
         ================================================= */
 
         const sunrise =
-            result.sunrise
-            ? new Date(
-                result.sunrise
-            )
-            : null;
+            new Date(
+                sunData.sunrise
+            );
 
 
         const sunset =
-            result.sunset
-            ? new Date(
-                result.sunset
-            )
-            : null;
+            new Date(
+                sunData.sunset
+            );
 
 
         const now =
             new Date();
 
 
-        let isDay = true;
-
-
-        if(
-            sunrise &&
-            sunset
-        ){
-
-            isDay =
-                now >= sunrise
-                &&
-                now < sunset;
-
-        }
-
-
         /* =================================================
            DAY / NIGHT
         ================================================= */
+
+        const isDay =
+            now >= sunrise
+            &&
+            now < sunset;
+
 
         if(isDay){
 
@@ -2899,7 +2950,7 @@ async function showMapPointInfo(
             $("ctw3PointSunValue")
                 .textContent =
                 formatSunTime(
-                    result.sunset
+                    sunData.sunset
                 );
 
         }else{
@@ -2917,7 +2968,7 @@ async function showMapPointInfo(
             $("ctw3PointSunValue")
                 .textContent =
                 formatSunTime(
-                    result.sunrise
+                    sunData.sunrise
                 );
 
         }
@@ -2944,7 +2995,7 @@ async function showMapPointInfo(
 
 
     /* =====================================================
-       LOCAL CLOCK TIMER
+       LOCAL CLOCK
     ===================================================== */
 
     if(
