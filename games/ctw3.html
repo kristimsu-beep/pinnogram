@@ -3507,6 +3507,17 @@ function connectCTW3WebSocket(){
 
             }
 
+            if(
+                data.type ===
+                "missile_attack"
+            ){
+            
+                playGlobalMissileAttack(
+                    data
+                );
+            
+            }
+
         }catch(error){
 
             console.error(
@@ -7823,6 +7834,420 @@ $("chatForm")
         }
     );
 
+/* =========================================================
+   GLOBAL MISSILE ATTACK
+   Видно всем игрокам
+========================================================= */
+
+function playGlobalMissileAttack(
+    attack
+){
+
+    if(
+        !map
+    ){
+        return;
+    }
+
+
+    const startLat =
+        Number(
+            attack.start_latitude
+        );
+
+    const startLng =
+        Number(
+            attack.start_longitude
+        );
+
+    const targetLat =
+        Number(
+            attack.animation_latitude
+        );
+
+    const targetLng =
+        Number(
+            attack.animation_longitude
+        );
+
+
+    if(
+        !Number.isFinite(startLat) ||
+        !Number.isFinite(startLng) ||
+        !Number.isFinite(targetLat) ||
+        !Number.isFinite(targetLng)
+    ){
+
+        console.warn(
+            "[CTW3 GLOBAL MISSILE] Invalid coordinates:",
+            attack
+        );
+
+        return;
+    }
+
+
+    const start =
+        L.latLng(
+            startLat,
+            startLng
+        );
+
+
+    const target =
+        L.latLng(
+            targetLat,
+            targetLng
+        );
+
+
+    // -----------------------------------------------------
+    // ROCKET ICON
+    // -----------------------------------------------------
+
+    const rocketIcon =
+        L.divIcon(
+            {
+                className:"",
+
+                html:
+                    `
+                    <div
+                        class="ctw3-attack-flight">
+                        🚀
+                    </div>
+                    `,
+
+                iconSize:[
+                    30,
+                    30
+                ],
+
+                iconAnchor:[
+                    15,
+                    15
+                ]
+            }
+        );
+
+
+    const rocket =
+        L.marker(
+            start,
+            {
+                icon:
+                    rocketIcon,
+
+                interactive:false,
+
+                zIndexOffset:
+                    10000
+            }
+        )
+        .addTo(
+            map
+        );
+
+
+    // -----------------------------------------------------
+    // TRAIL
+    // -----------------------------------------------------
+
+    const trail =
+        L.polyline(
+            [
+                start,
+                target
+            ],
+            {
+                color:"#ffffff",
+
+                weight:2,
+
+                opacity:.35,
+
+                dashArray:"6 8",
+
+                interactive:false,
+
+                pane:"markerPane"
+            }
+        )
+        .addTo(
+            map
+        );
+
+
+    // -----------------------------------------------------
+    // FLIGHT
+    // -----------------------------------------------------
+
+    const duration =
+        attack.intercepted
+            ? 1800
+            : 2200;
+
+
+    const startTime =
+        performance.now();
+
+
+    const deltaLat =
+        target.lat -
+        start.lat;
+
+
+    const deltaLng =
+        target.lng -
+        start.lng;
+
+
+    function frame(
+        now
+    ){
+
+        const progress =
+            Math.min(
+                1,
+
+                (
+                    now -
+                    startTime
+                ) /
+                duration
+            );
+
+
+        const eased =
+            progress < .5
+                ? 2 *
+                  progress *
+                  progress
+
+                : 1 -
+                  Math.pow(
+                      -2 *
+                      progress +
+                      2,
+                      2
+                  ) /
+                  2;
+
+
+        const lat =
+            start.lat +
+            deltaLat *
+            eased;
+
+
+        const lng =
+            start.lng +
+            deltaLng *
+            eased;
+
+
+        rocket.setLatLng(
+            [
+                lat,
+                lng
+            ]
+        );
+
+
+        // -------------------------------------------------
+        // ROCKET ROTATION
+        // -------------------------------------------------
+
+        if(
+            rocket._icon
+        ){
+
+            const rocketElement =
+                rocket._icon
+                    .querySelector(
+                        ".ctw3-attack-flight"
+                    );
+
+
+            if(
+                rocketElement
+            ){
+
+                const angle =
+                    Math.atan2(
+                        deltaLng,
+                        deltaLat
+                    ) *
+                    180 /
+                    Math.PI;
+
+
+                rocketElement.style.transform =
+                    "rotate("+
+                    angle+
+                    "deg)";
+
+            }
+
+        }
+
+
+        if(
+            progress < 1
+        ){
+
+            requestAnimationFrame(
+                frame
+            );
+
+            return;
+
+        }
+
+
+        // -------------------------------------------------
+        // REMOVE ROCKET
+        // -------------------------------------------------
+
+        if(
+            map &&
+            map.hasLayer(
+                rocket
+            )
+        ){
+
+            map.removeLayer(
+                rocket
+            );
+
+        }
+
+
+        if(
+            map &&
+            map.hasLayer(
+                trail
+            )
+        ){
+
+            map.removeLayer(
+                trail
+            );
+
+        }
+
+
+        // -------------------------------------------------
+        // IMPACT / INTERCEPTION
+        // -------------------------------------------------
+
+        showGlobalMissileEffect(
+            target,
+            Boolean(
+                attack.intercepted
+            )
+        );
+
+    }
+
+
+    requestAnimationFrame(
+        frame
+    );
+
+}
+
+function showGlobalMissileEffect(
+    latLng,
+    intercepted=false
+){
+
+    if(
+        !map
+    ){
+        return;
+    }
+
+
+    const html =
+        intercepted
+
+            ? `
+                <div
+                    class="ctw3-attack-intercept">
+                    ✦
+                </div>
+              `
+
+            : `
+                <div
+                    class="ctw3-attack-explosion">
+                </div>
+              `;
+
+
+    const icon =
+        L.divIcon(
+            {
+                className:"",
+
+                html,
+
+                iconSize:[
+                    30,
+                    30
+                ],
+
+                iconAnchor:[
+                    15,
+                    15
+                ]
+            }
+        );
+
+
+    const effect =
+        L.marker(
+            latLng,
+            {
+                icon,
+
+                interactive:false,
+
+                zIndexOffset:
+                    10001
+            }
+        )
+        .addTo(
+            map
+        );
+
+
+    setTimeout(
+        () => {
+
+            if(
+                map &&
+                map.hasLayer(
+                    effect
+                )
+            ){
+
+                map.removeLayer(
+                    effect
+                );
+
+            }
+
+        },
+
+        intercepted
+            ? 750
+            : 1000
+
+    );
+
+}
 
 /* =========================================================
    MISSILE ATTACK
