@@ -817,6 +817,359 @@ select{
 
 }
 
+/* =========================================================
+   CTW3 POINT WEATHER
+   ========================================================= */
+
+.ctw3-point-weather {
+    margin-top: 10px;
+    padding: 12px;
+    border-radius: 13px;
+
+    background: rgba(255,255,255,0.035);
+    border: 1px solid rgba(255,255,255,0.065);
+}
+
+
+/* =========================================================
+   WEATHER HEADER
+   ========================================================= */
+
+.ctw3-weather-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    gap: 12px;
+
+    margin-bottom: 10px;
+}
+
+.ctw3-weather-title {
+    display: flex;
+    align-items: center;
+
+    gap: 8px;
+
+    min-width: 0;
+}
+
+.ctw3-weather-title-icon {
+    width: 30px;
+    height: 30px;
+
+    flex: 0 0 30px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 9px;
+
+    background: rgba(0,180,255,0.12);
+    border: 1px solid rgba(0,200,255,0.18);
+
+    font-size: 16px;
+}
+
+.ctw3-weather-title-text {
+    display: flex;
+    flex-direction: column;
+
+    gap: 2px;
+
+    min-width: 0;
+}
+
+.ctw3-weather-title-text strong {
+    font-size: 11px;
+    font-weight: 800;
+
+    color: white;
+}
+
+.ctw3-weather-title-text span {
+    font-size: 9px;
+
+    color: rgba(255,255,255,0.38);
+
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+
+/* =========================================================
+   CURRENT WEATHER
+   ========================================================= */
+
+.ctw3-weather-current {
+    display: grid;
+
+    grid-template-columns:
+        minmax(150px, 1.4fr)
+        repeat(4, minmax(70px, 1fr));
+
+    gap: 7px;
+}
+
+.ctw3-weather-current-main {
+    display: flex;
+    align-items: center;
+
+    gap: 9px;
+
+    min-width: 0;
+
+    padding: 9px 10px;
+
+    border-radius: 10px;
+
+    background: rgba(255,255,255,0.045);
+    border: 1px solid rgba(255,255,255,0.055);
+}
+
+.ctw3-weather-current-icon {
+    width: 42px;
+    height: 42px;
+
+    flex: 0 0 42px;
+
+    object-fit: contain;
+}
+
+.ctw3-weather-current-main-info {
+    min-width: 0;
+
+    display: flex;
+    flex-direction: column;
+
+    gap: 2px;
+}
+
+.ctw3-weather-current-temp {
+    font-size: 20px;
+    font-weight: 850;
+
+    line-height: 1;
+}
+
+.ctw3-weather-current-description {
+    font-size: 9px;
+
+    color: rgba(255,255,255,0.48);
+
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    text-transform: capitalize;
+}
+
+
+/* =========================================================
+   WEATHER STAT
+   ========================================================= */
+
+.ctw3-weather-stat {
+    min-width: 0;
+
+    padding: 9px 10px;
+
+    border-radius: 10px;
+
+    background: rgba(255,255,255,0.045);
+    border: 1px solid rgba(255,255,255,0.055);
+}
+
+.ctw3-weather-stat small {
+    display: block;
+
+    margin-bottom: 4px;
+
+    color: rgba(255,255,255,0.34);
+
+    font-size: 8px;
+    font-weight: 750;
+
+    letter-spacing: .45px;
+    text-transform: uppercase;
+}
+
+.ctw3-weather-stat b {
+    display: block;
+
+    font-size: 11px;
+    font-weight: 800;
+
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+
+/* =========================================================
+   5 DAY FORECAST TITLE
+   ========================================================= */
+
+.ctw3-weather-forecast-title {
+    margin-top: 11px;
+    margin-bottom: 7px;
+
+    font-size: 9px;
+    font-weight: 800;
+
+    color: rgba(255,255,255,0.38);
+
+    letter-spacing: .5px;
+    text-transform: uppercase;
+}
+
+
+/* =========================================================
+   5 DAY FORECAST
+   ========================================================= */
+
+.ctw3-weather-forecast {
+    display: grid;
+
+    grid-template-columns:
+        repeat(5, minmax(0, 1fr));
+
+    gap: 7px;
+}
+
+.ctw3-weather-day {
+    min-width: 0;
+
+    padding: 9px 7px;
+
+    border-radius: 10px;
+
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.055);
+
+    text-align: center;
+}
+
+.ctw3-weather-day-name {
+    font-size: 9px;
+    font-weight: 800;
+
+    color: rgba(255,255,255,0.72);
+
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ctw3-weather-day-date {
+    margin-top: 2px;
+
+    font-size: 8px;
+
+    color: rgba(255,255,255,0.32);
+}
+
+.ctw3-weather-day-icon {
+    width: 42px;
+    height: 42px;
+
+    object-fit: contain;
+
+    margin: 2px auto 0;
+}
+
+.ctw3-weather-day-temp {
+    font-size: 11px;
+    font-weight: 850;
+}
+
+.ctw3-weather-day-range {
+    margin-top: 2px;
+
+    font-size: 8px;
+
+    color: rgba(255,255,255,0.36);
+}
+
+.ctw3-weather-day-description {
+    margin-top: 4px;
+
+    font-size: 8px;
+
+    color: rgba(255,255,255,0.42);
+
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+
+/* =========================================================
+   WEATHER LOADING
+   ========================================================= */
+
+.ctw3-weather-loading {
+    padding: 15px;
+
+    text-align: center;
+
+    color: rgba(255,255,255,0.4);
+
+    font-size: 10px;
+}
+
+
+/* =========================================================
+   WEATHER ERROR
+   ========================================================= */
+
+.ctw3-weather-error {
+    padding: 12px;
+
+    border-radius: 10px;
+
+    background: rgba(255,80,80,0.07);
+    border: 1px solid rgba(255,80,80,0.12);
+
+    color: rgba(255,255,255,0.55);
+
+    font-size: 9px;
+
+    text-align: center;
+}
+
+
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width: 700px) {
+
+    .ctw3-weather-current {
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+    }
+
+    .ctw3-weather-current-main {
+        grid-column: 1 / -1;
+    }
+
+    .ctw3-weather-forecast {
+        grid-template-columns:
+            repeat(5, minmax(62px, 1fr));
+
+        overflow-x: auto;
+
+        padding-bottom: 3px;
+    }
+
+    .ctw3-weather-day {
+        min-width: 62px;
+    }
+}
+
 </style>
 </head>
 
@@ -1089,10 +1442,14 @@ select{
 </div>
 
 <!-- =========================================================
-     MAP POINT INFORMATION
-========================================================= -->
+     CTW3 POINT INFORMATION
+     ========================================================= -->
 
 <div id="ctw3PointInfo">
+
+    <!-- =====================================================
+         HEADER
+         ===================================================== -->
 
     <div class="ctw3-point-header">
 
@@ -1100,7 +1457,8 @@ select{
 
             <div
                 id="ctw3PointIcon"
-                class="ctw3-point-icon">
+                class="ctw3-point-icon"
+            >
                 📍
             </div>
 
@@ -1118,20 +1476,32 @@ select{
 
         </div>
 
+
         <button
             class="ctw3-point-close"
-            onclick="closePointInfo()">
+            onclick="closePointInfo()"
+            title="Закрыть"
+        >
             ✕
         </button>
 
     </div>
 
 
+    <!-- =====================================================
+         BASIC POINT INFORMATION
+         ===================================================== -->
+
     <div class="ctw3-point-grid">
+
+
+        <!-- LOCAL TIME -->
 
         <div class="ctw3-point-card">
 
-            <small>МЕСТНОЕ ВРЕМЯ</small>
+            <small>
+                МЕСТНОЕ ВРЕМЯ
+            </small>
 
             <b id="ctw3PointTime">
                 —
@@ -1140,20 +1510,28 @@ select{
         </div>
 
 
+        <!-- COUNTRY -->
+
         <div class="ctw3-point-card">
 
-            <small>ГОСУДАРСТВО</small>
+            <small>
+                ГОСУДАРСТВО
+            </small>
 
             <b id="ctw3PointCountry">
-                Нейтральная территория
+                🌐 Нейтральная территория
             </b>
 
         </div>
 
 
+        <!-- OBJECT -->
+
         <div class="ctw3-point-card">
 
-            <small>ОБЪЕКТ</small>
+            <small>
+                ОБЪЕКТ
+            </small>
 
             <b id="ctw3PointObject">
                 📍 Свободная точка
@@ -1162,9 +1540,13 @@ select{
         </div>
 
 
+        <!-- COORDINATES -->
+
         <div class="ctw3-point-card">
 
-            <small>КООРДИНАТЫ</small>
+            <small>
+                КООРДИНАТЫ
+            </small>
 
             <b id="ctw3PointCoordinates">
                 —
@@ -1173,9 +1555,13 @@ select{
         </div>
 
 
+        <!-- TIMEZONE -->
+
         <div class="ctw3-point-card">
 
-            <small>ЧАСОВОЙ ПОЯС</small>
+            <small>
+                ЧАСОВОЙ ПОЯС
+            </small>
 
             <b id="ctw3PointTimezone">
                 —
@@ -1184,9 +1570,13 @@ select{
         </div>
 
 
+        <!-- DAY STATUS -->
+
         <div class="ctw3-point-card">
 
-            <small>СТАТУС</small>
+            <small>
+                СТАТУС
+            </small>
 
             <b id="ctw3PointDayStatus">
                 —
@@ -1197,30 +1587,113 @@ select{
     </div>
 
 
+    <!-- =====================================================
+         WEATHER
+         ===================================================== -->
+
+    <div class="ctw3-point-weather">
+
+
+        <!-- WEATHER HEADER -->
+
+        <div class="ctw3-weather-header">
+
+            <div class="ctw3-weather-title">
+
+                <div class="ctw3-weather-title-icon">
+                    🌤️
+                </div>
+
+                <div class="ctw3-weather-title-text">
+
+                    <strong>
+                        Погода
+                    </strong>
+
+                    <span id="ctw3WeatherLocation">
+                        OpenWeather
+                    </span>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             CURRENT WEATHER
+             ================================================= -->
+
+        <div id="ctw3WeatherCurrent">
+
+            <div class="ctw3-weather-loading">
+                ⏳ Загружаем текущую погоду...
+            </div>
+
+        </div>
+
+
+        <!-- =================================================
+             5 DAY FORECAST TITLE
+             ================================================= -->
+
+        <div class="ctw3-weather-forecast-title">
+            ПРОГНОЗ НА 5 ДНЕЙ
+        </div>
+
+
+        <!-- =================================================
+             5 DAY FORECAST
+             ================================================= -->
+
+        <div id="ctw3WeatherForecast">
+
+            <div class="ctw3-weather-loading">
+                ⏳ Загружаем прогноз...
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         SUNRISE / SUNSET
+         ===================================================== -->
+
     <div class="ctw3-point-sun">
 
         <span
             id="ctw3PointSunLabel"
-            class="ctw3-point-sun-label">
+            class="ctw3-point-sun-label"
+        >
             🌅 Восход солнца
         </span>
 
         <span
             id="ctw3PointSunValue"
-            class="ctw3-point-sun-value">
+            class="ctw3-point-sun-value"
+        >
             —
         </span>
 
     </div>
 
 
+    <!-- =====================================================
+         ATTRIBUTION
+         ===================================================== -->
+
     <div class="ctw3-point-attribution">
 
         Солнечные данные:
+
         <a
             href="https://sunrise-sunset.org/"
             target="_blank"
-            rel="noopener noreferrer">
+            rel="noopener noreferrer"
+        >
             Sunrise-Sunset.org
         </a>
 
@@ -2434,92 +2907,64 @@ async function showMapPointInfo(
     objectInfo = null
 ){
 
-    const panel =
-        $("ctw3PointInfo");
+    const panel = $("ctw3PointInfo");
 
-
-    if(!panel){
-        return;
-    }
+    if(!panel) return;
 
 
     /* =====================================================
        SAVE SELECTED POINT
-    ===================================================== */
+       ===================================================== */
 
     selectedPoint = {
-
-        latitude:
-            Number(latitude),
-
-        longitude:
-            Number(longitude)
-
+        latitude:Number(latitude),
+        longitude:Number(longitude)
     };
-
 
     selectedPointTimezone = null;
 
 
     /* =====================================================
        SHOW PANEL
-    ===================================================== */
+       ===================================================== */
 
-    panel.classList.add(
-        "visible"
-    );
+    panel.classList.add("visible");
 
 
     /* =====================================================
        ICON
-    ===================================================== */
+       ===================================================== */
 
-    $("ctw3PointIcon")
-        .textContent =
+    $("ctw3PointIcon").textContent =
         objectInfo
-        ? getObjectName(
-            objectInfo.type
-        ).split(" ")[0]
-        : "📍";
+            ? getObjectName(objectInfo.type).split(" ")[0]
+            : "📍";
 
 
     /* =====================================================
        TITLE
-    ===================================================== */
+       ===================================================== */
 
-    $("ctw3PointTitle")
-        .textContent =
+    $("ctw3PointTitle").textContent =
         objectInfo
-        ? getObjectName(
-            objectInfo.type
-        ).substring(3)
-        : "Точка на карте";
+            ? getObjectName(objectInfo.type).substring(3)
+            : "Точка на карте";
 
 
     /* =====================================================
        SUBTITLE
-    ===================================================== */
+       ===================================================== */
 
     if(objectInfo){
 
-        $("ctw3PointSubtitle")
-            .textContent =
-            (
-                objectInfo.country.flag ||
-                "🏳️"
-            )
-            +
-            " "
-            +
-            (
-                objectInfo.country.name ||
-                "Государство"
-            );
+        $("ctw3PointSubtitle").textContent =
+            (objectInfo.country.flag || "🏳️") +
+            " " +
+            (objectInfo.country.name || "Государство");
 
     }else{
 
-        $("ctw3PointSubtitle")
-            .textContent =
+        $("ctw3PointSubtitle").textContent =
             "Информация о выбранной точке";
 
     }
@@ -2527,93 +2972,110 @@ async function showMapPointInfo(
 
     /* =====================================================
        COORDINATES
-    ===================================================== */
+       ===================================================== */
 
-    $("ctw3PointCoordinates")
-        .textContent =
-        Number(latitude)
-            .toFixed(4)
-        +
-        "°, "
-        +
-        Number(longitude)
-            .toFixed(4)
-        +
+    $("ctw3PointCoordinates").textContent =
+        Number(latitude).toFixed(4) +
+        "°, " +
+        Number(longitude).toFixed(4) +
         "°";
 
 
     /* =====================================================
        OBJECT
-    ===================================================== */
+       ===================================================== */
 
-    $("ctw3PointObject")
-        .textContent =
+    $("ctw3PointObject").textContent =
         objectInfo
-        ? getObjectName(
-            objectInfo.type
-        )
-        : "📍 Свободная точка";
+            ? getObjectName(objectInfo.type)
+            : "📍 Свободная точка";
 
 
     /* =====================================================
        COUNTRY
-    ===================================================== */
+       ===================================================== */
 
     const pointCountry =
         objectInfo
-        ? objectInfo.country
-        : findCountryAtPoint(
-            latitude,
-            longitude
-        );
+            ? objectInfo.country
+            : findCountryAtPoint(
+                latitude,
+                longitude
+            );
 
 
     if(pointCountry){
 
-        $("ctw3PointCountry")
-            .textContent =
-            (
-                pointCountry.flag ||
-                "🏳️"
-            )
-            +
-            " "
-            +
-            (
-                pointCountry.name ||
-                "Государство"
-            );
+        $("ctw3PointCountry").textContent =
+            (pointCountry.flag || "🏳️") +
+            " " +
+            (pointCountry.name || "Государство");
 
     }else{
 
-        $("ctw3PointCountry")
-            .textContent =
+        $("ctw3PointCountry").textContent =
             "🌐 Нейтральная территория";
 
     }
 
 
     /* =====================================================
-       INITIAL STATE
-    ===================================================== */
+       RESET WEATHER
+       ===================================================== */
 
-    $("ctw3PointTime")
-        .textContent =
-        "⌛";
+    const weatherLocation =
+        $("ctw3WeatherLocation");
+
+    const weatherCurrent =
+        $("ctw3WeatherCurrent");
+
+    const weatherForecast =
+        $("ctw3WeatherForecast");
 
 
-    $("ctw3PointTimezone")
-        .textContent =
+    if(weatherLocation){
+
+        weatherLocation.textContent =
+            "Определяем местоположение...";
+
+    }
+
+
+    if(weatherCurrent){
+
+        weatherCurrent.innerHTML = `
+            <div class="ctw3-weather-loading">
+                ⏳ Загружаем текущую погоду...
+            </div>
+        `;
+
+    }
+
+
+    if(weatherForecast){
+
+        weatherForecast.innerHTML = `
+            <div class="ctw3-weather-loading">
+                ⏳ Загружаем прогноз...
+            </div>
+        `;
+
+    }
+
+
+    /* =====================================================
+       RESET TIME / SUN
+       ===================================================== */
+
+    $("ctw3PointTime").textContent = "⌛";
+
+    $("ctw3PointTimezone").textContent =
         "⌛ Определяем...";
 
-
-    $("ctw3PointDayStatus")
-        .textContent =
+    $("ctw3PointDayStatus").textContent =
         "⌛ Определяем...";
 
-
-    $("ctw3PointSunValue")
-        .textContent =
+    $("ctw3PointSunValue").textContent =
         "⌛";
 
 
@@ -2623,9 +3085,7 @@ async function showMapPointInfo(
 
     try{
 
-        if(
-            typeof tzlookup !== "function"
-        ){
+        if(typeof tzlookup !== "function"){
 
             throw new Error(
                 "tz-lookup library is not loaded"
@@ -2654,8 +3114,7 @@ async function showMapPointInfo(
             timezone;
 
 
-        $("ctw3PointTimezone")
-            .textContent =
+        $("ctw3PointTimezone").textContent =
             timezone;
 
 
@@ -2670,38 +3129,27 @@ async function showMapPointInfo(
         );
 
 
-        selectedPointTimezone =
-            null;
+        selectedPointTimezone = null;
 
 
-        $("ctw3PointTimezone")
-            .textContent =
+        $("ctw3PointTimezone").textContent =
             "Не определён";
 
-
-        $("ctw3PointTime")
-            .textContent =
+        $("ctw3PointTime").textContent =
             "—";
 
-
-        $("ctw3PointDayStatus")
-            .textContent =
+        $("ctw3PointDayStatus").textContent =
             "Не удалось определить";
 
-
-        $("ctw3PointSunValue")
-            .textContent =
+        $("ctw3PointSunValue").textContent =
             "—";
-
-
-        return;
 
     }
 
 
     /* =====================================================
-       CURRENT LOCAL DATE
-    ===================================================== */
+       LOCAL DATE
+       ===================================================== */
 
     let today;
 
@@ -2712,23 +3160,14 @@ async function showMapPointInfo(
             new Intl.DateTimeFormat(
                 "en-CA",
                 {
-
                     timeZone:
                         selectedPointTimezone,
 
-                    year:
-                        "numeric",
-
-                    month:
-                        "2-digit",
-
-                    day:
-                        "2-digit"
-
+                    year:"numeric",
+                    month:"2-digit",
+                    day:"2-digit"
                 }
-            ).format(
-                new Date()
-            );
+            ).format(new Date());
 
 
     }catch(error){
@@ -2742,68 +3181,39 @@ async function showMapPointInfo(
         today =
             new Date()
                 .toISOString()
-                .slice(
-                    0,
-                    10
-                );
+                .slice(0,10);
 
     }
 
 
     /* =====================================================
        SUNRISE / SUNSET
-       API V2
-    ===================================================== */
+       ===================================================== */
 
     try{
 
         const sunUrl =
-            "https://api.sunrise-sunset.org/v2"
-            +
-            "?lat="
-            +
-            encodeURIComponent(
-                latitude
-            )
-            +
-            "&lng="
-            +
-            encodeURIComponent(
-                longitude
-            )
-            +
-            "&date="
-            +
-            encodeURIComponent(
-                today
-            )
-            +
-            "&tz="
-            +
+            "https://api.sunrise-sunset.org/v2" +
+            "?lat=" +
+            encodeURIComponent(latitude) +
+            "&lng=" +
+            encodeURIComponent(longitude) +
+            "&date=" +
+            encodeURIComponent(today) +
+            "&tz=" +
             encodeURIComponent(
                 selectedPointTimezone
             );
 
 
-        console.log(
-            "[CTW3 POINT INFO] Sun request:",
-            sunUrl
-        );
-
-
         const sunResponse =
-            await fetch(
-                sunUrl
-            );
+            await fetch(sunUrl);
 
 
-        if(
-            !sunResponse.ok
-        ){
+        if(!sunResponse.ok){
 
             throw new Error(
-                "Sun API HTTP error: "
-                +
+                "Sun API HTTP error: " +
                 sunResponse.status
             );
 
@@ -2820,26 +3230,11 @@ async function showMapPointInfo(
         );
 
 
-        /*
-            API V2 не использует:
-                sunData.results
-                sunData.status
-
-            В V2 данные находятся прямо
-            в объекте ответа.
-        */
-
         if(
             !sunData ||
             !sunData.sunrise ||
             !sunData.sunset
         ){
-
-            /*
-                Возможен полярный день/ночь.
-                В таком случае API может вернуть
-                sunrise или sunset как null.
-            */
 
             if(
                 sunData &&
@@ -2855,18 +3250,13 @@ async function showMapPointInfo(
                         .textContent =
                         "☀️ Полярный день";
 
-
                     $("ctw3PointSunLabel")
                         .textContent =
                         "🌇 Заката нет";
 
-
                     $("ctw3PointSunValue")
                         .textContent =
                         "Солнце не заходит";
-
-
-                    return;
 
                 }
 
@@ -2880,20 +3270,18 @@ async function showMapPointInfo(
                         .textContent =
                         "🌙 Полярная ночь";
 
-
                     $("ctw3PointSunLabel")
                         .textContent =
                         "🌅 Восхода нет";
-
 
                     $("ctw3PointSunValue")
                         .textContent =
                         "Солнце не восходит";
 
-
-                    return;
-
                 }
+
+
+                return;
 
             }
 
@@ -2905,15 +3293,10 @@ async function showMapPointInfo(
         }
 
 
-        /* =================================================
-           SUNRISE / SUNSET
-        ================================================= */
-
         const sunrise =
             new Date(
                 sunData.sunrise
             );
-
 
         const sunset =
             new Date(
@@ -2925,13 +3308,8 @@ async function showMapPointInfo(
             new Date();
 
 
-        /* =================================================
-           DAY / NIGHT
-        ================================================= */
-
         const isDay =
-            now >= sunrise
-            &&
+            now >= sunrise &&
             now < sunset;
 
 
@@ -2995,12 +3373,648 @@ async function showMapPointInfo(
 
 
     /* =====================================================
-       LOCAL CLOCK
-    ===================================================== */
+       OPENWEATHER
+       ===================================================== */
 
-    if(
-        pointInfoTimer
-    ){
+    try{
+
+        const weatherUrl =
+            "/api/ctw3/weather" +
+            "?lat=" +
+            encodeURIComponent(latitude) +
+            "&lon=" +
+            encodeURIComponent(longitude);
+
+
+        console.log(
+            "[CTW3 WEATHER] Request:",
+            weatherUrl
+        );
+
+
+        const weatherResponse =
+            await fetch(weatherUrl);
+
+
+        if(!weatherResponse.ok){
+
+            let errorText =
+                "HTTP " +
+                weatherResponse.status;
+
+            try{
+
+                const errorData =
+                    await weatherResponse.json();
+
+                if(errorData.detail){
+
+                    errorText =
+                        typeof errorData.detail === "string"
+                            ? errorData.detail
+                            : JSON.stringify(
+                                errorData.detail
+                            );
+
+                }
+
+            }catch(_){}
+
+
+            throw new Error(
+                errorText
+            );
+
+        }
+
+
+        const weatherData =
+            await weatherResponse.json();
+
+
+        console.log(
+            "[CTW3 WEATHER] Data:",
+            weatherData
+        );
+
+
+        const current =
+            weatherData.current;
+
+
+        const forecast =
+            weatherData.forecast;
+
+
+        /* =================================================
+           LOCATION NAME
+           ================================================= */
+
+        if(weatherLocation){
+
+            const cityName =
+                current &&
+                current.name
+                    ? current.name
+                    : "Точка на карте";
+
+
+            const countryCode =
+                current &&
+                current.sys &&
+                current.sys.country
+                    ? current.sys.country
+                    : "";
+
+
+            weatherLocation.textContent =
+                cityName +
+                (
+                    countryCode
+                        ? " · " + countryCode
+                        : ""
+                );
+
+        }
+
+
+        /* =================================================
+           CURRENT WEATHER
+           ================================================= */
+
+        if(weatherCurrent){
+
+            if(
+                !current ||
+                !current.main ||
+                !current.weather ||
+                !current.weather.length
+            ){
+
+                throw new Error(
+                    "Invalid current weather data"
+                );
+
+            }
+
+
+            const weather =
+                current.weather[0];
+
+
+            const temp =
+                Math.round(
+                    Number(
+                        current.main.temp
+                    )
+                );
+
+
+            const feels =
+                Math.round(
+                    Number(
+                        current.main.feels_like
+                    )
+                );
+
+
+            const humidity =
+                Number(
+                    current.main.humidity
+                );
+
+
+            const pressure =
+                Number(
+                    current.main.pressure
+                );
+
+
+            const wind =
+                current.wind &&
+                Number.isFinite(
+                    Number(current.wind.speed)
+                )
+                    ? Number(
+                        current.wind.speed
+                    )
+                    : 0;
+
+
+            const icon =
+                weather.icon
+                    ? weather.icon
+                    : "01d";
+
+
+            const description =
+                weather.description
+                    ? weather.description
+                    : "Нет данных";
+
+
+            weatherCurrent.innerHTML = `
+
+                <div class="ctw3-weather-current">
+
+                    <div class="ctw3-weather-current-main">
+
+                        <img
+                            class="ctw3-weather-current-icon"
+                            src="https://openweathermap.org/img/wn/${icon}@2x.png"
+                            alt=""
+                        >
+
+                        <div class="ctw3-weather-current-main-info">
+
+                            <div class="ctw3-weather-current-temp">
+                                ${temp > 0 ? "+" : ""}${temp}°C
+                            </div>
+
+                            <div class="ctw3-weather-current-description">
+                                ${description}
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="ctw3-weather-stat">
+
+                        <small>ОЩУЩАЕТСЯ</small>
+
+                        <b>
+                            ${feels > 0 ? "+" : ""}${feels}°C
+                        </b>
+
+                    </div>
+
+
+                    <div class="ctw3-weather-stat">
+
+                        <small>ВЛАЖНОСТЬ</small>
+
+                        <b>
+                            ${humidity}%
+                        </b>
+
+                    </div>
+
+
+                    <div class="ctw3-weather-stat">
+
+                        <small>ДАВЛЕНИЕ</small>
+
+                        <b>
+                            ${pressure} hPa
+                        </b>
+
+                    </div>
+
+
+                    <div class="ctw3-weather-stat">
+
+                        <small>ВЕТЕР</small>
+
+                        <b>
+                            ${wind.toFixed(1)} м/с
+                        </b>
+
+                    </div>
+
+                </div>
+
+            `;
+
+        }
+
+
+        /* =================================================
+           5 DAY FORECAST
+           ================================================= */
+
+        if(weatherForecast){
+
+            if(
+                !forecast ||
+                !Array.isArray(
+                    forecast.list
+                )
+            ){
+
+                throw new Error(
+                    "Invalid forecast data"
+                );
+
+            }
+
+
+            const days = {};
+
+
+            /* ---------------------------------------------
+               Group 3-hour forecast by local date
+               --------------------------------------------- */
+
+            forecast.list.forEach(item => {
+
+                if(!item || !item.dt_txt){
+                    return;
+                }
+
+
+                const date =
+                    item.dt_txt.slice(
+                        0,
+                        10
+                    );
+
+
+                if(!days[date]){
+
+                    days[date] = [];
+
+                }
+
+
+                days[date].push(item);
+
+            });
+
+
+            const dayKeys =
+                Object.keys(days)
+                    .slice(0,5);
+
+
+            const dayNames = [
+                "Вс",
+                "Пн",
+                "Вт",
+                "Ср",
+                "Чт",
+                "Пт",
+                "Сб"
+            ];
+
+
+            const monthNames = [
+                "янв",
+                "фев",
+                "мар",
+                "апр",
+                "май",
+                "июн",
+                "июл",
+                "авг",
+                "сен",
+                "окт",
+                "ноя",
+                "дек"
+            ];
+
+
+            let forecastHtml =
+                '<div class="ctw3-weather-forecast">';
+
+
+            dayKeys.forEach(
+                dateString => {
+
+                    const entries =
+                        days[dateString];
+
+
+                    if(
+                        !entries ||
+                        !entries.length
+                    ){
+
+                        return;
+
+                    }
+
+
+                    /* -----------------------------------------
+                       Find minimum / maximum
+                       ----------------------------------------- */
+
+                    const temperatures =
+                        entries
+                            .map(
+                                item =>
+                                    Number(
+                                        item.main &&
+                                        item.main.temp
+                                    )
+                            )
+                            .filter(
+                                value =>
+                                    Number.isFinite(
+                                        value
+                                    )
+                            );
+
+
+                    const minTemp =
+                        temperatures.length
+                            ? Math.round(
+                                Math.min(
+                                    ...temperatures
+                                )
+                            )
+                            : null;
+
+
+                    const maxTemp =
+                        temperatures.length
+                            ? Math.round(
+                                Math.max(
+                                    ...temperatures
+                                )
+                            )
+                            : null;
+
+
+                    /* -----------------------------------------
+                       Prefer forecast around 12:00
+                       ----------------------------------------- */
+
+                    let representative =
+                        entries[0];
+
+
+                    let smallestDifference =
+                        Infinity;
+
+
+                    entries.forEach(
+                        item => {
+
+                            if(!item.dt_txt){
+                                return;
+                            }
+
+
+                            const time =
+                                item.dt_txt
+                                    .slice(
+                                        11,
+                                        16
+                                    );
+
+
+                            const hour =
+                                Number(
+                                    time.slice(
+                                        0,
+                                        2
+                                    )
+                                );
+
+
+                            const difference =
+                                Math.abs(
+                                    hour - 12
+                                );
+
+
+                            if(
+                                difference <
+                                smallestDifference
+                            ){
+
+                                smallestDifference =
+                                    difference;
+
+                                representative =
+                                    item;
+
+                            }
+
+                        }
+                    );
+
+
+                    const representativeWeather =
+                        representative.weather &&
+                        representative.weather.length
+                            ? representative.weather[0]
+                            : null;
+
+
+                    const icon =
+                        representativeWeather &&
+                        representativeWeather.icon
+                            ? representativeWeather.icon
+                            : "01d";
+
+
+                    const description =
+                        representativeWeather &&
+                        representativeWeather.description
+                            ? representativeWeather.description
+                            : "—";
+
+
+                    const date =
+                        new Date(
+                            dateString +
+                            "T12:00:00"
+                        );
+
+
+                    const dayName =
+                        dayNames[
+                            date.getDay()
+                        ];
+
+
+                    const dateText =
+                        date.getDate() +
+                        " " +
+                        monthNames[
+                            date.getMonth()
+                        ];
+
+
+                    forecastHtml += `
+
+                        <div class="ctw3-weather-day">
+
+                            <div class="ctw3-weather-day-name">
+                                ${dayName}
+                            </div>
+
+                            <div class="ctw3-weather-day-date">
+                                ${dateText}
+                            </div>
+
+                            <img
+                                class="ctw3-weather-day-icon"
+                                src="https://openweathermap.org/img/wn/${icon}@2x.png"
+                                alt=""
+                            >
+
+                            <div class="ctw3-weather-day-temp">
+
+                                ${
+                                    maxTemp !== null
+                                        ? (
+                                            maxTemp > 0
+                                                ? "+"
+                                                : ""
+                                        ) + maxTemp + "°"
+                                        : "—"
+                                }
+
+                            </div>
+
+                            <div class="ctw3-weather-day-range">
+
+                                ${
+                                    minTemp !== null
+                                        ? (
+                                            minTemp > 0
+                                                ? "+"
+                                                : ""
+                                        ) + minTemp + "°"
+                                        : "—"
+                                }
+
+                                /
+                                ${
+                                    maxTemp !== null
+                                        ? (
+                                            maxTemp > 0
+                                                ? "+"
+                                                : ""
+                                        ) + maxTemp + "°"
+                                        : "—"
+                                }
+
+                            </div>
+
+                            <div
+                                class="ctw3-weather-day-description"
+                                title="${description}"
+                            >
+                                ${description}
+                            </div>
+
+                        </div>
+
+                    `;
+
+                }
+            );
+
+
+            forecastHtml +=
+                "</div>";
+
+
+            weatherForecast.innerHTML =
+                forecastHtml;
+
+        }
+
+
+    }catch(error){
+
+        console.error(
+            "[CTW3 WEATHER] Error:",
+            error
+        );
+
+
+        if(weatherLocation){
+
+            weatherLocation.textContent =
+                "OpenWeather";
+
+        }
+
+
+        if(weatherCurrent){
+
+            weatherCurrent.innerHTML = `
+
+                <div class="ctw3-weather-error">
+
+                    🌧️ Не удалось загрузить
+                    текущую погоду.
+
+                </div>
+
+            `;
+
+        }
+
+
+        if(weatherForecast){
+
+            weatherForecast.innerHTML = `
+
+                <div class="ctw3-weather-error">
+
+                    Прогноз временно недоступен.
+
+                </div>
+
+            `;
+
+        }
+
+    }
+
+
+    /* =====================================================
+       CLOCK
+       ===================================================== */
+
+    if(pointInfoTimer){
 
         clearInterval(
             pointInfoTimer
@@ -3014,7 +4028,6 @@ async function showMapPointInfo(
             updatePointClock,
             1000
         );
-
 }
 
 /*
