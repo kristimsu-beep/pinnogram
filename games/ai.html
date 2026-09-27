@@ -275,39 +275,156 @@ function stopRecording(){
   }
 }
 
+let russianVoices = [];
+
+function loadRussianVoices() {
+    const voices = window.speechSynthesis.getVoices();
+
+    russianVoices = voices.filter(
+        voice => voice.lang &&
+        voice.lang.toLowerCase().startsWith("ru")
+    );
+
+    console.log("Russian voices:", russianVoices);
+}
+
+loadRussianVoices();
+
+if ("onvoiceschanged" in window.speechSynthesis) {
+    window.speechSynthesis.addEventListener(
+        "voiceschanged",
+        loadRussianVoices
+    );
+}
+
 function speakRussian(text) {
+
     if (!("speechSynthesis" in window)) {
-        console.warn("SpeechSynthesis не поддерживается");
+        console.error("Speech synthesis недоступен");
         return;
     }
 
-    speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-
-    utterance.lang = "ru-RU";
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-
-    const voices = speechSynthesis.getVoices();
-
-    const russianVoice = voices.find(
-        voice => voice.lang.toLowerCase().startsWith("ru")
-    );
-
-    if (russianVoice) {
-        utterance.voice = russianVoice;
+    if (!text || !text.trim()) {
+        return;
     }
 
+    const synth = window.speechSynthesis;
+
+    // Останавливаем только предыдущую озвучку.
+    synth.cancel();
+
+    const cleanText = text
+        .replace(/```[\s\S]*?```/g, "")
+        .replace(/[*_#]/g, "")
+        .trim();
+
+    const voice =
+        russianVoices.find(v =>
+            v.lang.toLowerCase() === "ru-ru"
+        ) ||
+        russianVoices[0] ||
+        null;
+
+    /*
+     * Для длинного ответа разбиваем текст
+     * на небольшие предложения.
+     *
+     * Это намного стабильнее на Android,
+     * чем один огромный SpeechSynthesisUtterance.
+     */
+
+    const parts = cleanText
+        .match(/[^.!?…]+[.!?…]+|[^.!?…]+$/g)
+        ?.map(x => x.trim())
+        .filter(Boolean) || [cleanText];
+
+    let index = 0;
+
     orbButton.classList.add("active", "speaking");
+    setStatus("Отвечаю…");
 
-    utterance.onend = () => {
-        orbButton.classList.remove("active", "speaking");
-        orb.style.transform = "scale(1)";
-    };
+    function speakNext() {
 
-    speechSynthesis.speak(utterance);
+        if (index >= parts.length) {
+            orbButton.classList.remove(
+                "active",
+                "speaking"
+            );
+
+            orb.style.transform = "scale(1)";
+            setStatus("Нажми на шар, чтобы говорить");
+
+            return;
+        }
+
+        const utterance =
+            new SpeechSynthesisUtterance(parts[index]);
+
+        utterance.lang = "ru-RU";
+        utterance.rate = 0.95;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+
+        if (voice) {
+            utterance.voice = voice;
+        }
+
+        utterance.onstart = () => {
+            orbButton.classList.add(
+                "active",
+                "speaking"
+            );
+        };
+
+        utterance.onend = () => {
+            index++;
+
+            /*
+             * Небольшая пауза между предложениями.
+             * Она помогает Android не пропускать
+             * начало следующего фрагмента.
+             */
+            setTimeout(
+                speakNext,
+                40
+            );
+        };
+
+        utterance.onerror = (event) => {
+            console.error(
+                "Speech error:",
+                event
+            );
+
+            index++;
+
+            setTimeout(
+                speakNext,
+                50
+            );
+        };
+
+        synth.speak(utterance);
+    }
+
+    /*
+     * Иногда Android ещё не успел загрузить
+     * голосовой движок сразу после открытия страницы.
+     */
+    if (russianVoices.length === 0) {
+
+        setTimeout(() => {
+
+            loadRussianVoices();
+
+            speakNext();
+
+        }, 150);
+
+    } else {
+
+        speakNext();
+    }
 }
 
 async function sendAudio(blob){
