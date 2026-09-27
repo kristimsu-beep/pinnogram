@@ -9,6 +9,7 @@
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/tz-lookup@6.1.25/tz.js"></script>
 <script src="https://unpkg.com/@joergdietrich/leaflet.terminator"></script>
 
 <link rel="stylesheet"
@@ -2566,48 +2567,74 @@ async function showMapPointInfo(
         .textContent =
         "⌛";
 
-
-    try{
-
-        /*
-            Получаем timezone,
-            страну и местное время.
-        */
-
-        const timezoneUrl =
-            "https://api-bdc.net/data/" +
-            "reverse-geocode-with-timezone" +
-            "?latitude="+
-            encodeURIComponent(latitude)+
-            "&longitude="+
-            encodeURIComponent(longitude)+
-            "&localityLanguage=ru";
-
-
-        const timezoneResponse =
-            await fetch(
-                timezoneUrl
-            );
-
-
-        if(
-            !timezoneResponse.ok
-        ){
-
-            throw new Error(
-                "Timezone API error"
-            );
-
-        }
-
-
-        const timezoneData =
-            await timezoneResponse.json();
-
-
-        const timezone =
-            timezoneData.timeZone &&
-            timezoneData.timeZone.ianaTimeId;
+      /* =========================================================
+         TIMEZONE FROM COORDINATES
+         ========================================================= */
+      
+      let timezone = null;
+      
+      try {
+      
+          if(
+              typeof tzlookup !== "function"
+          ){
+      
+              throw new Error(
+                  "tz-lookup library is not loaded"
+              );
+      
+          }
+      
+      
+          timezone =
+              tzlookup(
+                  Number(latitude),
+                  Number(longitude)
+              );
+      
+      
+          if(!timezone){
+      
+              throw new Error(
+                  "Timezone not found"
+              );
+      
+          }
+      
+      
+          selectedPointTimezone =
+              timezone;
+      
+      
+          $("ctw3PointTimezone")
+              .textContent =
+              timezone;
+      
+      
+          updatePointClock();
+      
+      
+      }catch(error){
+      
+          console.error(
+              "[CTW3 POINT INFO] Timezone:",
+              error
+          );
+      
+      
+          selectedPointTimezone = null;
+      
+      
+          $("ctw3PointTimezone")
+              .textContent =
+              "Не определён";
+      
+      
+          $("ctw3PointTime")
+              .textContent =
+              "—";
+      
+      }
 
 
         if(!timezone){
@@ -2638,13 +2665,25 @@ async function showMapPointInfo(
             Получаем sunrise/sunset.
         */
 
-        const today =
-            new Date()
-                .toISOString()
-                .slice(
-                    0,
-                    10
-                );
+      const today =
+          new Intl.DateTimeFormat(
+              "en-CA",
+              {
+                  timeZone:
+                      selectedPointTimezone,
+      
+                  year:
+                      "numeric",
+      
+                  month:
+                      "2-digit",
+      
+                  day:
+                      "2-digit"
+              }
+          ).format(
+              new Date()
+          );
 
 
         const sunUrl =
