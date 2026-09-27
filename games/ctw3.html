@@ -2431,7 +2431,7 @@ function updatePointClock(){
 async function showMapPointInfo(
     latitude,
     longitude,
-    objectInfo=null
+    objectInfo = null
 ){
 
     const panel =
@@ -2443,21 +2443,36 @@ async function showMapPointInfo(
     }
 
 
+    /* =====================================================
+       SAVE SELECTED POINT
+    ===================================================== */
+
     selectedPoint = {
 
-        latitude,
-        longitude
+        latitude:
+            Number(latitude),
+
+        longitude:
+            Number(longitude)
 
     };
 
 
-    selectedPointTimezone=null;
+    selectedPointTimezone = null;
 
+
+    /* =====================================================
+       SHOW PANEL
+    ===================================================== */
 
     panel.classList.add(
         "visible"
     );
 
+
+    /* =====================================================
+       ICON
+    ===================================================== */
 
     $("ctw3PointIcon")
         .textContent =
@@ -2468,43 +2483,68 @@ async function showMapPointInfo(
         : "📍";
 
 
+    /* =====================================================
+       TITLE
+    ===================================================== */
+
     $("ctw3PointTitle")
         .textContent =
         objectInfo
         ? getObjectName(
             objectInfo.type
-        ).substring(
-            3
-        )
+        ).substring(3)
         : "Точка на карте";
 
 
-    $("ctw3PointSubtitle")
-        .textContent =
-        objectInfo
-        ? (
-            objectInfo.country.flag ||
-            "🏳️"
-        )+
-        " "+
-        (
-            objectInfo.country.name ||
-            "Государство"
-        )
-        : "Информация о выбранной точке";
+    /* =====================================================
+       SUBTITLE
+    ===================================================== */
 
+    if(objectInfo){
+
+        $("ctw3PointSubtitle")
+            .textContent =
+            (
+                objectInfo.country.flag ||
+                "🏳️"
+            )
+            +
+            " "
+            +
+            (
+                objectInfo.country.name ||
+                "Государство"
+            );
+
+    }else{
+
+        $("ctw3PointSubtitle")
+            .textContent =
+            "Информация о выбранной точке";
+
+    }
+
+
+    /* =====================================================
+       COORDINATES
+    ===================================================== */
 
     $("ctw3PointCoordinates")
         .textContent =
         Number(latitude)
             .toFixed(4)
         +
-        "°, "+
+        "°, "
+        +
         Number(longitude)
             .toFixed(4)
         +
         "°";
 
+
+    /* =====================================================
+       OBJECT
+    ===================================================== */
 
     $("ctw3PointObject")
         .textContent =
@@ -2515,11 +2555,9 @@ async function showMapPointInfo(
         : "📍 Свободная точка";
 
 
-    /*
-        Если объект принадлежит
-        конкретной стране — используем её.
-        Иначе проверяем территорию.
-    */
+    /* =====================================================
+       COUNTRY
+    ===================================================== */
 
     const pointCountry =
         objectInfo
@@ -2537,8 +2575,10 @@ async function showMapPointInfo(
             (
                 pointCountry.flag ||
                 "🏳️"
-            )+
-            " "+
+            )
+            +
+            " "
+            +
             (
                 pointCountry.name ||
                 "Государство"
@@ -2553,12 +2593,21 @@ async function showMapPointInfo(
     }
 
 
-    $("ctw3PointDayStatus")
+    /* =====================================================
+       INITIAL STATUS
+    ===================================================== */
+
+    $("ctw3PointTime")
+        .textContent =
+        "⌛";
+
+
+    $("ctw3PointTimezone")
         .textContent =
         "⌛ Определяем...";
 
 
-    $("ctw3PointTimezone")
+    $("ctw3PointDayStatus")
         .textContent =
         "⌛ Определяем...";
 
@@ -2567,74 +2616,31 @@ async function showMapPointInfo(
         .textContent =
         "⌛";
 
-      /* =========================================================
-         TIMEZONE FROM COORDINATES
-         ========================================================= */
-      
-      let timezone = null;
-      
-      try {
-      
-          if(
-              typeof tzlookup !== "function"
-          ){
-      
-              throw new Error(
-                  "tz-lookup library is not loaded"
-              );
-      
-          }
-      
-      
-          timezone =
-              tzlookup(
-                  Number(latitude),
-                  Number(longitude)
-              );
-      
-      
-          if(!timezone){
-      
-              throw new Error(
-                  "Timezone not found"
-              );
-      
-          }
-      
-      
-          selectedPointTimezone =
-              timezone;
-      
-      
-          $("ctw3PointTimezone")
-              .textContent =
-              timezone;
-      
-      
-          updatePointClock();
-      
-      
-      }catch(error){
-      
-          console.error(
-              "[CTW3 POINT INFO] Timezone:",
-              error
-          );
-      
-      
-          selectedPointTimezone = null;
-      
-      
-          $("ctw3PointTimezone")
-              .textContent =
-              "Не определён";
-      
-      
-          $("ctw3PointTime")
-              .textContent =
-              "—";
-      
-      }
+
+    /* =====================================================
+       TIMEZONE
+       tz-lookup работает локально в браузере.
+       API KEY НЕ НУЖЕН.
+    ===================================================== */
+
+    try{
+
+        if(
+            typeof tzlookup !== "function"
+        ){
+
+            throw new Error(
+                "tz-lookup library is not loaded"
+            );
+
+        }
+
+
+        const timezone =
+            tzlookup(
+                Number(latitude),
+                Number(longitude)
+            );
 
 
         if(!timezone){
@@ -2652,48 +2658,146 @@ async function showMapPointInfo(
 
         $("ctw3PointTimezone")
             .textContent =
-            timezoneData.timeZone
-            .utcOffset
-            ||
             timezone;
 
+
+        /* =================================================
+           UPDATE LOCAL CLOCK
+        ================================================= */
 
         updatePointClock();
 
 
-        /*
-            Получаем sunrise/sunset.
-        */
+    }catch(error){
 
-      const today =
-          new Intl.DateTimeFormat(
-              "en-CA",
-              {
-                  timeZone:
-                      selectedPointTimezone,
-      
-                  year:
-                      "numeric",
-      
-                  month:
-                      "2-digit",
-      
-                  day:
-                      "2-digit"
-              }
-          ).format(
-              new Date()
-          );
+        console.error(
+            "[CTW3 POINT INFO] Timezone:",
+            error
+        );
 
+
+        selectedPointTimezone =
+            null;
+
+
+        $("ctw3PointTimezone")
+            .textContent =
+            "Не определён";
+
+
+        $("ctw3PointTime")
+            .textContent =
+            "—";
+
+    }
+
+
+    /* =====================================================
+       IF TIMEZONE WAS NOT FOUND,
+       STOP SUN CALCULATION
+    ===================================================== */
+
+    if(
+        !selectedPointTimezone
+    ){
+
+        $("ctw3PointDayStatus")
+            .textContent =
+            "Не удалось определить";
+
+
+        $("ctw3PointSunValue")
+            .textContent =
+            "—";
+
+
+        return;
+
+    }
+
+
+    /* =====================================================
+       CURRENT DATE IN SELECTED LOCATION
+    ===================================================== */
+
+    let today;
+
+
+    try{
+
+        today =
+            new Intl.DateTimeFormat(
+                "en-CA",
+                {
+
+                    timeZone:
+                        selectedPointTimezone,
+
+                    year:
+                        "numeric",
+
+                    month:
+                        "2-digit",
+
+                    day:
+                        "2-digit"
+
+                }
+            ).format(
+                new Date()
+            );
+
+    }catch(error){
+
+        console.error(
+            "[CTW3 POINT INFO] Date:",
+            error
+        );
+
+
+        today =
+            new Date()
+                .toISOString()
+                .slice(
+                    0,
+                    10
+                );
+
+    }
+
+
+    /* =====================================================
+       SUNRISE / SUNSET
+    ===================================================== */
+
+    try{
 
         const sunUrl =
-            "https://api.sunrise-sunset.org/v2" +
-            "?lat="+
-            encodeURIComponent(latitude)+
-            "&lng="+
-            encodeURIComponent(longitude)+
-            "&date="+
-            today;
+            "https://api.sunrise-sunset.org/v2"
+            +
+            "?lat="
+            +
+            encodeURIComponent(
+                latitude
+            )
+            +
+            "&lng="
+            +
+            encodeURIComponent(
+                longitude
+            )
+            +
+            "&date="
+            +
+            encodeURIComponent(
+                today
+            )
+            +
+            "&tzid="
+            +
+            encodeURIComponent(
+                selectedPointTimezone
+            );
 
 
         const sunResponse =
@@ -2707,7 +2811,9 @@ async function showMapPointInfo(
         ){
 
             throw new Error(
-                "Sun API error"
+                "Sun API error: "
+                +
+                sunResponse.status
             );
 
         }
@@ -2717,11 +2823,11 @@ async function showMapPointInfo(
             await sunResponse.json();
 
 
-        const result =
-            sunData.results;
-
-
-        if(!result){
+        if(
+            sunData.status !== "OK"
+            ||
+            !sunData.results
+        ){
 
             throw new Error(
                 "Sun data unavailable"
@@ -2730,9 +2836,13 @@ async function showMapPointInfo(
         }
 
 
-        const now =
-            new Date();
+        const result =
+            sunData.results;
 
+
+        /* =================================================
+           SUNRISE / SUNSET
+        ================================================= */
 
         const sunrise =
             result.sunrise
@@ -2750,10 +2860,9 @@ async function showMapPointInfo(
             : null;
 
 
-        /*
-            Определяем день/ночь
-            по реальному времени.
-        */
+        const now =
+            new Date();
+
 
         let isDay = true;
 
@@ -2764,11 +2873,16 @@ async function showMapPointInfo(
         ){
 
             isDay =
-                now >= sunrise &&
+                now >= sunrise
+                &&
                 now < sunset;
 
         }
 
+
+        /* =================================================
+           DAY / NIGHT
+        ================================================= */
 
         if(isDay){
 
@@ -2812,14 +2926,9 @@ async function showMapPointInfo(
     }catch(error){
 
         console.error(
-            "[CTW3 POINT INFO]",
+            "[CTW3 POINT INFO] Sunrise/Sunset:",
             error
         );
-
-
-        $("ctw3PointTimezone")
-            .textContent =
-            "Не определён";
 
 
         $("ctw3PointDayStatus")
@@ -2834,9 +2943,9 @@ async function showMapPointInfo(
     }
 
 
-    /*
-        Один общий таймер.
-    */
+    /* =====================================================
+       LOCAL CLOCK TIMER
+    ===================================================== */
 
     if(
         pointInfoTimer
@@ -2856,7 +2965,6 @@ async function showMapPointInfo(
         );
 
 }
-
 
 /*
     Закрытие карточки.
