@@ -1170,6 +1170,194 @@ select{
     }
 }
 
+/* =========================================================
+   CTW3 PRODUCTION SLIDERS
+========================================================= */
+
+.productionDescription{
+    font-size:10px;
+    color:#7f8997;
+    line-height:1.4;
+    margin-bottom:13px;
+}
+
+
+/* =========================================================
+   SLIDER BLOCK
+========================================================= */
+
+.productionSlider{
+    margin:11px 0 14px;
+}
+
+
+/* =========================================================
+   SLIDER HEADER
+========================================================= */
+
+.productionSliderHeader{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+
+    gap:10px;
+
+    margin-bottom:6px;
+
+    font-size:11px;
+    color:#cbd4df;
+}
+
+
+.productionSliderHeader b{
+    min-width:30px;
+
+    text-align:right;
+
+    font-size:12px;
+    color:#fff;
+}
+
+
+/* =========================================================
+   RANGE
+========================================================= */
+
+.productionRange{
+    width:100% !important;
+
+    height:18px !important;
+
+    padding:0 !important;
+
+    margin:0;
+
+    background:transparent !important;
+
+    border:0 !important;
+
+    border-radius:0;
+
+    outline:none;
+
+    cursor:pointer;
+
+    accent-color:#087df0;
+}
+
+
+/* =========================================================
+   RANGE TRACK
+========================================================= */
+
+.productionRange::-webkit-slider-runnable-track{
+
+    height:5px;
+
+    border-radius:999px;
+
+    background:
+        rgba(255,255,255,.12);
+
+}
+
+
+.productionRange::-moz-range-track{
+
+    height:5px;
+
+    border-radius:999px;
+
+    background:
+        rgba(255,255,255,.12);
+
+}
+
+
+/* =========================================================
+   RANGE THUMB
+========================================================= */
+
+.productionRange::-webkit-slider-thumb{
+
+    appearance:none;
+
+    width:15px;
+    height:15px;
+
+    margin-top:-5px;
+
+    border:2px solid #fff;
+
+    border-radius:50%;
+
+    background:#087df0;
+
+    box-shadow:
+        0 2px 8px rgba(0,0,0,.35);
+
+}
+
+
+.productionRange::-moz-range-thumb{
+
+    width:15px;
+    height:15px;
+
+    border:2px solid #fff;
+
+    border-radius:50%;
+
+    background:#087df0;
+
+    box-shadow:
+        0 2px 8px rgba(0,0,0,.35);
+
+}
+
+
+/* =========================================================
+   TOTAL
+========================================================= */
+
+.productionTotal{
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:space-between;
+
+    gap:10px;
+
+    margin-top:4px;
+    margin-bottom:10px;
+
+    padding:10px 11px;
+
+    border-radius:10px;
+
+    background:
+        rgba(255,255,255,.045);
+
+    border:
+        1px solid
+        rgba(255,255,255,.07);
+
+    font-size:10px;
+
+    color:#8e99a8;
+}
+
+
+.productionTotal b{
+
+    font-size:12px;
+
+    color:#fff;
+
+}
+
 </style>
 </head>
 
@@ -1358,7 +1546,6 @@ select{
 
 </div>
 
-
 <!-- =========================================================
      PRODUCTION
 ========================================================= -->
@@ -1380,48 +1567,137 @@ select{
         ⚙️ Производство заводов
     </h3>
 
-    <div style="
-        font-size:10px;
-        color:#7f8997;
-        margin-bottom:10px
-    ">
-        Все заводы должны быть распределены между тремя режимами.
+
+    <div class="productionDescription">
+        Распределите все заводы между тремя направлениями.
     </div>
 
-    <div class="rangeRow">
-        <span>💰 Прибыль</span>
+
+    <!-- =====================================================
+         PROFIT
+    ===================================================== -->
+
+    <div class="productionSlider">
+
+        <div class="productionSliderHeader">
+
+            <span>
+                💰 Прибыль
+            </span>
+
+            <b id="profitValue">
+                0
+            </b>
+
+        </div>
+
+
         <input
             id="profitRange"
-            type="number"
+            class="productionRange"
+            type="range"
             min="0"
+            max="0"
             value="0"
-            onchange="syncProduction()">
+            step="1"
+            oninput="productionSliderChanged('profit')"
+        >
+
     </div>
 
-    <div class="rangeRow">
-        <span>🚀 Ракеты</span>
+
+    <!-- =====================================================
+         MISSILES
+    ===================================================== -->
+
+    <div class="productionSlider">
+
+        <div class="productionSliderHeader">
+
+            <span>
+                🚀 Ракеты
+            </span>
+
+            <b id="missileValue">
+                0
+            </b>
+
+        </div>
+
+
         <input
             id="missileRange"
-            type="number"
+            class="productionRange"
+            type="range"
             min="0"
+            max="0"
             value="0"
-            onchange="syncProduction()">
+            step="1"
+            oninput="productionSliderChanged('missiles')"
+        >
+
     </div>
 
-    <div class="rangeRow">
-        <span>🛡️ ПВО</span>
+
+    <!-- =====================================================
+         AIR DEFENSE
+    ===================================================== -->
+
+    <div class="productionSlider">
+
+        <div class="productionSliderHeader">
+
+            <span>
+                🛡️ ПВО
+            </span>
+
+            <b id="defenseValue">
+                0
+            </b>
+
+        </div>
+
+
         <input
             id="defenseRange"
-            type="number"
+            class="productionRange"
+            type="range"
             min="0"
+            max="0"
             value="0"
-            onchange="syncProduction()">
+            step="1"
+            oninput="productionSliderChanged('defense')"
+        >
+
     </div>
+
+
+    <!-- =====================================================
+         TOTAL
+    ===================================================== -->
+
+    <div class="productionTotal">
+
+        <span>
+            🏭 Всего заводов
+        </span>
+
+        <b id="productionTotalValue">
+            0 / 0
+        </b>
+
+    </div>
+
+
+    <!-- =====================================================
+         SAVE
+    ===================================================== -->
 
     <button
         class="action"
-        onclick="saveProduction()">
-        Сохранить
+        onclick="saveProduction()"
+    >
+        💾 Сохранить распределение
     </button>
 
 </div>
@@ -5472,6 +5748,86 @@ function openProduction(){
    PRODUCTION
 ========================================================= */
 
+
+/*
+ * Обновляет значения справа от ползунков.
+ */
+function updateProductionLabels(){
+
+    const profit =
+        Number(
+            $("profitRange").value || 0
+        );
+
+    const missiles =
+        Number(
+            $("missileRange").value || 0
+        );
+
+    const defense =
+        Number(
+            $("defenseRange").value || 0
+        );
+
+    const total =
+        (country && country.factories)
+            ? country.factories.length
+            : 0;
+
+
+    $("profitValue").textContent =
+        profit;
+
+    $("missileValue").textContent =
+        missiles;
+
+    $("defenseValue").textContent =
+        defense;
+
+
+    $("productionTotalValue").textContent =
+        (
+            profit +
+            missiles +
+            defense
+        ) +
+        " / " +
+        total;
+}
+
+
+/*
+ * Устанавливает максимальное значение
+ * всех трёх ползунков.
+ */
+function setupProductionSliders(){
+
+    if(!country){
+        return;
+    }
+
+
+    const total =
+        (country.factories || []).length;
+
+
+    $("profitRange").min = 0;
+    $("profitRange").max = total;
+
+
+    $("missileRange").min = 0;
+    $("missileRange").max = total;
+
+
+    $("defenseRange").min = 0;
+    $("defenseRange").max = total;
+}
+
+
+/*
+ * Открытие панели / синхронизация
+ * с текущим государством.
+ */
 function syncProduction(){
 
     if(!country){
@@ -5479,57 +5835,577 @@ function syncProduction(){
     }
 
 
-    $("profitRange").value=
-        country.factory_profit||0;
+    const total =
+        (country.factories || []).length;
 
 
-    $("missileRange").value=
-        country.factory_missiles||0;
+    setupProductionSliders();
 
 
-    $("defenseRange").value=
-        country.factory_air_defense||0;
+    /*
+     * Получаем текущее распределение.
+     */
 
+    let profit =
+        Number(
+            country.factory_profit || 0
+        );
+
+    let missiles =
+        Number(
+            country.factory_missiles || 0
+        );
+
+    let defense =
+        Number(
+            country.factory_air_defense || 0
+        );
+
+
+    /*
+     * Защита от старых/некорректных данных.
+     */
+
+    profit =
+        Math.max(
+            0,
+            Math.min(
+                profit,
+                total
+            )
+        );
+
+    missiles =
+        Math.max(
+            0,
+            Math.min(
+                missiles,
+                total
+            )
+        );
+
+    defense =
+        Math.max(
+            0,
+            Math.min(
+                defense,
+                total
+            )
+        );
+
+
+    /*
+     * Если старое распределение
+     * не даёт ровно total,
+     * остаток отдаём прибыли.
+     */
+
+    const currentTotal =
+        profit +
+        missiles +
+        defense;
+
+
+    if(currentTotal < total){
+
+        profit +=
+            total -
+            currentTotal;
+
+    }
+
+
+    /*
+     * Если по какой-то причине
+     * сумма больше total,
+     * уменьшаем категории.
+     */
+
+    else if(currentTotal > total){
+
+        let excess =
+            currentTotal -
+            total;
+
+
+        const removeDefense =
+            Math.min(
+                defense,
+                excess
+            );
+
+        defense -=
+            removeDefense;
+
+        excess -=
+            removeDefense;
+
+
+        const removeMissiles =
+            Math.min(
+                missiles,
+                excess
+            );
+
+        missiles -=
+            removeMissiles;
+
+        excess -=
+            removeMissiles;
+
+
+        if(excess > 0){
+
+            profit =
+                Math.max(
+                    0,
+                    profit - excess
+                );
+
+        }
+
+    }
+
+
+    /*
+     * Записываем значения в sliders.
+     */
+
+    $("profitRange").value =
+        profit;
+
+    $("missileRange").value =
+        missiles;
+
+    $("defenseRange").value =
+        defense;
+
+
+    updateProductionLabels();
 }
 
 
+/*
+ * Вызывается непосредственно во время
+ * движения ползунка.
+ *
+ * Главное:
+ * сумма трёх категорий ВСЕГДА равна
+ * количеству заводов.
+ */
+function productionSliderChanged(
+    changed
+){
+
+    if(!country){
+        return;
+    }
+
+
+    const total =
+        (country.factories || []).length;
+
+
+    if(total <= 0){
+
+        $("profitRange").value = 0;
+        $("missileRange").value = 0;
+        $("defenseRange").value = 0;
+
+        updateProductionLabels();
+
+        return;
+    }
+
+
+    /*
+     * Текущие значения.
+     */
+
+    let profit =
+        Number(
+            $("profitRange").value || 0
+        );
+
+    let missiles =
+        Number(
+            $("missileRange").value || 0
+        );
+
+    let defense =
+        Number(
+            $("defenseRange").value || 0
+        );
+
+
+    /*
+     * Определяем новое значение
+     * изменяемого ползунка.
+     */
+
+    let changedValue;
+
+
+    if(changed === "profit"){
+
+        changedValue =
+            Math.max(
+                0,
+                Math.min(
+                    profit,
+                    total
+                )
+            );
+
+    }
+
+    else if(changed === "missiles"){
+
+        changedValue =
+            Math.max(
+                0,
+                Math.min(
+                    missiles,
+                    total
+                )
+            );
+
+    }
+
+    else{
+
+        changedValue =
+            Math.max(
+                0,
+                Math.min(
+                    defense,
+                    total
+                )
+            );
+
+    }
+
+
+    /*
+     * Сколько заводов осталось
+     * после изменения.
+     */
+
+    let remaining =
+        total -
+        changedValue;
+
+
+    /*
+     * Сначала сохраняем максимально
+     * возможное количество заводов
+     * в двух остальных категориях.
+     */
+
+    const otherA =
+        changed === "profit"
+            ? missiles
+            : profit;
+
+
+    const otherB =
+        changed === "defense"
+            ? missiles
+            : defense;
+
+
+    /*
+     * Но вышеупомянутые значения
+     * зависят от направления.
+     *
+     * Поэтому распределяем оставшиеся
+     * заводы пропорционально текущему
+     * распределению двух других категорий.
+     */
+
+    let firstOld;
+    let secondOld;
+
+
+    if(changed === "profit"){
+
+        firstOld = missiles;
+        secondOld = defense;
+
+    }
+
+    else if(changed === "missiles"){
+
+        firstOld = profit;
+        secondOld = defense;
+
+    }
+
+    else{
+
+        firstOld = profit;
+        secondOld = missiles;
+
+    }
+
+
+    const otherTotal =
+        firstOld +
+        secondOld;
+
+
+    let firstNew;
+    let secondNew;
+
+
+    if(otherTotal <= 0){
+
+        /*
+         * Если оба направления были 0,
+         * делим остаток примерно пополам.
+         */
+
+        firstNew =
+            Math.floor(
+                remaining / 2
+            );
+
+        secondNew =
+            remaining -
+            firstNew;
+
+    }
+
+    else{
+
+        /*
+         * Пропорциональное распределение.
+         */
+
+        firstNew =
+            Math.round(
+                remaining *
+                (
+                    firstOld /
+                    otherTotal
+                )
+            );
+
+
+        secondNew =
+            remaining -
+            firstNew;
+
+    }
+
+
+    /*
+     * Теперь записываем обратно.
+     */
+
+    if(changed === "profit"){
+
+        profit =
+            changedValue;
+
+        missiles =
+            firstNew;
+
+        defense =
+            secondNew;
+
+    }
+
+    else if(changed === "missiles"){
+
+        missiles =
+            changedValue;
+
+        profit =
+            firstNew;
+
+        defense =
+            secondNew;
+
+    }
+
+    else{
+
+        defense =
+            changedValue;
+
+        profit =
+            firstNew;
+
+        missiles =
+            secondNew;
+
+    }
+
+
+    /*
+     * Финальная защита.
+     */
+
+    profit =
+        Math.max(
+            0,
+            Math.min(
+                profit,
+                total
+            )
+        );
+
+
+    missiles =
+        Math.max(
+            0,
+            Math.min(
+                missiles,
+                total
+            )
+        );
+
+
+    defense =
+        Math.max(
+            0,
+            Math.min(
+                defense,
+                total
+            )
+        );
+
+
+    /*
+     * Корректируем возможную погрешность
+     * округления.
+     */
+
+    let sum =
+        profit +
+        missiles +
+        defense;
+
+
+    const difference =
+        total -
+        sum;
+
+
+    if(difference !== 0){
+
+        if(changed !== "profit"){
+
+            profit =
+                Math.max(
+                    0,
+                    profit + difference
+                );
+
+        }
+
+        else if(changed !== "missiles"){
+
+            missiles =
+                Math.max(
+                    0,
+                    missiles + difference
+                );
+
+        }
+
+        else{
+
+            defense =
+                Math.max(
+                    0,
+                    defense + difference
+                );
+
+        }
+
+    }
+
+
+    /*
+     * Обновляем sliders.
+     */
+
+    $("profitRange").value =
+        profit;
+
+    $("missileRange").value =
+        missiles;
+
+    $("defenseRange").value =
+        defense;
+
+
+    /*
+     * Обновляем числа на экране.
+     */
+
+    updateProductionLabels();
+}
+
+
+/*
+ * Сохранение распределения в MongoDB.
+ */
 async function saveProduction(){
 
-    const profit=
-        Number(
-            $("profitRange").value||0
-        );
-
-
-    const missiles=
-        Number(
-            $("missileRange").value||0
-        );
-
-
-    const defense=
-        Number(
-            $("defenseRange").value||0
-        );
-
-
-    const total=
-        (country.factories||[]).length;
-
-
-    if(
-        profit+
-        missiles+
-        defense!==total
-    ){
+    if(!country){
 
         setStatus(
-            "❌ Сумма должна быть равна "+
-            total
+            "❌ Государство не выбрано"
         );
 
         return;
 
+    }
+
+
+    const profit =
+        Number(
+            $("profitRange").value || 0
+        );
+
+
+    const missiles =
+        Number(
+            $("missileRange").value || 0
+        );
+
+
+    const defense =
+        Number(
+            $("defenseRange").value || 0
+        );
+
+
+    const total =
+        (country.factories || []).length;
+
+
+    /*
+     * Проверяем распределение.
+     */
+
+    if(
+        profit +
+        missiles +
+        defense !==
+        total
+    ){
+
+        setStatus(
+            "❌ Распределение заводов некорректно"
+        );
+
+        syncProduction();
+
+        return;
     }
 
 
@@ -5540,18 +6416,36 @@ async function saveProduction(){
             {
                 method:"PUT",
 
-                body:JSON.stringify(
-                    {
-                        profit,
-                        missiles,
-                        air_defense:defense
-                    }
-                )
+                body:
+                    JSON.stringify(
+                        {
+                            profit:
+                                profit,
+
+                            missiles:
+                                missiles,
+
+                            air_defense:
+                                defense
+                        }
+                    )
             }
         );
 
 
+        /*
+         * Обновляем состояние из MongoDB.
+         */
+
         await refreshState();
+
+
+        /*
+         * После refreshState()
+         * заново синхронизируем UI.
+         */
+
+        syncProduction();
 
 
         setStatus(
@@ -5561,14 +6455,20 @@ async function saveProduction(){
 
     }catch(e){
 
+        console.error(
+            "[CTW3 PRODUCTION]",
+            e
+        );
+
+
         setStatus(
-            "❌ "+e.message
+            "❌ " +
+            e.message
         );
 
     }
 
 }
-
 
 /* =========================================================
    COUNTRIES
