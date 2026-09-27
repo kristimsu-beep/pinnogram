@@ -8352,28 +8352,99 @@ async function openMissileAttackMap(
     // CREATE TERRITORY LAYER
     // -----------------------------------------------------
 
-    missileAttackTerritoryLayer =
-        L.geoJSON(
-            target.territory,
-            {
-                interactive: false,
-
-                style: {
-
-                    color: "#ffffff",
-
-                    weight: 2,
-
-                    opacity: 1,
-
-                    fillColor: "#222222",
-
-                    fillOpacity: 0.75
-                }
-            }
-        ).addTo(
-            missileAttackMap
-        );
+      // -----------------------------------------------------
+      // NORMALIZE TERRITORY GEOJSON
+      // -----------------------------------------------------
+      
+      let territoryGeoJSON =
+          target.territory;
+      
+      
+      // If territory is a GeoJSON Feature
+      if(
+          territoryGeoJSON &&
+          territoryGeoJSON.type === "Feature"
+      ){
+      
+          // Already valid
+      }
+      
+      
+      // If territory is only a geometry object
+      else if(
+          territoryGeoJSON &&
+          (
+              territoryGeoJSON.type === "Polygon" ||
+              territoryGeoJSON.type === "MultiPolygon"
+          )
+      ){
+      
+          territoryGeoJSON = {
+      
+              type: "Feature",
+      
+              properties: {},
+      
+              geometry: territoryGeoJSON
+      
+          };
+      
+      }
+      
+      
+      // If territory is a FeatureCollection
+      else if(
+          territoryGeoJSON &&
+          territoryGeoJSON.type === "FeatureCollection"
+      ){
+      
+          // Already valid
+      }
+      
+      
+      // Anything else is invalid
+      else{
+      
+          console.error(
+              "[CTW3 MISSILE] Invalid territory:",
+              target.territory
+          );
+      
+          setStatus(
+              "❌ Некорректная территория государства"
+          );
+      
+          return;
+      }
+      
+      
+      // -----------------------------------------------------
+      // CREATE TERRITORY LAYER
+      // -----------------------------------------------------
+      
+      missileAttackTerritoryLayer =
+          L.geoJSON(
+              territoryGeoJSON,
+              {
+                  interactive: false,
+      
+                  style: {
+      
+                      color: "#ffffff",
+      
+                      weight: 2,
+      
+                      opacity: 1,
+      
+                      fillColor: "#222222",
+      
+                      fillOpacity: 0.75
+      
+                  }
+              }
+          ).addTo(
+              missileAttackMap
+          );
 
 
     // -----------------------------------------------------
