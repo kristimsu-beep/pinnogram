@@ -158,14 +158,27 @@ async function sendAudio(blob){
     setStatus("Обрабатываю голос…");
 
     const form = new FormData();
-    form.append("audio", blob, "voice.webm");
-    form.append("history", JSON.stringify(history));
+
+    form.append(
+        "audio",
+        blob,
+        "voice.webm"
+    );
+
+    form.append(
+        "history",
+        JSON.stringify(history)
+    );
 
     try{
-        const response = await fetch("/api/ai/voice", {
-            method: "POST",
-            body: form
-        });
+
+        const response = await fetch(
+            "/api/ai/voice",
+            {
+                method: "POST",
+                body: form
+            }
+        );
 
         const data = await response.json();
 
@@ -177,13 +190,21 @@ async function sendAudio(blob){
             );
         }
 
-        const transcript = (data.transcript || "").trim();
+        const transcript =
+            (data.transcript || "").trim();
 
         /*
-         * Показываем сообщение пользователя
+         * =================================
+         * ПОКАЗЫВАЕМ СЛОВА ПОЛЬЗОВАТЕЛЯ
+         * =================================
          */
+
         if(transcript){
-            addMessage(transcript, "user");
+
+            addMessage(
+                transcript,
+                "user"
+            );
 
             history.push({
                 role: "user",
@@ -192,67 +213,132 @@ async function sendAudio(blob){
         }
 
         /*
-         * ============================
-         * ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЯ
-         * ============================
+         * =================================
+         * ИЗОБРАЖЕНИЕ
+         * =================================
          */
-        if(data.is_image && data.image){
 
-            addImageMessage(
-                data.image,
-                data.image_prompt || transcript
+        if(
+            data.is_image &&
+            data.image
+        ){
+
+            /*
+             * Сначала показываем картинку
+             */
+
+            if(
+                typeof addImageMessage ===
+                "function"
+            ){
+
+                addImageMessage(
+                    data.image,
+                    data.image_prompt ||
+                    transcript
+                );
+
+            }else{
+
+                console.error(
+                    "addImageMessage() не найдена"
+                );
+            }
+
+            /*
+             * Затем описание изображения
+             */
+
+            const description =
+                (
+                    data.image_description ||
+                    ""
+                ).trim();
+
+            if(description){
+
+                addMessage(
+                    description,
+                    "ai"
+                );
+
+                history.push({
+                    role: "assistant",
+                    content: description
+                });
+
+                /*
+                 * Озвучиваем описание
+                 */
+
+                speakRussian(
+                    description
+                );
+            }
+
+            setStatus(
+                "Нажми на шар, чтобы говорить"
             );
-
-            setStatus("Готово");
 
             return;
         }
 
         /*
-         * ============================
+         * =================================
          * ОБЫЧНЫЙ ОТВЕТ AI
-         * ============================
-         *
-         * ВАЖНО:
-         * backend возвращает data.response
+         * =================================
          */
-        const answer = (
-            data.response ||
-            data.text ||
-            data.answer ||
-            ""
-        ).trim();
+
+        const answer =
+            (
+                data.response ||
+                data.text ||
+                data.answer ||
+                ""
+            ).trim();
 
         if(answer){
 
-            addMessage(answer, "ai");
+            addMessage(
+                answer,
+                "ai"
+            );
 
             history.push({
                 role: "assistant",
                 content: answer
             });
 
-            /*
-             * Озвучиваем ответ
-             */
-            speakRussian(answer);
+            speakRussian(
+                answer
+            );
         }
 
         /*
          * Ограничиваем историю
          */
+
         if(history.length > 12){
-            history = history.slice(-12);
+
+            history =
+                history.slice(-12);
+
         }
 
-        setStatus("Нажми на шар, чтобы говорить");
+        setStatus(
+            "Нажми на шар, чтобы говорить"
+        );
 
     }catch(err){
 
-        console.error("AI error:", err);
+        console.error(
+            "AI error:",
+            err
+        );
 
         setStatus(
-            "Ошибка: " + err.message
+            "Ошибка: " +
+            err.message
         );
 
     }finally{
@@ -264,7 +350,8 @@ async function sendAudio(blob){
             "speaking"
         );
 
-        orb.style.transform = "scale(1)";
+        orb.style.transform =
+            "scale(1)";
     }
 }
 
