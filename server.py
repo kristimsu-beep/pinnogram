@@ -5626,6 +5626,18 @@ async def ctw3_attack(
             detail="Ракета не найдена"
         )
 
+    # -----------------------------------------------------
+    # SAVE MISSILE LAUNCH POSITION
+    # -----------------------------------------------------
+    
+    missile_start_latitude = missile.get(
+        "latitude"
+    )
+    
+    missile_start_longitude = missile.get(
+        "longitude"
+    )
+
     try:
         from bson import ObjectId
 
@@ -5691,11 +5703,69 @@ async def ctw3_attack(
     )
 
     if intercepted:
-
+    
+        interceptor_latitude = (
+            interceptor.get("latitude")
+            if interceptor
+            else data.latitude
+        )
+    
+        interceptor_longitude = (
+            interceptor.get("longitude")
+            if interceptor
+            else data.longitude
+        )
+    
+    
+        # -------------------------------------------------
+        # GLOBAL ATTACK EVENT
+        # -------------------------------------------------
+    
+        await ctw3_broadcast_attack_event(
+            {
+                "attacker_country_id":
+                    str(attacker.get("_id")),
+    
+                "target_country_id":
+                    str(data.target_country_id),
+    
+                "start_latitude":
+                    missile_start_latitude,
+    
+                "start_longitude":
+                    missile_start_longitude,
+    
+                "target_latitude":
+                    data.latitude,
+    
+                "target_longitude":
+                    data.longitude,
+    
+                "animation_latitude":
+                    interceptor_latitude,
+    
+                "animation_longitude":
+                    interceptor_longitude,
+    
+                "intercepted":
+                    True,
+    
+                "interceptor_id":
+                    interceptor.get("id")
+                    if interceptor
+                    else None
+            }
+        )
+    
+    
         return {
             "status": "intercepted",
-            "interceptor_id": interceptor.get("id"),
-            "target_country_id": data.target_country_id
+    
+            "interceptor_id":
+                interceptor.get("id"),
+    
+            "target_country_id":
+                data.target_country_id
         }
 
     # -----------------------------------------------------
@@ -5721,27 +5791,72 @@ async def ctw3_attack(
             None
         )
 
-        if city:
-
-            city["damage"] = min(
-                100,
-                int(city.get("damage", 0)) + 35
-            )
-
-            await ctw3_countries.update_one(
-                {"_id": target["_id"]},
-                {
-                    "$set": {
-                        "cities": cities
-                    }
+    if city:
+    
+        city["damage"] = min(
+            100,
+            int(city.get("damage", 0)) + 35
+        )
+    
+    
+        await ctw3_countries.update_one(
+            {"_id": target["_id"]},
+            {
+                "$set": {
+                    "cities": cities
                 }
-            )
-
-            return {
-                "status": "hit",
-                "result": "city_damaged",
-                "target_object_id": target_object_id
             }
+        )
+    
+    
+        # -------------------------------------------------
+        # GLOBAL MISSILE ATTACK EVENT
+        # -------------------------------------------------
+    
+        await ctw3_broadcast_attack_event(
+            {
+                "attacker_country_id":
+                    str(attacker.get("_id")),
+    
+                "target_country_id":
+                    str(data.target_country_id),
+    
+                "start_latitude":
+                    missile_start_latitude,
+    
+                "start_longitude":
+                    missile_start_longitude,
+    
+                "target_latitude":
+                    data.latitude,
+    
+                "target_longitude":
+                    data.longitude,
+    
+                "animation_latitude":
+                    data.latitude,
+    
+                "animation_longitude":
+                    data.longitude,
+    
+                "intercepted":
+                    False,
+    
+                "interceptor_id":
+                    None
+            }
+        )
+    
+    
+        return {
+            "status": "hit",
+    
+            "result":
+                "city_damaged",
+    
+            "target_object_id":
+                target_object_id
+        }
 
         # Other objects are destroyed.
         factories = [
@@ -5785,6 +5900,44 @@ async def ctw3_attack(
                         if f.get("mode") == "air_defense"
                     )
                 }
+            }
+        )
+
+        # -----------------------------------------------------
+        # GLOBAL MISSILE ATTACK EVENT
+        # -----------------------------------------------------
+        
+        await ctw3_broadcast_attack_event(
+            {
+                "attacker_country_id":
+                    str(attacker.get("_id")),
+        
+                "target_country_id":
+                    str(data.target_country_id),
+        
+                "start_latitude":
+                    missile_start_latitude,
+        
+                "start_longitude":
+                    missile_start_longitude,
+        
+                "target_latitude":
+                    data.latitude,
+        
+                "target_longitude":
+                    data.longitude,
+        
+                "animation_latitude":
+                    data.latitude,
+        
+                "animation_longitude":
+                    data.longitude,
+        
+                "intercepted":
+                    False,
+        
+                "interceptor_id":
+                    None
             }
         )
 
@@ -8747,6 +8900,40 @@ async def ctw3_broadcast():
     for player_id in disconnected:
         ctw3_players.pop(player_id, None)
 
+ async def ctw3_broadcast_attack_event(
+    attack_data
+):
+
+    message = json.dumps(
+        {
+            "type": "missile_attack",
+            **attack_data
+        }
+    )
+
+    disconnected = []
+
+    for player_id, websocket in ctw3_players.items():
+
+        try:
+
+            await websocket.send_text(
+                message
+            )
+
+        except Exception:
+
+            disconnected.append(
+                player_id
+            )
+
+
+    for player_id in disconnected:
+
+        ctw3_players.pop(
+            player_id,
+            None
+        )       
 
 @app.websocket("/ws/ctw3")
 async def ctw3_websocket(websocket: WebSocket):
