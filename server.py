@@ -5608,67 +5608,181 @@ async def ctw3_attack(
             detail="Государство не найдено"
         )
 
-    attacker = await ctw3_tick_country(attacker)
+    attacker = await ctw3_tick_country(
+        attacker
+    )
 
-    ctw3_require_territory(attacker)
+    ctw3_require_territory(
+        attacker
+    )
+
+    # -----------------------------------------------------
+    # FIND MISSILE
+    # -----------------------------------------------------
 
     missile = next(
         (
-            m for m in attacker.get("missiles", [])
-            if m.get("id") == data.missile_id
+            m
+            for m in attacker.get(
+                "missiles",
+                []
+            )
+            if str(m.get("id")) ==
+               str(data.missile_id)
         ),
         None
     )
 
     if not missile:
+
         raise HTTPException(
             status_code=404,
             detail="Ракета не найдена"
         )
 
     # -----------------------------------------------------
-    # SAVE MISSILE LAUNCH POSITION
+    # MISSILE START POSITION
     # -----------------------------------------------------
-    
+
     missile_start_latitude = missile.get(
         "latitude"
     )
-    
+
     missile_start_longitude = missile.get(
         "longitude"
     )
 
-    try:
-        from bson import ObjectId
+    # -----------------------------------------------------
+    # LOAD TARGET COUNTRY
+    # -----------------------------------------------------
 
-        target = await ctw3_countries.find_one({
-            "_id": ObjectId(data.target_country_id)
-        })
+    try:
+
+        target = await ctw3_countries.find_one(
+            {
+                "_id": ObjectId(
+                    data.target_country_id
+                )
+            }
+        )
 
     except Exception:
+
         target = None
 
     if not target:
+
         raise HTTPException(
             status_code=404,
             detail="Цель не найдена"
         )
 
-    if target.get("player_id") == attacker.get("player_id"):
+    if (
+        target.get("player_id")
+        ==
+        attacker.get("player_id")
+    ):
+
         raise HTTPException(
             status_code=400,
             detail="Нельзя атаковать своё государство"
         )
 
-    target = await ctw3_tick_country(target)
+    target = await ctw3_tick_country(
+        target
+    )
 
     # -----------------------------------------------------
-    # Simple persistent interception check.
-    # Nearest deployed air-defense can intercept.
+    # FIND TARGET OBJECT
+    # -----------------------------------------------------
+
+    target_object_id = (
+        str(data.target_object_id)
+        if data.target_object_id
+        else None
+    )
+
+    target_object_type = None
+    target_object = None
+
+    if target_object_id:
+
+        object_groups = [
+            (
+                "city",
+                target.get(
+                    "cities",
+                    []
+                )
+            ),
+            (
+                "factory",
+                target.get(
+                    "factories",
+                    []
+                )
+            ),
+            (
+                "airport",
+                target.get(
+                    "airports",
+                    []
+                )
+            ),
+            (
+                "air_defense",
+                target.get(
+                    "air_defenses",
+                    []
+                )
+            ),
+            (
+                "missile",
+                target.get(
+                    "missiles",
+                    []
+                )
+            )
+        ]
+
+        for object_type, objects in object_groups:
+
+            for obj in objects:
+
+                if (
+                    str(obj.get("id"))
+                    ==
+                    target_object_id
+                ):
+
+                    target_object_type = (
+                        object_type
+                    )
+
+                    target_object = obj
+
+                    break
+
+            if target_object:
+
+                break
+
+        if not target_object:
+
+            raise HTTPException(
+                status_code=404,
+                detail="Целевой объект не найден"
+            )
+
+    # -----------------------------------------------------
+    # AIR DEFENSE INTERCEPTION
     # -----------------------------------------------------
 
     defenses = list(
-        target.get("air_defenses", [])
+        target.get(
+            "air_defenses",
+            []
+        )
     )
 
     intercepted = False
@@ -5677,274 +5791,502 @@ async def ctw3_attack(
     for defense in defenses:
 
         distance = ctw3_distance_km(
-            defense.get("latitude", 0),
-            defense.get("longitude", 0),
+            defense.get(
+                "latitude",
+                0
+            ),
+            defense.get(
+                "longitude",
+                0
+            ),
             data.latitude,
             data.longitude
         )
 
         if distance <= 250:
+
             intercepted = True
             interceptor = defense
+
             break
 
-    missiles = [
-        m for m in attacker.get("missiles", [])
-        if m.get("id") != data.missile_id
+    # -----------------------------------------------------
+    # REMOVE ATTACKING MISSILE
+    # -----------------------------------------------------
+
+    attacker_missiles = [
+        m
+        for m in attacker.get(
+            "missiles",
+            []
+        )
+        if str(m.get("id"))
+        !=
+        str(data.missile_id)
     ]
 
     await ctw3_countries.update_one(
-        {"_id": attacker["_id"]},
         {
-            "$set": {
-                "missiles": missiles
+            "_id":
+                attacker["_id"]
+        },
+        {
+            "$set":
+            {
+                "missiles":
+                    attacker_missiles
             }
         }
     )
 
+    # -----------------------------------------------------
+    # INTERCEPTED
+    # -----------------------------------------------------
+
     if intercepted:
-    
+
         interceptor_latitude = (
-            interceptor.get("latitude")
+            interceptor.get(
+                "latitude"
+            )
             if interceptor
             else data.latitude
         )
-    
+
         interceptor_longitude = (
-            interceptor.get("longitude")
+            interceptor.get(
+                "longitude"
+            )
             if interceptor
             else data.longitude
         )
-    
-    
-        # -------------------------------------------------
-        # GLOBAL ATTACK EVENT
-        # -------------------------------------------------
-    
+
         await ctw3_broadcast_attack_event(
             {
                 "attacker_country_id":
-                    str(attacker.get("_id")),
-    
+                    str(
+                        attacker.get(
+                            "_id"
+                        )
+                    ),
+
                 "target_country_id":
-                    str(data.target_country_id),
-    
+                    str(
+                        data.target_country_id
+                    ),
+
+                "target_object_id":
+                    target_object_id,
+
+                "target_object_type":
+                    target_object_type,
+
                 "start_latitude":
                     missile_start_latitude,
-    
+
                 "start_longitude":
                     missile_start_longitude,
-    
+
                 "target_latitude":
                     data.latitude,
-    
+
                 "target_longitude":
                     data.longitude,
-    
+
                 "animation_latitude":
                     interceptor_latitude,
-    
+
                 "animation_longitude":
                     interceptor_longitude,
-    
+
                 "intercepted":
                     True,
-    
+
                 "interceptor_id":
-                    interceptor.get("id")
-                    if interceptor
-                    else None
+                    (
+                        interceptor.get(
+                            "id"
+                        )
+                        if interceptor
+                        else None
+                    )
             }
         )
-    
-    
+
         return {
-            "status": "intercepted",
-    
+            "status":
+                "intercepted",
+
             "interceptor_id":
-                interceptor.get("id"),
-    
+                (
+                    interceptor.get(
+                        "id"
+                    )
+                    if interceptor
+                    else None
+                ),
+
             "target_country_id":
                 data.target_country_id
         }
 
     # -----------------------------------------------------
-    # Destroy target object if supplied.
-    # Cities receive damage instead of being deleted.
+    # TARGET OBJECT DAMAGE / DESTRUCTION
     # -----------------------------------------------------
 
-    target_object_id = data.target_object_id
+    if target_object:
 
-    if target_object_id:
+        # -------------------------------------------------
+        # CITY
+        # -------------------------------------------------
 
-        cities = list(target.get("cities", []))
-        factories = list(target.get("factories", []))
-        airports = list(target.get("airports", []))
-        target_missiles = list(target.get("missiles", []))
-        target_defenses = list(target.get("air_defenses", []))
+        if target_object_type == "city":
 
-        city = next(
-            (
-                c for c in cities
-                if c.get("id") == target_object_id
-            ),
-            None
-        )
+            cities = list(
+                target.get(
+                    "cities",
+                    []
+                )
+            )
 
-    if city:
-    
-        city["damage"] = min(
-            100,
-            int(city.get("damage", 0)) + 35
-        )
-    
-    
-        await ctw3_countries.update_one(
-            {"_id": target["_id"]},
-            {
-                "$set": {
-                    "cities": cities
+            for city in cities:
+
+                if (
+                    str(city.get("id"))
+                    ==
+                    target_object_id
+                ):
+
+                    city["damage"] = min(
+                        100,
+                        int(
+                            city.get(
+                                "damage",
+                                0
+                            )
+                        ) + 35
+                    )
+
+                    break
+
+            await ctw3_countries.update_one(
+                {
+                    "_id":
+                        target["_id"]
+                },
+                {
+                    "$set":
+                    {
+                        "cities":
+                            cities
+                    }
                 }
-            }
-        )
-    
-    
-        # -------------------------------------------------
-        # GLOBAL MISSILE ATTACK EVENT
-        # -------------------------------------------------
-    
-        await ctw3_broadcast_attack_event(
-            {
-                "attacker_country_id":
-                    str(attacker.get("_id")),
-    
-                "target_country_id":
-                    str(data.target_country_id),
-    
-                "start_latitude":
-                    missile_start_latitude,
-    
-                "start_longitude":
-                    missile_start_longitude,
-    
-                "target_latitude":
-                    data.latitude,
-    
-                "target_longitude":
-                    data.longitude,
-    
-                "animation_latitude":
-                    data.latitude,
-    
-                "animation_longitude":
-                    data.longitude,
-    
-                "intercepted":
-                    False,
-    
-                "interceptor_id":
-                    None
-            }
-        )
-    
-    
-        return {
-            "status": "hit",
-    
-            "result":
-                "city_damaged",
-    
-            "target_object_id":
-                target_object_id
-        }
+            )
 
-        # Other objects are destroyed.
+            # City remains, but damage is synchronized.
+            await ctw3_broadcast_attack_event(
+                {
+                    "attacker_country_id":
+                        str(
+                            attacker.get(
+                                "_id"
+                            )
+                        ),
+
+                    "target_country_id":
+                        str(
+                            data.target_country_id
+                        ),
+
+                    "target_object_id":
+                        target_object_id,
+
+                    "target_object_type":
+                        "city",
+
+                    "start_latitude":
+                        missile_start_latitude,
+
+                    "start_longitude":
+                        missile_start_longitude,
+
+                    "target_latitude":
+                        data.latitude,
+
+                    "target_longitude":
+                        data.longitude,
+
+                    "animation_latitude":
+                        data.latitude,
+
+                    "animation_longitude":
+                        data.longitude,
+
+                    "intercepted":
+                        False,
+
+                    "interceptor_id":
+                        None
+                }
+            )
+
+            return {
+                "status":
+                    "hit",
+
+                "result":
+                    "city_damaged",
+
+                "target_object_id":
+                    target_object_id
+            }
+
+        # -------------------------------------------------
+        # OTHER OBJECTS ARE DESTROYED
+        # -------------------------------------------------
+
+        factories = list(
+            target.get(
+                "factories",
+                []
+            )
+        )
+
+        airports = list(
+            target.get(
+                "airports",
+                []
+            )
+        )
+
+        target_missiles = list(
+            target.get(
+                "missiles",
+                []
+            )
+        )
+
+        target_defenses = list(
+            target.get(
+                "air_defenses",
+                []
+            )
+        )
+
         factories = [
-            x for x in factories
-            if x.get("id") != target_object_id
+            x
+            for x in factories
+            if str(x.get("id"))
+            !=
+            target_object_id
         ]
 
         airports = [
-            x for x in airports
-            if x.get("id") != target_object_id
+            x
+            for x in airports
+            if str(x.get("id"))
+            !=
+            target_object_id
         ]
 
         target_missiles = [
-            x for x in target_missiles
-            if x.get("id") != target_object_id
+            x
+            for x in target_missiles
+            if str(x.get("id"))
+            !=
+            target_object_id
         ]
 
         target_defenses = [
-            x for x in target_defenses
-            if x.get("id") != target_object_id
+            x
+            for x in target_defenses
+            if str(x.get("id"))
+            !=
+            target_object_id
         ]
 
         await ctw3_countries.update_one(
-            {"_id": target["_id"]},
             {
-                "$set": {
-                    "factories": factories,
-                    "airports": airports,
-                    "missiles": target_missiles,
-                    "air_defenses": target_defenses,
-                    "factory_profit": sum(
-                        1 for f in factories
-                        if f.get("mode") == "profit"
-                    ),
-                    "factory_missiles": sum(
-                        1 for f in factories
-                        if f.get("mode") == "missiles"
-                    ),
-                    "factory_air_defense": sum(
-                        1 for f in factories
-                        if f.get("mode") == "air_defense"
-                    )
+                "_id":
+                    target["_id"]
+            },
+            {
+                "$set":
+                {
+                    "factories":
+                        factories,
+
+                    "airports":
+                        airports,
+
+                    "missiles":
+                        target_missiles,
+
+                    "air_defenses":
+                        target_defenses,
+
+                    "factory_profit":
+                        sum(
+                            1
+                            for f in factories
+                            if f.get(
+                                "mode"
+                            )
+                            ==
+                            "profit"
+                        ),
+
+                    "factory_missiles":
+                        sum(
+                            1
+                            for f in factories
+                            if f.get(
+                                "mode"
+                            )
+                            ==
+                            "missiles"
+                        ),
+
+                    "factory_air_defense":
+                        sum(
+                            1
+                            for f in factories
+                            if f.get(
+                                "mode"
+                            )
+                            ==
+                            "air_defense"
+                        )
                 }
             }
         )
 
-        # -----------------------------------------------------
-        # GLOBAL MISSILE ATTACK EVENT
-        # -----------------------------------------------------
-        
+        # -------------------------------------------------
+        # GLOBAL ATTACK EVENT
+        # -------------------------------------------------
+
         await ctw3_broadcast_attack_event(
             {
                 "attacker_country_id":
-                    str(attacker.get("_id")),
-        
+                    str(
+                        attacker.get(
+                            "_id"
+                        )
+                    ),
+
                 "target_country_id":
-                    str(data.target_country_id),
-        
+                    str(
+                        data.target_country_id
+                    ),
+
+                "target_object_id":
+                    target_object_id,
+
+                "target_object_type":
+                    target_object_type,
+
                 "start_latitude":
                     missile_start_latitude,
-        
+
                 "start_longitude":
                     missile_start_longitude,
-        
+
                 "target_latitude":
                     data.latitude,
-        
+
                 "target_longitude":
                     data.longitude,
-        
+
                 "animation_latitude":
                     data.latitude,
-        
+
                 "animation_longitude":
                     data.longitude,
-        
+
                 "intercepted":
                     False,
-        
+
                 "interceptor_id":
                     None
             }
         )
 
+        return {
+            "status":
+                "hit",
+
+            "result":
+                "target_destroyed",
+
+            "target_country_id":
+                data.target_country_id,
+
+            "target_object_id":
+                target_object_id,
+
+            "target_object_type":
+                target_object_type
+        }
+
+    # -----------------------------------------------------
+    # GENERIC HIT
+    # -----------------------------------------------------
+
+    await ctw3_broadcast_attack_event(
+        {
+            "attacker_country_id":
+                str(
+                    attacker.get(
+                        "_id"
+                    )
+                ),
+
+            "target_country_id":
+                str(
+                    data.target_country_id
+                ),
+
+            "target_object_id":
+                None,
+
+            "target_object_type":
+                None,
+
+            "start_latitude":
+                missile_start_latitude,
+
+            "start_longitude":
+                missile_start_longitude,
+
+            "target_latitude":
+                data.latitude,
+
+            "target_longitude":
+                data.longitude,
+
+            "animation_latitude":
+                data.latitude,
+
+            "animation_longitude":
+                data.longitude,
+
+            "intercepted":
+                False,
+
+            "interceptor_id":
+                None
+        }
+    )
+
     return {
-        "status": "hit",
-        "result": "target_damaged",
-        "target_country_id": data.target_country_id
+        "status":
+            "hit",
+
+        "result":
+            "target_damaged",
+
+        "target_country_id":
+            data.target_country_id
     }
 
 # 🛑 ОТЛАДОЧНЫЙ ШЛЮЗ: Логирует статус загрузки 3D графики прямо в консоль Render
