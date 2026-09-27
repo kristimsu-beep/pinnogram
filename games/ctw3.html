@@ -8112,139 +8112,180 @@ function getMissileAttackIcon(
    OPEN ATTACK MAP
 ========================================================= */
 
-function openMissileAttackMap(
-    c,
+async function openMissileAttackMap(
+    target,
     missile
 ){
 
-    if(
-        !c ||
-        !c.territory ||
-        !c.territory.geometry ||
-        c.territory.geometry.type !==
-        "Polygon"
-    ){
+    // -----------------------------------------------------
+    // SAVE STATE
+    // -----------------------------------------------------
 
-        setStatus(
-            "❌ Некорректная территория цели"
+    missileAttackTargetCountry = target;
+
+    missileAttackMissile = missile;
+
+    missileAttackSelectedObject = null;
+
+    missileAttackBusy = false;
+
+
+    // -----------------------------------------------------
+    // SHOW WINDOW FIRST
+    // -----------------------------------------------------
+
+    const overlay =
+        $("missileAttackOverlay");
+
+    if(!overlay){
+
+        console.error(
+            "[CTW3 MISSILE] missileAttackOverlay not found"
         );
 
         return;
     }
 
-
-    const coordinates =
-        c.territory
-        .geometry
-        .coordinates;
+    overlay.style.display = "flex";
 
 
-    if(
-        !coordinates ||
-        !coordinates[0] ||
-        coordinates[0].length < 3
-    ){
+    // -----------------------------------------------------
+    // CLEAR OLD OBJECTS
+    // -----------------------------------------------------
 
-        setStatus(
-            "❌ У цели нет корректной территории"
-        );
+    missileAttackObjectLayers.forEach(
+        layer => {
 
-        return;
-    }
+            try{
 
+                if(
+                    missileAttackMap &&
+                    missileAttackMap.hasLayer(layer)
+                ){
 
-    /*
-       Показываем окно ДО создания Leaflet-карты.
-       Это важно, потому что Leaflet должен видеть
-       реальные размеры контейнера.
-    */
+                    missileAttackMap.removeLayer(
+                        layer
+                    );
 
-    $("missileAttackOverlay")
-        .classList
-        .add("visible");
+                }
 
+            }catch(err){
 
-    $("missileAttackCountry")
-        .textContent =
-            (
-                c.flag ||
-                "🏳️"
-            )+
-            " "+
-            (
-                c.name ||
-                "Государство"
-            );
+                console.warn(
+                    "[CTW3 MISSILE] Failed to remove old layer:",
+                    err
+                );
+
+            }
+
+        }
+    );
 
 
-    $("missileAttackSelection")
-        .textContent =
-            "Выберите объект для атаки";
+    missileAttackObjectLayers = [];
 
 
-    $("missileLaunchButton")
-        .disabled=true;
-
-
-    /*
-       Если старая карта ещё существует —
-       полностью уничтожаем её.
-    */
+    // -----------------------------------------------------
+    // DESTROY OLD MAP
+    // -----------------------------------------------------
 
     if(missileAttackMap){
 
-        missileAttackMap.remove();
+        try{
 
-        missileAttackMap=null;
+            missileAttackMap.off();
+
+            missileAttackMap.remove();
+
+        }catch(err){
+
+            console.warn(
+                "[CTW3 MISSILE] Failed to remove old map:",
+                err
+            );
+
+        }
+
+        missileAttackMap = null;
 
     }
 
 
-    missileAttackNormalLayer=null;
+    // -----------------------------------------------------
+    // RESET MAP CONTAINER
+    // -----------------------------------------------------
 
-    missileAttackSatelliteLayer=null;
+    const mapContainer =
+        $("missileAttackMap");
 
-    missileAttackMaskLayer=null;
+    if(!mapContainer){
 
-    missileAttackTerritoryLayer=null;
+        console.error(
+            "[CTW3 MISSILE] missileAttackMap element not found"
+        );
 
-    missileAttackObjectLayers=[];
+        return;
+    }
 
 
-    /*
-       Создаём отдельную карту.
-    */
+    mapContainer.innerHTML = "";
+
+
+    // -----------------------------------------------------
+    // WAIT FOR BROWSER TO RENDER THE OVERLAY
+    // -----------------------------------------------------
+
+    await new Promise(
+        resolve => {
+
+            requestAnimationFrame(
+                () => {
+
+                    requestAnimationFrame(
+                        resolve
+                    );
+
+                }
+            );
+
+        }
+    );
+
+
+    // -----------------------------------------------------
+    // CREATE MAP
+    // -----------------------------------------------------
 
     missileAttackMap =
         L.map(
-            "missileAttackMap",
+            mapContainer,
             {
-                zoomControl:true,
+                zoomControl: true,
 
-                attributionControl:true,
+                attributionControl: true,
 
-                minZoom:1,
+                worldCopyJump: false,
 
-                maxZoom:18,
+                zoomAnimation: false,
 
-                worldCopyJump:false
+                fadeAnimation: false,
+
+                markerZoomAnimation: false
             }
         );
 
 
-    /*
-       Используем ТОЧНО такие же источники,
-       как основная карта CTW3.
-    */
+    // -----------------------------------------------------
+    // TILE LAYERS
+    // -----------------------------------------------------
 
     missileAttackNormalLayer =
         L.tileLayer(
             "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
             {
-                maxZoom:19,
-
+                maxZoom: 19,
                 attribution:
-                    "© OpenStreetMap contributors"
+                    "&copy; OpenStreetMap contributors"
             }
         );
 
@@ -8253,194 +8294,94 @@ function openMissileAttackMap(
         L.tileLayer(
             "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
             {
-                maxZoom:19,
-
+                maxZoom: 19,
                 attribution:
-                    "Tiles © Esri"
+                    "Tiles &copy; Esri"
             }
         );
 
 
-    /*
-       Выбираем тот же режим,
-       который сейчас используется
-       на главной карте.
-    */
+    // -----------------------------------------------------
+    // USE SAME MAP MODE AS MAIN MAP
+    // -----------------------------------------------------
 
-    if(mapMode === "satellite"){
+    const currentMapMode =
+        localStorage.getItem(
+            "ctw3_map_mode"
+        ) || "normal";
 
-        missileAttackSatelliteLayer
-            .addTo(
-                missileAttackMap
-            );
+
+    if(currentMapMode === "satellite"){
+
+        missileAttackSatelliteLayer.addTo(
+            missileAttackMap
+        );
 
     }else{
 
-        missileAttackNormalLayer
-            .addTo(
-                missileAttackMap
-            );
+        missileAttackNormalLayer.addTo(
+            missileAttackMap
+        );
 
     }
 
 
-    /*
-       Переводим именно изображение территории
-       в чёрно-белый стиль.
+    // -----------------------------------------------------
+    // TERRITORY CHECK
+    // -----------------------------------------------------
 
-       При этом форма территории остаётся
-       абсолютно такой же.
-    */
+    if(
+        !target ||
+        !target.territory ||
+        !target.territory.geometry
+    ){
 
-    setTimeout(
-        () => {
+        console.error(
+            "[CTW3 MISSILE] Target has no territory"
+        );
 
-            const tilePane =
-                missileAttackMap
-                    .getPane(
-                        "tilePane"
-                    );
+        setStatus(
+            "❌ У государства нет территории"
+        );
 
-
-            if(tilePane){
-
-                tilePane.style.filter =
-                    "grayscale(1) contrast(1.08)";
-
-            }
-
-        },
-        50
-    );
+        return;
+    }
 
 
-    /*
-       GeoJSON хранится как:
-       [longitude, latitude]
-
-       Leaflet использует:
-       [latitude, longitude]
-    */
-
-    const latLngs =
-        coordinates[0]
-            .map(
-                point => [
-                    Number(point[1]),
-                    Number(point[0])
-                ]
-            );
-
-
-    /*
-       Граница территории.
-    */
+    // -----------------------------------------------------
+    // CREATE TERRITORY LAYER
+    // -----------------------------------------------------
 
     missileAttackTerritoryLayer =
-        L.polygon(
-            latLngs,
+        L.geoJSON(
+            target.territory,
             {
+                interactive: false,
 
-                color:"#ffffff",
+                style: {
 
-                weight:2.5,
+                    color: "#ffffff",
 
-                opacity:.95,
+                    weight: 2,
 
-                fillColor:"#000000",
+                    opacity: 1,
 
-                fillOpacity:.08,
+                    fillColor: "#222222",
 
-                interactive:false,
-
-                className:
-                    "attackTerritoryBorder"
-
+                    fillOpacity: 0.75
+                }
             }
-        )
-        .addTo(
+        ).addTo(
             missileAttackMap
         );
 
 
-    /*
-       Маска.
-
-       Внешний полигон = весь мир.
-
-       Внутренний полигон = территория цели.
-
-       Благодаря fillRule:"evenodd"
-       внутренняя часть становится отверстием.
-
-       Поэтому спутниковая/обычная карта
-       видна ТОЛЬКО внутри территории.
-    */
-
-    const outerWorld = [
-
-        [-89.9,-179.9],
-
-        [-89.9,179.9],
-
-        [89.9,179.9],
-
-        [89.9,-179.9]
-
-    ];
-
-
-    missileAttackMaskLayer =
-        L.polygon(
-            [
-                outerWorld,
-
-                latLngs
-            ],
-            {
-
-                stroke:false,
-
-                fill:true,
-
-                fillColor:"#000000",
-
-                fillOpacity:.97,
-
-                fillRule:"evenodd",
-
-                interactive:false
-
-            }
-        )
-        .addTo(
-            missileAttackMap
-        );
-
-
-    /*
-       Возвращаем границу поверх маски.
-    */
-
-    missileAttackTerritoryLayer.bringToFront();
-
-
-    /*
-       Рисуем объекты.
-    */
-
-    renderMissileAttackObjects(
-        c
-    );
-
-
-    /*
-       Подгоняем масштаб под территорию.
-    */
+    // -----------------------------------------------------
+    // FIT TERRITORY
+    // -----------------------------------------------------
 
     const bounds =
-        missileAttackTerritoryLayer
-            .getBounds();
+        missileAttackTerritoryLayer.getBounds();
 
 
     if(bounds.isValid()){
@@ -8448,68 +8389,111 @@ function openMissileAttackMap(
         missileAttackMap.fitBounds(
             bounds,
             {
-                padding:[
-                    55,
-                    55
+                padding: [
+                    30,
+                    30
                 ],
 
-                maxZoom:10
+                animate: false
             }
         );
 
     }
 
 
-    /*
-       Не разрешаем пользователю уйти
-       слишком далеко от территории.
-    */
+    // -----------------------------------------------------
+    // WAIT UNTIL MAP HAS REAL SIZE
+    // -----------------------------------------------------
 
-    if(bounds.isValid()){
+    await new Promise(
+        resolve => {
 
-        missileAttackMap.setMaxBounds(
-            bounds.pad(.45)
+            requestAnimationFrame(
+                resolve
+            );
+
+        }
+    );
+
+
+    if(
+        missileAttackMap &&
+        missileAttackMap.getContainer()
+    ){
+
+        missileAttackMap.invalidateSize(
+            {
+                pan: false,
+
+                debounceMoveend: true
+            }
         );
 
-    missileAttackMap.on(
-          "zoomend moveend",
-          updateMissileAttackMask
-      );
     }
 
 
-    /*
-       После fitBounds ещё раз обновляем
-       размеры и маску.
-    */
+    // -----------------------------------------------------
+    // CREATE OUTSIDE MASK
+    // -----------------------------------------------------
+
+    updateMissileAttackMask();
+
+
+    // -----------------------------------------------------
+    // RENDER TARGET OBJECTS
+    // -----------------------------------------------------
+
+    renderMissileAttackObjects(
+        target
+    );
+
+
+    // -----------------------------------------------------
+    // KEEP MASK UPDATED
+    // -----------------------------------------------------
+
+    missileAttackMap.on(
+        "zoomend moveend",
+        updateMissileAttackMask
+    );
+
+
+    // -----------------------------------------------------
+    // FINAL SIZE UPDATE
+    // -----------------------------------------------------
 
     setTimeout(
         () => {
 
-            if(missileAttackMap){
+            if(
+                missileAttackMap &&
+                missileAttackMap.getContainer()
+            ){
 
-                missileAttackMap.invalidateSize();
+                try{
 
-                updateMissileAttackMask();
+                    missileAttackMap.invalidateSize(
+                        {
+                            pan: false
+                        }
+                    );
+
+                }catch(err){
+
+                    console.warn(
+                        "[CTW3 MISSILE] invalidateSize failed:",
+                        err
+                    );
+
+                }
 
             }
 
         },
-        100
-    );
-
-
-    setStatus(
-        "🎯 Выберите объект "+
-        "на территории "+
-        (
-            c.name ||
-            "цели"
-        )
+        150
     );
 
 }
-
 
 /* =========================================================
    UPDATE ATTACK MASK
