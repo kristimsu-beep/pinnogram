@@ -5052,10 +5052,7 @@ async def ctw3_moderator_reset(
 
     try:
 
-        target_id =
-            ObjectId(
-                data.target_country_id
-            )
+        target_id = ObjectId(data.target_country_id)
 
     except Exception:
 
