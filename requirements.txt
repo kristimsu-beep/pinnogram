@@ -28,3 +28,4 @@ shapely
 numpy
 groq
 piper-tts
+google-genai
