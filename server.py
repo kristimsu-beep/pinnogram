@@ -5031,8 +5031,7 @@ async def ctw3_moderator_reset(
     # CONSTANT-TIME SECRET COMPARISON
     # -----------------------------------------------------
 
-    supplied_key =
-        str(data.moderator_key or "")
+    supplied_key = str(data.moderator_key or "")
 
 
     if not secrets.compare_digest(
