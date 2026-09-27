@@ -8923,25 +8923,48 @@ function selectMissileAttackObject(
 
 function closeMissileAttack(){
 
+    /*
+       Если ракета прямо сейчас летит —
+       обычное закрытие запрещаем.
+    */
     if(
         missileAttackBusy
     ){
-
         return;
-
     }
 
+
+    // -----------------------------------------------------
+    // REMOVE MAP
+    // -----------------------------------------------------
 
     if(
         missileAttackMap
     ){
 
-        missileAttackMap.remove();
+        try{
+
+            missileAttackMap.off();
+
+            missileAttackMap.remove();
+
+        }catch(error){
+
+            console.warn(
+                "[CTW3 MISSILE] Map close error:",
+                error
+            );
+
+        }
 
         missileAttackMap=null;
 
     }
 
+
+    // -----------------------------------------------------
+    // RESET MAP STATE
+    // -----------------------------------------------------
 
     missileAttackNormalLayer=null;
 
@@ -8953,6 +8976,11 @@ function closeMissileAttack(){
 
     missileAttackObjectLayers=[];
 
+
+    // -----------------------------------------------------
+    // RESET ATTACK STATE
+    // -----------------------------------------------------
+
     missileAttackTargetCountry=null;
 
     missileAttackMissile=null;
@@ -8960,26 +8988,69 @@ function closeMissileAttack(){
     missileAttackSelectedObject=null;
 
 
-    $("missileAttackOverlay")
-        .classList
-        .remove(
+    // -----------------------------------------------------
+    // HIDE ATTACK WINDOW
+    // -----------------------------------------------------
+
+    const overlay =
+        $("missileAttackOverlay");
+
+    if(overlay){
+
+        overlay.classList.remove(
             "visible"
         );
 
+        /*
+           ВАЖНО:
+           openMissileAttackMap()
+           ставит inline display:flex.
+           Поэтому одного remove("visible")
+           недостаточно.
+        */
 
-    $("missileLaunchButton")
-        .disabled=true;
+        overlay.style.display="none";
+
+    }
+
+
+    // -----------------------------------------------------
+    // RESET BUTTON
+    // -----------------------------------------------------
+
+    const launchButton =
+        $("missileLaunchButton");
+
+    if(launchButton){
+
+        launchButton.disabled=true;
+
+    }
+
+
+    // -----------------------------------------------------
+    // RESET SELECTION TEXT
+    // -----------------------------------------------------
+
+    const selection =
+        $("missileAttackSelection");
+
+    if(selection){
+
+        selection.textContent =
+            "Выберите объект для атаки";
+
+    }
 
 
     targetCountry=null;
 
 
     setStatus(
-        "🚀 Атака отменена"
+        "🚀 Окно атаки закрыто"
     );
 
 }
-
 
 /* =========================================================
    DELAY
