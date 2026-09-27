@@ -7861,6 +7861,530 @@ async def ai_voice(
     history: str = Form("")
 ):
     try:
+        if not GROQ_API_KEY:
+            return JSONResponse(
+                {"error": "GROQ_API_KEY не установлен в Render"},
+                status_code=500
+            )
+
+        if not GEMINI_API_KEY:
+            return JSONResponse(
+                {"error": "GEMINI_API_KEY не установлен в Render"},
+                status_code=500
+            )
+
+        if not CLOUDFLARE_ACCOUNT_ID:
+            return JSONResponse(
+                {"error": "CLOUDFLARE_ACCOUNT_ID не установлен в Render"},
+                status_code=500
+            )
+
+        # ==========================================
+        # 1. ЧИТАЕМ АУДИО
+        # ==========================================
+
+        audio_bytes = await audio.read()
+
+        if not audio_bytes:
+            return JSONResponse(
+                {"error": "Аудиофайл пустой"},
+                status_code=400
+            )
+
+        audio_file = io.BytesIO(audio_bytes)
+        audio_file.name = audio.filename or "voice.webm"
+
+        # ==========================================
+        # 2. WHISPER
+        # ==========================================
+
+        try:
+            transcription = groq_client.audio.transcriptions.create(
+                file=audio_file,
+                model="whisper-large-v3",
+                language="ru",
+                prompt=(
+                    "Пользователь говорит на русском языке. "
+                    "Точно распознавай русские слова, имена, "
+                    "названия и технические термины. "
+                    "Не переводи речь."
+                ),
+                response_format="json",
+                temperature=0
+            )
+
+            transcript = transcription.text.strip()
+
+        except Exception as e:
+            print("WHISPER ERROR:", repr(e))
+
+            return JSONResponse(
+                {
+                    "error": f"Ошибка распознавания речи: {str(e)}"
+                },
+                status_code=500
+            )
+
+        if not transcript:
+            return JSONResponse(
+                {"error": "Не удалось распознать речь"},
+                status_code=400
+            )
+
+        print("USER SAID:", transcript)
+
+        # ==========================================
+        # 3. ПРОВЕРЯЕМ — НУЖНА ЛИ КАРТИНКА
+        # ==========================================
+
+        image_keywords = [
+            "нарисуй",
+            "нарисовать",
+            "рисунок",
+            "создай изображение",
+            "создай картинку",
+            "создай рисунок",
+            "сгенерируй изображение",
+            "сгенерируй картинку",
+            "сгенерируй рисунок",
+            "сделай изображение",
+            "сделай картинку",
+            "сделай рисунок",
+            "изобрази",
+            "покажи изображение",
+            "создай фото",
+            "сгенерируй фото"
+        ]
+
+        transcript_lower = transcript.lower()
+
+        is_image_request = any(
+            keyword in transcript_lower
+            for keyword in image_keywords
+        )
+
+        # ==========================================
+        # 4. ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЯ
+        # ==========================================
+
+        if is_image_request:
+
+            print("IMAGE REQUEST DETECTED")
+
+            # ------------------------------------------
+            # 4.1 GROQ СОЗДАЁТ ХОРОШИЙ VISUAL PROMPT
+            # ------------------------------------------
+
+            try:
+                prompt_completion = groq_client.chat.completions.create(
+                    model="openai/gpt-oss-20b",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": """
+Ты преобразуешь русские запросы пользователя
+в точные промпты для генерации изображений.
+
+Твоя задача — НЕ менять смысл запроса.
+
+Обязательно сохраняй:
+- всех персонажей;
+- животных;
+- предметы;
+- количество объектов;
+- действия;
+- позы;
+- окружение;
+- время суток;
+- цвета, если они указаны;
+- стиль, если он указан;
+- настроение;
+- важные детали.
+
+Можно сделать описание более подробным,
+но нельзя добавлять совершенно новые объекты
+или менять то, что попросил пользователь.
+
+Не пиши объяснения.
+Не пиши вступление.
+Верни ТОЛЬКО готовый prompt для генератора изображения.
+
+Prompt должен быть на английском языке,
+поскольку он будет передан модели FLUX.
+"""
+                        },
+                        {
+                            "role": "user",
+                            "content": transcript
+                        }
+                    ],
+                    temperature=0.2,
+                    max_completion_tokens=700,
+                    reasoning_effort="low",
+                    stream=False
+                )
+
+                image_prompt = (
+                    prompt_completion.choices[0]
+                    .message.content
+                    .strip()
+                )
+
+            except Exception as e:
+                print(
+                    "IMAGE PROMPT GENERATION ERROR:",
+                    repr(e)
+                )
+
+                # Если Groq не смог обработать prompt,
+                # используем исходный текст.
+                image_prompt = transcript
+
+            if not image_prompt:
+                image_prompt = transcript
+
+            # FLUX ограничивает prompt 2048 символами.
+            image_prompt = image_prompt[:2048]
+
+            print("FINAL IMAGE PROMPT:", image_prompt)
+
+            # ------------------------------------------
+            # 4.2 CLOUDFLARE FLUX
+            # ------------------------------------------
+
+            model = "@cf/black-forest-labs/flux-1-schnell"
+
+            cloudflare_url = (
+                "https://api.cloudflare.com/client/v4/"
+                f"accounts/{CLOUDFLARE_ACCOUNT_ID}/"
+                f"ai/run/{model}"
+            )
+
+            payload = {
+                "prompt": image_prompt,
+                "steps": 4
+            }
+
+            headers = {
+                "Authorization": f"Bearer {GEMINI_API_KEY}",
+                "Content-Type": "application/json"
+            }
+
+            try:
+                async with httpx.AsyncClient(
+                    timeout=120.0
+                ) as client:
+
+                    response = await client.post(
+                        cloudflare_url,
+                        headers=headers,
+                        json=payload
+                    )
+
+            except Exception as e:
+                print(
+                    "CLOUDFLARE CONNECTION ERROR:",
+                    repr(e)
+                )
+
+                return JSONResponse(
+                    {
+                        "error":
+                        f"Ошибка соединения с Cloudflare: {str(e)}"
+                    },
+                    status_code=500
+                )
+
+            if response.status_code != 200:
+
+                print(
+                    "CLOUDFLARE ERROR:",
+                    response.text
+                )
+
+                return JSONResponse(
+                    {
+                        "error":
+                        "Cloudflare не смог создать изображение: "
+                        + response.text
+                    },
+                    status_code=500
+                )
+
+            try:
+                cloudflare_data = response.json()
+            except Exception:
+                return JSONResponse(
+                    {
+                        "error":
+                        "Cloudflare вернул некорректный ответ"
+                    },
+                    status_code=500
+                )
+
+            if not cloudflare_data.get("success"):
+
+                print(
+                    "CLOUDFLARE API ERROR:",
+                    cloudflare_data
+                )
+
+                return JSONResponse(
+                    {
+                        "error":
+                        "Cloudflare вернул ошибку генерации изображения"
+                    },
+                    status_code=500
+                )
+
+            image_base64 = (
+                cloudflare_data
+                .get("result", {})
+                .get("image")
+            )
+
+            if not image_base64:
+                return JSONResponse(
+                    {
+                        "error":
+                        "Cloudflare не вернул изображение"
+                    },
+                    status_code=500
+                )
+
+            print("IMAGE GENERATED SUCCESSFULLY")
+
+            # ==========================================
+            # 4.3 GROQ VISION ОПИСЫВАЕТ РЕАЛЬНУЮ КАРТИНКУ
+            # ==========================================
+
+            image_description = ""
+
+            try:
+
+                vision_completion = (
+                    groq_client
+                    .chat
+                    .completions
+                    .create(
+                        model="qwen/qwen3.8-27b",
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": """
+Ты описываешь изображение для пользователя
+на русском языке.
+
+Посмотри именно на изображение и опиши,
+что реально на нём видно.
+
+Не говори, что ты "сгенерировал изображение".
+Не упоминай промпт.
+Не придумывай детали, которых не видно.
+
+Описание должно быть естественным,
+коротким и понятным — примерно 1–3 предложения.
+"""
+                            },
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": (
+                                            "Опиши это изображение "
+                                            "на русском языке."
+                                        )
+                                    },
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url":
+                                            "data:image/jpeg;base64,"
+                                            + image_base64
+                                        }
+                                    }
+                                ]
+                            }
+                        ],
+                        temperature=0.4,
+                        max_completion_tokens=300,
+                        stream=False
+                    )
+                )
+
+                if vision_completion.choices:
+
+                    image_description = (
+                        vision_completion
+                        .choices[0]
+                        .message
+                        .content
+                        .strip()
+                    )
+
+            except Exception as e:
+
+                print(
+                    "VISION DESCRIPTION ERROR:",
+                    repr(e)
+                )
+
+                # Картинка всё равно будет показана,
+                # даже если Vision не сработал.
+                image_description = ""
+
+            print(
+                "IMAGE DESCRIPTION:",
+                image_description
+            )
+
+            # ==========================================
+            # 4.4 ОТДАЁМ КЛИЕНТУ И КАРТИНКУ,
+            #     И ЕЁ ОПИСАНИЕ
+            # ==========================================
+
+            return JSONResponse(
+                {
+                    "is_image": True,
+
+                    "image":
+                        "data:image/jpeg;base64,"
+                        + image_base64,
+
+                    "image_prompt":
+                        image_prompt,
+
+                    "image_description":
+                        image_description,
+
+                    "transcript":
+                        transcript
+                }
+            )
+
+        # ==========================================
+        # 5. ОБЫЧНЫЙ ТЕКСТОВЫЙ AI
+        # ==========================================
+
+        messages = []
+
+        try:
+
+            if history:
+
+                parsed_history = json.loads(history)
+
+                if isinstance(
+                    parsed_history,
+                    list
+                ):
+                    messages.extend(
+                        parsed_history
+                    )
+
+        except Exception as e:
+
+            print(
+                "HISTORY PARSE ERROR:",
+                repr(e)
+            )
+
+        messages.append(
+            {
+                "role": "user",
+                "content": transcript
+            }
+        )
+
+        messages = messages[-20:]
+
+        print("STARTING GROQ CHAT...")
+
+        try:
+
+            completion = (
+                groq_client
+                .chat
+                .completions
+                .create(
+                    model="openai/gpt-oss-20b",
+                    messages=messages,
+                    temperature=0.7,
+                    max_completion_tokens=1000,
+                    reasoning_effort="low",
+                    stream=False
+                )
+            )
+
+            if not completion.choices:
+                raise Exception(
+                    "Groq не вернул ни одного ответа"
+                )
+
+            answer = (
+                completion
+                .choices[0]
+                .message
+                .content
+            )
+
+            if not answer:
+                raise Exception(
+                    "Groq вернул пустой ответ"
+                )
+
+            answer = answer.strip()
+
+            print(
+                "AI ANSWER:",
+                answer
+            )
+
+        except Exception as e:
+
+            print(
+                "GROQ CHAT ERROR:",
+                repr(e)
+            )
+
+            return JSONResponse(
+                {
+                    "error":
+                    f"Ошибка получения ответа AI: {str(e)}"
+                },
+                status_code=500
+            )
+
+        return JSONResponse(
+            {
+                "is_image": False,
+                "transcript": transcript,
+                "response": answer
+            }
+        )
+
+    except Exception as e:
+
+        print(
+            "AI VOICE GENERAL ERROR:",
+            repr(e)
+        )
+
+        return JSONResponse(
+            {
+                "error":
+                f"Ошибка AI: {str(e)}"
+            },
+            status_code=500
+    )
+
+@app.post("/api/ai/voice")
+async def ai_voice(
+    audio: UploadFile = File(...),
+    history: str = Form("")
+):
+    try:
         # ==========================================
         # 1. ПРОВЕРЯЕМ НАСТРОЙКИ
         # ==========================================
