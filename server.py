@@ -10525,21 +10525,61 @@ async def ctw2_panorama(
         }
 
 @app.get("/map/{z}/{x}/{y}.png")
-async def ctw2_temperature_map_tile(z: int, x: int, y: int):
+async def ctw2_temperature_map_tile(
+    z: int,
+    x: int,
+    y: int
+):
     """
     CTW2 real air-temperature tile.
 
-    OpenWeather provides the temperature PNG.
-    The server processes the PNG to make the
-    temperature colors more saturated and contrasted.
+    Source:
+        OpenWeather temp_new
+
+    The server downloads the original PNG,
+    increases saturation / contrast / brightness,
+    and returns the processed PNG.
     """
 
     api_key = os.getenv("OPENWEATHER_API_KEY")
 
+    # =====================================================
+    # CHECK API KEY
+    # =====================================================
+
     if not api_key:
-        return {
-            "error": "OPENWEATHER_API_KEY is not configured"
-        }
+        raise HTTPException(
+            status_code=500,
+            detail="OPENWEATHER_API_KEY is not configured"
+        )
+
+    # =====================================================
+    # VALIDATE TILE COORDINATES
+    # =====================================================
+
+    if z < 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid zoom"
+        )
+
+    max_tile = (2 ** z) - 1
+
+    if x < 0 or x > max_tile:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid tile X"
+        )
+
+    if y < 0 or y > max_tile:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid tile Y"
+        )
+
+    # =====================================================
+    # OPENWEATHER TILE
+    # =====================================================
 
     tile_url = (
         "https://tile.openweathermap.org/map/"
@@ -10548,55 +10588,74 @@ async def ctw2_temperature_map_tile(z: int, x: int, y: int):
     )
 
     try:
+
         async with httpx.AsyncClient(
-            timeout=15.0,
+            timeout=20.0,
             follow_redirects=True
         ) as client:
 
-            response = await client.get(tile_url)
+            response = await client.get(
+                tile_url
+            )
+
+        # =================================================
+        # OPENWEATHER ERROR
+        # =================================================
 
         if response.status_code != 200:
-            return {
-                "error": "OpenWeather request failed",
-                "status_code": response.status_code,
-                "response": response.text[:500]
-            }
 
-        # =====================================================
-        # LOAD OPENWEATHER PNG
-        # =====================================================
+            print(
+                "[CTW2 MAP] OpenWeather tile error:",
+                response.status_code,
+                f"z={z}",
+                f"x={x}",
+                f"y={y}",
+                response.text[:500]
+            )
+
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "OpenWeather request failed: "
+                    f"{response.status_code}"
+                )
+            )
+
+        # =================================================
+        # LOAD PNG
+        # =================================================
 
         image = Image.open(
             BytesIO(response.content)
         ).convert("RGBA")
 
-        # =====================================================
-        # INCREASE COLOR SATURATION
-        # =====================================================
+        # =================================================
+        # SATURATION
+        # =================================================
 
         image = ImageEnhance.Color(
             image
         ).enhance(2.5)
 
-        # =====================================================
-        # INCREASE CONTRAST
-        # =====================================================
+        # =================================================
+        # CONTRAST
+        # =================================================
 
         image = ImageEnhance.Contrast(
             image
         ).enhance(1.35)
 
-        # =====================================================
-        # SLIGHT BRIGHTNESS BOOST
-        # =====================================================
+        # =================================================
+        # BRIGHTNESS
+        # =================================================
 
         image = ImageEnhance.Brightness(
             image
         ).enhance(1.08)
 
-        # =====================================================
-        # RETURN PROCESSED PNG
-        # =====================================================
+        # =================================================
+        # SAVE PNG
+        # =================================================
 
         output = BytesIO()
 
@@ -10608,16 +10667,29 @@ async def ctw2_temperature_map_tile(z: int, x: int, y: int):
 
         output.seek(0)
 
+        # =================================================
+        # RETURN TILE
+        # =================================================
+
         return Response(
             content=output.getvalue(),
             media_type="image/png"
         )
 
+    except HTTPException:
+        raise
+
     except Exception as e:
-        return {
-            "error": "Failed to process temperature tile",
-            "details": str(e)
-        }
+
+        print(
+            "[CTW2 MAP] Failed to process tile:",
+            repr(e)
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to process temperature tile"
+        )
 
 @app.get("/api/ctw2/satellite/himawari")
 async def ctw2_himawari_proxy(
