@@ -218,29 +218,122 @@ async function playBase64Audio(base64){
   });
 }
 
-let russianVoices=[];
-let speechTimer=null;
-function loadRussianVoices(){
-  russianVoices=speechSynthesis.getVoices().filter(v=>v.lang&&v.lang.toLowerCase().startsWith("ru"));
-}
-loadRussianVoices();
-speechSynthesis.addEventListener("voiceschanged",loadRussianVoices);
+let russianVoices = [];
+let speechTimer = null;
 
-function speakRussian(text){
-  if(!text||!("speechSynthesis" in window)) return;
-  clearTimeout(speechTimer);
-  speechSynthesis.cancel();
-  try{speechSynthesis.resume();}catch(e){}
-  const cleanText=text.replace(/```[\s\S]*?```/g,"").replace(/[*_#]/g,"").trim();
-  if(!cleanText) return;
-  const voice=russianVoices.find(v=>v.lang.toLowerCase()==="ru-ru")||russianVoices.find(v=>v.lang.toLowerCase().startsWith("ru"))||null;
-  const utterance=new SpeechSynthesisUtterance(cleanText);
-  utterance.lang="ru-RU";utterance.rate=.95;utterance.pitch=1;utterance.volume=1;
-  if(voice) utterance.voice=voice;
-  utterance.onstart=()=>{orbButton.classList.add("active","speaking");setStatus("Отвечаю…");};
-  utterance.onend=()=>{orbButton.classList.remove("active","speaking");orb.style.transform="scale(1)";setStatus("Нажми на шар, чтобы говорить");};
-  utterance.onerror=e=>{console.error("TTS ERROR:",e.error);orbButton.classList.remove("active","speaking");};
-  speechTimer=setTimeout(()=>{loadRussianVoices();if(!utterance.voice&&russianVoices.length) utterance.voice=russianVoices.find(v=>v.lang.toLowerCase()==="ru-ru")||russianVoices[0];speechSynthesis.resume();speechSynthesis.speak(utterance);setTimeout(()=>{if(!speechSynthesis.speaking)speechSynthesis.resume();},100);},300);
+function loadRussianVoices() {
+    russianVoices = speechSynthesis
+        .getVoices()
+        .filter(v =>
+            v.lang &&
+            v.lang.toLowerCase().startsWith("ru")
+        );
+}
+
+loadRussianVoices();
+speechSynthesis.addEventListener("voiceschanged", loadRussianVoices);
+
+
+function speakRussian(text) {
+    if (!text || !("speechSynthesis" in window)) return;
+
+    // Полностью останавливаем предыдущую речь
+    clearTimeout(speechTimer);
+
+    try {
+        speechSynthesis.cancel();
+        speechSynthesis.resume();
+    } catch (e) {
+        console.warn("Speech reset:", e);
+    }
+
+    // Убираем Markdown и лишние символы
+    const cleanText = text
+        .replace(/```[\s\S]*?```/g, "")
+        .replace(/[*_#`]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    if (!cleanText) return;
+
+    // Обновляем список голосов
+    loadRussianVoices();
+
+    const voice =
+        russianVoices.find(v =>
+            v.lang.toLowerCase() === "ru-ru"
+        ) ||
+        russianVoices.find(v =>
+            v.lang.toLowerCase().startsWith("ru")
+        ) ||
+        null;
+
+    // Создаём НОВЫЙ объект речи
+    const utterance = new SpeechSynthesisUtterance();
+
+    utterance.text = cleanText;
+    utterance.lang = "ru-RU";
+    utterance.rate = 0.95;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    if (voice) {
+        utterance.voice = voice;
+    }
+
+    utterance.onstart = () => {
+        console.log("TTS START:", cleanText);
+
+        orbButton.classList.add("active", "speaking");
+        setStatus("Отвечаю…");
+    };
+
+    utterance.onend = () => {
+        console.log("TTS END");
+
+        orbButton.classList.remove("active", "speaking");
+
+        try {
+            orb.style.transform = "scale(1)";
+        } catch (e) {}
+
+        setStatus("Нажми на шар, чтобы говорить");
+    };
+
+    utterance.onerror = (event) => {
+        console.error("TTS ERROR:", event.error);
+
+        orbButton.classList.remove("active", "speaking");
+
+        try {
+            orb.style.transform = "scale(1)";
+        } catch (e) {}
+    };
+
+    // Даём браузеру полностью очистить старую очередь
+    speechTimer = setTimeout(() => {
+
+        // Ещё раз очищаем очередь непосредственно перед запуском
+        try {
+            speechSynthesis.cancel();
+            speechSynthesis.resume();
+        } catch (e) {}
+
+        // На всякий случай обновляем голос
+        loadRussianVoices();
+
+        if (!utterance.voice && russianVoices.length > 0) {
+            utterance.voice =
+                russianVoices.find(v =>
+                    v.lang.toLowerCase() === "ru-ru"
+                ) ||
+                russianVoices[0];
+        }
+
+        // Запускаем именно этот новый utterance
+        speechSynthesis.speak(utterance);
+
+    }, 150);
 }
 
 orbButton.addEventListener("click",()=>{if(busy)return;if(recording)stopRecording();else startRecording();});
