@@ -343,6 +343,553 @@ select{
     background:rgba(255,255,255,.07)
 }
 
+/* =========================================================
+   MISSILE ATTACK WINDOW
+========================================================= */
+
+#missileAttackOverlay{
+    position:fixed;
+    inset:0;
+
+    z-index:7000;
+
+    display:none;
+
+    align-items:center;
+    justify-content:center;
+
+    padding:18px;
+
+    background:
+        rgba(0,0,0,.86);
+
+    backdrop-filter:
+        blur(12px);
+}
+
+#missileAttackOverlay.visible{
+    display:flex;
+}
+
+
+#missileAttackModal{
+    width:
+        min(1100px, calc(100vw - 30px));
+
+    height:
+        min(760px, calc(100vh - 30px));
+
+    display:flex;
+    flex-direction:column;
+
+    overflow:hidden;
+
+    background:
+        #07090d;
+
+    border:
+        1px solid
+        rgba(255,255,255,.14);
+
+    border-radius:
+        18px;
+
+    box-shadow:
+        0 30px 100px
+        rgba(0,0,0,.7);
+}
+
+
+/* =========================================================
+   ATTACK HEADER
+========================================================= */
+
+#missileAttackHeader{
+    flex:
+        0 0 auto;
+
+    display:flex;
+
+    align-items:center;
+    justify-content:space-between;
+
+    gap:12px;
+
+    padding:
+        12px 15px;
+
+    background:
+        rgba(10,14,22,.96);
+
+    border-bottom:
+        1px solid
+        rgba(255,255,255,.09);
+}
+
+#missileAttackTitle{
+    display:flex;
+
+    flex-direction:column;
+
+    gap:3px;
+
+    min-width:0;
+}
+
+#missileAttackTitle strong{
+    font-size:14px;
+    font-weight:850;
+}
+
+#missileAttackTitle span{
+    font-size:10px;
+    color:#788595;
+
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+}
+
+#missileAttackClose{
+    width:34px;
+    height:34px;
+
+    flex:0 0 34px;
+
+    border:0;
+    border-radius:9px;
+
+    background:
+        rgba(255,255,255,.07);
+
+    color:#b9c3cf;
+
+    cursor:pointer;
+
+    font-size:17px;
+}
+
+#missileAttackClose:hover{
+    background:
+        rgba(255,255,255,.13);
+
+    color:#fff;
+}
+
+
+/* =========================================================
+   ATTACK MAP
+========================================================= */
+
+#missileAttackMap{
+    position:relative;
+
+    flex:
+        1 1 auto;
+
+    min-height:0;
+
+    background:
+        #030405;
+
+    overflow:hidden;
+}
+
+#missileAttackMap .leaflet-control-attribution{
+    background:
+        rgba(0,0,0,.72)!important;
+
+    font-size:8px;
+}
+
+
+/*
+   Территория выглядит монохромной,
+   но сама спутниковая/обычная подложка
+   остаётся соответствующей текущему режиму.
+*/
+
+.attackTerritoryBorder{
+    filter:
+        grayscale(1);
+}
+
+
+/* =========================================================
+   OBJECT MARKERS
+========================================================= */
+
+.ctw3-attack-object{
+    width:34px;
+    height:34px;
+
+    display:flex;
+
+    align-items:center;
+    justify-content:center;
+
+    border-radius:50%;
+
+    background:
+        rgba(8,10,14,.88);
+
+    border:
+        1px solid
+        rgba(255,255,255,.65);
+
+    box-shadow:
+        0 4px 16px
+        rgba(0,0,0,.65);
+
+    font-size:17px;
+
+    transition:
+        transform .15s ease,
+        background .15s ease,
+        border-color .15s ease;
+
+    cursor:pointer;
+
+    filter:
+        grayscale(1);
+}
+
+.ctw3-attack-object:hover{
+    transform:
+        scale(1.15);
+
+    background:
+        rgba(255,255,255,.16);
+
+    border-color:
+        #fff;
+}
+
+.ctw3-attack-object.selected{
+    transform:
+        scale(1.22);
+
+    background:
+        rgba(255,255,255,.22);
+
+    border:
+        2px solid
+        #fff;
+
+    box-shadow:
+        0 0 0 5px
+        rgba(255,255,255,.12),
+        0 5px 25px
+        rgba(0,0,0,.75);
+}
+
+
+/* =========================================================
+   ATTACK FOOTER
+========================================================= */
+
+#missileAttackFooter{
+    flex:
+        0 0 auto;
+
+    display:flex;
+
+    align-items:center;
+    justify-content:space-between;
+
+    gap:12px;
+
+    padding:
+        11px 13px;
+
+    background:
+        rgba(8,12,19,.97);
+
+    border-top:
+        1px solid
+        rgba(255,255,255,.09);
+}
+
+#missileAttackSelection{
+    min-width:0;
+
+    color:#aeb8c5;
+
+    font-size:11px;
+
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+}
+
+#missileAttackSelection b{
+    color:#fff;
+}
+
+#missileAttackButtons{
+    display:flex;
+
+    gap:7px;
+
+    flex:
+        0 0 auto;
+}
+
+.missileAttackButton{
+    height:36px;
+
+    padding:
+        0 13px;
+
+    border:0;
+    border-radius:9px;
+
+    font-size:11px;
+    font-weight:800;
+
+    cursor:pointer;
+
+    color:#fff;
+
+    background:
+        rgba(255,255,255,.08);
+}
+
+.missileAttackButton:hover{
+    background:
+        rgba(255,255,255,.14);
+}
+
+#missileLaunchButton{
+    background:
+        #087df0;
+}
+
+#missileLaunchButton:hover{
+    background:
+        #1690ff;
+}
+
+#missileLaunchButton:disabled{
+    opacity:.35;
+    cursor:not-allowed;
+}
+
+
+/* =========================================================
+   ROCKET FLIGHT
+========================================================= */
+
+.ctw3-attack-flight{
+    width:30px;
+    height:30px;
+
+    display:flex;
+
+    align-items:center;
+    justify-content:center;
+
+    font-size:25px;
+
+    filter:
+        drop-shadow(
+            0 0 7px
+            rgba(255,255,255,.8)
+        );
+}
+
+
+/* =========================================================
+   EXPLOSION
+========================================================= */
+
+.ctw3-attack-explosion{
+    width:22px;
+    height:22px;
+
+    border-radius:50%;
+
+    background:
+        radial-gradient(
+            circle,
+            #fff 0%,
+            #ffe16b 18%,
+            #ff8a24 40%,
+            #f0442e 60%,
+            transparent 72%
+        );
+
+    animation:
+        ctw3Explosion
+        .7s
+        ease-out
+        forwards;
+}
+
+.ctw3-attack-explosion::after{
+    content:"";
+
+    position:absolute;
+
+    left:50%;
+    top:50%;
+
+    width:18px;
+    height:18px;
+
+    margin-left:-9px;
+    margin-top:-9px;
+
+    border:
+        2px solid
+        rgba(255,180,60,.8);
+
+    border-radius:50%;
+
+    animation:
+        ctw3Shockwave
+        .7s
+        ease-out
+        forwards;
+}
+
+
+@keyframes ctw3Explosion{
+
+    0%{
+        transform:
+            scale(.15);
+
+        opacity:1;
+    }
+
+    35%{
+        transform:
+            scale(1.8);
+
+        opacity:1;
+    }
+
+    100%{
+        transform:
+            scale(4.8);
+
+        opacity:0;
+    }
+}
+
+
+@keyframes ctw3Shockwave{
+
+    0%{
+        transform:
+            scale(.3);
+
+        opacity:.9;
+    }
+
+    100%{
+        transform:
+            scale(5);
+
+        opacity:0;
+    }
+}
+
+
+/* =========================================================
+   INTERCEPTION EFFECT
+========================================================= */
+
+.ctw3-attack-intercept{
+    width:24px;
+    height:24px;
+
+    display:flex;
+
+    align-items:center;
+    justify-content:center;
+
+    border-radius:50%;
+
+    border:
+        2px solid
+        #fff;
+
+    color:#fff;
+
+    background:
+        rgba(255,255,255,.16);
+
+    font-size:15px;
+
+    animation:
+        ctw3Intercept
+        .65s
+        ease-out
+        forwards;
+}
+
+
+@keyframes ctw3Intercept{
+
+    0%{
+        transform:
+            scale(.2)
+            rotate(0deg);
+
+        opacity:1;
+    }
+
+    55%{
+        transform:
+            scale(1.8)
+            rotate(90deg);
+
+        opacity:1;
+    }
+
+    100%{
+        transform:
+            scale(3.5)
+            rotate(180deg);
+
+        opacity:0;
+    }
+}
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media(max-width:700px){
+
+    #missileAttackOverlay{
+        padding:8px;
+    }
+
+    #missileAttackModal{
+        width:100%;
+        height:calc(100vh - 16px);
+
+        border-radius:14px;
+    }
+
+    #missileAttackFooter{
+        flex-direction:column;
+        align-items:stretch;
+    }
+
+    #missileAttackButtons{
+        width:100%;
+    }
+
+    .missileAttackButton{
+        flex:1;
+    }
+
+}
+
 #production{
     display:none
 }
@@ -2169,6 +2716,77 @@ select{
 
 </div>
 
+<!-- =========================================================
+     MISSILE ATTACK WINDOW
+========================================================= -->
+
+<div id="missileAttackOverlay">
+
+    <div id="missileAttackModal">
+
+        <div id="missileAttackHeader">
+
+            <div id="missileAttackTitle">
+
+                <strong>
+                    🚀 РАКЕТНАЯ АТАКА
+                </strong>
+
+                <span id="missileAttackCountry">
+                    Выбор цели
+                </span>
+
+            </div>
+
+            <button
+                id="missileAttackClose"
+                onclick="closeMissileAttack()">
+                ✕
+            </button>
+
+        </div>
+
+
+        <div id="missileAttackMap"></div>
+
+
+        <div id="missileAttackFooter">
+
+            <div id="missileAttackSelection">
+
+                Выберите объект для атаки
+
+            </div>
+
+
+            <div id="missileAttackButtons">
+
+                <button
+                    class="missileAttackButton"
+                    onclick="closeMissileAttack()">
+
+                    Отмена
+
+                </button>
+
+
+                <button
+                    id="missileLaunchButton"
+                    class="missileAttackButton"
+                    onclick="launchSelectedMissile()"
+                    disabled>
+
+                    🚀 Запустить ракету
+
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
 
 <script>
 
@@ -2217,6 +2835,29 @@ let territoryPreview=null;
 
 let territoryLayer=null;
 
+/* =========================================================
+   MISSILE ATTACK STATE
+========================================================= */
+
+let missileAttackMap=null;
+
+let missileAttackNormalLayer=null;
+
+let missileAttackSatelliteLayer=null;
+
+let missileAttackMaskLayer=null;
+
+let missileAttackTerritoryLayer=null;
+
+let missileAttackObjectLayers=[];
+
+let missileAttackTargetCountry=null;
+
+let missileAttackMissile=null;
+
+let missileAttackSelectedObject=null;
+
+let missileAttackBusy=false;
 
 /* =========================================================
    HELPERS
@@ -6665,13 +7306,20 @@ async function startAttack(missileId){
     }
 
 
-    const missile=
+    const missile =
         country.missiles.find(
-            x=>x.id===missileId
+            x =>
+                String(x.id) ===
+                String(missileId)
         );
 
 
     if(!missile){
+
+        setStatus(
+            "❌ Ракета не найдена"
+        );
+
         return;
     }
 
@@ -6679,66 +7327,1863 @@ async function startAttack(missileId){
     targetCountry=null;
 
 
-    const data=
-        await api(
-            "/api/ctw3/countries"
+    /*
+       Получаем актуальный список стран,
+       чтобы вместе с территорией получить
+       актуальные города, заводы, ПВО и т.д.
+    */
+
+    try{
+
+        const data =
+            await api(
+                "/api/ctw3/countries"
+            );
+
+
+        const list =
+            (data.countries || [])
+            .filter(
+                x =>
+                    String(x.id) !==
+                    String(country.id)
+            );
+
+
+        $("targetList")
+            .innerHTML="";
+
+
+        if(!list.length){
+
+            setStatus(
+                "❌ Нет других государств для атаки"
+            );
+
+            return;
+        }
+
+
+        list.forEach(
+            c => {
+
+                const d =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                d.className =
+                    "countryTarget";
+
+
+                d.innerHTML =
+                    escapeHtml(
+                        c.flag || "🏳️"
+                    )+
+                    " "+
+                    escapeHtml(
+                        c.name ||
+                        "Государство"
+                    );
+
+
+                d.onclick =
+                    () =>
+                        selectAttackTarget(
+                            c,
+                            missile
+                        );
+
+
+                $("targetList")
+                    .appendChild(d);
+
+            }
         );
 
 
-    const list=
-        (data.countries||[])
-        .filter(
-            x=>x.id!==country.id
+        $("targetPanel")
+            .style
+            .display="block";
+
+
+        setStatus(
+            "🎯 Выберите государство-цель"
         );
 
 
-    $("targetList")
-        .innerHTML="";
+    }catch(error){
+
+        setStatus(
+            "❌ "+error.message
+        );
+
+    }
+
+}
 
 
-    list.forEach(
-        c=>{
+/* =========================================================
+   SELECT COUNTRY TARGET
+========================================================= */
 
-            const d=
-                document.createElement(
-                    "div"
-                );
+function selectAttackTarget(
+    c,
+    missile
+){
 
+    if(
+        !c ||
+        !c.territory ||
+        !c.territory.geometry
+    ){
 
-            d.className=
-                "countryTarget";
+        setStatus(
+            "❌ У этой страны нет территории"
+        );
 
-
-            d.innerHTML=
-                escapeHtml(
-                    c.flag||"🏳️"
-                )+
-                " "+
-                escapeHtml(
-                    c.name
-                );
-
-
-            d.onclick=
-                ()=>selectAttackTarget(
-                    c,
-                    missile
-                );
+        return;
+    }
 
 
-            $("targetList")
-                .appendChild(d);
+    targetCountry=c;
+
+    missileAttackTargetCountry=c;
+
+    missileAttackMissile=missile;
+
+    missileAttackSelectedObject=null;
+
+    missileAttackBusy=false;
+
+
+    $("targetPanel")
+        .style
+        .display="none";
+
+
+    openMissileAttackMap(
+        c,
+        missile
+    );
+
+}
+
+
+/* =========================================================
+   GET TARGET OBJECTS
+========================================================= */
+
+function getMissileAttackObjects(c){
+
+    if(!c){
+        return [];
+    }
+
+
+    const groups=[
+        [
+            "city",
+            c.cities || []
+        ],
+
+        [
+            "factory",
+            c.factories || []
+        ],
+
+        [
+            "airport",
+            c.airports || []
+        ],
+
+        [
+            "air_defense",
+            c.air_defenses || []
+        ],
+
+        [
+            "missile",
+            c.missiles || []
+        ]
+    ];
+
+
+    const result=[];
+
+
+    groups.forEach(
+        ([type,list]) => {
+
+            (list || []).forEach(
+                object => {
+
+                    if(
+                        object &&
+                        object.latitude !== undefined &&
+                        object.longitude !== undefined
+                    ){
+
+                        result.push({
+
+                            type,
+
+                            object
+
+                        });
+
+                    }
+
+                }
+            );
 
         }
     );
 
 
-    $("targetPanel")
-        .style
-        .display="block";
+    return result;
+}
+
+
+/* =========================================================
+   OBJECT ICON
+========================================================= */
+
+function getMissileAttackIcon(
+    type
+){
+
+    const icons={
+
+        city:"🏙️",
+
+        factory:"🏭",
+
+        airport:"✈️",
+
+        air_defense:"🛡️",
+
+        missile:"🚀"
+
+    };
+
+
+    return (
+        icons[type] ||
+        "📍"
+    );
+}
+
+
+/* =========================================================
+   OPEN ATTACK MAP
+========================================================= */
+
+function openMissileAttackMap(
+    c,
+    missile
+){
+
+    if(
+        !c ||
+        !c.territory ||
+        !c.territory.geometry ||
+        c.territory.geometry.type !==
+        "Polygon"
+    ){
+
+        setStatus(
+            "❌ Некорректная территория цели"
+        );
+
+        return;
+    }
+
+
+    const coordinates =
+        c.territory
+        .geometry
+        .coordinates;
+
+
+    if(
+        !coordinates ||
+        !coordinates[0] ||
+        coordinates[0].length < 3
+    ){
+
+        setStatus(
+            "❌ У цели нет корректной территории"
+        );
+
+        return;
+    }
+
+
+    /*
+       Показываем окно ДО создания Leaflet-карты.
+       Это важно, потому что Leaflet должен видеть
+       реальные размеры контейнера.
+    */
+
+    $("missileAttackOverlay")
+        .classList
+        .add("visible");
+
+
+    $("missileAttackCountry")
+        .textContent =
+            (
+                c.flag ||
+                "🏳️"
+            )+
+            " "+
+            (
+                c.name ||
+                "Государство"
+            );
+
+
+    $("missileAttackSelection")
+        .textContent =
+            "Выберите объект для атаки";
+
+
+    $("missileLaunchButton")
+        .disabled=true;
+
+
+    /*
+       Если старая карта ещё существует —
+       полностью уничтожаем её.
+    */
+
+    if(missileAttackMap){
+
+        missileAttackMap.remove();
+
+        missileAttackMap=null;
+
+    }
+
+
+    missileAttackNormalLayer=null;
+
+    missileAttackSatelliteLayer=null;
+
+    missileAttackMaskLayer=null;
+
+    missileAttackTerritoryLayer=null;
+
+    missileAttackObjectLayers=[];
+
+
+    /*
+       Создаём отдельную карту.
+    */
+
+    missileAttackMap =
+        L.map(
+            "missileAttackMap",
+            {
+                zoomControl:true,
+
+                attributionControl:true,
+
+                minZoom:1,
+
+                maxZoom:18,
+
+                worldCopyJump:false
+            }
+        );
+
+
+    /*
+       Используем ТОЧНО такие же источники,
+       как основная карта CTW3.
+    */
+
+    missileAttackNormalLayer =
+        L.tileLayer(
+            "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            {
+                maxZoom:19,
+
+                attribution:
+                    "© OpenStreetMap contributors"
+            }
+        );
+
+
+    missileAttackSatelliteLayer =
+        L.tileLayer(
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            {
+                maxZoom:19,
+
+                attribution:
+                    "Tiles © Esri"
+            }
+        );
+
+
+    /*
+       Выбираем тот же режим,
+       который сейчас используется
+       на главной карте.
+    */
+
+    if(mapMode === "satellite"){
+
+        missileAttackSatelliteLayer
+            .addTo(
+                missileAttackMap
+            );
+
+    }else{
+
+        missileAttackNormalLayer
+            .addTo(
+                missileAttackMap
+            );
+
+    }
+
+
+    /*
+       Переводим именно изображение территории
+       в чёрно-белый стиль.
+
+       При этом форма территории остаётся
+       абсолютно такой же.
+    */
+
+    setTimeout(
+        () => {
+
+            const tilePane =
+                missileAttackMap
+                    .getPane(
+                        "tilePane"
+                    );
+
+
+            if(tilePane){
+
+                tilePane.style.filter =
+                    "grayscale(1) contrast(1.08)";
+
+            }
+
+        },
+        50
+    );
+
+
+    /*
+       GeoJSON хранится как:
+       [longitude, latitude]
+
+       Leaflet использует:
+       [latitude, longitude]
+    */
+
+    const latLngs =
+        coordinates[0]
+            .map(
+                point => [
+                    Number(point[1]),
+                    Number(point[0])
+                ]
+            );
+
+
+    /*
+       Граница территории.
+    */
+
+    missileAttackTerritoryLayer =
+        L.polygon(
+            latLngs,
+            {
+
+                color:"#ffffff",
+
+                weight:2.5,
+
+                opacity:.95,
+
+                fillColor:"#000000",
+
+                fillOpacity:.08,
+
+                interactive:false,
+
+                className:
+                    "attackTerritoryBorder"
+
+            }
+        )
+        .addTo(
+            missileAttackMap
+        );
+
+
+    /*
+       Маска.
+
+       Внешний полигон = весь мир.
+
+       Внутренний полигон = территория цели.
+
+       Благодаря fillRule:"evenodd"
+       внутренняя часть становится отверстием.
+
+       Поэтому спутниковая/обычная карта
+       видна ТОЛЬКО внутри территории.
+    */
+
+    const outerWorld = [
+
+        [-89.9,-179.9],
+
+        [-89.9,179.9],
+
+        [89.9,179.9],
+
+        [89.9,-179.9]
+
+    ];
+
+
+    missileAttackMaskLayer =
+        L.polygon(
+            [
+                outerWorld,
+
+                latLngs
+            ],
+            {
+
+                stroke:false,
+
+                fill:true,
+
+                fillColor:"#000000",
+
+                fillOpacity:.97,
+
+                fillRule:"evenodd",
+
+                interactive:false
+
+            }
+        )
+        .addTo(
+            missileAttackMap
+        );
+
+
+    /*
+       Возвращаем границу поверх маски.
+    */
+
+    missileAttackTerritoryLayer.bringToFront();
+
+
+    /*
+       Рисуем объекты.
+    */
+
+    renderMissileAttackObjects(
+        c
+    );
+
+
+    /*
+       Подгоняем масштаб под территорию.
+    */
+
+    const bounds =
+        missileAttackTerritoryLayer
+            .getBounds();
+
+
+    if(bounds.isValid()){
+
+        missileAttackMap.fitBounds(
+            bounds,
+            {
+                padding:[
+                    55,
+                    55
+                ],
+
+                maxZoom:10
+            }
+        );
+
+    }
+
+
+    /*
+       Не разрешаем пользователю уйти
+       слишком далеко от территории.
+    */
+
+    if(bounds.isValid()){
+
+        missileAttackMap.setMaxBounds(
+            bounds.pad(.45)
+        );
+
+    missileAttackMap.on(
+          "zoomend moveend",
+          updateMissileAttackMask
+      );
+    }
+
+
+    /*
+       После fitBounds ещё раз обновляем
+       размеры и маску.
+    */
+
+    setTimeout(
+        () => {
+
+            if(missileAttackMap){
+
+                missileAttackMap.invalidateSize();
+
+                updateMissileAttackMask();
+
+            }
+
+        },
+        100
+    );
+
+
+    setStatus(
+        "🎯 Выберите объект "+
+        "на территории "+
+        (
+            c.name ||
+            "цели"
+        )
+    );
 
 }
 
+
+/* =========================================================
+   UPDATE ATTACK MASK
+========================================================= */
+
+function updateMissileAttackMask(){
+
+    if(
+        !missileAttackMap ||
+        !missileAttackMaskLayer ||
+        !missileAttackTargetCountry
+    ){
+
+        return;
+    }
+
+
+    /*
+       При перемещении/масштабировании Leaflet
+       сам перерисовывает Polygon.
+       Поэтому здесь просто убеждаемся,
+       что маска находится поверх тайлов.
+    */
+
+    missileAttackMaskLayer.bringToFront();
+
+
+    if(
+        missileAttackTerritoryLayer
+    ){
+
+        missileAttackTerritoryLayer
+            .bringToFront();
+
+    }
+
+
+    /*
+       Маркеры должны быть выше маски.
+    */
+
+    missileAttackObjectLayers
+        .forEach(
+            marker => {
+
+                if(
+                    marker &&
+                    marker._icon
+                ){
+
+                    marker._icon
+                        .style
+                        .zIndex=1000;
+
+                }
+
+            }
+        );
+
+}
+
+
+/* =========================================================
+   RENDER TARGET OBJECTS
+========================================================= */
+
+function renderMissileAttackObjects(
+    c
+){
+
+    missileAttackObjectLayers=[];
+
+
+    const objects =
+        getMissileAttackObjects(
+            c
+        );
+
+
+    objects.forEach(
+        entry => {
+
+            const type =
+                entry.type;
+
+            const object =
+                entry.object;
+
+
+            const lat =
+                Number(
+                    object.latitude
+                );
+
+            const lng =
+                Number(
+                    object.longitude
+                );
+
+
+            if(
+                !Number.isFinite(lat) ||
+                !Number.isFinite(lng)
+            ){
+
+                return;
+
+            }
+
+
+            const icon =
+                L.divIcon(
+                    {
+
+                        className:
+                            "",
+
+                        html:
+                            `
+                            <div
+                                class="ctw3-attack-object"
+                                data-object-id="${escapeHtml(String(object.id || ""))}"
+                            >
+                                ${getMissileAttackIcon(type)}
+                            </div>
+                            `,
+
+                        iconSize:[
+                            34,
+                            34
+                        ],
+
+                        iconAnchor:[
+                            17,
+                            17
+                        ]
+
+                    }
+                );
+
+
+            const marker =
+                L.marker(
+                    [
+                        lat,
+                        lng
+                    ],
+                    {
+                        icon,
+
+                        keyboard:false,
+
+                        riseOnHover:true
+                    }
+                )
+                .addTo(
+                    missileAttackMap
+                );
+
+
+            marker.bindTooltip(
+                getObjectName(type),
+                {
+                    direction:"top",
+
+                    offset:[
+                        0,
+                        -14
+                    ]
+                }
+            );
+
+
+            marker.on(
+                "click",
+                function(e){
+
+                    L.DomEvent
+                        .stopPropagation(
+                            e
+                        );
+
+
+                    selectMissileAttackObject(
+                        marker,
+                        type,
+                        object
+                    );
+
+                }
+            );
+
+
+            missileAttackObjectLayers
+                .push(
+                    marker
+                );
+
+        }
+    );
+
+
+    updateMissileAttackMask();
+
+}
+
+
+/* =========================================================
+   SELECT TARGET OBJECT
+========================================================= */
+
+function selectMissileAttackObject(
+    marker,
+    type,
+    object
+){
+
+    if(
+        missileAttackBusy
+    ){
+
+        return;
+
+    }
+
+
+    /*
+       Снимаем старое выделение.
+    */
+
+    missileAttackObjectLayers
+        .forEach(
+            layer => {
+
+                if(
+                    layer &&
+                    layer._icon
+                ){
+
+                    const element =
+                        layer._icon
+                        .querySelector(
+                            ".ctw3-attack-object"
+                        );
+
+
+                    if(element){
+
+                        element.classList
+                            .remove(
+                                "selected"
+                            );
+
+                    }
+
+                }
+
+            }
+        );
+
+
+    /*
+       Выделяем новый объект.
+    */
+
+    if(
+        marker &&
+        marker._icon
+    ){
+
+        const element =
+            marker._icon
+                .querySelector(
+                    ".ctw3-attack-object"
+                );
+
+
+        if(element){
+
+            element.classList
+                .add(
+                    "selected"
+                );
+
+        }
+
+    }
+
+
+    missileAttackSelectedObject = {
+
+        marker,
+
+        type,
+
+        object
+
+    };
+
+
+    const objectName =
+        getObjectName(type);
+
+
+    $("missileAttackSelection")
+        .innerHTML =
+            "<b>"+
+            escapeHtml(
+                objectName
+            )+
+            "</b> — "+
+            escapeHtml(
+                object.name ||
+                "объект"
+            );
+
+
+    $("missileLaunchButton")
+        .disabled=false;
+
+
+    setStatus(
+        "🎯 Цель выбрана: "+
+        objectName
+    );
+
+}
+
+
+/* =========================================================
+   CLOSE ATTACK WINDOW
+========================================================= */
+
+function closeMissileAttack(){
+
+    if(
+        missileAttackBusy
+    ){
+
+        return;
+
+    }
+
+
+    if(
+        missileAttackMap
+    ){
+
+        missileAttackMap.remove();
+
+        missileAttackMap=null;
+
+    }
+
+
+    missileAttackNormalLayer=null;
+
+    missileAttackSatelliteLayer=null;
+
+    missileAttackMaskLayer=null;
+
+    missileAttackTerritoryLayer=null;
+
+    missileAttackObjectLayers=[];
+
+    missileAttackTargetCountry=null;
+
+    missileAttackMissile=null;
+
+    missileAttackSelectedObject=null;
+
+
+    $("missileAttackOverlay")
+        .classList
+        .remove(
+            "visible"
+        );
+
+
+    $("missileLaunchButton")
+        .disabled=true;
+
+
+    targetCountry=null;
+
+
+    setStatus(
+        "🚀 Атака отменена"
+    );
+
+}
+
+
+/* =========================================================
+   DELAY
+========================================================= */
+
+function missileAttackDelay(
+    milliseconds
+){
+
+    return new Promise(
+        resolve =>
+            setTimeout(
+                resolve,
+                milliseconds
+            )
+    );
+
+}
+
+
+/* =========================================================
+   GET MISSILE START POINT
+========================================================= */
+
+function getMissileAttackStartPoint(
+    targetLatLng,
+    missile
+){
+
+    if(
+        !missileAttackMap
+    ){
+
+        return targetLatLng;
+
+    }
+
+
+    const bounds =
+        missileAttackMap
+            .getBounds();
+
+
+    const target =
+        L.latLng(
+            targetLatLng.lat,
+            targetLatLng.lng
+        );
+
+
+    const missileLat =
+        Number(
+            missile &&
+            missile.latitude
+        );
+
+
+    const missileLng =
+        Number(
+            missile &&
+            missile.longitude
+        );
+
+
+    if(
+        !Number.isFinite(missileLat) ||
+        !Number.isFinite(missileLng)
+    ){
+
+        return L.latLng(
+            bounds.getNorth(),
+            target.lng
+        );
+
+    }
+
+
+    const dLat =
+        missileLat -
+        target.lat;
+
+
+    const dLng =
+        missileLng -
+        target.lng;
+
+
+    /*
+       Если ракета находится восточнее цели —
+       начинаем с восточного края.
+
+       Если западнее —
+       с западного.
+
+       Аналогично для севера/юга.
+    */
+
+    if(
+        Math.abs(dLng) >=
+        Math.abs(dLat)
+    ){
+
+        return L.latLng(
+
+            Math.max(
+                bounds.getSouth(),
+                Math.min(
+                    bounds.getNorth(),
+                    target.lat
+                )
+            ),
+
+            dLng >= 0
+                ? bounds.getEast()
+                : bounds.getWest()
+
+        );
+
+    }
+
+
+    return L.latLng(
+
+        dLat >= 0
+            ? bounds.getNorth()
+            : bounds.getSouth(),
+
+        Math.max(
+            bounds.getWest(),
+            Math.min(
+                bounds.getEast(),
+                target.lng
+            )
+        )
+
+    );
+
+}
+
+
+/* =========================================================
+   ANIMATE MISSILE
+========================================================= */
+
+function animateMissileFlight(
+    startLatLng,
+    targetLatLng,
+    duration=1800
+){
+
+    return new Promise(
+        resolve => {
+
+            if(
+                !missileAttackMap
+            ){
+
+                resolve();
+
+                return;
+
+            }
+
+
+            const missileIcon =
+                L.divIcon(
+                    {
+
+                        className:"",
+
+                        html:
+                            `
+                            <div
+                                class="ctw3-attack-flight">
+                                🚀
+                            </div>
+                            `,
+
+                        iconSize:[
+                            30,
+                            30
+                        ],
+
+                        iconAnchor:[
+                            15,
+                            15
+                        ]
+
+                    }
+                );
+
+
+            const marker =
+                L.marker(
+                    startLatLng,
+                    {
+                        icon:
+                            missileIcon,
+
+                        interactive:false,
+
+                        zIndexOffset:5000
+                    }
+                )
+                .addTo(
+                    missileAttackMap
+                );
+
+
+            const trail =
+                L.polyline(
+                    [
+                        startLatLng,
+                        targetLatLng
+                    ],
+                    {
+
+                        color:"#ffffff",
+
+                        weight:1.5,
+
+                        opacity:.25,
+
+                        dashArray:"5 7",
+
+                        interactive:false
+
+                    }
+                )
+                .addTo(
+                    missileAttackMap
+                );
+
+
+            const startTime =
+                performance.now();
+
+
+            const deltaLat =
+                targetLatLng.lat -
+                startLatLng.lat;
+
+
+            const deltaLng =
+                targetLatLng.lng -
+                startLatLng.lng;
+
+
+            function frame(now){
+
+                const progress =
+                    Math.min(
+                        1,
+                        (
+                            now -
+                            startTime
+                        ) /
+                        duration
+                    );
+
+
+                /*
+                   Немного ускоряем ракету
+                   в начале и замедляем перед целью.
+                */
+
+                const eased =
+                    progress < .5
+
+                        ? 2 *
+                          progress *
+                          progress
+
+                        : 1 -
+                          Math.pow(
+                              -2 *
+                              progress +
+                              2,
+                              2
+                          ) /
+                          2;
+
+
+                const lat =
+                    startLatLng.lat +
+                    deltaLat *
+                    eased;
+
+
+                const lng =
+                    startLatLng.lng +
+                    deltaLng *
+                    eased;
+
+
+                marker.setLatLng(
+                    [
+                        lat,
+                        lng
+                    ]
+                );
+
+
+                /*
+                   Поворачиваем ракету
+                   по направлению движения.
+                */
+
+                if(
+                    marker._icon
+                ){
+
+                    const rocket =
+                        marker._icon
+                            .querySelector(
+                                ".ctw3-attack-flight"
+                            );
+
+
+                    if(rocket){
+
+                        const angle =
+                            Math.atan2(
+                                deltaLng,
+                                deltaLat
+                            ) *
+                            180 /
+                            Math.PI;
+
+
+                        rocket.style.transform =
+                            "rotate("+
+                            angle+
+                            "deg)";
+
+                    }
+
+                }
+
+
+                if(
+                    progress < 1
+                ){
+
+                    requestAnimationFrame(
+                        frame
+                    );
+
+                    return;
+
+                }
+
+
+                missileAttackMap
+                    .removeLayer(
+                        marker
+                    );
+
+
+                missileAttackMap
+                    .removeLayer(
+                        trail
+                    );
+
+
+                resolve();
+
+            }
+
+
+            requestAnimationFrame(
+                frame
+            );
+
+        }
+    );
+
+}
+
+
+/* =========================================================
+   ATTACK EFFECT
+========================================================= */
+
+function showMissileAttackEffect(
+    latLng,
+    intercepted=false
+){
+
+    return new Promise(
+        resolve => {
+
+            if(
+                !missileAttackMap
+            ){
+
+                resolve();
+
+                return;
+
+            }
+
+
+            const html =
+                intercepted
+
+                    ? `
+                        <div
+                            class="ctw3-attack-intercept">
+                            ✦
+                        </div>
+                      `
+
+                    : `
+                        <div
+                            class="ctw3-attack-explosion">
+                        </div>
+                      `;
+
+
+            const icon =
+                L.divIcon(
+                    {
+
+                        className:"",
+
+                        html,
+
+                        iconSize:[
+                            24,
+                            24
+                        ],
+
+                        iconAnchor:[
+                            12,
+                            12
+                        ]
+
+                    }
+                );
+
+
+            const effect =
+                L.marker(
+                    latLng,
+                    {
+                        icon,
+
+                        interactive:false,
+
+                        zIndexOffset:6000
+                    }
+                )
+                .addTo(
+                    missileAttackMap
+                );
+
+
+            setTimeout(
+                () => {
+
+                    if(
+                        missileAttackMap
+                    ){
+
+                        missileAttackMap
+                            .removeLayer(
+                                effect
+                            );
+
+                    }
+
+
+                    resolve();
+
+                },
+                intercepted
+                    ? 700
+                    : 800
+            );
+
+        }
+    );
+
+}
+
+
+/* =========================================================
+   LAUNCH SELECTED MISSILE
+========================================================= */
+
+async function launchSelectedMissile(){
+
+    if(
+        missileAttackBusy
+    ){
+
+        return;
+
+    }
+
+
+    if(
+        !missileAttackSelectedObject
+    ){
+
+        setStatus(
+            "⚠️ Сначала выберите объект"
+        );
+
+        return;
+
+    }
+
+
+    if(
+        !missileAttackTargetCountry ||
+        !missileAttackMissile
+    ){
+
+        setStatus(
+            "❌ Данные атаки потеряны"
+        );
+
+        return;
+
+    }
+
+
+    const selected =
+        missileAttackSelectedObject;
+
+
+    const targetObject =
+        selected.object;
+
+
+    const targetType =
+        selected.type;
+
+
+    const targetLat =
+        Number(
+            targetObject.latitude
+        );
+
+
+    const targetLng =
+        Number(
+            targetObject.longitude
+        );
+
+
+    if(
+        !Number.isFinite(targetLat) ||
+        !Number.isFinite(targetLng)
+    ){
+
+        setStatus(
+            "❌ У объекта нет координат"
+        );
+
+        return;
+
+    }
+
+
+    missileAttackBusy=true;
+
+
+    $("missileLaunchButton")
+        .disabled=true;
+
+
+    $("missileAttackSelection")
+        .textContent =
+            "🚀 Запуск ракеты...";
+
+
+    setStatus(
+        "🚀 Ракета запущена"
+    );
+
+
+    let result;
+
+
+    try{
+
+        /*
+           ВАЖНО:
+
+           Теперь сервер получает не просто
+           координаты на карте, а ID конкретного
+           объекта.
+
+           Поэтому именно этот объект
+           становится целью атаки.
+        */
+
+        result =
+            await api(
+                "/api/ctw3/attack",
+                {
+                    method:"POST",
+
+                    body:
+                        JSON.stringify(
+                            {
+
+                                missile_id:
+                                    missileAttackMissile.id,
+
+                                target_country_id:
+                                    missileAttackTargetCountry.id,
+
+                                latitude:
+                                    targetLat,
+
+                                longitude:
+                                    targetLng,
+
+                                target_object_id:
+                                    String(
+                                        targetObject.id
+                                    )
+
+                            }
+                        )
+                }
+            );
+
+
+    }catch(error){
+
+        missileAttackBusy=false;
+
+        $("missileLaunchButton")
+            .disabled=false;
+
+
+        $("missileAttackSelection")
+            .textContent =
+                "❌ "+
+                error.message;
+
+
+        setStatus(
+            "❌ "+error.message
+        );
+
+        return;
+
+    }
+
+
+    /*
+       Если ракета перехвачена,
+       сервер возвращает ID ПВО.
+    */
+
+    let animationTarget =
+        L.latLng(
+            targetLat,
+            targetLng
+        );
+
+
+    let intercepted=false;
+
+
+    if(
+        result.status ===
+        "intercepted"
+    ){
+
+        intercepted=true;
+
+
+        const interceptor =
+            (
+                missileAttackTargetCountry
+                    .air_defenses ||
+                []
+            )
+            .find(
+                x =>
+                    String(x.id) ===
+                    String(
+                        result.interceptor_id
+                    )
+            );
+
+
+        if(interceptor){
+
+            animationTarget =
+                L.latLng(
+                    Number(
+                        interceptor.latitude
+                    ),
+
+                    Number(
+                        interceptor.longitude
+                    )
+                );
+
+        }
+
+    }
+
+
+    /*
+       Стартуем с края карты,
+       со стороны страны атакующего.
+    */
+
+    const startPoint =
+        getMissileAttackStartPoint(
+            animationTarget,
+            missileAttackMissile
+        );
+
+
+    /*
+       Полёт ракеты.
+    */
+
+    await animateMissileFlight(
+        startPoint,
+        animationTarget,
+        1900
+    );
+
+
+    /*
+       Эффект попадания/перехвата.
+    */
+
+    await showMissileAttackEffect(
+        animationTarget,
+        intercepted
+    );
+
+
+    if(intercepted){
+
+        setStatus(
+            "🛡️ Ракета перехвачена ПВО"
+        );
+
+        $("missileAttackSelection")
+            .textContent =
+                "🛡️ Ракета была перехвачена";
+
+    }else{
+
+        setStatus(
+            "💥 Попадание по "+
+            getObjectName(
+                targetType
+            )
+        );
+
+        $("missileAttackSelection")
+            .textContent =
+                "💥 Удар нанесён по "+
+                (
+                    targetObject.name ||
+                    getObjectName(
+                        targetType
+                    )
+                );
+
+    }
+
+
+    /*
+       Обновляем MongoDB-состояние
+       на клиенте.
+    */
+
+    try{
+
+        await refreshState();
+
+        await loadCountries();
+
+    }catch(error){
+
+        console.error(
+            "[CTW3 ATTACK REFRESH]",
+            error
+        );
+
+    }
+
+
+    /*
+       Оставляем взрыв/перехват
+       немного видимым перед закрытием.
+    */
+
+    await missileAttackDelay(
+        600
+    );
+
+
+    missileAttackBusy=false;
+
+
+    closeMissileAttack();
+
+}
 
 function selectAttackTarget(
     c,
