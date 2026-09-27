@@ -10524,6 +10524,13 @@ async def ctw2_panorama(
                 str(e)
         }
 
+@app.get("/map/test")
+async def ctw2_map_test():
+    return {
+        "status": "ok",
+        "message": "CTW2 MAP backend is working"
+    }
+
 @app.get("/map/{z}/{x}/{y}.png")
 async def ctw2_temperature_map_tile(
     z: int,
