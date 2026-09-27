@@ -10785,6 +10785,60 @@ async def ctw2_temperature_map_tile(
             detail="Failed to process temperature tile"
         )
 
+# =========================================================
+# CTW2 MAP — STATIC IMAGE FILES
+# =========================================================
+
+@app.get("/map/{filename:path}")
+async def ctw2_map_static_file(filename: str):
+
+    map_directory = os.path.abspath(
+        os.path.join(
+            os.getcwd(),
+            "map"
+        )
+    )
+
+    file_path = os.path.abspath(
+        os.path.join(
+            map_directory,
+            filename
+        )
+    )
+
+    # -----------------------------------------------------
+    # SECURITY — запрещаем выход из папки map
+    # -----------------------------------------------------
+
+    if not (
+        file_path == map_directory
+        or file_path.startswith(
+            map_directory + os.sep
+        )
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied"
+        )
+
+    # -----------------------------------------------------
+    # FILE DOES NOT EXIST
+    # -----------------------------------------------------
+
+    if not os.path.isfile(file_path):
+        raise HTTPException(
+            status_code=404,
+            detail="Map file not found"
+        )
+
+    # -----------------------------------------------------
+    # RETURN IMAGE / FILE
+    # -----------------------------------------------------
+
+    return FileResponse(
+        file_path
+    )
+
 @app.get("/api/ctw2/satellite/himawari")
 async def ctw2_himawari_proxy(
     z: int,
