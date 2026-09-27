@@ -3871,19 +3871,32 @@ async function showMapPointInfo(
     /* =====================================================
        SUBTITLE
        ===================================================== */
-
     if(objectInfo){
-
-        $("ctw3PointSubtitle").textContent =
-            (objectInfo.country.flag || "🏳️") +
+      
+      const objectCountry =
+            objectInfo.country ||
+            findCountryAtPoint(
+            latitude,
+            longitude
+            );
+      
+      
+      $("ctw3PointSubtitle").textContent =
+            (
+            objectCountry?.flag ||
+            "🏳️"
+            ) +
             " " +
-            (objectInfo.country.name || "Государство");
-
+            (
+            objectCountry?.name ||
+            "Государство"
+            );
+      
     }else{
-
-        $("ctw3PointSubtitle").textContent =
+      
+      $("ctw3PointSubtitle").textContent =
             "Информация о выбранной точке";
-
+      
     }
 
 
