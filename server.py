@@ -38,13 +38,24 @@ from fastapi import UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 
 from groq import Groq
+from google import genai
 
+# =========================================
+# AI KEYS
+# =========================================
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 groq_client = (
     Groq(api_key=GROQ_API_KEY)
     if GROQ_API_KEY
+    else None
+)
+
+gemini_client = (
+    genai.Client(api_key=GEMINI_API_KEY)
+    if GEMINI_API_KEY
     else None
 )
 
@@ -7850,6 +7861,10 @@ async def ai_voice(
     audio: UploadFile = File(...),
     history: str = Form("[]")
 ):
+    # =========================================
+    # ПРОВЕРКА GROQ
+    # =========================================
+
     if not groq_client:
         raise HTTPException(
             status_code=500,
@@ -7857,7 +7872,7 @@ async def ai_voice(
         )
 
     # =========================================
-    # 1. Читаем аудио
+    # 1. ЧИТАЕМ АУДИО
     # =========================================
 
     try:
@@ -7877,8 +7892,14 @@ async def ai_voice(
             audio.content_type
         )
 
+    except HTTPException:
+        raise
+
     except Exception as e:
-        print("AI AUDIO READ ERROR:", repr(e))
+        print(
+            "AI AUDIO READ ERROR:",
+            repr(e)
+        )
 
         raise HTTPException(
             status_code=500,
@@ -7886,7 +7907,7 @@ async def ai_voice(
         )
 
     # =========================================
-    # 2. Сохраняем временный файл
+    # 2. ВРЕМЕННЫЙ ФАЙЛ
     # =========================================
 
     temp_path = None
@@ -7901,14 +7922,19 @@ async def ai_voice(
             suffix=suffix,
             delete=False
         ) as temp:
-
             temp.write(audio_bytes)
             temp_path = temp.name
 
-        print("AI TEMP FILE:", temp_path)
+        print(
+            "AI TEMP FILE:",
+            temp_path
+        )
 
     except Exception as e:
-        print("AI TEMP FILE ERROR:", repr(e))
+        print(
+            "AI TEMP FILE ERROR:",
+            repr(e)
+        )
 
         raise HTTPException(
             status_code=500,
@@ -7916,7 +7942,7 @@ async def ai_voice(
         )
 
     # =========================================
-    # 3. GROQ — распознавание речи
+    # 3. GROQ — РАСПОЗНАВАНИЕ РЕЧИ
     # =========================================
 
     transcript = ""
@@ -7951,7 +7977,10 @@ async def ai_voice(
             repr(e)
         )
 
-        # Пробуем более точную модель
+        # =====================================
+        # FALLBACK — БОЛЕЕ ТОЧНАЯ МОДЕЛЬ
+        # =====================================
+
         try:
 
             print(
@@ -7967,8 +7996,9 @@ async def ai_voice(
                         language="ru",
                         prompt=(
                             "Пользователь говорит на русском языке. "
-                            "Точно распознавай русские слова, имена, названия "
-                            "и технические термины. Не переводи речь."
+                            "Точно распознавай русские слова, имена, "
+                            "названия и технические термины. "
+                            "Не переводи речь."
                         ),
                         response_format="json",
                         temperature=0
@@ -8005,8 +8035,13 @@ async def ai_voice(
 
             try:
                 os.remove(temp_path)
+
             except Exception:
                 pass
+
+    # =========================================
+    # 4. ПРОВЕРЯЕМ РАСПОЗНАННУЮ РЕЧЬ
+    # =========================================
 
     if not transcript:
 
@@ -8016,20 +8051,219 @@ async def ai_voice(
         )
 
     # =========================================
-    # 4. История разговора
+    # 5. КЛЮЧЕВЫЕ СЛОВА ДЛЯ ГЕНЕРАЦИИ
+    # =========================================
+
+    image_keywords = [
+        "нарисуй",
+        "нарисовать",
+        "рисуй",
+        "создай картинку",
+        "создай изображение",
+        "создай рисунок",
+        "сгенерируй картинку",
+        "сгенерируй изображение",
+        "сгенерируй рисунок",
+        "сделай картинку",
+        "сделай изображение",
+        "сделай рисунок",
+        "изобрази",
+        "покажи картинку"
+    ]
+
+    transcript_lower = transcript.lower().strip()
+
+    is_image_request = any(
+        keyword in transcript_lower
+        for keyword in image_keywords
+    )
+
+    # =========================================
+    # 6. ЕСЛИ ЭТО ЗАПРОС НА ИЗОБРАЖЕНИЕ
+    # =========================================
+
+    if is_image_request:
+
+        if not gemini_client:
+
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "GEMINI_API_KEY не установлен "
+                    "на Render."
+                )
+            )
+
+        # -------------------------------------
+        # Убираем команду из текста,
+        # оставляем непосредственно описание
+        # изображения.
+        # -------------------------------------
+
+        image_prompt = transcript
+
+        import re
+
+        image_prompt = re.sub(
+            r"^\s*(пожалуйста\s*)?",
+            "",
+            image_prompt,
+            flags=re.IGNORECASE
+        )
+
+        image_prompt = re.sub(
+            r"\b(нарисуй|нарисовать|рисуй)\b",
+            "",
+            image_prompt,
+            count=1,
+            flags=re.IGNORECASE
+        )
+
+        image_prompt = re.sub(
+            r"\b(создай\s+(картинку|изображение|рисунок))\b",
+            "",
+            image_prompt,
+            count=1,
+            flags=re.IGNORECASE
+        )
+
+        image_prompt = re.sub(
+            r"\b(сгенерируй\s+(картинку|изображение|рисунок))\b",
+            "",
+            image_prompt,
+            count=1,
+            flags=re.IGNORECASE
+        )
+
+        image_prompt = re.sub(
+            r"\b(сделай\s+(картинку|изображение|рисунок))\b",
+            "",
+            image_prompt,
+            count=1,
+            flags=re.IGNORECASE
+        )
+
+        image_prompt = re.sub(
+            r"^\s*изобрази\b",
+            "",
+            image_prompt,
+            count=1,
+            flags=re.IGNORECASE
+        )
+
+        image_prompt = re.sub(
+            r"^\s*покажи\s+картинку\b",
+            "",
+            image_prompt,
+            count=1,
+            flags=re.IGNORECASE
+        )
+
+        image_prompt = image_prompt.strip(" ,.!?")
+
+        if not image_prompt:
+            image_prompt = (
+                "Красивое художественное изображение "
+                "с выразительной атмосферой."
+            )
+
+        print(
+            "🎨 IMAGE REQUEST:",
+            repr(image_prompt)
+        )
+
+        # -------------------------------------
+        # Gemini Image
+        # -------------------------------------
+
+        try:
+
+            interaction = (
+                gemini_client.interactions.create(
+                    model="gemini-3.1-flash-image",
+                    input=(
+                        "Создай изображение по следующему "
+                        "описанию. Не добавляй объяснений. "
+                        "Описание: "
+                        + image_prompt
+                    ),
+                    response_format={
+                        "type": "image",
+                        "mime_type": "image/jpeg",
+                        "aspect_ratio": "1:1",
+                        "image_size": "1K"
+                    }
+                )
+            )
+
+            generated_image = (
+                interaction.output_image
+            )
+
+            if not generated_image:
+
+                raise Exception(
+                    "Gemini не вернул изображение."
+                )
+
+            image_base64 = generated_image.data
+
+            print(
+                "🎨 IMAGE GENERATED:",
+                len(image_base64),
+                "base64 chars"
+            )
+
+            # ---------------------------------
+            # Не сохраняем картинку на сервере.
+            # Отправляем её прямо в браузер.
+            # ---------------------------------
+
+            return JSONResponse({
+                "transcript": transcript,
+                "text": "Готово! Я создал изображение.",
+                "image": (
+                    "data:image/jpeg;base64,"
+                    + image_base64
+                ),
+                "image_prompt": image_prompt,
+                "is_image": True,
+                "audio": None
+            })
+
+        except Exception as e:
+
+            print(
+                "🎨 GEMINI IMAGE ERROR:",
+                repr(e)
+            )
+
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Не удалось создать изображение "
+                    "через Gemini: "
+                    + str(e)
+                )
+            )
+
+    # =========================================
+    # 7. ОБЫЧНЫЙ ТЕКСТОВЫЙ AI
     # =========================================
 
     try:
+
         old_history = json.loads(history)
 
         if not isinstance(old_history, list):
             old_history = []
 
     except Exception:
+
         old_history = []
 
     # =========================================
-    # 5. Формируем сообщения
+    # 8. ФОРМИРУЕМ СООБЩЕНИЯ GROQ
     # =========================================
 
     messages = [
@@ -8066,7 +8300,7 @@ async def ai_voice(
     })
 
     # =========================================
-    # 6. GROQ — AI ответ
+    # 9. GROQ — ОТВЕТ
     # =========================================
 
     answer = ""
@@ -8101,7 +8335,10 @@ async def ai_voice(
             repr(e)
         )
 
-        # Fallback на другую доступную модель
+        # =====================================
+        # FALLBACK
+        # =====================================
+
         try:
 
             print(
@@ -8152,12 +8389,15 @@ async def ai_voice(
     )
 
     # =========================================
-    # 7. Возвращаем результат
+    # 10. ОБЫЧНЫЙ ОТВЕТ
     # =========================================
 
     return JSONResponse({
         "transcript": transcript,
         "text": answer,
+        "image": None,
+        "image_prompt": None,
+        "is_image": False,
         "audio": None
     })
 
