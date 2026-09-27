@@ -54,6 +54,10 @@ gemini_client = (
     else None
 )
 
+groq_client = Groq(
+    api_key=GROQ_API_KEY
+)
+
 # Вечное облачное хранилище для видео и голосовых Pinnogram
 SUPABASE_URL = "https://zzcfdrryfsychezckjov.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6Y2ZkcnJ5ZnN5Y2hlemNram92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMTk1MTgsImV4cCI6MjA5NDY5NTUxOH0.L5QdbaIumhGTwATLNZnrTklUOHYD9PhYUYBpM--OZds"
