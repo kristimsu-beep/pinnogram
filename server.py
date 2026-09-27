@@ -7862,8 +7862,16 @@ async def ai_voice(
 ):
     try:
         # ==========================================
-        # 1. ПРОВЕРЯЕМ CLOUDFARE
+        # 1. ПРОВЕРЯЕМ НАСТРОЙКИ
         # ==========================================
+
+        if not GROQ_API_KEY:
+            return JSONResponse(
+                {
+                    "error": "GROQ_API_KEY не установлен в Render"
+                },
+                status_code=500
+            )
 
         if not GEMINI_API_KEY:
             return JSONResponse(
@@ -7895,14 +7903,14 @@ async def ai_voice(
                 status_code=400
             )
 
-        # ==========================================
-        # 3. SPEECH → TEXT ЧЕРЕЗ GROQ WHISPER
-        # ==========================================
-
         audio_file = io.BytesIO(audio_bytes)
 
-        # Имя файла помогает API определить формат
+        # Имя файла важно для определения формата
         audio_file.name = audio.filename or "voice.webm"
+
+        # ==========================================
+        # 3. WHISPER: РЕЧЬ → ТЕКСТ
+        # ==========================================
 
         try:
             transcription = groq_client.audio.transcriptions.create(
@@ -7926,7 +7934,10 @@ async def ai_voice(
 
             return JSONResponse(
                 {
-                    "error": f"Ошибка распознавания речи: {str(e)}"
+                    "error": (
+                        "Ошибка распознавания речи: "
+                        f"{str(e)}"
+                    )
                 },
                 status_code=500
             )
@@ -7942,8 +7953,7 @@ async def ai_voice(
         print("USER SAID:", transcript)
 
         # ==========================================
-        # 4. ОПРЕДЕЛЯЕМ, ХОЧЕТ ЛИ ПОЛЬЗОВАТЕЛЬ
-        #    СОЗДАТЬ ИЗОБРАЖЕНИЕ
+        # 4. ПРОВЕРЯЕМ ЗАПРОС НА ИЗОБРАЖЕНИЕ
         # ==========================================
 
         image_keywords = [
@@ -7977,8 +7987,6 @@ async def ai_voice(
 
             image_prompt = transcript
 
-            # Убираем команду из начала prompt,
-            # чтобы модель получила именно описание изображения
             prefixes = [
                 "нарисуй",
                 "нарисовать",
@@ -8002,7 +8010,9 @@ async def ai_voice(
                     break
 
             if not image_prompt:
-                image_prompt = "красивое художественное изображение"
+                image_prompt = (
+                    "красивое художественное изображение"
+                )
 
             print("IMAGE PROMPT:", image_prompt)
 
@@ -8010,7 +8020,10 @@ async def ai_voice(
             # CLOUDFLARE FLUX.1 SCHNELL
             # ======================================
 
-            model = "@cf/black-forest-labs/flux-1-schnell"
+            model = (
+                "@cf/black-forest-labs/"
+                "flux-1-schnell"
+            )
 
             cloudflare_url = (
                 "https://api.cloudflare.com/client/v4/"
@@ -8024,7 +8037,9 @@ async def ai_voice(
             }
 
             headers = {
-                "Authorization": f"Bearer {GEMINI_API_KEY}",
+                "Authorization": (
+                    f"Bearer {GEMINI_API_KEY}"
+                ),
                 "Content-Type": "application/json"
             }
 
@@ -8055,10 +8070,6 @@ async def ai_voice(
                     status_code=500
                 )
 
-            # ======================================
-            # ПРОВЕРЯЕМ ОТВЕТ CLOUDFLARE
-            # ======================================
-
             if response.status_code != 200:
 
                 print(
@@ -8085,8 +8096,7 @@ async def ai_voice(
 
                 print(
                     "CLOUDFLARE JSON ERROR:",
-                    repr(e),
-                    response.text
+                    repr(e)
                 )
 
                 return JSONResponse(
@@ -8116,10 +8126,6 @@ async def ai_voice(
                     status_code=500
                 )
 
-            # ======================================
-            # ПОЛУЧАЕМ BASE64 ИЗОБРАЖЕНИЕ
-            # ======================================
-
             result = cloudflare_data.get(
                 "result",
                 {}
@@ -8147,10 +8153,6 @@ async def ai_voice(
             print(
                 "IMAGE GENERATED SUCCESSFULLY"
             )
-
-            # ======================================
-            # ВОЗВРАЩАЕМ ИЗОБРАЖЕНИЕ В AI.HTML
-            # ======================================
 
             return JSONResponse(
                 {
@@ -8191,26 +8193,51 @@ async def ai_voice(
             }
         )
 
-        # Ограничиваем историю
+        # Не отправляем слишком большую историю
         messages = messages[-20:]
 
+        print(
+            "STARTING GROQ CHAT..."
+        )
+
         # ==========================================
-        # 7. ОТВЕТ GROQ
+        # 7. GROQ GPT-OSS 20B
         # ==========================================
 
         try:
-            completion = groq_client.chat.completions.create(
-                model="openai/gpt-oss-20b",
-                messages=messages,
-                temperature=0.7,
-                max_tokens=1000
+            completion = (
+                groq_client.chat.completions.create(
+                    model="openai/gpt-oss-20b",
+                    messages=messages,
+                    temperature=0.7,
+                    max_completion_tokens=1000,
+                    reasoning_effort="low",
+                    stream=False
+                )
             )
 
+            if not completion.choices:
+                raise Exception(
+                    "Groq не вернул ни одного ответа"
+                )
+
             answer = (
-                completion.choices[0]
+                completion
+                .choices[0]
                 .message
                 .content
-                .strip()
+            )
+
+            if not answer:
+                raise Exception(
+                    "Groq вернул пустой ответ"
+                )
+
+            answer = answer.strip()
+
+            print(
+                "AI ANSWER:",
+                answer
             )
 
         except Exception as e:
@@ -8231,7 +8258,7 @@ async def ai_voice(
             )
 
         # ==========================================
-        # 8. ВОЗВРАЩАЕМ ТЕКСТ
+        # 8. ОТДАЁМ ОТВЕТ FRONTEND
         # ==========================================
 
         return JSONResponse(
@@ -8251,7 +8278,10 @@ async def ai_voice(
 
         return JSONResponse(
             {
-                "error": f"Ошибка AI: {str(e)}"
+                "error": (
+                    "Ошибка AI: "
+                    f"{str(e)}"
+                )
             },
             status_code=500
         )
