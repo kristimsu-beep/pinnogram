@@ -1,5 +1,6 @@
 import asyncio 
 import os, uuid, aiosqlite, uvicorn
+import secrets
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Request, Response, Depends
 from fastapi.responses import FileResponse 
@@ -47,6 +48,14 @@ from google import genai
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+
+# =========================================================
+# CTW3 MODERATION
+# =========================================================
+
+CTW3_MODERATOR_KEY = os.getenv(
+    "CTW3_MODERATOR_KEY"
+)
 
 gemini_client = (
     genai.Client(api_key=GEMINI_API_KEY)
@@ -3920,6 +3929,15 @@ class CTW3Attack(BaseModel):
     longitude: float
     target_object_id: str | None = None
 
+# =========================================================
+# CTW3 MODERATION MODELS
+# =========================================================
+
+class CTW3ModeratorReset(BaseModel):
+
+    target_country_id: str
+
+    moderator_key: str
 
 # =========================================================
 # CTW3 HELPERS
@@ -4985,6 +5003,143 @@ async def ctw3_get_countries(
 
     return {
         "countries": countries
+    }
+
+# =========================================================
+# CTW3 — MODERATOR RESET
+# =========================================================
+
+@app.post("/api/ctw3/mod/reset")
+async def ctw3_moderator_reset(
+    data: CTW3ModeratorReset
+):
+
+    # -----------------------------------------------------
+    # SECRET KEY MUST EXIST ON SERVER
+    # -----------------------------------------------------
+
+    if not CTW3_MODERATOR_KEY:
+
+        raise HTTPException(
+            status_code=503,
+            detail=
+                "CTW3_MODERATOR_KEY не настроен"
+        )
+
+
+    # -----------------------------------------------------
+    # CONSTANT-TIME SECRET COMPARISON
+    # -----------------------------------------------------
+
+    supplied_key =
+        str(data.moderator_key or "")
+
+
+    if not secrets.compare_digest(
+        supplied_key,
+        CTW3_MODERATOR_KEY
+    ):
+
+        raise HTTPException(
+            status_code=403,
+            detail=
+                "Неверный ключ модератора"
+        )
+
+
+    # -----------------------------------------------------
+    # CHECK COUNTRY ID
+    # -----------------------------------------------------
+
+    try:
+
+        target_id =
+            ObjectId(
+                data.target_country_id
+            )
+
+    except Exception:
+
+        raise HTTPException(
+            status_code=400,
+            detail=
+                "Некорректный ID пользователя"
+        )
+
+
+    # -----------------------------------------------------
+    # FIND TARGET
+    # -----------------------------------------------------
+
+    target =
+        await ctw3_countries.find_one(
+            {
+                "_id": target_id
+            }
+        )
+
+
+    if not target:
+
+        raise HTTPException(
+            status_code=404,
+            detail=
+                "Пользователь не найден"
+        )
+
+
+    target_name =
+        target.get(
+            "name",
+            "Без названия"
+        )
+
+
+    target_player_id =
+        target.get(
+            "player_id"
+        )
+
+
+    # -----------------------------------------------------
+    # DELETE CTW3 COUNTRY
+    # -----------------------------------------------------
+
+    result =
+        await ctw3_countries.delete_one(
+            {
+                "_id": target_id
+            }
+        )
+
+
+    if result.deleted_count != 1:
+
+        raise HTTPException(
+            status_code=500,
+            detail=
+                "Не удалось удалить пользователя"
+        )
+
+
+    print(
+        "[CTW3 MODERATION] RESET:",
+        target_name,
+        "| player_id:",
+        target_player_id
+    )
+
+
+    return {
+
+        "status": "success",
+
+        "message":
+            "Пользователь сброшен",
+
+        "country_name":
+            target_name
+
     }
 
 # =========================================================
