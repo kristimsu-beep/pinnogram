@@ -275,6 +275,41 @@ function stopRecording(){
   }
 }
 
+function speakRussian(text) {
+    if (!("speechSynthesis" in window)) {
+        console.warn("SpeechSynthesis не поддерживается");
+        return;
+    }
+
+    speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+
+    utterance.lang = "ru-RU";
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    const voices = speechSynthesis.getVoices();
+
+    const russianVoice = voices.find(
+        voice => voice.lang.toLowerCase().startsWith("ru")
+    );
+
+    if (russianVoice) {
+        utterance.voice = russianVoice;
+    }
+
+    orbButton.classList.add("active", "speaking");
+
+    utterance.onend = () => {
+        orbButton.classList.remove("active", "speaking");
+        orb.style.transform = "scale(1)";
+    };
+
+    speechSynthesis.speak(utterance);
+}
+
 async function sendAudio(blob){
   busy = true;
   setStatus("Обрабатываю голос…");
@@ -297,6 +332,16 @@ async function sendAudio(blob){
 
     const transcript = (data.transcript || "").trim();
     const answer = (data.text || data.answer || "").trim();
+
+    if (answer) {
+    addMessage(answer, "ai");
+    history.push({
+        role: "assistant",
+        content: answer
+    });
+
+    speakRussian(answer);
+    }
 
     if(transcript){
       addMessage(transcript,"user");
