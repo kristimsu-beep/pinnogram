@@ -8148,8 +8148,37 @@ function playGlobalMissileAttack(
             )
         );
 
-    }
+        // После завершения удара обновляем состояние мира.
+        // При перехвате объект уничтожаться не должен.
+        if(
+            !attack.intercepted
+        ){
 
+            setTimeout(
+                async () => {
+
+                    try{
+
+                        await refreshState();
+
+                        await loadCountries();
+
+                    }catch(error){
+
+                        console.error(
+                            "[CTW3 GLOBAL ATTACK REFRESH]",
+                            error
+                        );
+
+                    }
+
+                },
+                300
+            );
+
+        }
+
+    }
 
     requestAnimationFrame(
         frame
