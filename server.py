@@ -7854,547 +7854,403 @@ async def get_ctw3_game_page():
 @app.post("/api/ai/voice")
 async def ai_voice(
     audio: UploadFile = File(...),
-    history: str = Form("[]")
+    history: str = Form("")
 ):
-    # =========================================
-    # ПРОВЕРКА GROQ
-    # =========================================
-
-    if not groq_client:
-        raise HTTPException(
-            status_code=500,
-            detail="GROQ_API_KEY не установлен на Render."
-        )
-
-    # =========================================
-    # 1. ЧИТАЕМ АУДИО
-    # =========================================
-
     try:
+        # ==========================================
+        # 1. ПРОВЕРЯЕМ CLOUDFARE
+        # ==========================================
+
+        if not GEMINI_API_KEY:
+            return JSONResponse(
+                {
+                    "error": "GEMINI_API_KEY не установлен в Render"
+                },
+                status_code=500
+            )
+
+        if not CLOUDFLARE_ACCOUNT_ID:
+            return JSONResponse(
+                {
+                    "error": "CLOUDFLARE_ACCOUNT_ID не установлен в Render"
+                },
+                status_code=500
+            )
+
+        # ==========================================
+        # 2. ПОЛУЧАЕМ АУДИО
+        # ==========================================
+
         audio_bytes = await audio.read()
 
         if not audio_bytes:
-            raise HTTPException(
-                status_code=400,
-                detail="Аудиозапись пустая."
+            return JSONResponse(
+                {
+                    "error": "Аудиофайл пустой"
+                },
+                status_code=400
             )
 
-        print(
-            "AI AUDIO:",
-            len(audio_bytes),
-            "bytes",
-            audio.filename,
-            audio.content_type
-        )
+        # ==========================================
+        # 3. SPEECH → TEXT ЧЕРЕЗ GROQ WHISPER
+        # ==========================================
 
-    except HTTPException:
-        raise
+        audio_file = io.BytesIO(audio_bytes)
 
-    except Exception as e:
-        print(
-            "AI AUDIO READ ERROR:",
-            repr(e)
-        )
-
-        raise HTTPException(
-            status_code=500,
-            detail="Не удалось прочитать аудиозапись."
-        )
-
-    # =========================================
-    # 2. ВРЕМЕННЫЙ ФАЙЛ
-    # =========================================
-
-    temp_path = None
-
-    try:
-        suffix = ".webm"
-
-        if audio.filename and "." in audio.filename:
-            suffix = "." + audio.filename.rsplit(".", 1)[1]
-
-        with tempfile.NamedTemporaryFile(
-            suffix=suffix,
-            delete=False
-        ) as temp:
-            temp.write(audio_bytes)
-            temp_path = temp.name
-
-        print(
-            "AI TEMP FILE:",
-            temp_path
-        )
-
-    except Exception as e:
-        print(
-            "AI TEMP FILE ERROR:",
-            repr(e)
-        )
-
-        raise HTTPException(
-            status_code=500,
-            detail="Не удалось подготовить аудио."
-        )
-
-    # =========================================
-    # 3. GROQ — РАСПОЗНАВАНИЕ РЕЧИ
-    # =========================================
-
-    transcript = ""
-
-    try:
-
-        with open(temp_path, "rb") as audio_file:
-
-            transcription = (
-                groq_client.audio.transcriptions.create(
-                    file=audio_file,
-                    model="whisper-large-v3-turbo",
-                    language="ru",
-                    response_format="json",
-                    temperature=0
-                )
-            )
-
-        transcript = (
-            transcription.text or ""
-        ).strip()
-
-        print(
-            "AI TRANSCRIPT:",
-            repr(transcript)
-        )
-
-    except Exception as e:
-
-        print(
-            "AI TRANSCRIPTION ERROR:",
-            repr(e)
-        )
-
-        # =====================================
-        # FALLBACK — БОЛЕЕ ТОЧНАЯ МОДЕЛЬ
-        # =====================================
+        # Имя файла помогает API определить формат
+        audio_file.name = audio.filename or "voice.webm"
 
         try:
-
-            print(
-                "AI: пробуем whisper-large-v3..."
+            transcription = groq_client.audio.transcriptions.create(
+                file=audio_file,
+                model="whisper-large-v3",
+                language="ru",
+                prompt=(
+                    "Пользователь говорит на русском языке. "
+                    "Точно распознавай русские слова, имена, "
+                    "названия и технические термины. "
+                    "Не переводи речь."
+                ),
+                response_format="json",
+                temperature=0
             )
 
-            with open(temp_path, "rb") as audio_file:
+            transcript = transcription.text.strip()
 
-                transcription = (
-                    groq_client.audio.transcriptions.create(
-                        file=audio_file,
-                        model="whisper-large-v3",
-                        language="ru",
-                        prompt=(
-                            "Пользователь говорит на русском языке. "
-                            "Точно распознавай русские слова, имена, "
-                            "названия и технические термины. "
-                            "Не переводи речь."
-                        ),
-                        response_format="json",
-                        temperature=0
-                    )
-                )
+        except Exception as e:
+            print("WHISPER ERROR:", repr(e))
 
-            transcript = (
-                transcription.text or ""
-            ).strip()
-
-            print(
-                "AI TRANSCRIPT FALLBACK:",
-                repr(transcript)
+            return JSONResponse(
+                {
+                    "error": f"Ошибка распознавания речи: {str(e)}"
+                },
+                status_code=500
             )
 
-        except Exception as e2:
-
-            print(
-                "AI TRANSCRIPTION FALLBACK ERROR:",
-                repr(e2)
+        if not transcript:
+            return JSONResponse(
+                {
+                    "error": "Не удалось распознать речь"
+                },
+                status_code=400
             )
 
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    "Ошибка распознавания речи через Groq. "
-                    "Проверь Render Logs."
-                )
+        print("USER SAID:", transcript)
+
+        # ==========================================
+        # 4. ОПРЕДЕЛЯЕМ, ХОЧЕТ ЛИ ПОЛЬЗОВАТЕЛЬ
+        #    СОЗДАТЬ ИЗОБРАЖЕНИЕ
+        # ==========================================
+
+        image_keywords = [
+            "нарисуй",
+            "нарисовать",
+            "рисунок",
+            "создай изображение",
+            "создай картинку",
+            "создай рисунок",
+            "сгенерируй изображение",
+            "сгенерируй картинку",
+            "сгенерируй рисунок",
+            "сделай изображение",
+            "сделай картинку",
+            "сделай рисунок",
+            "изобрази"
+        ]
+
+        transcript_lower = transcript.lower()
+
+        is_image_request = any(
+            keyword in transcript_lower
+            for keyword in image_keywords
+        )
+
+        # ==========================================
+        # 5. ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЯ
+        # ==========================================
+
+        if is_image_request:
+
+            image_prompt = transcript
+
+            # Убираем команду из начала prompt,
+            # чтобы модель получила именно описание изображения
+            prefixes = [
+                "нарисуй",
+                "нарисовать",
+                "создай изображение",
+                "создай картинку",
+                "создай рисунок",
+                "сгенерируй изображение",
+                "сгенерируй картинку",
+                "сгенерируй рисунок",
+                "сделай изображение",
+                "сделай картинку",
+                "сделай рисунок",
+                "изобрази"
+            ]
+
+            for prefix in prefixes:
+                if image_prompt.lower().startswith(prefix):
+                    image_prompt = image_prompt[
+                        len(prefix):
+                    ].strip()
+                    break
+
+            if not image_prompt:
+                image_prompt = "красивое художественное изображение"
+
+            print("IMAGE PROMPT:", image_prompt)
+
+            # ======================================
+            # CLOUDFLARE FLUX.1 SCHNELL
+            # ======================================
+
+            model = "@cf/black-forest-labs/flux-1-schnell"
+
+            cloudflare_url = (
+                "https://api.cloudflare.com/client/v4/"
+                f"accounts/{CLOUDFLARE_ACCOUNT_ID}/"
+                f"ai/run/{model}"
             )
 
-    finally:
+            payload = {
+                "prompt": image_prompt,
+                "steps": 4
+            }
 
-        if temp_path:
+            headers = {
+                "Authorization": f"Bearer {GEMINI_API_KEY}",
+                "Content-Type": "application/json"
+            }
 
             try:
-                os.remove(temp_path)
+                async with httpx.AsyncClient(
+                    timeout=120.0
+                ) as client:
 
-            except Exception:
-                pass
+                    response = await client.post(
+                        cloudflare_url,
+                        headers=headers,
+                        json=payload
+                    )
 
-    # =========================================
-    # 4. ПРОВЕРЯЕМ РАСПОЗНАННУЮ РЕЧЬ
-    # =========================================
-
-    if not transcript:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Я не услышал речь."
-        )
-
-    # =========================================
-    # 5. КЛЮЧЕВЫЕ СЛОВА ДЛЯ ГЕНЕРАЦИИ
-    # =========================================
-
-    image_keywords = [
-        "нарисуй",
-        "нарисовать",
-        "рисуй",
-        "создай картинку",
-        "создай изображение",
-        "создай рисунок",
-        "сгенерируй картинку",
-        "сгенерируй изображение",
-        "сгенерируй рисунок",
-        "сделай картинку",
-        "сделай изображение",
-        "сделай рисунок",
-        "изобрази",
-        "покажи картинку"
-    ]
-
-    transcript_lower = transcript.lower().strip()
-
-    is_image_request = any(
-        keyword in transcript_lower
-        for keyword in image_keywords
-    )
-
-    # =========================================
-    # 6. ЕСЛИ ЭТО ЗАПРОС НА ИЗОБРАЖЕНИЕ
-    # =========================================
-
-    if is_image_request:
-
-        if not gemini_client:
-
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    "GEMINI_API_KEY не установлен "
-                    "на Render."
-                )
-            )
-
-        # -------------------------------------
-        # Убираем команду из текста,
-        # оставляем непосредственно описание
-        # изображения.
-        # -------------------------------------
-
-        image_prompt = transcript
-
-        import re
-
-        image_prompt = re.sub(
-            r"^\s*(пожалуйста\s*)?",
-            "",
-            image_prompt,
-            flags=re.IGNORECASE
-        )
-
-        image_prompt = re.sub(
-            r"\b(нарисуй|нарисовать|рисуй)\b",
-            "",
-            image_prompt,
-            count=1,
-            flags=re.IGNORECASE
-        )
-
-        image_prompt = re.sub(
-            r"\b(создай\s+(картинку|изображение|рисунок))\b",
-            "",
-            image_prompt,
-            count=1,
-            flags=re.IGNORECASE
-        )
-
-        image_prompt = re.sub(
-            r"\b(сгенерируй\s+(картинку|изображение|рисунок))\b",
-            "",
-            image_prompt,
-            count=1,
-            flags=re.IGNORECASE
-        )
-
-        image_prompt = re.sub(
-            r"\b(сделай\s+(картинку|изображение|рисунок))\b",
-            "",
-            image_prompt,
-            count=1,
-            flags=re.IGNORECASE
-        )
-
-        image_prompt = re.sub(
-            r"^\s*изобрази\b",
-            "",
-            image_prompt,
-            count=1,
-            flags=re.IGNORECASE
-        )
-
-        image_prompt = re.sub(
-            r"^\s*покажи\s+картинку\b",
-            "",
-            image_prompt,
-            count=1,
-            flags=re.IGNORECASE
-        )
-
-        image_prompt = image_prompt.strip(" ,.!?")
-
-        if not image_prompt:
-            image_prompt = (
-                "Красивое художественное изображение "
-                "с выразительной атмосферой."
-            )
-
-        print(
-            "🎨 IMAGE REQUEST:",
-            repr(image_prompt)
-        )
-
-        # -------------------------------------
-        # Gemini Image
-        # -------------------------------------
-
-        try:
-
-            interaction = (
-                gemini_client.interactions.create(
-                    model="gemini-3.1-flash-image",
-                    input=(
-                        "Создай изображение по следующему "
-                        "описанию. Не добавляй объяснений. "
-                        "Описание: "
-                        + image_prompt
-                    ),
-                    response_format={
-                        "type": "image",
-                        "mime_type": "image/jpeg",
-                        "aspect_ratio": "1:1",
-                        "image_size": "1K"
-                    }
-                )
-            )
-
-            generated_image = (
-                interaction.output_image
-            )
-
-            if not generated_image:
-
-                raise Exception(
-                    "Gemini не вернул изображение."
+            except Exception as e:
+                print(
+                    "CLOUDFLARE CONNECTION ERROR:",
+                    repr(e)
                 )
 
-            image_base64 = generated_image.data
+                return JSONResponse(
+                    {
+                        "error": (
+                            "Не удалось подключиться "
+                            f"к Cloudflare: {str(e)}"
+                        )
+                    },
+                    status_code=500
+                )
+
+            # ======================================
+            # ПРОВЕРЯЕМ ОТВЕТ CLOUDFLARE
+            # ======================================
+
+            if response.status_code != 200:
+
+                print(
+                    "CLOUDFLARE ERROR:",
+                    response.status_code,
+                    response.text
+                )
+
+                return JSONResponse(
+                    {
+                        "error": (
+                            "Cloudflare не смог создать "
+                            "изображение: "
+                            f"{response.text}"
+                        )
+                    },
+                    status_code=500
+                )
+
+            try:
+                cloudflare_data = response.json()
+
+            except Exception as e:
+
+                print(
+                    "CLOUDFLARE JSON ERROR:",
+                    repr(e),
+                    response.text
+                )
+
+                return JSONResponse(
+                    {
+                        "error": (
+                            "Cloudflare вернул "
+                            "неверный ответ"
+                        )
+                    },
+                    status_code=500
+                )
+
+            if not cloudflare_data.get("success"):
+
+                print(
+                    "CLOUDFLARE API ERROR:",
+                    cloudflare_data
+                )
+
+                return JSONResponse(
+                    {
+                        "error": (
+                            "Cloudflare вернул "
+                            "ошибку генерации изображения"
+                        )
+                    },
+                    status_code=500
+                )
+
+            # ======================================
+            # ПОЛУЧАЕМ BASE64 ИЗОБРАЖЕНИЕ
+            # ======================================
+
+            result = cloudflare_data.get(
+                "result",
+                {}
+            )
+
+            image_base64 = result.get("image")
+
+            if not image_base64:
+
+                print(
+                    "CLOUDFLARE EMPTY IMAGE:",
+                    cloudflare_data
+                )
+
+                return JSONResponse(
+                    {
+                        "error": (
+                            "Cloudflare не вернул "
+                            "изображение"
+                        )
+                    },
+                    status_code=500
+                )
 
             print(
-                "🎨 IMAGE GENERATED:",
-                len(image_base64),
-                "base64 chars"
+                "IMAGE GENERATED SUCCESSFULLY"
             )
 
-            # ---------------------------------
-            # Не сохраняем картинку на сервере.
-            # Отправляем её прямо в браузер.
-            # ---------------------------------
+            # ======================================
+            # ВОЗВРАЩАЕМ ИЗОБРАЖЕНИЕ В AI.HTML
+            # ======================================
 
-            return JSONResponse({
-                "transcript": transcript,
-                "text": "Готово! Я создал изображение.",
-                "image": (
-                    "data:image/jpeg;base64,"
-                    + image_base64
-                ),
-                "image_prompt": image_prompt,
-                "is_image": True,
-                "audio": None
-            })
+            return JSONResponse(
+                {
+                    "is_image": True,
+                    "image": (
+                        "data:image/jpeg;base64,"
+                        + image_base64
+                    ),
+                    "image_prompt": image_prompt,
+                    "transcript": transcript
+                }
+            )
+
+        # ==========================================
+        # 6. ОБЫЧНЫЙ ТЕКСТОВЫЙ ЗАПРОС
+        # ==========================================
+
+        messages = []
+
+        try:
+            if history:
+                parsed_history = json.loads(history)
+
+                if isinstance(parsed_history, list):
+                    messages.extend(parsed_history)
+
+        except Exception as e:
+            print(
+                "HISTORY PARSE ERROR:",
+                repr(e)
+            )
+
+        # Добавляем новое сообщение пользователя
+        messages.append(
+            {
+                "role": "user",
+                "content": transcript
+            }
+        )
+
+        # Ограничиваем историю
+        messages = messages[-20:]
+
+        # ==========================================
+        # 7. ОТВЕТ GROQ
+        # ==========================================
+
+        try:
+            completion = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1000
+            )
+
+            answer = (
+                completion.choices[0]
+                .message
+                .content
+                .strip()
+            )
 
         except Exception as e:
 
             print(
-                "🎨 GEMINI IMAGE ERROR:",
+                "GROQ CHAT ERROR:",
                 repr(e)
             )
 
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    "Не удалось создать изображение "
-                    "через Gemini: "
-                    + str(e)
-                )
+            return JSONResponse(
+                {
+                    "error": (
+                        "Ошибка получения ответа AI: "
+                        f"{str(e)}"
+                    )
+                },
+                status_code=500
             )
 
-    # =========================================
-    # 7. ОБЫЧНЫЙ ТЕКСТОВЫЙ AI
-    # =========================================
+        # ==========================================
+        # 8. ВОЗВРАЩАЕМ ТЕКСТ
+        # ==========================================
 
-    try:
-
-        old_history = json.loads(history)
-
-        if not isinstance(old_history, list):
-            old_history = []
-
-    except Exception:
-
-        old_history = []
-
-    # =========================================
-    # 8. ФОРМИРУЕМ СООБЩЕНИЯ GROQ
-    # =========================================
-
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "Ты дружелюбный голосовой AI-помощник. "
-                "Отвечай на русском языке, если пользователь "
-                "говорит по-русски. "
-                "Отвечай естественно, кратко и разговорно. "
-                "Не используй Markdown без необходимости."
-            )
-        }
-    ]
-
-    for item in old_history[-10:]:
-
-        if not isinstance(item, dict):
-            continue
-
-        role = item.get("role")
-        content = item.get("content")
-
-        if role in ("user", "assistant") and content:
-
-            messages.append({
-                "role": role,
-                "content": str(content)
-            })
-
-    messages.append({
-        "role": "user",
-        "content": transcript
-    })
-
-    # =========================================
-    # 9. GROQ — ОТВЕТ
-    # =========================================
-
-    answer = ""
-
-    try:
-
-        print(
-            "AI CHAT: openai/gpt-oss-20b"
+        return JSONResponse(
+            {
+                "is_image": False,
+                "transcript": transcript,
+                "response": answer
+            }
         )
-
-        completion = (
-            groq_client.chat.completions.create(
-                model="openai/gpt-oss-20b",
-                messages=messages,
-                temperature=0.6,
-                max_completion_tokens=500
-            )
-        )
-
-        answer = (
-            completion
-            .choices[0]
-            .message
-            .content
-            or ""
-        ).strip()
 
     except Exception as e:
 
         print(
-            "AI CHAT ERROR:",
+            "AI VOICE GENERAL ERROR:",
             repr(e)
         )
 
-        # =====================================
-        # FALLBACK
-        # =====================================
-
-        try:
-
-            print(
-                "AI CHAT FALLBACK: llama-3.1-8b-instant"
-            )
-
-            completion = (
-                groq_client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
-                    messages=messages,
-                    temperature=0.6,
-                    max_tokens=500
-                )
-            )
-
-            answer = (
-                completion
-                .choices[0]
-                .message
-                .content
-                or ""
-            ).strip()
-
-        except Exception as e2:
-
-            print(
-                "AI CHAT FALLBACK ERROR:",
-                repr(e2)
-            )
-
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    "Groq не смог создать ответ. "
-                    "Проверь Render Logs."
-                )
-            )
-
-    if not answer:
-
-        answer = (
-            "Извини, я не смог подготовить ответ."
+        return JSONResponse(
+            {
+                "error": f"Ошибка AI: {str(e)}"
+            },
+            status_code=500
         )
-
-    print(
-        "AI ANSWER:",
-        repr(answer)
-    )
-
-    # =========================================
-    # 10. ОБЫЧНЫЙ ОТВЕТ
-    # =========================================
-
-    return JSONResponse({
-        "transcript": transcript,
-        "text": answer,
-        "image": None,
-        "image_prompt": None,
-        "is_image": False,
-        "audio": None
-    })
 
 # =========================
 # CTW3 — ONLINE MULTIPLAYER
