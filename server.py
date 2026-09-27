@@ -8900,9 +8900,11 @@ async def ctw3_broadcast():
     for player_id in disconnected:
         ctw3_players.pop(player_id, None)
 
- async def ctw3_broadcast_attack_event(
-    attack_data
-):
+# =========================================================
+# CTW3 — GLOBAL MISSILE ATTACK EVENT
+# =========================================================
+
+async def ctw3_broadcast_attack_event(attack_data):
 
     message = json.dumps(
         {
@@ -8913,7 +8915,7 @@ async def ctw3_broadcast():
 
     disconnected = []
 
-    for player_id, websocket in ctw3_players.items():
+    for player_id, websocket in list(ctw3_players.items()):
 
         try:
 
@@ -8921,19 +8923,23 @@ async def ctw3_broadcast():
                 message
             )
 
-        except Exception:
+        except Exception as error:
+
+            print(
+                "[CTW3 WS] Failed to send missile attack:",
+                error
+            )
 
             disconnected.append(
                 player_id
             )
-
 
     for player_id in disconnected:
 
         ctw3_players.pop(
             player_id,
             None
-        )       
+        )
 
 @app.websocket("/ws/ctw3")
 async def ctw3_websocket(websocket: WebSocket):
