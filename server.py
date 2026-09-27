@@ -4438,6 +4438,208 @@ def ctw3_point_in_polygon(
     return inside
 
 # =========================================================
+# CTW3 — WEATHER API
+# =========================================================
+
+@app.get("/api/ctw3/weather")
+async def ctw3_weather(
+    lat: float,
+    lon: float
+):
+    """
+    Возвращает:
+    - текущую погоду;
+    - прогноз на 5 дней с шагом 3 часа.
+
+    OpenWeather API key хранится только на сервере.
+    """
+
+    # -----------------------------------------------------
+    # Проверяем координаты
+    # -----------------------------------------------------
+
+    if not (-90 <= lat <= 90):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid latitude"
+        )
+
+    if not (-180 <= lon <= 180):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid longitude"
+        )
+
+    # -----------------------------------------------------
+    # Получаем API KEY из переменных окружения Render
+    # -----------------------------------------------------
+
+    api_key = os.getenv("OPENWEATHER_API_KEY")
+
+    if not api_key:
+        print(
+            "[CTW3 WEATHER] OPENWEATHER_API_KEY is not configured"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="OPENWEATHER_API_KEY is not configured"
+        )
+
+    # -----------------------------------------------------
+    # OpenWeather endpoints
+    # -----------------------------------------------------
+
+    current_url = (
+        "https://api.openweathermap.org/data/2.5/weather"
+    )
+
+    forecast_url = (
+        "https://api.openweathermap.org/data/2.5/forecast"
+    )
+
+    params = {
+        "lat": lat,
+        "lon": lon,
+        "appid": api_key,
+        "units": "metric",
+        "lang": "ru"
+    }
+
+    try:
+
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            follow_redirects=True
+        ) as client:
+
+            # ---------------------------------------------
+            # Текущая погода
+            # ---------------------------------------------
+
+            current_response = await client.get(
+                current_url,
+                params=params
+            )
+
+            # ---------------------------------------------
+            # Прогноз 5 дней / 3 часа
+            # ---------------------------------------------
+
+            forecast_response = await client.get(
+                forecast_url,
+                params=params
+            )
+
+        # -------------------------------------------------
+        # Проверяем current weather
+        # -------------------------------------------------
+
+        if current_response.status_code != 200:
+
+            print(
+                "[CTW3 WEATHER] Current weather error:",
+                current_response.status_code,
+                current_response.text[:500]
+            )
+
+            raise HTTPException(
+                status_code=current_response.status_code,
+                detail={
+                    "source": "current",
+                    "error": current_response.text[:500]
+                }
+            )
+
+        # -------------------------------------------------
+        # Проверяем forecast
+        # -------------------------------------------------
+
+        if forecast_response.status_code != 200:
+
+            print(
+                "[CTW3 WEATHER] Forecast error:",
+                forecast_response.status_code,
+                forecast_response.text[:500]
+            )
+
+            raise HTTPException(
+                status_code=forecast_response.status_code,
+                detail={
+                    "source": "forecast",
+                    "error": forecast_response.text[:500]
+                }
+            )
+
+        # -------------------------------------------------
+        # JSON
+        # -------------------------------------------------
+
+        current_data = current_response.json()
+        forecast_data = forecast_response.json()
+
+        print(
+            "[CTW3 WEATHER] Weather loaded:",
+            lat,
+            lon
+        )
+
+        # -------------------------------------------------
+        # Возвращаем объединённые данные
+        # -------------------------------------------------
+
+        return {
+            "status": "ok",
+
+            "coordinates": {
+                "latitude": lat,
+                "longitude": lon
+            },
+
+            "current": current_data,
+
+            "forecast": forecast_data
+        }
+
+    except httpx.TimeoutException:
+
+        print(
+            "[CTW3 WEATHER] OpenWeather timeout"
+        )
+
+        raise HTTPException(
+            status_code=504,
+            detail="OpenWeather request timed out"
+        )
+
+    except httpx.RequestError as error:
+
+        print(
+            "[CTW3 WEATHER] OpenWeather connection error:",
+            repr(error)
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to connect to OpenWeather"
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+
+        print(
+            "[CTW3 WEATHER] Unexpected error:",
+            repr(error)
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Weather service error"
+        )
+
+# =========================================================
 # CTW3 — COUNTRY CREATION
 # =========================================================
 
