@@ -4799,6 +4799,44 @@ async function showMapPointInfo(
     longitude,
     objectInfo = null
 ){
+    // =====================================================
+    // NORMALIZE LEAFLET LONGITUDE
+    // worldCopyJump может вернуть longitude > 180
+    // или < -180.
+    // =====================================================
+
+    lat = Number(lat);
+    lng = Number(lng);
+
+    if(
+        !Number.isFinite(lat) ||
+        !Number.isFinite(lng)
+    ){
+
+        console.warn(
+            "[CTW3 POINT INFO] Invalid coordinates:",
+            lat,
+            lng
+        );
+
+        return;
+
+    }
+
+    // Приводим longitude к диапазону -180...180
+    lng =
+        ((lng + 180) % 360 + 360) % 360 - 180;
+
+    // latitude ограничиваем допустимым
+    // диапазоном Web Mercator.
+    lat =
+        Math.max(
+            -85.05112878,
+            Math.min(
+                85.05112878,
+                lat
+            )
+        );
 
     const panel = $("ctw3PointInfo");
 
