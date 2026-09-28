@@ -2333,6 +2333,357 @@ select{
 
 }
 
+/* =========================================================
+   CTW3 — MEASUREMENT PANEL
+========================================================= */
+
+#measurementPanel{
+    position:fixed;
+
+    left:14px;
+    top:50%;
+
+    transform:
+        translateY(-50%)
+        translateX(-100%);
+
+    width:245px;
+
+    z-index:2100;
+
+    padding:0;
+
+    background:
+        rgba(7,10,16,.82);
+
+    border:
+        1px solid
+        rgba(255,255,255,.12);
+
+    border-radius:14px;
+
+    backdrop-filter:
+        blur(16px);
+
+    box-shadow:
+        0 15px 45px
+        rgba(0,0,0,.45);
+
+    transition:
+        transform .22s ease;
+
+    overflow:hidden;
+}
+
+#measurementPanel.open{
+
+    transform:
+        translateY(-50%)
+        translateX(0);
+
+}
+
+
+/* ---------------------------------------------------------
+   HEADER
+--------------------------------------------------------- */
+
+#measurementHeader{
+
+    height:44px;
+
+    display:flex;
+
+    align-items:center;
+    justify-content:space-between;
+
+    padding:
+        0 10px 0 13px;
+
+    border-bottom:
+        1px solid
+        rgba(255,255,255,.08);
+
+}
+
+#measurementTitle{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:8px;
+
+    font-size:12px;
+
+    font-weight:800;
+
+}
+
+#measurementTitle i{
+
+    color:#55d9ff;
+
+}
+
+#measurementToggle{
+
+    width:30px;
+    height:30px;
+
+    border:0;
+    border-radius:8px;
+
+    background:
+        rgba(255,255,255,.07);
+
+    color:#aeb8c5;
+
+    cursor:pointer;
+
+}
+
+#measurementToggle:hover{
+
+    background:
+        rgba(255,255,255,.13);
+
+    color:#fff;
+
+}
+
+
+/* ---------------------------------------------------------
+   BODY
+--------------------------------------------------------- */
+
+#measurementBody{
+
+    padding:10px;
+
+}
+
+.measurementTool{
+
+    width:100%;
+
+    height:38px;
+
+    display:flex;
+
+    align-items:center;
+
+    gap:9px;
+
+    border:0;
+
+    border-radius:9px;
+
+    background:
+        rgba(255,255,255,.055);
+
+    color:#aeb8c5;
+
+    cursor:pointer;
+
+    padding:
+        0 11px;
+
+    margin-bottom:6px;
+
+    font-size:11px;
+
+    font-weight:700;
+
+    text-align:left;
+
+}
+
+.measurementTool:hover{
+
+    background:
+        rgba(255,255,255,.10);
+
+    color:#fff;
+
+}
+
+.measurementTool.active{
+
+    background:
+        rgba(0,145,255,.17);
+
+    color:#fff;
+
+    outline:
+        1px solid
+        rgba(70,190,255,.35);
+
+}
+
+.measurementTool i{
+
+    width:18px;
+
+    text-align:center;
+
+    color:#72dfff;
+
+}
+
+
+/* ---------------------------------------------------------
+   RESULT
+--------------------------------------------------------- */
+
+#measurementResult{
+
+    margin-top:9px;
+
+    padding:10px;
+
+    border-radius:9px;
+
+    background:
+        rgba(255,255,255,.035);
+
+    border:
+        1px solid
+        rgba(255,255,255,.06);
+
+}
+
+#measurementResultLabel{
+
+    color:#687587;
+
+    font-size:9px;
+
+    margin-bottom:4px;
+
+}
+
+#measurementResultValue{
+
+    color:#fff;
+
+    font-size:14px;
+
+    font-weight:850;
+
+}
+
+#measurementHint{
+
+    margin-top:8px;
+
+    color:#697686;
+
+    font-size:9px;
+
+    line-height:1.4;
+
+}
+
+
+/* ---------------------------------------------------------
+   RESET
+--------------------------------------------------------- */
+
+#measurementReset{
+
+    width:100%;
+
+    height:32px;
+
+    margin-top:7px;
+
+    border:0;
+
+    border-radius:8px;
+
+    background:
+        rgba(255,255,255,.045);
+
+    color:#7f8b9a;
+
+    cursor:pointer;
+
+    font-size:9px;
+
+    font-weight:700;
+
+}
+
+#measurementReset:hover{
+
+    background:
+        rgba(255,255,255,.09);
+
+    color:#fff;
+
+}
+
+
+/* ---------------------------------------------------------
+   CLOSED TAB
+--------------------------------------------------------- */
+
+#measurementOpenTab{
+
+    position:fixed;
+
+    left:0;
+    top:50%;
+
+    transform:
+        translateY(-50%);
+
+    z-index:2099;
+
+    width:34px;
+    height:70px;
+
+    border:0;
+
+    border-radius:
+        0 11px 11px 0;
+
+    background:
+        rgba(7,10,16,.82);
+
+    border:
+        1px solid
+        rgba(255,255,255,.12);
+
+    color:#9da8b6;
+
+    cursor:pointer;
+
+    backdrop-filter:
+        blur(14px);
+
+    box-shadow:
+        0 10px 30px
+        rgba(0,0,0,.35);
+
+}
+
+#measurementOpenTab:hover{
+
+    color:#fff;
+
+    background:
+        rgba(12,18,28,.94);
+
+}
+
+#measurementOpenTab i{
+
+    font-size:14px;
+
+}
+
 </style>
 </head>
 
@@ -2340,6 +2691,101 @@ select{
 
 <div id="ctw3Map"></div>
 
+<!-- =========================================================
+     CTW3 MEASUREMENT TOOLS
+========================================================= -->
+
+<button
+    id="measurementOpenTab"
+    onclick="toggleMeasurementPanel()"
+    title="Инструменты измерения"
+>
+    <i class="fa-solid fa-ruler-combined"></i>
+</button>
+
+
+<div id="measurementPanel">
+
+    <div id="measurementHeader">
+
+        <div id="measurementTitle">
+
+            <i class="fa-solid fa-ruler-combined"></i>
+
+            <span>Измерения</span>
+
+        </div>
+
+        <button
+            id="measurementToggle"
+            onclick="toggleMeasurementPanel()"
+            title="Закрыть"
+        >
+            <i class="fa-solid fa-chevron-left"></i>
+        </button>
+
+    </div>
+
+
+    <div id="measurementBody">
+
+        <button
+            id="measurementDistance"
+            class="measurementTool"
+            onclick="startDistanceMeasurement()"
+        >
+
+            <i class="fa-solid fa-ruler"></i>
+
+            <span>Измерить расстояние</span>
+
+        </button>
+
+
+        <button
+            id="measurementArea"
+            class="measurementTool"
+            onclick="startAreaMeasurement()"
+        >
+
+            <i class="fa-solid fa-draw-polygon"></i>
+
+            <span>Измерить площадь</span>
+
+        </button>
+
+
+        <div id="measurementResult">
+
+            <div id="measurementResultLabel">
+                Результат
+            </div>
+
+            <div id="measurementResultValue">
+                —
+            </div>
+
+            <div id="measurementHint">
+                Выберите инструмент.
+            </div>
+
+        </div>
+
+
+        <button
+            id="measurementReset"
+            onclick="resetMeasurement()"
+        >
+
+            <i class="fa-solid fa-rotate-left"></i>
+            &nbsp;
+            Очистить измерение
+
+        </button>
+
+    </div>
+
+</div>
 
 <!-- =========================================================
      TOP BAR
@@ -11255,6 +11701,803 @@ $("moderatorKeyInput")
 
         }
     );
+
+/* =========================================================
+   CTW3 — MEASUREMENT TOOLS
+========================================================= */
+
+let measurementMode = null;
+
+let measurementPoints = [];
+
+let measurementLayer = null;
+
+let measurementMarkers = [];
+
+const MEASUREMENT_STORAGE_KEY =
+    "ctw3_measurement_panel_open";
+
+
+/* =========================================================
+   PANEL
+========================================================= */
+
+function setMeasurementPanel(
+    open
+){
+
+    const panel =
+        $("measurementPanel");
+
+    const tab =
+        $("measurementOpenTab");
+
+    if(!panel || !tab){
+        return;
+    }
+
+
+    panel.classList.toggle(
+        "open",
+        open
+    );
+
+
+    tab.style.display =
+        open
+            ? "none"
+            : "block";
+
+
+    localStorage.setItem(
+        MEASUREMENT_STORAGE_KEY,
+        open
+            ? "1"
+            : "0"
+    );
+
+}
+
+
+function toggleMeasurementPanel(){
+
+    const panel =
+        $("measurementPanel");
+
+    if(!panel){
+        return;
+    }
+
+
+    setMeasurementPanel(
+        !panel.classList.contains(
+            "open"
+        )
+    );
+
+}
+
+
+/* =========================================================
+   INIT PANEL
+========================================================= */
+
+(function(){
+
+    const saved =
+        localStorage.getItem(
+            MEASUREMENT_STORAGE_KEY
+        );
+
+    /*
+       По умолчанию панель закрыта.
+    */
+
+    setMeasurementPanel(
+        saved === "1"
+    );
+
+})();
+
+
+/* =========================================================
+   DISTANCE
+========================================================= */
+
+function startDistanceMeasurement(){
+
+    resetMeasurement();
+
+    measurementMode =
+        "distance";
+
+
+    $("measurementDistance")
+        .classList.add(
+            "active"
+        );
+
+    $("measurementArea")
+        .classList.remove(
+            "active"
+        );
+
+
+    $("measurementResultValue")
+        .textContent =
+            "0 km";
+
+
+    $("measurementHint")
+        .textContent =
+            "Нажмите две точки на карте.";
+
+
+    setStatus(
+        "📏 Измерение расстояния: выберите две точки"
+    );
+
+}
+
+
+/* =========================================================
+   AREA
+========================================================= */
+
+function startAreaMeasurement(){
+
+    resetMeasurement();
+
+    measurementMode =
+        "area";
+
+
+    $("measurementArea")
+        .classList.add(
+            "active"
+        );
+
+    $("measurementDistance")
+        .classList.remove(
+            "active"
+        );
+
+
+    $("measurementResultValue")
+        .textContent =
+            "0 km²";
+
+
+    $("measurementHint")
+        .textContent =
+            "Нажимайте точки на карте. Третья и следующие точки образуют площадь.";
+
+
+    setStatus(
+        "⬡ Измерение площади: добавляйте точки"
+    );
+
+}
+
+
+/* =========================================================
+   MAP CLICK
+========================================================= */
+
+function handleMeasurementClick(
+    e
+){
+
+    if(
+        !measurementMode
+    ){
+
+        return false;
+
+    }
+
+
+    measurementPoints.push(
+        [
+            e.latlng.lat,
+            e.latlng.lng
+        ]
+    );
+
+
+    if(
+        measurementMode ===
+        "distance"
+    ){
+
+        if(
+            measurementPoints.length === 1
+        ){
+
+            renderMeasurement();
+
+            $("measurementHint")
+                .textContent =
+                    "Первая точка установлена. Выберите вторую.";
+
+            return true;
+
+        }
+
+
+        if(
+            measurementPoints.length >= 2
+        ){
+
+            /*
+               Для расстояния нужны
+               только две последние точки.
+            */
+
+            measurementPoints =
+                measurementPoints.slice(
+                    -2
+                );
+
+            renderMeasurement();
+
+            const distance =
+                calculateDistance(
+                    measurementPoints[0],
+                    measurementPoints[1]
+                );
+
+
+            $("measurementResultValue")
+                .textContent =
+                    formatDistance(
+                        distance
+                    );
+
+
+            $("measurementHint")
+                .textContent =
+                    "Нажмите новую точку, чтобы измерить другое расстояние.";
+
+            return true;
+
+        }
+
+    }
+
+
+    if(
+        measurementMode ===
+        "area"
+    ){
+
+        renderMeasurement();
+
+        if(
+            measurementPoints.length >= 3
+        ){
+
+            const area =
+                calculatePolygonArea(
+                    measurementPoints
+                );
+
+
+            $("measurementResultValue")
+                .textContent =
+                    formatArea(
+                        area
+                    );
+
+
+            $("measurementHint")
+                .textContent =
+                    "Точек: "+
+                    measurementPoints.length+
+                    ". Можно продолжать добавлять точки.";
+
+        }
+        else{
+
+            $("measurementHint")
+                .textContent =
+                    "Добавьте ещё "+
+                    (
+                        3 -
+                        measurementPoints.length
+                    )+
+                    " точки.";
+
+        }
+
+        return true;
+
+    }
+
+
+    return false;
+
+}
+
+
+/* =========================================================
+   DISTANCE CALCULATION
+   Haversine
+========================================================= */
+
+function calculateDistance(
+    pointA,
+    pointB
+){
+
+    const R =
+        6371.0088;
+
+
+    const lat1 =
+        pointA[0] *
+        Math.PI /
+        180;
+
+    const lat2 =
+        pointB[0] *
+        Math.PI /
+        180;
+
+
+    const deltaLat =
+        (
+            pointB[0] -
+            pointA[0]
+        ) *
+        Math.PI /
+        180;
+
+
+    const deltaLng =
+        (
+            pointB[1] -
+            pointA[1]
+        ) *
+        Math.PI /
+        180;
+
+
+    const a =
+        Math.sin(
+            deltaLat / 2
+        ) ** 2
+        +
+        Math.cos(lat1) *
+        Math.cos(lat2) *
+        Math.sin(
+            deltaLng / 2
+        ) ** 2;
+
+
+    const c =
+        2 *
+        Math.atan2(
+            Math.sqrt(a),
+            Math.sqrt(
+                1 - a
+            )
+        );
+
+
+    return R * c;
+
+}
+
+
+/* =========================================================
+   POLYGON AREA
+   Spherical Earth
+========================================================= */
+
+function calculatePolygonArea(
+    points
+){
+
+    if(
+        !points ||
+        points.length < 3
+    ){
+
+        return 0;
+
+    }
+
+
+    const R =
+        6371008.8;
+
+
+    let area = 0;
+
+
+    for(
+        let i = 0;
+        i < points.length;
+        i++
+    ){
+
+        const point1 =
+            points[i];
+
+        const point2 =
+            points[
+                (
+                    i + 1
+                ) %
+                points.length
+            ];
+
+
+        const lat1 =
+            point1[0] *
+            Math.PI /
+            180;
+
+        const lat2 =
+            point2[0] *
+            Math.PI /
+            180;
+
+
+        const lng1 =
+            point1[1] *
+            Math.PI /
+            180;
+
+        const lng2 =
+            point2[1] *
+            Math.PI /
+            180;
+
+
+        area +=
+            (
+                lng2 -
+                lng1
+            ) *
+            (
+                2 +
+                Math.sin(lat1) +
+                Math.sin(lat2)
+            );
+
+    }
+
+
+    area =
+        Math.abs(area) *
+        R *
+        R /
+        2;
+
+
+    return area / 1000000;
+
+}
+
+
+/* =========================================================
+   FORMATTING
+========================================================= */
+
+function formatDistance(
+    km
+){
+
+    if(
+        km < 1
+    ){
+
+        return (
+            Math.round(
+                km * 1000
+            ) +
+            " м"
+        );
+
+    }
+
+
+    return (
+        km.toLocaleString(
+            "ru-RU",
+            {
+                maximumFractionDigits:1
+            }
+        ) +
+        " км"
+    );
+
+}
+
+
+function formatArea(
+    km2
+){
+
+    if(
+        km2 < 1
+    ){
+
+        return (
+            km2.toLocaleString(
+                "ru-RU",
+                {
+                    maximumFractionDigits:3
+                }
+            ) +
+            " км²"
+        );
+
+    }
+
+
+    return (
+        km2.toLocaleString(
+            "ru-RU",
+            {
+                maximumFractionDigits:1
+            }
+        ) +
+        " км²"
+    );
+
+}
+
+
+/* =========================================================
+   RENDER
+========================================================= */
+
+function renderMeasurement(){
+
+    if(
+        !map
+    ){
+
+        return;
+
+    }
+
+
+    if(
+        measurementLayer
+    ){
+
+        map.removeLayer(
+            measurementLayer
+        );
+
+        measurementLayer=null;
+
+    }
+
+
+    measurementMarkers.forEach(
+        marker=>{
+
+            if(
+                map.hasLayer(
+                    marker
+                )
+            ){
+
+                map.removeLayer(
+                    marker
+                );
+
+            }
+
+        }
+    );
+
+
+    measurementMarkers=[];
+
+
+    if(
+        measurementPoints.length === 0
+    ){
+
+        return;
+
+    }
+
+
+    /*
+       Точки.
+    */
+
+    measurementPoints.forEach(
+        (
+            point,
+            index
+        )=>{
+
+            const marker =
+                L.circleMarker(
+                    point,
+                    {
+                        radius:5,
+
+                        color:"#ffffff",
+
+                        weight:2,
+
+                        opacity:1,
+
+                        fillColor:"#55d9ff",
+
+                        fillOpacity:.95,
+
+                        interactive:false
+                    }
+                ).addTo(
+                    map
+                );
+
+
+            measurementMarkers.push(
+                marker
+            );
+
+        }
+    );
+
+
+    /*
+       Расстояние.
+    */
+
+    if(
+        measurementMode ===
+        "distance" &&
+        measurementPoints.length >= 2
+    ){
+
+        measurementLayer =
+            L.polyline(
+                measurementPoints,
+                {
+                    color:"#55d9ff",
+
+                    weight:3,
+
+                    opacity:.95,
+
+                    dashArray:"8 6",
+
+                    interactive:false
+                }
+            ).addTo(
+                map
+            );
+
+        return;
+
+    }
+
+
+    /*
+       Площадь.
+    */
+
+    if(
+        measurementMode ===
+        "area" &&
+        measurementPoints.length >= 2
+    ){
+
+        measurementLayer =
+            L.polygon(
+                measurementPoints,
+                {
+                    color:"#55d9ff",
+
+                    weight:2,
+
+                    opacity:.95,
+
+                    fillColor:"#55d9ff",
+
+                    fillOpacity:.16,
+
+                    dashArray:"7 5",
+
+                    interactive:false
+                }
+            ).addTo(
+                map
+            );
+
+    }
+
+}
+
+
+/* =========================================================
+   RESET
+========================================================= */
+
+function resetMeasurement(){
+
+    measurementMode=null;
+
+    measurementPoints=[];
+
+
+    if(
+        measurementLayer
+    ){
+
+        if(
+            map &&
+            map.hasLayer(
+                measurementLayer
+            )
+        ){
+
+            map.removeLayer(
+                measurementLayer
+            );
+
+        }
+
+        measurementLayer=null;
+
+    }
+
+
+    measurementMarkers.forEach(
+        marker=>{
+
+            if(
+                map &&
+                map.hasLayer(
+                    marker
+                )
+            ){
+
+                map.removeLayer(
+                    marker
+                );
+
+            }
+
+        }
+    );
+
+
+    measurementMarkers=[];
+
+
+    $("measurementDistance")
+        ?.classList.remove(
+            "active"
+        );
+
+    $("measurementArea")
+        ?.classList.remove(
+            "active"
+        );
+
+
+    $("measurementResultValue")
+        .textContent =
+            "—";
+
+
+    $("measurementHint")
+        .textContent =
+            "Выберите инструмент.";
+
+}
 
 </script>
 
