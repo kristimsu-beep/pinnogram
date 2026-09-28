@@ -4799,44 +4799,6 @@ async function showMapPointInfo(
     longitude,
     objectInfo = null
 ){
-    // =====================================================
-    // NORMALIZE LEAFLET LONGITUDE
-    // worldCopyJump может вернуть longitude > 180
-    // или < -180.
-    // =====================================================
-
-    lat = Number(lat);
-    lng = Number(lng);
-
-    if(
-        !Number.isFinite(lat) ||
-        !Number.isFinite(lng)
-    ){
-
-        console.warn(
-            "[CTW3 POINT INFO] Invalid coordinates:",
-            lat,
-            lng
-        );
-
-        return;
-
-    }
-
-    // Приводим longitude к диапазону -180...180
-    lng =
-        ((lng + 180) % 360 + 360) % 360 - 180;
-
-    // latitude ограничиваем допустимым
-    // диапазоном Web Mercator.
-    lat =
-        Math.max(
-            -85.05112878,
-            Math.min(
-                85.05112878,
-                lat
-            )
-        );
 
     const panel = $("ctw3PointInfo");
 
@@ -4844,124 +4806,54 @@ async function showMapPointInfo(
 
 
     /* =====================================================
+       NORMALIZE COORDINATES
+       ===================================================== */
+
+    latitude = Number(latitude);
+    longitude = Number(longitude);
+
+    if(
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude)
+    ){
+
+        console.warn(
+            "[CTW3 POINT INFO] Invalid coordinates:",
+            latitude,
+            longitude
+        );
+
+        return;
+
+    }
+
+    /*
+       Leaflet + worldCopyJump может вернуть
+       долготу больше 180 или меньше -180.
+
+       Например:
+
+       298° → -62°
+       299° → -61°
+
+       Для timezone, weather и других API
+       нужна стандартная долгота [-180, 180].
+    */
+
+    longitude =
+        ((longitude + 180) % 360 + 360) % 360 - 180;
+
+
+    /* =====================================================
        SAVE SELECTED POINT
        ===================================================== */
 
     selectedPoint = {
-        latitude:Number(latitude),
-        longitude:Number(longitude)
+        latitude: latitude,
+        longitude: longitude
     };
 
     selectedPointTimezone = null;
-
-
-    /* =====================================================
-       SHOW PANEL
-       ===================================================== */
-
-    panel.classList.add("visible");
-
-
-    /* =====================================================
-       ICON
-       ===================================================== */
-
-    $("ctw3PointIcon").textContent =
-        objectInfo
-            ? getObjectName(objectInfo.type).split(" ")[0]
-            : "📍";
-
-
-    /* =====================================================
-       TITLE
-       ===================================================== */
-
-    $("ctw3PointTitle").textContent =
-        objectInfo
-            ? getObjectName(objectInfo.type).substring(3)
-            : "Точка на карте";
-
-
-    /* =====================================================
-       SUBTITLE
-       ===================================================== */
-    if(objectInfo){
-      
-      const objectCountry =
-            objectInfo.country ||
-            findCountryAtPoint(
-            latitude,
-            longitude
-            );
-      
-      
-      $("ctw3PointSubtitle").textContent =
-            (
-            objectCountry?.flag ||
-            "🏳️"
-            ) +
-            " " +
-            (
-            objectCountry?.name ||
-            "Государство"
-            );
-      
-    }else{
-      
-      $("ctw3PointSubtitle").textContent =
-            "Информация о выбранной точке";
-      
-    }
-
-
-    /* =====================================================
-       COORDINATES
-       ===================================================== */
-
-    $("ctw3PointCoordinates").textContent =
-        Number(latitude).toFixed(4) +
-        "°, " +
-        Number(longitude).toFixed(4) +
-        "°";
-
-
-    /* =====================================================
-       OBJECT
-       ===================================================== */
-
-    $("ctw3PointObject").textContent =
-        objectInfo
-            ? getObjectName(objectInfo.type)
-            : "📍 Свободная точка";
-
-
-    /* =====================================================
-       COUNTRY
-       ===================================================== */
-
-    const pointCountry =
-        objectInfo
-            ? objectInfo.country
-            : findCountryAtPoint(
-                latitude,
-                longitude
-            );
-
-
-    if(pointCountry){
-
-        $("ctw3PointCountry").textContent =
-            (pointCountry.flag || "🏳️") +
-            " " +
-            (pointCountry.name || "Государство");
-
-    }else{
-
-        $("ctw3PointCountry").textContent =
-            "🌐 Нейтральная территория";
-
-    }
-
 
     /* =====================================================
        RESET WEATHER
