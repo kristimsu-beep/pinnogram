@@ -4827,8 +4827,20 @@ async function showMapPointInfo(
 
 
     /* =====================================================
+       SHOW POINT INFORMATION PANEL
+       ===================================================== */
+
+    panel.classList.add(
+        "visible"
+    );
+
+
+    /* =====================================================
        NORMALIZE COORDINATES
        ===================================================== */
+
+    latitude = Number(latitude);
+    longitude = Number(longitude);
 
     latitude = Number(latitude);
     longitude = Number(longitude);
