@@ -12378,10 +12378,14 @@ function renderMeasurement(){
 
 function resetMeasurement(){
 
-    measurementMode=null;
+    measurementMode = null;
 
-    measurementPoints=[];
+    measurementPoints = [];
 
+
+    /* =====================================================
+       REMOVE MEASUREMENT LINE / POLYGON
+    ===================================================== */
 
     if(
         measurementLayer
@@ -12400,13 +12404,17 @@ function resetMeasurement(){
 
         }
 
-        measurementLayer=null;
+        measurementLayer = null;
 
     }
 
 
+    /* =====================================================
+       REMOVE MEASUREMENT POINTS
+    ===================================================== */
+
     measurementMarkers.forEach(
-        marker=>{
+        marker => {
 
             if(
                 map &&
@@ -12425,8 +12433,12 @@ function resetMeasurement(){
     );
 
 
-    measurementMarkers=[];
+    measurementMarkers = [];
 
+
+    /* =====================================================
+       RESET BUTTONS
+    ===================================================== */
 
     $("measurementDistance")
         ?.classList.remove(
@@ -12439,14 +12451,40 @@ function resetMeasurement(){
         );
 
 
-    $("measurementResultValue")
-        .textContent =
+    /* =====================================================
+       RESET RESULT
+    ===================================================== */
+
+    const result =
+        $("measurementResultValue");
+
+    if(result){
+
+        result.textContent =
             "—";
 
+    }
 
-    $("measurementHint")
-        .textContent =
+
+    const hint =
+        $("measurementHint");
+
+    if(hint){
+
+        hint.textContent =
             "Выберите инструмент.";
+
+    }
+
+
+    /* =====================================================
+       IMPORTANT:
+       RESTORE NORMAL MAP CLICK
+    ===================================================== */
+
+    setStatus(
+        ""
+    );
 
 }
 
