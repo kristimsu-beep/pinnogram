@@ -4996,6 +4996,87 @@ async def ctw3_opensky_test():
             "reason": str(error)
         }
 
+
+@app.get("/api/ctw3/adsblol-test")
+async def ctw3_adsblol_test():
+
+    url = (
+        "https://api.adsb.lol/"
+        "v2/point/50/30/250"
+    )
+
+    print(
+        "[CTW3 ADSB.LOL TEST] "
+        "Connecting..."
+    )
+
+    try:
+
+        timeout = httpx.Timeout(
+            connect=10.0,
+            read=15.0,
+            write=10.0,
+            pool=10.0
+        )
+
+        async with httpx.AsyncClient(
+            timeout=timeout
+        ) as client:
+
+            response = await client.get(
+                url
+            )
+
+        print(
+            "[CTW3 ADSB.LOL TEST] "
+            f"HTTP status: "
+            f"{response.status_code}"
+        )
+
+        return {
+            "status": "ok",
+            "http_status": response.status_code,
+            "response": response.json()
+        }
+
+    except httpx.TimeoutException:
+
+        print(
+            "[CTW3 ADSB.LOL TEST] "
+            "TIMEOUT"
+        )
+
+        return {
+            "status": "timeout",
+            "reason":
+                "Render could not receive "
+                "a response from ADSB.lol"
+        }
+
+    except httpx.ConnectError as error:
+
+        print(
+            "[CTW3 ADSB.LOL TEST] "
+            f"CONNECT ERROR: {error}"
+        )
+
+        return {
+            "status": "connection_error",
+            "reason": str(error)
+        }
+
+    except Exception as error:
+
+        print(
+            "[CTW3 ADSB.LOL TEST] "
+            f"ERROR: {error}"
+        )
+
+        return {
+            "status": "error",
+            "reason": str(error)
+        }
+
 # =========================================================
 # CTW3 — REAL AIR TRAFFIC / ADS-B
 # =========================================================
