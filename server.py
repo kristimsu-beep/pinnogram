@@ -4793,6 +4793,91 @@ async def ctw3_get_opensky_token():
             detail="OpenSky authentication failed"
         )
 
+@app.get("/api/ctw3/opensky-api-test")
+async def ctw3_opensky_api_test():
+
+    url = (
+        "https://opensky-network.org/"
+        "api/states/all"
+    )
+
+    print(
+        "[CTW3 OPENSKY API TEST] "
+        "Connecting to OpenSky API..."
+    )
+
+    try:
+
+        timeout = httpx.Timeout(
+            connect=10.0,
+            read=15.0,
+            write=10.0,
+            pool=10.0
+        )
+
+        async with httpx.AsyncClient(
+            timeout=timeout
+        ) as client:
+
+            response = await client.get(
+                url,
+                params={
+                    "lamin": 45,
+                    "lomin": 20,
+                    "lamax": 55,
+                    "lomax": 40
+                }
+            )
+
+        print(
+            "[CTW3 OPENSKY API TEST] "
+            f"HTTP status: {response.status_code}"
+        )
+
+        return {
+            "status": "ok",
+            "http_status": response.status_code,
+            "response": response.text[:1000]
+        }
+
+    except httpx.TimeoutException:
+
+        print(
+            "[CTW3 OPENSKY API TEST] "
+            "TIMEOUT"
+        )
+
+        return {
+            "status": "timeout",
+            "reason":
+                "Render could not receive a response "
+                "from OpenSky API"
+        }
+
+    except httpx.ConnectError as error:
+
+        print(
+            "[CTW3 OPENSKY API TEST] "
+            f"CONNECT ERROR: {error}"
+        )
+
+        return {
+            "status": "connection_error",
+            "reason": str(error)
+        }
+
+    except Exception as error:
+
+        print(
+            "[CTW3 OPENSKY API TEST] "
+            f"ERROR: {error}"
+        )
+
+        return {
+            "status": "error",
+            "reason": str(error)
+        }
+
 @app.get("/api/ctw3/opensky-test")
 async def ctw3_opensky_test():
 
