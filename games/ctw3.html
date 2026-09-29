@@ -11900,44 +11900,63 @@ function handleMeasurementClick(
 
         }
 
-
-        if(
-            measurementPoints.length >= 2
-        ){
-
-            /*
-               Для расстояния нужны
-               только две последние точки.
-            */
-
-            measurementPoints =
-                measurementPoints.slice(
-                    -2
-                );
-
-            renderMeasurement();
-
-            const distance =
-                calculateDistance(
-                    measurementPoints[0],
-                    measurementPoints[1]
-                );
-
-
-            $("measurementResultValue")
-                .textContent =
-                    formatDistance(
-                        distance
-                    );
-
-
-            $("measurementHint")
-                .textContent =
-                    "Нажмите новую точку, чтобы измерить другое расстояние.";
-
-            return true;
-
-        }
+            if(
+                measurementPoints.length >= 2
+            ){
+            
+                /*
+                   Все точки сохраняются.
+            
+                   Например:
+            
+                   точка 1 → точка 2 → точка 3 → точка 4
+            
+                   Ничего не удаляем.
+                */
+            
+                renderMeasurement();
+            
+            
+                /*
+                   Считаем ОБЩУЮ длину
+                   всей линии.
+                */
+            
+                let totalDistance = 0;
+            
+            
+                for(
+                    let i = 1;
+                    i < measurementPoints.length;
+                    i++
+                ){
+            
+                    totalDistance +=
+                        calculateDistance(
+                            measurementPoints[i - 1],
+                            measurementPoints[i]
+                        );
+            
+                }
+            
+            
+                $("measurementResultValue")
+                    .textContent =
+                        formatDistance(
+                            totalDistance
+                        );
+            
+            
+                $("measurementHint")
+                    .textContent =
+                        "Точек: " +
+                        measurementPoints.length +
+                        ". Можно продолжать добавлять точки.";
+            
+            
+                return true;
+            
+            }
 
     }
 
