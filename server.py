@@ -4668,21 +4668,20 @@ async def ctw3_aircraft(
     east: float,
     west: float
 ):
-
     """
-    Возвращает реальные воздушные суда,
-    находящиеся внутри текущего viewport CTW3.
+    CTW3 — получает самолёты только в текущем viewport карты.
 
     Источник:
-    OpenSky Network / ADS-B state vectors.
+    OpenSky Network REST API
+
+    Авторизация не требуется для базового анонимного запроса.
     """
 
-    # -----------------------------------------------------
-    # NORMALIZE INPUT
-    # -----------------------------------------------------
+    # =========================================================
+    # ПРОВЕРКА КООРДИНАТ
+    # =========================================================
 
     try:
-
         north = float(north)
         south = float(south)
         east = float(east)
@@ -4692,91 +4691,85 @@ async def ctw3_aircraft(
 
         raise HTTPException(
             status_code=400,
-            detail="Некорректные координаты viewport"
+            detail="Invalid viewport coordinates"
         )
 
-
-    # -----------------------------------------------------
-    # VALIDATE LATITUDE
-    # -----------------------------------------------------
-
-    if(
-        south < -90 or
-        south > 90 or
-        north < -90 or
-        north > 90
-    ):
-
-        raise HTTPException(
-            status_code=400,
-            detail="Некорректная широта"
-        )
-
+    # =========================================================
+    # НОРМАЛИЗАЦИЯ LATITUDE
+    # =========================================================
 
     if south > north:
 
         south, north = north, south
 
+    # =========================================================
+    # ПРОВЕРКА ДИАПАЗОНА LATITUDE
+    # =========================================================
 
-    # -----------------------------------------------------
-    # VALIDATE LONGITUDE
-    # -----------------------------------------------------
-
-    if(
-        west < -180 or
-        west > 180 or
-        east < -180 or
-        east > 180
+    if (
+        south < -90
+        or north > 90
+        or south >= north
     ):
 
         raise HTTPException(
             status_code=400,
-            detail="Некорректная долгота"
+            detail="Invalid latitude range"
         )
 
+    # =========================================================
+    # НОРМАЛИЗАЦИЯ LONGITUDE
+    # =========================================================
 
-    # -----------------------------------------------------
-    # PREVENT ABSURDLY LARGE REQUESTS
-    # -----------------------------------------------------
-    
-    latitude_span = north - south
-    
-    longitude_span = east - west
-    
-    bbox_area = latitude_span * longitude_span
-    
-    
-    # Большой мировой viewport может стоить
-    # больше API credits у OpenSky.
-    
-    if bbox_area > 1600:
-    
+    if west < -180:
+        west = -180
+
+    if east > 180:
+        east = 180
+
+    if west >= east:
+
         raise HTTPException(
             status_code=400,
-            detail="Viewport слишком большой. Приблизьте карту."
+            detail="Invalid longitude range"
         )
 
+    # =========================================================
+    # ЗАЩИТА ОТ СЛИШКОМ БОЛЬШОГО VIEWPORT
+    # =========================================================
 
-    # -----------------------------------------------------
-    # OPENSKY REQUEST
-    # -----------------------------------------------------
+    latitude_span = north - south
+    longitude_span = east - west
 
-    opensky_url =
+    bbox_area = (
+        latitude_span *
+        longitude_span
+    )
+
+    # Не разрешаем запрашивать практически весь мир
+    # одним запросом.
+
+    if bbox_area > 1600:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Viewport is too large"
+        )
+
+    # =========================================================
+    # OPEN SKY REQUEST
+    # =========================================================
+
+    opensky_url = (
         "https://opensky-network.org/api/states/all"
-
+    )
 
     params = {
-
         "lamin": south,
-
         "lomin": west,
-
         "lamax": north,
-
         "lomax": east
-
     }
-
 
     try:
 
@@ -4784,60 +4777,29 @@ async def ctw3_aircraft(
             timeout=15.0
         ) as client:
 
-            response =
-                await client.get(
-                    opensky_url,
-                    params=params
-                )
-
-
-        # -------------------------------------------------
-        # OPENSKY ERROR
-        # -------------------------------------------------
-
-        if response.status_code != 200:
-
-            print(
-                "[CTW3 AIRCRAFT] OpenSky error:",
-                response.status_code,
-                response.text[:500]
+            response = await client.get(
+                opensky_url,
+                params=params
             )
 
-            raise HTTPException(
-                status_code=response.status_code,
-                detail={
-                    "source": "OpenSky",
-                    "error": response.text[:500]
-                }
-            )
+            response.raise_for_status()
 
+            data = response.json()
 
-        data =
-            response.json()
+        # =====================================================
+        # OPEN SKY STATES
+        # =====================================================
 
-
-        states =
-            data.get(
-                "states",
-                []
-            )
-
+        states = data.get(
+            "states",
+            []
+        )
 
         aircraft = []
 
-
-        # -------------------------------------------------
-        # CONVERT OPENSKY STATE VECTORS
-        # -------------------------------------------------
-
         for state in states:
 
-            if not state:
-
-                continue
-
-
-            # OpenSky state-vector indexes:
+            # OpenSky state vector:
             #
             # 0  = icao24
             # 1  = callsign
@@ -4858,198 +4820,109 @@ async def ctw3_aircraft(
             # 16 = position_source
             # 17 = category
 
-
-            if len(state) < 11:
-
+            if not state:
                 continue
 
-
-            icao24 =
-                state[0]
-
-
-            callsign =
-                (
-                    state[1].strip()
-                    if state[1]
-                    else None
-                )
-
-
-            origin_country =
-                state[2]
-
-
-            longitude =
-                state[5]
-
-
-            latitude =
-                state[6]
-
-
-            altitude =
-                state[7]
-
-
-            on_ground =
-                state[8]
-
-
-            velocity =
-                state[9]
-
-
-            true_track =
-                state[10]
-
-
-            vertical_rate =
-                state[11]
-                if len(state) > 11
-                else None
-
-
-            geo_altitude =
-                state[13]
-                if len(state) > 13
-                else None
-
-
-            squawk =
-                state[14]
-                if len(state) > 14
-                else None
-
-
-            category =
-                state[17]
-                if len(state) > 17
-                else None
-
-
             # -------------------------------------------------
-            # ONLY AIRBORNE AIRCRAFT
+            # КООРДИНАТЫ
             # -------------------------------------------------
 
-            if on_ground:
+            latitude = state[6]
 
-                continue
+            longitude = state[5]
 
-
-            # -------------------------------------------------
-            # VALID POSITION
-            # -------------------------------------------------
-
-            if(
-                latitude is None or
-                longitude is None
+            if (
+                latitude is None
+                or longitude is None
             ):
-
                 continue
 
+            # -------------------------------------------------
+            # САМОЛЁТ НА ЗЕМЛЕ
+            # -------------------------------------------------
+
+            on_ground = state[8]
+
+            if on_ground is True:
+                continue
 
             # -------------------------------------------------
-            # RETURN CLEAN DATA
+            # CALLSIGN
             # -------------------------------------------------
 
-            aircraft.append({
+            callsign = state[1]
 
-                "icao24":
-                    icao24,
+            if callsign:
 
-                "callsign":
-                    callsign,
+                callsign = callsign.strip()
 
-                "origin_country":
-                    origin_country,
+            # -------------------------------------------------
+            # ДОБАВЛЯЕМ САМОЛЁТ
+            # -------------------------------------------------
 
-                "latitude":
-                    latitude,
+            aircraft.append(
+                {
+                    "icao24": state[0],
+                    "callsign": callsign,
+                    "origin_country": state[2],
 
-                "longitude":
-                    longitude,
+                    "latitude": latitude,
+                    "longitude": longitude,
 
-                "altitude":
-                    altitude,
+                    "altitude": state[7],
+                    "geo_altitude": state[13],
 
-                "geo_altitude":
-                    geo_altitude,
+                    "velocity": state[9],
+                    "true_track": state[10],
+                    "vertical_rate": state[11],
 
-                "velocity":
-                    velocity,
+                    "squawk": state[14],
+                    "category": state[17]
+                }
+            )
 
-                "true_track":
-                    true_track,
-
-                "vertical_rate":
-                    vertical_rate,
-
-                "squawk":
-                    squawk,
-
-                "category":
-                    category
-
-            })
-
+        # =====================================================
+        # RESPONSE
+        # =====================================================
 
         print(
-            "[CTW3 AIRCRAFT]",
-            "viewport:",
-            south,
-            west,
-            north,
-            east,
-            "| aircraft:",
-            len(aircraft)
+            "[CTW3 AIRCRAFT] "
+            f"viewport="
+            f"{south},{west} -> {north},{east} | "
+            f"aircraft={len(aircraft)}"
         )
 
-
         return {
+            "status": "ok",
+            "source": "OpenSky Network",
 
-            "status":
-                "ok",
+            "time": data.get(
+                "time"
+            ),
 
-            "source":
-                "OpenSky Network",
-
-            "time":
-                data.get("time"),
-
-            "count":
-                len(aircraft),
+            "count": len(
+                aircraft
+            ),
 
             "viewport": {
-
-                "north":
-                    north,
-
-                "south":
-                    south,
-
-                "east":
-                    east,
-
-                "west":
-                    west
-
+                "north": north,
+                "south": south,
+                "east": east,
+                "west": west
             },
 
-            "aircraft":
-                aircraft
-
+            "aircraft": aircraft
         }
 
-
-    # -----------------------------------------------------
+    # =========================================================
     # TIMEOUT
-    # -----------------------------------------------------
+    # =========================================================
 
     except httpx.TimeoutException:
 
         print(
-            "[CTW3 AIRCRAFT] OpenSky timeout"
+            "[CTW3 AIRCRAFT] "
+            "OpenSky request timeout"
         )
 
         raise HTTPException(
@@ -5057,43 +4930,59 @@ async def ctw3_aircraft(
             detail="OpenSky request timed out"
         )
 
-
-    # -----------------------------------------------------
+    # =========================================================
     # CONNECTION ERROR
-    # -----------------------------------------------------
+    # =========================================================
 
-    except httpx.RequestError as error:
+    except httpx.ConnectError as error:
 
         print(
-            "[CTW3 AIRCRAFT] OpenSky connection error:",
-            repr(error)
+            "[CTW3 AIRCRAFT] "
+            f"OpenSky connection error: {error}"
         )
 
         raise HTTPException(
             status_code=502,
-            detail="Unable to connect to OpenSky"
+            detail="Could not connect to OpenSky"
         )
 
+    # =========================================================
+    # HTTP ERROR
+    # =========================================================
 
-    except HTTPException:
+    except httpx.HTTPStatusError as error:
 
-        raise
+        status_code = (
+            error.response.status_code
+        )
 
+        print(
+            "[CTW3 AIRCRAFT] "
+            f"OpenSky HTTP {status_code}"
+        )
 
-    # -----------------------------------------------------
-    # UNEXPECTED ERROR
-    # -----------------------------------------------------
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "OpenSky returned "
+                f"HTTP {status_code}"
+            )
+        )
+
+    # =========================================================
+    # OTHER ERROR
+    # =========================================================
 
     except Exception as error:
 
         print(
-            "[CTW3 AIRCRAFT] Unexpected error:",
-            repr(error)
+            "[CTW3 AIRCRAFT] "
+            f"Unexpected error: {error}"
         )
 
         raise HTTPException(
             status_code=500,
-            detail="Air traffic service error"
+            detail="Aircraft service error"
         )
 
 # =========================================================
