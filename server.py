@@ -4657,6 +4657,95 @@ async def ctw3_weather(
             detail="Weather service error"
         )
 
+@app.get("/api/ctw3/aircraft-test")
+async def ctw3_aircraft_test():
+
+    test_url = (
+        "https://opensky-network.org/api/states/all"
+    )
+
+    try:
+
+        print(
+            "[CTW3 AIRCRAFT TEST] "
+            "Connecting to OpenSky..."
+        )
+
+        timeout = httpx.Timeout(
+            connect=10.0,
+            read=15.0,
+            write=10.0,
+            pool=10.0
+        )
+
+        async with httpx.AsyncClient(
+            timeout=timeout,
+            follow_redirects=True
+        ) as client:
+
+            response = await client.get(
+                test_url,
+                params={
+                    "lamin": 45,
+                    "lomin": 20,
+                    "lamax": 55,
+                    "lomax": 40
+                },
+                headers={
+                    "User-Agent": "Pinnogram-CTW3/1.0"
+                }
+            )
+
+        print(
+            "[CTW3 AIRCRAFT TEST] "
+            f"HTTP {response.status_code}"
+        )
+
+        return {
+            "status": "ok",
+            "http_status": response.status_code,
+            "content_type": response.headers.get(
+                "content-type"
+            ),
+            "body_preview": response.text[:1000]
+        }
+
+    except httpx.TimeoutException as error:
+
+        print(
+            "[CTW3 AIRCRAFT TEST] "
+            f"TIMEOUT: {error}"
+        )
+
+        raise HTTPException(
+            status_code=504,
+            detail="OpenSky connection timeout"
+        )
+
+    except httpx.ConnectError as error:
+
+        print(
+            "[CTW3 AIRCRAFT TEST] "
+            f"CONNECT ERROR: {error}"
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Could not connect to OpenSky"
+        )
+
+    except Exception as error:
+
+        print(
+            "[CTW3 AIRCRAFT TEST] "
+            f"ERROR: {error}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(error)
+        )
+
 # =========================================================
 # CTW3 — REAL AIR TRAFFIC / ADS-B
 # =========================================================
