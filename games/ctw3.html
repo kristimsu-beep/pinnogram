@@ -12058,32 +12058,57 @@ function handleMeasurementMouseMove(
        DISTANCE PREVIEW
     ===================================================== */
 
-    if(
-        measurementMode === "distance" &&
-        measurementPoints.length >= 1
-    ){
-
-        const distance =
-            calculateDistance(
-                measurementPoints[
-                    measurementPoints.length - 1
-                ],
-                measurementPreviewPoint
-            );
-
-
-        $("measurementResultValue")
-            .textContent =
-                formatDistance(
-                    distance
-                );
-
-
-        $("measurementHint")
-            .textContent =
-                "Нажмите, чтобы зафиксировать вторую точку.";
-
-    }
+      if(
+          measurementMode === "distance" &&
+          measurementPoints.length >= 1
+      ){
+      
+          /*
+             Считаем всю линию:
+      
+             точка 1 → точка 2
+             +
+             точка 2 → точка 3
+             +
+             точка 3 → курсор
+          */
+      
+          const previewPoints = [
+              ...measurementPoints,
+              measurementPreviewPoint
+          ];
+      
+      
+          let totalDistance = 0;
+      
+      
+          for(
+              let i = 1;
+              i < previewPoints.length;
+              i++
+          ){
+      
+              totalDistance +=
+                  calculateDistance(
+                      previewPoints[i - 1],
+                      previewPoints[i]
+                  );
+      
+          }
+      
+      
+          $("measurementResultValue")
+              .textContent =
+                  formatDistance(
+                      totalDistance
+                  );
+      
+      
+          $("measurementHint")
+              .textContent =
+                  "Нажмите, чтобы зафиксировать точку.";
+      
+      }
 
 
     /* =====================================================
