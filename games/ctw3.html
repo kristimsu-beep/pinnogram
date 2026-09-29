@@ -4447,6 +4447,17 @@ function initMap(){
       
           }
       );
+
+      map.on(
+          "mousemove",
+          function(e){
+      
+              handleMeasurementMouseMove(
+                  e
+              );
+      
+          }
+      );
 }
 
 function pointInsideTerritory(
@@ -11677,6 +11688,8 @@ let measurementLayer = null;
 
 let measurementMarkers = [];
 
+let measurementPreviewPoint = null;
+
 const MEASUREMENT_STORAGE_KEY =
     "ctw3_measurement_panel_open";
 
@@ -11982,6 +11995,118 @@ function handleMeasurementClick(
 
 }
 
+/* =========================================================
+   MEASUREMENT MOUSE MOVE
+========================================================= */
+
+function handleMeasurementMouseMove(
+    e
+){
+
+    if(
+        !measurementMode
+    ){
+
+        return;
+
+    }
+
+
+    /*
+       Пока ничего не выбрано —
+       просто ждём первую точку.
+    */
+
+    if(
+        measurementPoints.length === 0
+    ){
+
+        return;
+
+    }
+
+
+    measurementPreviewPoint = [
+        e.latlng.lat,
+        e.latlng.lng
+    ];
+
+
+    renderMeasurement();
+
+
+    /* =====================================================
+       DISTANCE PREVIEW
+    ===================================================== */
+
+    if(
+        measurementMode === "distance" &&
+        measurementPoints.length >= 1
+    ){
+
+        const distance =
+            calculateDistance(
+                measurementPoints[
+                    measurementPoints.length - 1
+                ],
+                measurementPreviewPoint
+            );
+
+
+        $("measurementResultValue")
+            .textContent =
+                formatDistance(
+                    distance
+                );
+
+
+        $("measurementHint")
+            .textContent =
+                "Нажмите, чтобы зафиксировать вторую точку.";
+
+    }
+
+
+    /* =====================================================
+       AREA PREVIEW
+    ===================================================== */
+
+    if(
+        measurementMode === "area"
+    ){
+
+        const previewPoints = [
+            ...measurementPoints,
+            measurementPreviewPoint
+        ];
+
+
+        if(
+            previewPoints.length >= 3
+        ){
+
+            const area =
+                calculatePolygonArea(
+                    previewPoints
+                );
+
+
+            $("measurementResultValue")
+                .textContent =
+                    formatArea(
+                        area
+                    );
+
+
+            $("measurementHint")
+                .textContent =
+                    "Нажмите, чтобы добавить точку.";
+
+        }
+
+    }
+
+}
 
 /* =========================================================
    DISTANCE CALCULATION
@@ -12313,73 +12438,95 @@ function renderMeasurement(){
         }
     );
 
+      /*
+         Расстояние.
+      */
+      
+      if(
+          measurementMode ===
+          "distance" &&
+          measurementPoints.length >= 1
+      ){
+      
+          const previewPoints =
+              measurementPreviewPoint
+                  ? [
+                      ...measurementPoints,
+                      measurementPreviewPoint
+                  ]
+                  : measurementPoints;
+      
+      
+          if(
+              previewPoints.length >= 2
+          ){
+      
+              measurementLayer =
+                  L.polyline(
+                      previewPoints,
+                      {
+                          color:"#55d9ff",
+      
+                          weight:3,
+      
+                          opacity:.95,
+      
+                          dashArray:"8 6",
+      
+                          interactive:false
+                      }
+                  ).addTo(
+                      map
+                  );
+      
+          }
+      
+          return;
+      
+      }
 
-    /*
-       Расстояние.
-    */
-
-    if(
-        measurementMode ===
-        "distance" &&
-        measurementPoints.length >= 2
-    ){
-
-        measurementLayer =
-            L.polyline(
-                measurementPoints,
-                {
-                    color:"#55d9ff",
-
-                    weight:3,
-
-                    opacity:.95,
-
-                    dashArray:"8 6",
-
-                    interactive:false
-                }
-            ).addTo(
-                map
-            );
-
-        return;
-
-    }
-
-
-    /*
-       Площадь.
-    */
-
-    if(
-        measurementMode ===
-        "area" &&
-        measurementPoints.length >= 2
-    ){
-
-        measurementLayer =
-            L.polygon(
-                measurementPoints,
-                {
-                    color:"#55d9ff",
-
-                    weight:2,
-
-                    opacity:.95,
-
-                    fillColor:"#55d9ff",
-
-                    fillOpacity:.16,
-
-                    dashArray:"7 5",
-
-                    interactive:false
-                }
-            ).addTo(
-                map
-            );
-
-    }
+      /*
+         Площадь.
+      */
+      
+      if(
+          measurementMode ===
+          "area" &&
+          measurementPoints.length >= 2
+      ){
+      
+          const previewPoints =
+              measurementPreviewPoint
+                  ? [
+                      ...measurementPoints,
+                      measurementPreviewPoint
+                  ]
+                  : measurementPoints;
+      
+      
+          measurementLayer =
+              L.polygon(
+                  previewPoints,
+                  {
+                      color:"#55d9ff",
+      
+                      weight:2,
+      
+                      opacity:.95,
+      
+                      fillColor:"#55d9ff",
+      
+                      fillOpacity:.16,
+      
+                      dashArray:"7 5",
+      
+                      interactive:false
+                  }
+              ).addTo(
+                  map
+              );
+      
+      }
 
 }
 
@@ -12394,6 +12541,7 @@ function resetMeasurement(){
 
     measurementPoints = [];
 
+    measurementPreviewPoint = null;
 
     /* =====================================================
        REMOVE MEASUREMENT LINE / POLYGON
