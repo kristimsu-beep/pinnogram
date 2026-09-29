@@ -12437,7 +12437,7 @@ function renderMeasurement(){
 
         }
     );
-
+    
       /*
          Расстояние.
       */
@@ -12454,8 +12454,16 @@ function renderMeasurement(){
                       ...measurementPoints,
                       measurementPreviewPoint
                   ]
-                  : measurementPoints;
+                  : [
+                      ...measurementPoints
+                  ];
       
+      
+          /*
+             Рисуем ВСЮ ломаную:
+      
+             точка 1 ─ точка 2 ─ точка 3 ─ курсор
+          */
       
           if(
               previewPoints.length >= 2
@@ -12480,6 +12488,54 @@ function renderMeasurement(){
                   );
       
           }
+      
+      
+          /*
+             Общая длина всех сегментов
+          */
+      
+          let totalDistance = 0;
+      
+      
+          for(
+              let i = 1;
+              i < previewPoints.length;
+              i++
+          ){
+      
+              totalDistance +=
+                  calculateDistance(
+                      previewPoints[i - 1],
+                      previewPoints[i]
+                  );
+      
+          }
+      
+      
+          $("measurementResultValue")
+              .textContent =
+                  formatDistance(
+                      totalDistance
+                  );
+      
+      
+          if(
+              measurementPoints.length === 1
+          ){
+      
+              $("measurementHint")
+                  .textContent =
+                      "Поставьте следующую точку.";
+      
+          }
+          else{
+      
+              $("measurementHint")
+                  .textContent =
+                      "Нажмите, чтобы добавить точку.";
+      
+          }
+      
       
           return;
       
