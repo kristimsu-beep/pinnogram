@@ -4793,6 +4793,124 @@ async def ctw3_get_opensky_token():
             detail="OpenSky authentication failed"
         )
 
+@app.get("/api/ctw3/opensky-test")
+async def ctw3_opensky_test():
+
+    token_url = (
+        "https://auth.opensky-network.org/"
+        "auth/realms/opensky-network/"
+        "protocol/openid-connect/token"
+    )
+
+    client_id = os.getenv(
+        "OPENSKY_CLIENT_ID"
+    )
+
+    client_secret = os.getenv(
+        "OPENSKY_CLIENT_SECRET"
+    )
+
+    print(
+        "[CTW3 OPENSKY TEST] "
+        "Starting authentication test..."
+    )
+
+    print(
+        "[CTW3 OPENSKY TEST] "
+        f"CLIENT_ID exists: "
+        f"{bool(client_id)}"
+    )
+
+    print(
+        "[CTW3 OPENSKY TEST] "
+        f"CLIENT_SECRET exists: "
+        f"{bool(client_secret)}"
+    )
+
+    if not client_id or not client_secret:
+
+        return {
+            "status": "error",
+            "reason": "OpenSky environment variables are missing"
+        }
+
+    try:
+
+        timeout = httpx.Timeout(
+            connect=10.0,
+            read=15.0,
+            write=10.0,
+            pool=10.0
+        )
+
+        async with httpx.AsyncClient(
+            timeout=timeout
+        ) as client:
+
+            response = await client.post(
+                token_url,
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": client_id,
+                    "client_secret": client_secret
+                },
+                headers={
+                    "Content-Type":
+                        "application/x-www-form-urlencoded"
+                }
+            )
+
+        print(
+            "[CTW3 OPENSKY TEST] "
+            f"HTTP status: "
+            f"{response.status_code}"
+        )
+
+        return {
+            "status": "ok",
+            "http_status": response.status_code,
+            "response": response.text[:500]
+        }
+
+    except httpx.TimeoutException:
+
+        print(
+            "[CTW3 OPENSKY TEST] "
+            "TIMEOUT"
+        )
+
+        return {
+            "status": "timeout",
+            "reason": (
+                "Render could not receive a response "
+                "from OpenSky authentication server"
+            )
+        }
+
+    except httpx.ConnectError as error:
+
+        print(
+            "[CTW3 OPENSKY TEST] "
+            f"CONNECT ERROR: {error}"
+        )
+
+        return {
+            "status": "connection_error",
+            "reason": str(error)
+        }
+
+    except Exception as error:
+
+        print(
+            "[CTW3 OPENSKY TEST] "
+            f"ERROR: {error}"
+        )
+
+        return {
+            "status": "error",
+            "reason": str(error)
+        }
+
 # =========================================================
 # CTW3 — REAL AIR TRAFFIC / ADS-B
 # =========================================================
