@@ -5020,11 +5020,16 @@ async def ctw3_adsblol_test():
         )
 
         async with httpx.AsyncClient(
-            timeout=timeout
+            timeout=timeout,
+            follow_redirects=True
         ) as client:
 
             response = await client.get(
-                url
+                url,
+                headers={
+                    "User-Agent":
+                        "Pinnogram-CTW3/1.0"
+                }
             )
 
         print(
@@ -5033,10 +5038,27 @@ async def ctw3_adsblol_test():
             f"{response.status_code}"
         )
 
+        print(
+            "[CTW3 ADSB.LOL TEST] "
+            f"Content-Type: "
+            f"{response.headers.get('content-type')}"
+        )
+
+        print(
+            "[CTW3 ADSB.LOL TEST] "
+            f"Response: "
+            f"{response.text[:1000]}"
+        )
+
         return {
             "status": "ok",
             "http_status": response.status_code,
-            "response": response.json()
+            "content_type":
+                response.headers.get(
+                    "content-type"
+                ),
+            "response":
+                response.text[:2000]
         }
 
     except httpx.TimeoutException:
