@@ -111,35 +111,70 @@ app = FastAPI()
 PARASHAGRAM_GROQ_KEY = os.getenv("PARASHAGRAM_GROQ_KEY")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
-PARASHAGRAM_MONGO_DB = "parashagram_db"
+# =========================================================
+# PARASHAGRAM MONGODB
+# Используем ту же MongoDB и ту же базу,
+# что уже использует основное приложение
+# =========================================================
 
-parashagram_client = None
-parashagram_db = None
 parashagram_users = None
 parashagram_messages = None
 parashagram_sessions = None
 parashagram_ai_history = None
 
-if MONGO_URI:
-    try:
-        parashagram_client = motor.motor_asyncio.AsyncIOMotorClient(
-            MONGO_URI
-        )
+try:
+    # Используем уже существующую MongoDB-базу приложения.
+    # Если у тебя переменная с базой называется иначе,
+    # здесь будет использовано значение MONGODB_DATABASE.
+    parashagram_database_name = os.getenv(
+        "MONGODB_DATABASE",
+        "tlv_production"
+    )
 
-        parashagram_db = parashagram_client[PARASHAGRAM_MONGO_DB]
+    # Используем существующий mongo_client,
+    # который уже создан выше в server.py.
+    if mongo_client is not None:
 
-        parashagram_users = parashagram_db["users"]
-        parashagram_messages = parashagram_db["messages"]
-        parashagram_sessions = parashagram_db["sessions"]
-        parashagram_ai_history = parashagram_db["ai_history"]
+        parashagram_db = mongo_client[
+            parashagram_database_name
+        ]
 
-        print("[PARASHAGRAM] MongoDB initialized")
+        parashagram_users = parashagram_db[
+            "parashagram_users"
+        ]
 
-    except Exception as e:
+        parashagram_messages = parashagram_db[
+            "parashagram_messages"
+        ]
+
+        parashagram_sessions = parashagram_db[
+            "parashagram_sessions"
+        ]
+
+        parashagram_ai_history = parashagram_db[
+            "parashagram_ai_history"
+        ]
+
         print(
-            f"[PARASHAGRAM] MongoDB initialization error: {e}"
+            "[PARASHAGRAM] MongoDB initialized "
+            f"in existing database: {parashagram_database_name}"
         )
 
+    else:
+        print(
+            "[PARASHAGRAM] ERROR: existing mongo_client "
+            "is not initialized"
+        )
+
+except Exception as e:
+    print(
+        f"[PARASHAGRAM] MongoDB initialization error: {e}"
+    )
+
+
+# =========================================================
+# PARASHAGRAM GROQ
+# =========================================================
 
 parashagram_groq = (
     Groq(api_key=PARASHAGRAM_GROQ_KEY)
