@@ -41,6 +41,17 @@ from fastapi.responses import JSONResponse
 from groq import Groq
 from google import genai
 
+import hashlib
+import base64
+import mimetypes
+from pathlib import Path
+
+from fastapi import WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
+from starlette.websockets import WebSocketState
+
+from PIL import Image, ImageOps
+
 # =========================================
 # AI KEYS
 # =========================================
@@ -85,11 +96,55 @@ MUTED_DATA = {}
 # Хранилище активных деморганов: { "username": timestamp_release }
 DEMORGAN_DATA = {}
 
+
 from fastapi.responses import HTMLResponse
 
 MASTER_ADMIN_DISCORD_ID = "1499475142231855260" 
 ALWAYS_BANNED_IP = "192.168.2.55"
 app = FastAPI()
+
+# =========================================================
+# PARASHAGRAM
+# =========================================================
+
+PARASHAGRAM_GROQ_KEY = os.getenv("PARASHAGRAM_GROQ_KEY")
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+
+PARASHAGRAM_MONGO_DB = "parashagram_db"
+
+parashagram_client = None
+parashagram_db = None
+parashagram_users = None
+parashagram_messages = None
+parashagram_sessions = None
+parashagram_ai_history = None
+
+if MONGO_URI:
+    try:
+        parashagram_client = motor.motor_asyncio.AsyncIOMotorClient(
+            MONGO_URI
+        )
+
+        parashagram_db = parashagram_client[PARASHAGRAM_MONGO_DB]
+
+        parashagram_users = parashagram_db["users"]
+        parashagram_messages = parashagram_db["messages"]
+        parashagram_sessions = parashagram_db["sessions"]
+        parashagram_ai_history = parashagram_db["ai_history"]
+
+        print("[PARASHAGRAM] MongoDB initialized")
+
+    except Exception as e:
+        print(
+            f"[PARASHAGRAM] MongoDB initialization error: {e}"
+        )
+
+
+parashagram_groq = (
+    Groq(api_key=PARASHAGRAM_GROQ_KEY)
+    if PARASHAGRAM_GROQ_KEY
+    else None
+)
 
 @app.middleware("http")
 async def global_ip_ban_protection_middleware(request: Request, call_next):
@@ -12898,6 +12953,1066 @@ def init_gozon_db():
         
     conn.commit()
     conn.close()
+
+
+class ParashagramRegister(BaseModel):
+    username: str
+    password: str
+    latitude: float | None = None
+    longitude: float | None = None
+
+
+class ParashagramLogin(BaseModel):
+    username: str
+    password: str
+
+
+class ParashagramLocation(BaseModel):
+    latitude: float
+    longitude: float
+
+
+class ParashagramMessage(BaseModel):
+    text: str
+
+# =========================================================
+# PARASHAGRAM HELPERS
+# =========================================================
+
+def parashagram_hash_password(password: str) -> str:
+    return hashlib.sha256(
+        password.encode("utf-8")
+    ).hexdigest()
+
+
+def parashagram_get_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+
+    if request.client:
+        return request.client.host
+
+    return "0.0.0.0"
+
+
+def parashagram_flag(country_code: str | None) -> str:
+    if not country_code:
+        return "🌐"
+
+    country_code = country_code.upper()
+
+    if len(country_code) != 2:
+        return "🌐"
+
+    return "".join(
+        chr(127397 + ord(char))
+        for char in country_code
+    )
+
+
+async def parashagram_ip_location(ip: str):
+    try:
+        if ip in (
+            "127.0.0.1",
+            "localhost",
+            "::1",
+            "0.0.0.0"
+        ):
+            return {
+                "country_code": None,
+                "country": "Local",
+                "city": "Localhost",
+            }
+
+        async with httpx.AsyncClient(
+            timeout=8
+        ) as client:
+
+            response = await client.get(
+                f"https://ipwho.is/{ip}"
+            )
+
+            if response.status_code != 200:
+                return {}
+
+            data = response.json()
+
+            if not data.get("success", False):
+                return {}
+
+            return {
+                "country_code": data.get("country_code"),
+                "country": data.get("country"),
+                "city": data.get("city"),
+                "latitude": data.get("latitude"),
+                "longitude": data.get("longitude"),
+            }
+
+    except Exception as e:
+        print(
+            f"[PARASHAGRAM] IP location error: {e}"
+        )
+        return {}
+
+
+async def parashagram_weather(
+    latitude: float,
+    longitude: float
+):
+    if not OPENWEATHER_API_KEY:
+        return None
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=10
+        ) as client:
+
+            response = await client.get(
+                "https://api.openweathermap.org/data/2.5/weather",
+                params={
+                    "lat": latitude,
+                    "lon": longitude,
+                    "appid": OPENWEATHER_API_KEY,
+                    "units": "metric",
+                    "lang": "ru",
+                },
+            )
+
+            if response.status_code != 200:
+                return None
+
+            data = response.json()
+
+            weather = (
+                data.get("weather") or [{}]
+            )[0]
+
+            main = data.get("main") or {}
+            wind = data.get("wind") or {}
+
+            return {
+                "temperature": main.get("temp"),
+                "feels_like": main.get("feels_like"),
+                "humidity": main.get("humidity"),
+                "pressure": main.get("pressure"),
+                "description": weather.get(
+                    "description"
+                ),
+                "icon": weather.get("icon"),
+                "wind_speed": wind.get("speed"),
+                "city": data.get("name"),
+            }
+
+    except Exception as e:
+        print(
+            f"[PARASHAGRAM] Weather error: {e}"
+        )
+        return None
+
+
+def parashagram_public_user(user):
+    if not user:
+        return None
+
+    return {
+        "id": str(user.get("_id")),
+        "username": user.get("username"),
+        "country_code": user.get("country_code"),
+        "country": user.get("country"),
+        "city": user.get("city"),
+        "flag": parashagram_flag(
+            user.get("country_code")
+        ),
+        "avatar": user.get("avatar"),
+        "created_at": (
+            user.get("created_at").isoformat()
+            if user.get("created_at")
+            else None
+        ),
+        "latitude": user.get("latitude"),
+        "longitude": user.get("longitude"),
+    }
+
+
+async def parashagram_current_user(
+    request: Request
+):
+    session_id = request.cookies.get(
+        "parashagram_session"
+    )
+
+    if not session_id:
+        return None
+
+    session = await parashagram_sessions.find_one(
+        {
+            "session_id": session_id
+        }
+    )
+
+    if not session:
+        return None
+
+    user = await parashagram_users.find_one(
+        {
+            "_id": ObjectId(
+                session["user_id"]
+            )
+        }
+    )
+
+    return user
+
+@app.get("/parashagram")
+async def parashagram_page():
+    return FileResponse(
+        os.path.join(
+            "games",
+            "parashagram.html"
+        )
+    )
+
+@app.post("/api/parashagram/register")
+async def parashagram_register(
+    data: ParashagramRegister,
+    request: Request,
+    response: Response
+):
+
+    if parashagram_users is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Parashagram MongoDB unavailable"
+        )
+
+    username = data.username.strip()
+
+    if len(username) < 3:
+        raise HTTPException(
+            status_code=400,
+            detail="Никнейм слишком короткий"
+        )
+
+    if len(username) > 32:
+        raise HTTPException(
+            status_code=400,
+            detail="Никнейм слишком длинный"
+        )
+
+    if len(data.password) < 6:
+        raise HTTPException(
+            status_code=400,
+            detail="Пароль должен содержать минимум 6 символов"
+        )
+
+    existing = await parashagram_users.find_one(
+        {
+            "username_lower": username.lower()
+        }
+    )
+
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="Этот никнейм уже занят"
+        )
+
+    ip = parashagram_get_ip(request)
+
+    ip_info = await parashagram_ip_location(ip)
+
+    country_code = ip_info.get(
+        "country_code"
+    )
+
+    country = ip_info.get(
+        "country"
+    )
+
+    city = ip_info.get(
+        "city"
+    )
+
+    latitude = data.latitude
+
+    longitude = data.longitude
+
+    if latitude is None:
+        latitude = ip_info.get(
+            "latitude"
+        )
+
+    if longitude is None:
+        longitude = ip_info.get(
+            "longitude"
+        )
+
+    now = datetime.utcnow()
+
+    user = {
+        "username": username,
+        "username_lower": username.lower(),
+        "password_hash": parashagram_hash_password(
+            data.password
+        ),
+        "country_code": country_code,
+        "country": country,
+        "city": city,
+        "latitude": latitude,
+        "longitude": longitude,
+        "avatar": None,
+        "created_at": now,
+    }
+
+    result = await parashagram_users.insert_one(
+        user
+    )
+
+    session_id = secrets.token_urlsafe(48)
+
+    await parashagram_sessions.insert_one(
+        {
+            "session_id": session_id,
+            "user_id": str(result.inserted_id),
+            "created_at": now,
+        }
+    )
+
+    response.set_cookie(
+        "parashagram_session",
+        session_id,
+        max_age=60 * 60 * 24 * 30,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+    )
+
+    user["_id"] = result.inserted_id
+
+    return {
+        "success": True,
+        "user": parashagram_public_user(
+            user
+        )
+    }
+
+@app.post("/api/parashagram/login")
+async def parashagram_login(
+    data: ParashagramLogin,
+    response: Response
+):
+
+    username = data.username.strip().lower()
+
+    user = await parashagram_users.find_one(
+        {
+            "username_lower": username
+        }
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Неверный никнейм или пароль"
+        )
+
+    password_hash = parashagram_hash_password(
+        data.password
+    )
+
+    if user.get("password_hash") != password_hash:
+        raise HTTPException(
+            status_code=401,
+            detail="Неверный никнейм или пароль"
+        )
+
+    session_id = secrets.token_urlsafe(48)
+
+    await parashagram_sessions.insert_one(
+        {
+            "session_id": session_id,
+            "user_id": str(user["_id"]),
+            "created_at": datetime.utcnow(),
+        }
+    )
+
+    response.set_cookie(
+        "parashagram_session",
+        session_id,
+        max_age=60 * 60 * 24 * 30,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+    )
+
+    return {
+        "success": True,
+        "user": parashagram_public_user(
+            user
+        )
+    }
+
+@app.get("/api/parashagram/me")
+async def parashagram_me(
+    request: Request
+):
+
+    user = await parashagram_current_user(
+        request
+    )
+
+    if not user:
+        return {
+            "authenticated": False
+        }
+
+    return {
+        "authenticated": True,
+        "user": parashagram_public_user(
+            user
+        )
+    }
+
+@app.post("/api/parashagram/logout")
+async def parashagram_logout(
+    request: Request,
+    response: Response
+):
+
+    session_id = request.cookies.get(
+        "parashagram_session"
+    )
+
+    if session_id:
+        await parashagram_sessions.delete_one(
+            {
+                "session_id": session_id
+            }
+        )
+
+    response.delete_cookie(
+        "parashagram_session"
+    )
+
+    return {
+        "success": True
+    }
+
+@app.post("/api/parashagram/avatar")
+async def parashagram_avatar(
+    request: Request,
+    file: UploadFile = File(...)
+):
+
+    user = await parashagram_current_user(
+        request
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Необходимо войти"
+        )
+
+    if not file.content_type:
+        raise HTTPException(
+            status_code=400,
+            detail="Неизвестный формат изображения"
+        )
+
+    allowed = {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+    }
+
+    if file.content_type not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail="Разрешены JPG, PNG, WEBP и GIF"
+        )
+
+    raw = await file.read()
+
+    if len(raw) > 5 * 1024 * 1024:
+        raise HTTPException(
+            status_code=400,
+            detail="Максимальный размер аватара — 5 MB"
+        )
+
+    try:
+        image = Image.open(
+            BytesIO(raw)
+        )
+
+        image = ImageOps.exif_transpose(
+            image
+        )
+
+        image = image.convert("L")
+
+        image.thumbnail(
+            (512, 512),
+            Image.Resampling.LANCZOS
+        )
+
+        output = BytesIO()
+
+        image.save(
+            output,
+            format="JPEG",
+            quality=82,
+            optimize=True
+        )
+
+        encoded = base64.b64encode(
+            output.getvalue()
+        ).decode("ascii")
+
+        avatar = (
+            "data:image/jpeg;base64,"
+            + encoded
+        )
+
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Не удалось обработать изображение"
+        )
+
+    await parashagram_users.update_one(
+        {
+            "_id": user["_id"]
+        },
+        {
+            "$set": {
+                "avatar": avatar
+            }
+        }
+    )
+
+    return {
+        "success": True,
+        "avatar": avatar
+    }
+
+@app.post("/api/parashagram/location")
+async def parashagram_location(
+    data: ParashagramLocation,
+    request: Request
+):
+
+    user = await parashagram_current_user(
+        request
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Необходимо войти"
+        )
+
+    weather = await parashagram_weather(
+        data.latitude,
+        data.longitude
+    )
+
+    city = (
+        weather.get("city")
+        if weather
+        else user.get("city")
+    )
+
+    await parashagram_users.update_one(
+        {
+            "_id": user["_id"]
+        },
+        {
+            "$set": {
+                "latitude": data.latitude,
+                "longitude": data.longitude,
+                "city": city,
+                "location_updated_at":
+                    datetime.utcnow(),
+            }
+        }
+    )
+
+    return {
+        "success": True,
+        "weather": weather,
+        "city": city
+    }
+
+@app.get("/api/parashagram/users/{user_id}")
+async def parashagram_profile(
+    user_id: str
+):
+
+    try:
+        object_id = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid user id"
+        )
+
+    user = await parashagram_users.find_one(
+        {
+            "_id": object_id
+        }
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="Пользователь не найден"
+        )
+
+    public = parashagram_public_user(
+        user
+    )
+
+    if (
+        user.get("latitude") is not None
+        and
+        user.get("longitude") is not None
+    ):
+        public["weather"] = (
+            await parashagram_weather(
+                user["latitude"],
+                user["longitude"]
+            )
+        )
+    else:
+        public["weather"] = None
+
+    return public
+
+@app.get("/api/parashagram/messages")
+async def parashagram_get_messages():
+
+    cursor = (
+        parashagram_messages
+        .find({})
+        .sort("created_at", -1)
+        .limit(100)
+    )
+
+    messages = []
+
+    async for message in cursor:
+
+        author = await parashagram_users.find_one(
+            {
+                "_id": ObjectId(
+                    message["user_id"]
+                )
+            }
+        )
+
+        if not author:
+            continue
+
+        messages.append({
+            "id": str(message["_id"]),
+            "text": message["text"],
+            "created_at":
+                message["created_at"].isoformat(),
+            "author": parashagram_public_user(
+                author
+            ),
+        })
+
+    messages.reverse()
+
+    return {
+        "messages": messages
+    }
+
+
+parashagram_connections = set()
+
+
+@app.websocket("/api/parashagram/ws")
+async def parashagram_websocket(
+    websocket: WebSocket
+):
+
+    await websocket.accept()
+
+    session_id = websocket.cookies.get(
+        "parashagram_session"
+    )
+
+    if not session_id:
+        await websocket.close(
+            code=1008
+        )
+        return
+
+    session = await parashagram_sessions.find_one(
+        {
+            "session_id": session_id
+        }
+    )
+
+    if not session:
+        await websocket.close(
+            code=1008
+        )
+        return
+
+    user = await parashagram_users.find_one(
+        {
+            "_id": ObjectId(
+                session["user_id"]
+            )
+        }
+    )
+
+    if not user:
+        await websocket.close(
+            code=1008
+        )
+        return
+
+    parashagram_connections.add(
+        websocket
+    )
+
+    try:
+
+        while True:
+
+            data = await websocket.receive_json()
+
+            text_value = str(
+                data.get("text", "")
+            ).strip()
+
+            if not text_value:
+                continue
+
+            if len(text_value) > 2000:
+                text_value = text_value[:2000]
+
+            message = {
+                "user_id": str(
+                    user["_id"]
+                ),
+                "text": text_value,
+                "created_at":
+                    datetime.utcnow(),
+            }
+
+            result = (
+                await parashagram_messages.insert_one(
+                    message
+                )
+            )
+
+            payload = {
+                "type": "message",
+                "message": {
+                    "id": str(
+                        result.inserted_id
+                    ),
+                    "text": text_value,
+                    "created_at":
+                        message[
+                            "created_at"
+                        ].isoformat(),
+                    "author":
+                        parashagram_public_user(
+                            user
+                        ),
+                },
+            }
+
+            dead = []
+
+            for connection in parashagram_connections:
+
+                try:
+                    await connection.send_json(
+                        payload
+                    )
+                except Exception:
+                    dead.append(
+                        connection
+                    )
+
+            for connection in dead:
+                parashagram_connections.discard(
+                    connection
+                )
+
+    except WebSocketDisconnect:
+
+        parashagram_connections.discard(
+            websocket
+        )
+
+    except Exception:
+
+        parashagram_connections.discard(
+            websocket
+        )
+
+@app.post("/api/parashagram/ai/voice")
+async def parashagram_ai_voice(
+    request: Request,
+    file: UploadFile = File(...)
+):
+
+    user = await parashagram_current_user(
+        request
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Необходимо войти"
+        )
+
+    if not parashagram_groq:
+        raise HTTPException(
+            status_code=503,
+            detail="PARASHAGRAM_GROQ_KEY не настроен"
+        )
+
+    audio = await file.read()
+
+    if len(audio) > 25 * 1024 * 1024:
+        raise HTTPException(
+            status_code=400,
+            detail="Аудио слишком большое"
+        )
+
+    try:
+
+        transcription = (
+            parashagram_groq.audio.transcriptions.create(
+                file=(
+                    file.filename or "voice.webm",
+                    audio,
+                    file.content_type
+                    or "audio/webm",
+                ),
+                model="whisper-large-v3-turbo",
+                response_format="text",
+            )
+        )
+
+        text_input = str(
+            transcription
+        ).strip()
+
+    except Exception as e:
+
+        print(
+            f"[PARASHAGRAM AI STT] {e}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Ошибка распознавания речи"
+        )
+
+    if not text_input:
+        return {
+            "success": False,
+            "reason": "empty"
+        }
+
+    ai_result = await parashagram_ai_answer(
+        user,
+        text_input
+    )
+
+    return ai_result
+
+async def parashagram_ai_answer(
+    user,
+    text_input: str
+):
+
+    history_cursor = (
+        parashagram_ai_history
+        .find({
+            "user_id": str(
+                user["_id"]
+            )
+        })
+        .sort("created_at", -1)
+        .limit(12)
+    )
+
+    history = []
+
+    async for item in history_cursor:
+        history.append({
+            "role": item["role"],
+            "content": item["content"],
+        })
+
+    history.reverse()
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Ты Parashagram AI — спокойный, "
+                "дружелюбный голосовой ИИ внутри "
+                "темного мессенджера Parashagram. "
+                "Отвечай естественно и кратко. "
+                "Если пользователь пишет на русском — "
+                "отвечай на русском. "
+                "Если на английском — на английском. "
+                "Не начинай каждый ответ с приветствия."
+            ),
+        }
+    ]
+
+    messages.extend(history)
+
+    messages.append({
+        "role": "user",
+        "content": text_input,
+    })
+
+    try:
+
+        completion = (
+            parashagram_groq.chat.completions.create(
+                model="openai/gpt-oss-20b",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=500,
+            )
+        )
+
+        answer = (
+            completion
+            .choices[0]
+            .message
+            .content
+            .strip()
+        )
+
+    except Exception as e:
+
+        print(
+            f"[PARASHAGRAM AI] {e}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Ошибка Parashagram AI"
+        )
+
+    now = datetime.utcnow()
+
+    await parashagram_ai_history.insert_many([
+        {
+            "user_id": str(
+                user["_id"]
+            ),
+            "role": "user",
+            "content": text_input,
+            "created_at": now,
+        },
+        {
+            "user_id": str(
+                user["_id"]
+            ),
+            "role": "assistant",
+            "content": answer,
+            "created_at": now,
+        },
+    ])
+
+    return {
+        "success": True,
+        "text": text_input,
+        "answer": answer,
+    }
+
+@app.post("/api/parashagram/ai/speak")
+async def parashagram_ai_speak(
+    request: Request,
+    data: dict
+):
+
+    user = await parashagram_current_user(
+        request
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=401
+        )
+
+    if not parashagram_groq:
+        raise HTTPException(
+            status_code=503,
+            detail="PARASHAGRAM_GROQ_KEY не настроен"
+        )
+
+    text_value = str(
+        data.get("text", "")
+    ).strip()
+
+    if not text_value:
+        raise HTTPException(
+            status_code=400,
+            detail="Пустой текст"
+        )
+
+    # Orpheus имеет ограничение 200 символов
+    text_value = text_value[:200]
+
+    try:
+
+        audio_response = (
+            parashagram_groq.audio.speech.create(
+                model=(
+                    "canopylabs/"
+                    "orpheus-v1-english"
+                ),
+                voice="hannah",
+                input=text_value,
+                response_format="wav",
+            )
+        )
+
+        audio_bytes = (
+            audio_response.read()
+        )
+
+        return Response(
+            content=audio_bytes,
+            media_type="audio/wav",
+            headers={
+                "Cache-Control":
+                    "no-store"
+            }
+        )
+
+    except Exception as e:
+
+        print(
+            f"[PARASHAGRAM TTS] {e}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Ошибка генерации голоса"
+        )
 
 # Запускаем создание таблиц при инициализации модуля
 init_gozon_db()
