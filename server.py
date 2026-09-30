@@ -59,6 +59,7 @@ from PIL import Image, ImageOps
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID")
+MONGO_URI = os.getenv("MONGO_URI")
 
 # =========================================================
 # CTW3 MODERATION
