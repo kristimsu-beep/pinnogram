@@ -111,66 +111,10 @@ app = FastAPI()
 PARASHAGRAM_GROQ_KEY = os.getenv("PARASHAGRAM_GROQ_KEY")
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
-# =========================================================
-# PARASHAGRAM MONGODB
-# Используем ту же MongoDB и ту же базу,
-# что уже использует основное приложение
-# =========================================================
-
 parashagram_users = None
 parashagram_messages = None
 parashagram_sessions = None
 parashagram_ai_history = None
-
-try:
-    # Используем уже существующую MongoDB-базу приложения.
-    # Если у тебя переменная с базой называется иначе,
-    # здесь будет использовано значение MONGODB_DATABASE.
-    parashagram_database_name = os.getenv(
-        "MONGODB_DATABASE",
-        "tlv_production"
-    )
-
-    # Используем существующий mongo_client,
-    # который уже создан выше в server.py.
-    if mongo_client is not None:
-
-        parashagram_db = mongo_client[
-            parashagram_database_name
-        ]
-
-        parashagram_users = parashagram_db[
-            "parashagram_users"
-        ]
-
-        parashagram_messages = parashagram_db[
-            "parashagram_messages"
-        ]
-
-        parashagram_sessions = parashagram_db[
-            "parashagram_sessions"
-        ]
-
-        parashagram_ai_history = parashagram_db[
-            "parashagram_ai_history"
-        ]
-
-        print(
-            "[PARASHAGRAM] MongoDB initialized "
-            f"in existing database: {parashagram_database_name}"
-        )
-
-    else:
-        print(
-            "[PARASHAGRAM] ERROR: existing mongo_client "
-            "is not initialized"
-        )
-
-except Exception as e:
-    print(
-        f"[PARASHAGRAM] MongoDB initialization error: {e}"
-    )
-
 
 # =========================================================
 # PARASHAGRAM GROQ
@@ -3940,6 +3884,31 @@ try:
     cities_db = mongo_client["ctw2_cities_db"]
     sessions_collection = db["user_sessions"]
 
+    # =====================================================
+    # PARASHAGRAM
+    # =====================================================
+
+    parashagram_db = db
+
+    parashagram_users = parashagram_db[
+        "parashagram_users"
+    ]
+
+    parashagram_messages = parashagram_db[
+        "parashagram_messages"
+    ]
+
+    parashagram_sessions = parashagram_db[
+        "parashagram_sessions"
+    ]
+
+    parashagram_ai_history = parashagram_db[
+        "parashagram_ai_history"
+    ]
+
+    print(
+        "[💬 PARASHAGRAM] MongoDB collections initialized"
+    )
     # =====================================================
     # CTW3
     # =====================================================
