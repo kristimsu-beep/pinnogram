@@ -1,0 +1,2234 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0">
+
+<title>Parashagram</title>
+
+<style>
+
+* {
+    box-sizing: border-box;
+}
+
+:root {
+    --bg: #050507;
+    --panel: #0b0b10;
+    --panel2: #101016;
+    --border: rgba(255,255,255,.08);
+    --text: #f5f5f7;
+    --muted: #777783;
+    --accent: #8b5cf6;
+    --accent2: #4f46e5;
+    --danger: #ef4444;
+}
+
+body {
+    margin: 0;
+    background:
+        radial-gradient(
+            circle at 50% -10%,
+            rgba(124,58,237,.18),
+            transparent 35%
+        ),
+        #050507;
+
+    color: var(--text);
+    font-family:
+        Inter,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+
+    height: 100vh;
+    overflow: hidden;
+}
+
+button,
+input {
+    font: inherit;
+}
+
+button {
+    cursor: pointer;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* =========================================================
+   AUTH
+========================================================= */
+
+#auth {
+    position: fixed;
+    inset: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 20px;
+}
+
+.auth-card {
+    width: min(420px, 100%);
+
+    background:
+        linear-gradient(
+            145deg,
+            rgba(20,20,28,.94),
+            rgba(7,7,10,.96)
+        );
+
+    border: 1px solid var(--border);
+
+    border-radius: 28px;
+
+    padding: 34px;
+
+    box-shadow:
+        0 30px 100px rgba(0,0,0,.7);
+}
+
+.logo {
+    text-align: center;
+
+    font-size: 34px;
+    font-weight: 900;
+
+    letter-spacing: -1px;
+
+    margin-bottom: 8px;
+
+    background:
+        linear-gradient(
+            90deg,
+            #fff,
+            #a78bfa
+        );
+
+    -webkit-background-clip: text;
+    color: transparent;
+}
+
+.subtitle {
+    text-align: center;
+    color: var(--muted);
+    margin-bottom: 30px;
+}
+
+.auth-card input {
+    width: 100%;
+
+    background: #09090d;
+
+    border: 1px solid var(--border);
+
+    color: white;
+
+    padding: 14px 16px;
+
+    border-radius: 14px;
+
+    outline: none;
+
+    margin-bottom: 12px;
+}
+
+.auth-card input:focus {
+    border-color: rgba(139,92,246,.6);
+}
+
+.primary {
+    width: 100%;
+
+    border: 0;
+
+    padding: 14px;
+
+    border-radius: 14px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #7c3aed,
+            #4f46e5
+        );
+
+    color: white;
+
+    font-weight: 700;
+}
+
+.secondary {
+    width: 100%;
+
+    margin-top: 10px;
+
+    border: 1px solid var(--border);
+
+    background: #0b0b10;
+
+    color: white;
+
+    padding: 13px;
+
+    border-radius: 14px;
+}
+
+.auth-switch {
+    margin-top: 20px;
+
+    text-align: center;
+
+    color: var(--muted);
+
+    cursor: pointer;
+}
+
+.avatar-upload {
+    text-align: center;
+    margin: 15px 0;
+}
+
+.avatar-preview {
+    width: 90px;
+    height: 90px;
+
+    border-radius: 50%;
+
+    object-fit: cover;
+
+    background: #111;
+
+    filter: grayscale(1);
+
+    border: 1px solid var(--border);
+}
+
+/* =========================================================
+   APP
+========================================================= */
+
+#app {
+    height: 100vh;
+
+    display: flex;
+    flex-direction: column;
+}
+
+.topbar {
+    height: 82px;
+
+    flex-shrink: 0;
+
+    border-bottom: 1px solid var(--border);
+
+    background:
+        rgba(5,5,8,.82);
+
+    backdrop-filter: blur(20px);
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    padding: 0 24px;
+}
+
+.brand {
+    font-size: 20px;
+    font-weight: 900;
+}
+
+.brand span {
+    color: #a78bfa;
+}
+
+.user-mini {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-mini img {
+    width: 38px;
+    height: 38px;
+
+    border-radius: 50%;
+
+    object-fit: cover;
+
+    filter: grayscale(1);
+}
+
+#aiOrb {
+    position: absolute;
+
+    left: 50%;
+    top: 41px;
+
+    transform:
+        translate(-50%, -50%);
+
+    width: 58px;
+    height: 58px;
+
+    border-radius: 50%;
+
+    border: 0;
+
+    background:
+        radial-gradient(
+            circle at 35% 30%,
+            #ddd6fe,
+            #8b5cf6 28%,
+            #4c1d95 65%,
+            #08050f
+        );
+
+    box-shadow:
+        0 0 25px rgba(139,92,246,.6),
+        0 0 70px rgba(79,70,229,.25);
+
+    transition:
+        transform .08s,
+        box-shadow .08s;
+}
+
+#aiOrb.recording {
+    box-shadow:
+        0 0 30px rgba(239,68,68,.9),
+        0 0 100px rgba(139,92,246,.65);
+}
+
+#aiOrb.processing {
+    animation: orbPulse 1s infinite;
+}
+
+@keyframes orbPulse {
+    0%,100% {
+        transform:
+            translate(-50%, -50%)
+            scale(1);
+    }
+
+    50% {
+        transform:
+            translate(-50%, -50%)
+            scale(1.12);
+    }
+}
+
+/* =========================================================
+   CHAT
+========================================================= */
+
+.chat {
+    flex: 1;
+
+    overflow-y: auto;
+
+    padding: 30px;
+
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.message {
+    display: flex;
+    gap: 12px;
+
+    max-width: 850px;
+}
+
+.message.me {
+    margin-left: auto;
+    flex-direction: row-reverse;
+}
+
+.message-avatar {
+    width: 42px;
+    height: 42px;
+
+    flex: 0 0 42px;
+
+    border-radius: 50%;
+
+    object-fit: cover;
+
+    filter: grayscale(1);
+
+    cursor: pointer;
+
+    border: 1px solid var(--border);
+}
+
+.message-content {
+    max-width: 75%;
+}
+
+.message-head {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+
+    margin-bottom: 5px;
+
+    font-size: 12px;
+}
+
+.username {
+    font-weight: 700;
+}
+
+.flag {
+    font-size: 14px;
+}
+
+.message-time {
+    color: var(--muted);
+}
+
+.bubble {
+    padding: 11px 15px;
+
+    border-radius: 16px;
+
+    background: #111117;
+
+    border: 1px solid var(--border);
+
+    line-height: 1.45;
+
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.message.me .bubble {
+    background:
+        linear-gradient(
+            135deg,
+            rgba(124,58,237,.45),
+            rgba(79,70,229,.3)
+        );
+}
+
+/* =========================================================
+   COMPOSER
+========================================================= */
+
+.composer {
+    padding: 15px 22px 22px;
+
+    border-top: 1px solid var(--border);
+
+    background:
+        rgba(5,5,8,.9);
+
+    display: flex;
+    gap: 10px;
+}
+
+.composer input {
+    flex: 1;
+
+    background: #0d0d12;
+
+    border: 1px solid var(--border);
+
+    color: white;
+
+    padding: 14px 17px;
+
+    border-radius: 16px;
+
+    outline: none;
+}
+
+.send {
+    width: 52px;
+
+    border: 0;
+
+    border-radius: 15px;
+
+    background: #7c3aed;
+
+    color: white;
+
+    font-size: 20px;
+}
+
+/* =========================================================
+   PROFILE
+========================================================= */
+
+#profile {
+    position: fixed;
+
+    right: 20px;
+    top: 100px;
+    bottom: 20px;
+
+    width: 340px;
+
+    background:
+        rgba(11,11,16,.96);
+
+    border: 1px solid var(--border);
+
+    border-radius: 24px;
+
+    backdrop-filter: blur(25px);
+
+    box-shadow:
+        0 30px 80px rgba(0,0,0,.6);
+
+    padding: 28px;
+
+    overflow-y: auto;
+
+    z-index: 20;
+}
+
+.profile-close {
+    float: right;
+
+    border: 0;
+
+    background: transparent;
+
+    color: var(--muted);
+
+    font-size: 24px;
+}
+
+.profile-avatar {
+    display: block;
+
+    width: 130px;
+    height: 130px;
+
+    margin: 25px auto 15px;
+
+    border-radius: 50%;
+
+    object-fit: cover;
+
+    filter: grayscale(1);
+
+    border: 2px solid rgba(255,255,255,.1);
+}
+
+.profile-name {
+    text-align: center;
+
+    font-size: 24px;
+    font-weight: 800;
+}
+
+.profile-country {
+    text-align: center;
+
+    color: var(--muted);
+
+    margin-top: 7px;
+}
+
+.profile-section {
+    margin-top: 25px;
+
+    padding: 16px;
+
+    border-radius: 17px;
+
+    background: #0d0d12;
+
+    border: 1px solid var(--border);
+}
+
+.profile-section-title {
+    font-size: 11px;
+
+    text-transform: uppercase;
+
+    letter-spacing: 1px;
+
+    color: var(--muted);
+
+    margin-bottom: 10px;
+}
+
+.weather-temp {
+    font-size: 30px;
+    font-weight: 800;
+}
+
+.weather-desc {
+    color: #aaa;
+}
+
+/* =========================================================
+   STATUS
+========================================================= */
+
+#status {
+    position: fixed;
+
+    left: 50%;
+    bottom: 95px;
+
+    transform: translateX(-50%);
+
+    background: rgba(10,10,15,.9);
+
+    border: 1px solid var(--border);
+
+    border-radius: 999px;
+
+    padding: 8px 14px;
+
+    color: #aaa;
+
+    font-size: 12px;
+
+    z-index: 50;
+}
+
+</style>
+</head>
+
+<body>
+
+<!-- =======================================================
+     AUTH
+======================================================= -->
+
+<div id="auth">
+
+    <div class="auth-card">
+
+        <div class="logo">
+            PARASHAGRAM
+        </div>
+
+        <div class="subtitle">
+            Dark messenger · voice · AI
+        </div>
+
+        <div id="loginForm">
+
+            <input
+                id="loginUsername"
+                placeholder="Никнейм"
+                maxlength="32"
+            >
+
+            <input
+                id="loginPassword"
+                type="password"
+                placeholder="Пароль"
+            >
+
+            <button
+                class="primary"
+                onclick="login()"
+            >
+                Войти
+            </button>
+
+            <div
+                class="auth-switch"
+                onclick="showRegister()"
+            >
+                Создать аккаунт
+            </div>
+
+        </div>
+
+
+        <div
+            id="registerForm"
+            class="hidden"
+        >
+
+            <input
+                id="registerUsername"
+                placeholder="Никнейм"
+                maxlength="32"
+            >
+
+            <input
+                id="registerPassword"
+                type="password"
+                placeholder="Пароль"
+            >
+
+            <div class="avatar-upload">
+
+                <img
+                    id="avatarPreview"
+                    class="avatar-preview"
+                    src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='90'%3E%3Crect width='100%25' height='100%25' fill='%23111111'/%3E%3C/svg%3E"
+                >
+
+                <br><br>
+
+                <input
+                    id="avatarInput"
+                    type="file"
+                    accept="image/*"
+                    onchange="previewAvatar(event)"
+                >
+
+            </div>
+
+            <button
+                class="secondary"
+                onclick="requestLocation()"
+            >
+                📍 Разрешить местоположение
+            </button>
+
+            <div
+                id="locationStatus"
+                style="
+                    text-align:center;
+                    color:#777;
+                    font-size:12px;
+                    margin:10px 0;
+                "
+            >
+                Местоположение пока не определено
+            </div>
+
+            <button
+                class="primary"
+                onclick="register()"
+            >
+                Зарегистрироваться
+            </button>
+
+            <div
+                class="auth-switch"
+                onclick="showLogin()"
+            >
+                Уже есть аккаунт
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =======================================================
+     APP
+======================================================= -->
+
+<div
+    id="app"
+    class="hidden"
+>
+
+    <header class="topbar">
+
+        <div class="brand">
+            <span>Para</span>shagram
+        </div>
+
+        <button
+            id="aiOrb"
+            onclick="toggleRecording()"
+            title="Голосовой AI"
+        ></button>
+
+        <div class="user-mini">
+
+            <img
+                id="myAvatar"
+            >
+
+            <span id="myName"></span>
+
+            <span id="myFlag"></span>
+
+            <button
+                onclick="logout()"
+                style="
+                    border:0;
+                    background:none;
+                    color:#777;
+                    margin-left:10px;
+                "
+            >
+                ↪
+            </button>
+
+        </div>
+
+    </header>
+
+
+    <main
+        id="chat"
+        class="chat"
+    ></main>
+
+
+    <div id="status">
+        Подключение...
+    </div>
+
+
+    <form
+        class="composer"
+        onsubmit="sendMessage(event)"
+    >
+
+        <input
+            id="messageInput"
+            autocomplete="off"
+            placeholder="Напишите сообщение..."
+        >
+
+        <button
+            class="send"
+            type="submit"
+        >
+            ➤
+        </button>
+
+    </form>
+
+</div>
+
+
+<!-- =======================================================
+     PROFILE
+======================================================= -->
+
+<div
+    id="profile"
+    class="hidden"
+>
+
+    <button
+        class="profile-close"
+        onclick="closeProfile()"
+    >
+        ×
+    </button>
+
+    <img
+        id="profileAvatar"
+        class="profile-avatar"
+    >
+
+    <div
+        id="profileName"
+        class="profile-name"
+    ></div>
+
+    <div
+        id="profileCountry"
+        class="profile-country"
+    ></div>
+
+    <div class="profile-section">
+
+        <div class="profile-section-title">
+            Местоположение
+        </div>
+
+        <div id="profileLocation">
+            —
+        </div>
+
+    </div>
+
+    <div class="profile-section">
+
+        <div class="profile-section-title">
+            Погода
+        </div>
+
+        <div
+            id="profileWeather"
+        >
+            Загрузка...
+        </div>
+
+    </div>
+
+    <div class="profile-section">
+
+        <div class="profile-section-title">
+            В Parashagram с
+        </div>
+
+        <div id="profileDate">
+            —
+        </div>
+
+    </div>
+
+</div>
+
+
+<script>
+
+let currentUser = null;
+let socket = null;
+
+let selectedLocation = {
+    latitude: null,
+    longitude: null
+};
+
+let mediaRecorder = null;
+let audioChunks = [];
+let audioContext = null;
+let analyser = null;
+let animationFrame = null;
+let silenceTimer = null;
+
+let isRecording = false;
+
+
+/* =========================================================
+   AUTH
+========================================================= */
+
+function showRegister() {
+
+    document
+        .getElementById("loginForm")
+        .classList.add("hidden");
+
+    document
+        .getElementById("registerForm")
+        .classList.remove("hidden");
+}
+
+
+function showLogin() {
+
+    document
+        .getElementById("registerForm")
+        .classList.add("hidden");
+
+    document
+        .getElementById("loginForm")
+        .classList.remove("hidden");
+}
+
+
+function previewAvatar(event) {
+
+    const file =
+        event.target.files[0];
+
+    if (!file) return;
+
+    const reader =
+        new FileReader();
+
+    reader.onload = () => {
+
+        document
+            .getElementById("avatarPreview")
+            .src = reader.result;
+
+    };
+
+    reader.readAsDataURL(file);
+}
+
+
+/* =========================================================
+   LOCATION
+========================================================= */
+
+function requestLocation() {
+
+    if (!navigator.geolocation) {
+
+        document
+            .getElementById("locationStatus")
+            .textContent =
+                "Геолокация не поддерживается";
+
+        return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+
+        position => {
+
+            selectedLocation.latitude =
+                position.coords.latitude;
+
+            selectedLocation.longitude =
+                position.coords.longitude;
+
+            document
+                .getElementById("locationStatus")
+                .textContent =
+                "✓ Местоположение получено";
+
+        },
+
+        () => {
+
+            document
+                .getElementById("locationStatus")
+                .textContent =
+                "Используем приблизительное местоположение по IP";
+
+        },
+
+        {
+            enableHighAccuracy: true,
+            timeout: 10000
+        }
+    );
+}
+
+
+/* =========================================================
+   REGISTER
+========================================================= */
+
+async function register() {
+
+    const username =
+        document
+            .getElementById("registerUsername")
+            .value
+            .trim();
+
+    const password =
+        document
+            .getElementById("registerPassword")
+            .value;
+
+    if (!username || !password) {
+
+        alert("Введите никнейм и пароль");
+
+        return;
+    }
+
+    const response =
+        await fetch(
+            "/api/parashagram/register",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                credentials: "include",
+
+                body: JSON.stringify({
+                    username,
+                    password,
+                    latitude:
+                        selectedLocation.latitude,
+                    longitude:
+                        selectedLocation.longitude
+                })
+            }
+        );
+
+    const data =
+        await response.json();
+
+    if (!response.ok) {
+
+        alert(
+            data.detail ||
+            "Ошибка регистрации"
+        );
+
+        return;
+    }
+
+    currentUser = data.user;
+
+    await uploadAvatarIfNeeded();
+
+    enterApp();
+}
+
+
+async function uploadAvatarIfNeeded() {
+
+    const input =
+        document.getElementById(
+            "avatarInput"
+        );
+
+    if (!input.files.length) {
+        return;
+    }
+
+    const form =
+        new FormData();
+
+    form.append(
+        "file",
+        input.files[0]
+    );
+
+    await fetch(
+        "/api/parashagram/avatar",
+        {
+            method: "POST",
+            credentials: "include",
+            body: form
+        }
+    );
+}
+
+
+/* =========================================================
+   LOGIN
+========================================================= */
+
+async function login() {
+
+    const username =
+        document
+            .getElementById("loginUsername")
+            .value
+            .trim();
+
+    const password =
+        document
+            .getElementById("loginPassword")
+            .value;
+
+    const response =
+        await fetch(
+            "/api/parashagram/login",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                credentials: "include",
+
+                body: JSON.stringify({
+                    username,
+                    password
+                })
+            }
+        );
+
+    const data =
+        await response.json();
+
+    if (!response.ok) {
+
+        alert(
+            data.detail ||
+            "Ошибка входа"
+        );
+
+        return;
+    }
+
+    currentUser = data.user;
+
+    enterApp();
+}
+
+
+/* =========================================================
+   START
+========================================================= */
+
+async function boot() {
+
+    const response =
+        await fetch(
+            "/api/parashagram/me",
+            {
+                credentials: "include"
+            }
+        );
+
+    const data =
+        await response.json();
+
+    if (data.authenticated) {
+
+        currentUser =
+            data.user;
+
+        enterApp();
+
+    } else {
+
+        document
+            .getElementById("auth")
+            .classList.remove("hidden");
+
+    }
+}
+
+
+function enterApp() {
+
+    document
+        .getElementById("auth")
+        .classList.add("hidden");
+
+    document
+        .getElementById("app")
+        .classList.remove("hidden");
+
+    document
+        .getElementById("myName")
+        .textContent =
+        currentUser.username;
+
+    document
+        .getElementById("myFlag")
+        .textContent =
+        currentUser.flag;
+
+    document
+        .getElementById("myAvatar")
+        .src =
+        currentUser.avatar ||
+        placeholderAvatar();
+
+    loadMessages();
+
+    connectSocket();
+}
+
+
+/* =========================================================
+   LOGOUT
+========================================================= */
+
+async function logout() {
+
+    await fetch(
+        "/api/parashagram/logout",
+        {
+            method: "POST",
+            credentials: "include"
+        }
+    );
+
+    location.reload();
+}
+
+
+/* =========================================================
+   MESSAGES
+========================================================= */
+
+async function loadMessages() {
+
+    const response =
+        await fetch(
+            "/api/parashagram/messages"
+        );
+
+    const data =
+        await response.json();
+
+    const chat =
+        document.getElementById(
+            "chat"
+        );
+
+    chat.innerHTML = "";
+
+    for (const message of data.messages) {
+
+        renderMessage(message);
+    }
+
+    scrollChat();
+}
+
+
+function renderMessage(message) {
+
+    const chat =
+        document.getElementById(
+            "chat"
+        );
+
+    const div =
+        document.createElement(
+            "div"
+        );
+
+    const isMe =
+        currentUser &&
+        message.author.id ===
+            currentUser.id;
+
+    div.className =
+        "message" +
+        (isMe ? " me" : "");
+
+    const avatar =
+        document.createElement(
+            "img"
+        );
+
+    avatar.className =
+        "message-avatar";
+
+    avatar.src =
+        message.author.avatar ||
+        placeholderAvatar();
+
+    avatar.onclick = () =>
+        openProfile(
+            message.author.id
+        );
+
+    const content =
+        document.createElement(
+            "div"
+        );
+
+    content.className =
+        "message-content";
+
+    const head =
+        document.createElement(
+            "div"
+        );
+
+    head.className =
+        "message-head";
+
+    head.innerHTML = `
+        <span class="username">
+            ${escapeHtml(
+                message.author.username
+            )}
+        </span>
+
+        <span class="flag">
+            ${message.author.flag}
+        </span>
+
+        <span class="message-time">
+            ${formatTime(
+                message.created_at
+            )}
+        </span>
+    `;
+
+    const bubble =
+        document.createElement(
+            "div"
+        );
+
+    bubble.className =
+        "bubble";
+
+    bubble.textContent =
+        message.text;
+
+    content.appendChild(head);
+
+    content.appendChild(
+        bubble
+    );
+
+    div.appendChild(avatar);
+
+    div.appendChild(content);
+
+    chat.appendChild(div);
+}
+
+
+function connectSocket() {
+
+    const protocol =
+        location.protocol === "https:"
+            ? "wss:"
+            : "ws:";
+
+    socket =
+        new WebSocket(
+            protocol +
+            "//" +
+            location.host +
+            "/api/parashagram/ws"
+        );
+
+    socket.onopen = () => {
+
+        document
+            .getElementById("status")
+            .textContent =
+                "● В сети";
+    };
+
+    socket.onclose = () => {
+
+        document
+            .getElementById("status")
+            .textContent =
+                "○ Соединение потеряно";
+
+        setTimeout(
+            connectSocket,
+            3000
+        );
+    };
+
+    socket.onmessage = event => {
+
+        const data =
+            JSON.parse(
+                event.data
+            );
+
+        if (
+            data.type === "message"
+        ) {
+
+            renderMessage(
+                data.message
+            );
+
+            scrollChat();
+        }
+    };
+}
+
+
+function sendMessage(event) {
+
+    event.preventDefault();
+
+    const input =
+        document.getElementById(
+            "messageInput"
+        );
+
+    const text =
+        input.value.trim();
+
+    if (!text) return;
+
+    if (
+        !socket ||
+        socket.readyState !==
+            WebSocket.OPEN
+    ) {
+
+        return;
+    }
+
+    socket.send(
+        JSON.stringify({
+            text
+        })
+    );
+
+    input.value = "";
+}
+
+
+function scrollChat() {
+
+    const chat =
+        document.getElementById(
+            "chat"
+        );
+
+    chat.scrollTop =
+        chat.scrollHeight;
+}
+
+
+/* =========================================================
+   PROFILE
+========================================================= */
+
+async function openProfile(
+    userId
+) {
+
+    const response =
+        await fetch(
+            "/api/parashagram/users/" +
+            userId
+        );
+
+    if (!response.ok) return;
+
+    const user =
+        await response.json();
+
+    document
+        .getElementById(
+            "profile"
+        )
+        .classList.remove(
+            "hidden"
+        );
+
+    document
+        .getElementById(
+            "profileAvatar"
+        )
+        .src =
+            user.avatar ||
+            placeholderAvatar();
+
+    document
+        .getElementById(
+            "profileName"
+        )
+        .textContent =
+            user.username +
+            " " +
+            user.flag;
+
+    document
+        .getElementById(
+            "profileCountry"
+        )
+        .textContent =
+            user.country ||
+            "Страна неизвестна";
+
+    document
+        .getElementById(
+            "profileLocation"
+        )
+        .textContent =
+            [
+                user.city,
+                user.country
+            ]
+            .filter(Boolean)
+            .join(", ") ||
+            "Не указано";
+
+    document
+        .getElementById(
+            "profileDate"
+        )
+        .textContent =
+            formatDate(
+                user.created_at
+            );
+
+    const weather =
+        document.getElementById(
+            "profileWeather"
+        );
+
+    if (
+        user.weather
+    ) {
+
+        weather.innerHTML = `
+            <div class="weather-temp">
+                ${Math.round(
+                    user.weather.temperature
+                )}°C
+            </div>
+
+            <div class="weather-desc">
+                ${escapeHtml(
+                    user.weather.description ||
+                    ""
+                )}
+            </div>
+
+            <div style="
+                margin-top:8px;
+                color:#777;
+                font-size:12px;
+            ">
+                Влажность:
+                ${user.weather.humidity ?? "—"}%
+
+                <br>
+
+                Ветер:
+                ${user.weather.wind_speed ?? "—"} м/с
+            </div>
+        `;
+
+    } else {
+
+        weather.textContent =
+            "Погода недоступна";
+    }
+}
+
+
+function closeProfile() {
+
+    document
+        .getElementById(
+            "profile"
+        )
+        .classList.add(
+            "hidden"
+        );
+}
+
+
+/* =========================================================
+   VOICE AI
+========================================================= */
+
+async function toggleRecording() {
+
+    if (isRecording) {
+
+        stopRecording();
+
+    } else {
+
+        await startRecording();
+    }
+}
+
+
+async function startRecording() {
+
+    try {
+
+        const stream =
+            await navigator.mediaDevices
+                .getUserMedia({
+                    audio: true
+                });
+
+        audioChunks = [];
+
+        mediaRecorder =
+            new MediaRecorder(
+                stream
+            );
+
+        audioContext =
+            new AudioContext();
+
+        const source =
+            audioContext
+                .createMediaStreamSource(
+                    stream
+                );
+
+        analyser =
+            audioContext
+                .createAnalyser();
+
+        analyser.fftSize =
+            256;
+
+        source.connect(
+            analyser
+        );
+
+        mediaRecorder.ondataavailable =
+            event => {
+
+                if (
+                    event.data.size > 0
+                ) {
+
+                    audioChunks.push(
+                        event.data
+                    );
+                }
+            };
+
+        mediaRecorder.onstop =
+            processVoice;
+
+        mediaRecorder.start();
+
+        isRecording = true;
+
+        const orb =
+            document.getElementById(
+                "aiOrb"
+            );
+
+        orb.classList.add(
+            "recording"
+        );
+
+        document
+            .getElementById(
+                "status"
+            )
+            .textContent =
+                "🎙 Слушаю...";
+
+        animateOrb();
+
+        startSilenceDetection();
+
+    } catch (error) {
+
+        alert(
+            "Не удалось получить доступ к микрофону"
+        );
+    }
+}
+
+
+function stopRecording() {
+
+    if (!mediaRecorder) {
+        return;
+    }
+
+    isRecording = false;
+
+    clearTimeout(
+        silenceTimer
+    );
+
+    mediaRecorder.stop();
+
+    mediaRecorder
+        .stream
+        .getTracks()
+        .forEach(
+            track =>
+                track.stop()
+        );
+
+    if (animationFrame) {
+
+        cancelAnimationFrame(
+            animationFrame
+        );
+    }
+
+    const orb =
+        document.getElementById(
+            "aiOrb"
+        );
+
+    orb.classList.remove(
+        "recording"
+    );
+
+    orb.classList.add(
+        "processing"
+    );
+
+    document
+        .getElementById(
+            "status"
+        )
+        .textContent =
+            "ИИ обрабатывает голос...";
+}
+
+
+function animateOrb() {
+
+    if (!isRecording) {
+        return;
+    }
+
+    const data =
+        new Uint8Array(
+            analyser.frequencyBinCount
+        );
+
+    analyser.getByteFrequencyData(
+        data
+    );
+
+    let total = 0;
+
+    for (
+        let i = 0;
+        i < data.length;
+        i++
+    ) {
+
+        total += data[i];
+    }
+
+    const average =
+        total / data.length;
+
+    const scale =
+        1 +
+        Math.min(
+            average / 120,
+            .65
+        );
+
+    const orb =
+        document.getElementById(
+            "aiOrb"
+        );
+
+    orb.style.transform =
+        `translate(-50%, -50%) scale(${scale})`;
+
+    animationFrame =
+        requestAnimationFrame(
+            animateOrb
+        );
+}
+
+
+function startSilenceDetection() {
+
+    let silenceStart = null;
+
+    const check = () => {
+
+        if (!isRecording) {
+            return;
+        }
+
+        const data =
+            new Uint8Array(
+                analyser.frequencyBinCount
+            );
+
+        analyser.getByteFrequencyData(
+            data
+        );
+
+        let total = 0;
+
+        for (
+            let i = 0;
+            i < data.length;
+            i++
+        ) {
+
+            total += data[i];
+        }
+
+        const average =
+            total / data.length;
+
+        if (average < 7) {
+
+            if (!silenceStart) {
+
+                silenceStart =
+                    Date.now();
+            }
+
+            if (
+                Date.now() -
+                silenceStart >
+                1800
+            ) {
+
+                stopRecording();
+
+                return;
+            }
+
+        } else {
+
+            silenceStart = null;
+        }
+
+        setTimeout(
+            check,
+            100
+        );
+    };
+
+    check();
+}
+
+
+async function processVoice() {
+
+    const blob =
+        new Blob(
+            audioChunks,
+            {
+                type:
+                    mediaRecorder.mimeType ||
+                    "audio/webm"
+            }
+        );
+
+    const form =
+        new FormData();
+
+    form.append(
+        "file",
+        blob,
+        "voice.webm"
+    );
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/parashagram/ai/voice",
+                {
+                    method: "POST",
+                    credentials: "include",
+                    body: form
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if (
+            !response.ok
+        ) {
+
+            throw new Error(
+                data.detail ||
+                "AI error"
+            );
+        }
+
+        if (
+            data.success
+        ) {
+
+            addAIMessage(
+                data.text,
+                false
+            );
+
+            addAIMessage(
+                data.answer,
+                true
+            );
+
+            await speakAI(
+                data.answer
+            );
+        }
+
+    } catch (error) {
+
+        console.error(error);
+
+        document
+            .getElementById(
+                "status"
+            )
+            .textContent =
+                "Ошибка AI";
+
+    } finally {
+
+        const orb =
+            document.getElementById(
+                "aiOrb"
+            );
+
+        orb.classList.remove(
+            "processing"
+        );
+
+        document
+            .getElementById(
+                "status"
+            )
+            .textContent =
+                "● В сети";
+    }
+}
+
+
+function addAIMessage(
+    text,
+    isAI
+) {
+
+    const chat =
+        document.getElementById(
+            "chat"
+        );
+
+    const div =
+        document.createElement(
+            "div"
+        );
+
+    div.className =
+        "message";
+
+    const avatar =
+        document.createElement(
+            "div"
+        );
+
+    avatar.style.width = "42px";
+    avatar.style.height = "42px";
+    avatar.style.borderRadius = "50%";
+
+    avatar.style.background =
+        isAI
+            ? "radial-gradient(circle,#c4b5fd,#4c1d95)"
+            : "#222";
+
+    avatar.style.flex =
+        "0 0 42px";
+
+    const content =
+        document.createElement(
+            "div"
+        );
+
+    content.className =
+        "message-content";
+
+    const head =
+        document.createElement(
+            "div"
+        );
+
+    head.className =
+        "message-head";
+
+    head.innerHTML =
+        isAI
+            ? "◉ Parashagram AI"
+            : "🎙 Вы";
+
+    const bubble =
+        document.createElement(
+            "div"
+        );
+
+    bubble.className =
+        "bubble";
+
+    bubble.textContent =
+        text;
+
+    content.appendChild(
+        head
+    );
+
+    content.appendChild(
+        bubble
+    );
+
+    div.appendChild(
+        avatar
+    );
+
+    div.appendChild(
+        content
+    );
+
+    chat.appendChild(
+        div
+    );
+
+    scrollChat();
+}
+
+
+async function speakAI(
+    text
+) {
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/parashagram/ai/speak",
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    credentials: "include",
+
+                    body: JSON.stringify({
+                        text
+                    })
+                }
+            );
+
+        if (!response.ok) {
+            throw new Error(
+                "TTS failed"
+            );
+        }
+
+        const blob =
+            await response.blob();
+
+        const url =
+            URL.createObjectURL(
+                blob
+            );
+
+        const audio =
+            new Audio(url);
+
+        await audio.play();
+
+        audio.onended = () =>
+            URL.revokeObjectURL(
+                url
+            );
+
+    } catch (error) {
+
+        // Резервный вариант
+        // через голос браузера
+
+        if (
+            "speechSynthesis"
+            in window
+        ) {
+
+            speechSynthesis.cancel();
+
+            const utterance =
+                new SpeechSynthesisUtterance(
+                    text
+                );
+
+            utterance.lang =
+                navigator.language ||
+                "ru-RU";
+
+            speechSynthesis.speak(
+                utterance
+            );
+        }
+    }
+}
+
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function placeholderAvatar() {
+
+    return (
+        "data:image/svg+xml," +
+        encodeURIComponent(`
+            <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="200"
+                height="200"
+            >
+                <rect
+                    width="100%"
+                    height="100%"
+                    fill="#15151b"
+                />
+
+                <circle
+                    cx="100"
+                    cy="80"
+                    r="35"
+                    fill="#555"
+                />
+
+                <path
+                    d="M35 190
+                       C45 135,
+                       155 135,
+                       165 190"
+                    fill="#555"
+                />
+            </svg>
+        `)
+    );
+}
+
+
+function escapeHtml(value) {
+
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+
+function formatTime(value) {
+
+    const date =
+        new Date(value);
+
+    return date.toLocaleTimeString(
+        [],
+        {
+            hour: "2-digit",
+            minute: "2-digit"
+        }
+    );
+}
+
+
+function formatDate(value) {
+
+    if (!value) return "—";
+
+    return new Date(
+        value
+    ).toLocaleDateString(
+        "ru-RU",
+        {
+            year: "numeric",
+            month: "long",
+            day: "numeric"
+        }
+    );
+}
+
+
+boot();
+
+</script>
+
+</body>
+</html>
