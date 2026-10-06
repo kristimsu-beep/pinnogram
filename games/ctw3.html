@@ -11435,14 +11435,18 @@ function processModeratorCommand(){
         $("moderatorCommandInput");
 
 
-    const value =
+    const rawValue =
         input.value
-            .trim()
+            .trim();
+
+
+    const value =
+        rawValue
             .toLowerCase();
 
 
     /*
-       Поддерживаем оба варианта:
+       Поддерживаем:
 
        !reset
        /reset
@@ -11458,24 +11462,103 @@ function processModeratorCommand(){
         return true;
 
     }
-      /*
-         !money
-         /money
-      */
-      
-      if(
-          value === "!money" ||
-          value === "/money"
-      ){
-      
-          loadModeratorMoneyCountries();
-      
-          return true;
-      
-      }
+
 
     /*
-       Пока существует только одна команда.
+       MONEY
+
+       Формат:
+
+       /money 10000000
+
+       или
+
+       !money 10000000
+    */
+
+    const moneyMatch =
+        rawValue.match(
+            /^[/!]money\s+(\d+(?:\.\d+)?)$/i
+        );
+
+
+    if(moneyMatch){
+
+        const amount =
+            Number(
+                moneyMatch[1]
+            );
+
+
+        if(
+            !Number.isFinite(amount) ||
+            amount <= 0
+        ){
+
+            $("moderatorCommandSuggestions")
+                .innerHTML =
+                    `
+                    <div
+                        class="moderatorUser"
+                        style="color:#ff7373">
+
+                        ❌ Некорректная сумма
+
+                    </div>
+                    `;
+
+            $("moderatorCommandSuggestions")
+                .classList
+                .add("visible");
+
+            return false;
+
+        }
+
+
+        /*
+           Сохраняем сумму,
+           чтобы использовать её
+           после выбора страны.
+        */
+
+        moderatorMoneyAmount =
+            amount;
+
+
+        loadModeratorMoneyCountries();
+
+        return true;
+
+    }
+
+
+    /*
+       Если введено просто:
+
+       /money
+
+       тоже показываем список стран,
+       но без суммы.
+    */
+
+    if(
+        value === "!money" ||
+        value === "/money"
+    ){
+
+        moderatorMoneyAmount =
+            null;
+
+        loadModeratorMoneyCountries();
+
+        return true;
+
+    }
+
+
+    /*
+       Неизвестная команда
     */
 
     if(
@@ -11514,7 +11597,6 @@ function processModeratorCommand(){
     return false;
 
 }
-
 
 /* =========================================================
    KEYBOARD HANDLER
