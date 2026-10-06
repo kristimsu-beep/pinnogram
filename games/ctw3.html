@@ -11283,6 +11283,55 @@ function openModeratorMoneyAmount(){
 
 }
 
+function openModeratorMoneyKey(){
+
+    $("moderatorKeyInput")
+        .value = "";
+
+
+    $("moderatorKeyError")
+        .textContent = "";
+
+
+    $("moderatorKeyOverlay")
+        .classList
+        .add("visible");
+
+
+    const title =
+        $("moderatorKeyOverlay")
+            .querySelector(
+                ".moderatorKeyTitle"
+            );
+
+
+    if(title){
+
+        title.textContent =
+            "Ключ модератора";
+
+    }
+
+
+    const input =
+        $("moderatorKeyInput");
+
+
+    input.placeholder =
+        "Введите ключ модератора";
+
+
+    setTimeout(
+        () => {
+
+            input.focus();
+
+        },
+        50
+    );
+
+}
+  
 /* =========================================================
    RENDER USERS
 ========================================================= */
