@@ -11198,6 +11198,44 @@ function openModeratorMoneyAmount(){
     }
 
 
+    /*
+       Если сумма уже была указана
+       в команде:
+
+       /money 10000000
+
+       сразу переходим к вводу
+       ключа модератора.
+    */
+
+    if(
+        moderatorMoneyAmount !== null &&
+        Number.isFinite(
+            Number(
+                moderatorMoneyAmount
+            )
+        ) &&
+        Number(
+            moderatorMoneyAmount
+        ) > 0
+    ){
+
+        openModeratorMoneyKey();
+
+        return;
+
+    }
+
+
+    /*
+       Старый режим:
+
+       /money
+
+       Тогда сначала спрашиваем
+       сумму.
+    */
+
     $("moderatorKeyInput")
         .value = "";
 
@@ -11244,7 +11282,7 @@ function openModeratorMoneyAmount(){
     );
 
 }
-      
+
 /* =========================================================
    RENDER USERS
 ========================================================= */
