@@ -12116,6 +12116,199 @@ async function confirmModeratorReset(){
 
 }
 
+async function confirmModeratorMoney(){
+
+    if(
+        !moderatorMoneySelectedCountry
+    ){
+
+        return;
+
+    }
+
+
+    /*
+       Если сумма была указана
+       прямо в команде:
+
+       /money 10000000
+
+       используем её.
+
+       Если нет — берём сумму
+       из поля.
+    */
+
+    let amount =
+        moderatorMoneyAmount;
+
+
+    if(
+        amount === null ||
+        !Number.isFinite(
+            Number(amount)
+        ) ||
+        Number(amount) <= 0
+    ){
+
+        const value =
+            $("moderatorKeyInput")
+                .value
+                .trim();
+
+
+        amount =
+            Number(value);
+
+
+        if(
+            !Number.isFinite(amount) ||
+            amount <= 0
+        ){
+
+            $("moderatorKeyError")
+                .textContent =
+                    "❌ Некорректная сумма.";
+
+            return;
+
+        }
+
+    }
+
+
+    /*
+       На этом этапе поле уже должно
+       содержать ключ модератора.
+    */
+
+    const key =
+        $("moderatorKeyInput")
+            .value
+            .trim();
+
+
+    if(
+        !key
+    ){
+
+        $("moderatorKeyError")
+            .textContent =
+                "Введите ключ модератора.";
+
+        return;
+
+    }
+
+
+    const button =
+        $("moderatorKeyConfirm");
+
+
+    button.disabled = true;
+
+    button.textContent =
+        "Выдача...";
+
+
+    $("moderatorKeyError")
+        .textContent = "";
+
+
+    try{
+
+        const result =
+            await api(
+                "/api/ctw3/mod/money",
+                {
+                    method:"POST",
+
+                    body:
+                        JSON.stringify({
+
+                            country_id:
+                                moderatorMoneySelectedCountry.id,
+
+                            amount:
+                                Number(amount),
+
+                            moderator_key:
+                                key
+
+                        })
+                }
+            );
+
+
+        closeModeratorKey();
+
+        closeModeratorCommand();
+
+
+        setStatus(
+            "💰 "+
+            (
+                result.country ||
+                moderatorMoneySelectedCountry.name ||
+                "Страна"
+            )+
+            ": +"+
+            Number(amount).toLocaleString()+
+            "$"
+        );
+
+
+        /*
+           Сбрасываем сохранённую сумму,
+           чтобы следующая команда
+           начиналась заново.
+        */
+
+        moderatorMoneyAmount =
+            null;
+
+
+        moderatorMoneySelectedCountry =
+            null;
+
+
+        moderatorMoneySelectedIndex =
+            -1;
+
+
+        /*
+           Обновляем состояние игры.
+        */
+
+        await refreshState();
+
+        await loadCountries();
+
+
+    }catch(error){
+
+        console.error(
+            "[CTW3 MONEY]",
+            error
+        );
+
+
+        $("moderatorKeyError")
+            .textContent =
+                "❌ "+
+                error.message;
+
+
+    }finally{
+
+        button.disabled = false;
+
+        button.textContent =
+            "Подтвердить";
+
+    }
+
+}
 
 /* =========================================================
    ENTER IN MODERATOR KEY
@@ -12132,7 +12325,30 @@ $("moderatorKeyInput")
 
                 event.preventDefault();
 
-                confirmModeratorReset();
+
+                /*
+                   Если сейчас открыта
+                   выдача денег —
+                   подтверждаем MONEY.
+                */
+
+                if(
+                    moderatorMoneySelectedCountry
+                ){
+
+                    confirmModeratorMoney();
+
+                }
+                else{
+
+                    /*
+                       Иначе это обычный
+                       /reset.
+                    */
+
+                    confirmModeratorReset();
+
+                }
 
             }
 
