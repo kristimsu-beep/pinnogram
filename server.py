@@ -5989,6 +5989,115 @@ async def ctw3_moderator_reset(
     }
 
 # =========================================================
+# CTW3 — ADMIN: GIVE MONEY
+# =========================================================
+
+@app.post("/api/ctw3/mod/money")
+async def ctw3_moderator_give_money(data: dict):
+
+    if not CTW3_MODERATOR_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="CTW3_MODERATOR_KEY не настроен"
+        )
+
+    moderator_key = str(
+        data.get("moderator_key") or ""
+    )
+
+    if not secrets.compare_digest(
+        moderator_key,
+        CTW3_MODERATOR_KEY
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Неверный ключ модератора"
+        )
+
+    country_id = str(
+        data.get("country_id") or ""
+    )
+
+    try:
+        amount = int(
+            data.get("amount")
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Некорректная сумма"
+        )
+
+    if amount <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Сумма должна быть больше нуля"
+        )
+
+    try:
+        country_object_id = ObjectId(
+            country_id
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Некорректный ID страны"
+        )
+
+    country = await ctw3_countries.find_one(
+        {
+            "_id": country_object_id
+        }
+    )
+
+    if not country:
+        raise HTTPException(
+            status_code=404,
+            detail="Страна не найдена"
+        )
+
+    country = await ctw3_tick_country(
+        country
+    )
+
+    current_budget = float(
+        country.get(
+            "budget",
+            0
+        )
+    )
+
+    new_budget = (
+        current_budget + amount
+    )
+
+    await ctw3_countries.update_one(
+        {
+            "_id": country_object_id
+        },
+        {
+            "$set": {
+                "budget": new_budget
+            }
+        }
+    )
+
+    return {
+        "status": "success",
+
+        "country": country.get(
+            "name",
+            "Без названия"
+        ),
+
+        "amount": amount,
+
+        "old_budget": current_budget,
+
+        "new_budget": new_budget
+    }
+
+# =========================================================
 # CTW3 — GET FULL STATE
 # =========================================================
 
