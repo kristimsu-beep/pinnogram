@@ -10954,7 +10954,297 @@ async function loadModeratorUsers(){
 
 }
 
+/* =========================================================
+   MODERATOR — MONEY COUNTRIES
+========================================================= */
 
+let moderatorMoneyCountries = [];
+let moderatorMoneySelectedIndex = -1;
+let moderatorMoneySelectedCountry = null;
+
+
+async function loadModeratorMoneyCountries(){
+
+    try{
+
+        const data =
+            await api(
+                "/api/ctw3/countries"
+            );
+
+
+        moderatorMoneyCountries =
+            Array.isArray(
+                data.countries
+            )
+                ? data.countries
+                : [];
+
+
+        moderatorMoneySelectedIndex =
+            moderatorMoneyCountries.length
+                ? 0
+                : -1;
+
+
+        moderatorMoneySelectedCountry =
+            moderatorMoneyCountries.length
+                ? moderatorMoneyCountries[0]
+                : null;
+
+
+        renderModeratorMoneyCountries();
+
+
+    }catch(error){
+
+        console.error(
+            "[CTW3 MONEY]",
+            error
+        );
+
+
+        $("moderatorCommandSuggestions")
+            .innerHTML =
+                `
+                <div
+                    class="moderatorUser"
+                    style="color:#ff7373">
+
+                    ❌ Не удалось загрузить список стран
+
+                </div>
+                `;
+
+
+        $("moderatorCommandSuggestions")
+            .classList
+            .add("visible");
+
+    }
+
+}
+
+
+function renderModeratorMoneyCountries(){
+
+    const container =
+        $("moderatorCommandSuggestions");
+
+
+    container.innerHTML = "";
+
+
+    if(
+        !moderatorMoneyCountries.length
+    ){
+
+        container.innerHTML =
+            `
+            <div
+                class="moderatorUser"
+                style="color:#7d8998">
+
+                Нет зарегистрированных стран
+
+            </div>
+            `;
+
+
+        container.classList
+            .add("visible");
+
+
+        return;
+
+    }
+
+
+    moderatorMoneyCountries.forEach(
+        (country,index) => {
+
+            const item =
+                document.createElement(
+                    "div"
+                );
+
+
+            item.className =
+                "moderatorUser";
+
+
+            if(
+                index ===
+                moderatorMoneySelectedIndex
+            ){
+
+                item.classList
+                    .add(
+                        "selected"
+                    );
+
+            }
+
+
+            item.innerHTML =
+                `
+                <div
+                    class="moderatorUserFlag">
+
+                    ${escapeHtml(
+                        country.flag ||
+                        "🏳️"
+                    )}
+
+                </div>
+
+
+                <div
+                    class="moderatorUserInfo">
+
+                    <div
+                        class="moderatorUserName">
+
+                        ${escapeHtml(
+                            country.name ||
+                            "Без названия"
+                        )}
+
+                    </div>
+
+
+                    <div
+                        class="moderatorUserId">
+
+                        ID:
+                        ${escapeHtml(
+                            String(
+                                country.id ||
+                                ""
+                            )
+                        )}
+
+                    </div>
+
+                </div>
+                `;
+
+
+            item.addEventListener(
+                "click",
+                () => {
+
+                    moderatorMoneySelectedIndex =
+                        index;
+
+
+                    moderatorMoneySelectedCountry =
+                        country;
+
+
+                    renderModeratorMoneyCountries();
+
+                }
+            );
+
+
+            item.addEventListener(
+                "dblclick",
+                () => {
+
+                    moderatorMoneySelectedIndex =
+                        index;
+
+
+                    moderatorMoneySelectedCountry =
+                        country;
+
+
+                    openModeratorMoneyAmount();
+
+                }
+            );
+
+
+            container.appendChild(
+                item
+            );
+
+        }
+    );
+
+
+    container.classList
+        .add("visible");
+
+}      
+
+/* =========================================================
+   MODERATOR — MONEY AMOUNT
+========================================================= */
+
+function openModeratorMoneyAmount(){
+
+    if(
+        !moderatorMoneySelectedCountry
+    ){
+
+        setStatus(
+            "⚠️ Сначала выберите страну"
+        );
+
+        return;
+
+    }
+
+
+    $("moderatorKeyInput")
+        .value = "";
+
+
+    $("moderatorKeyError")
+        .textContent = "";
+
+
+    $("moderatorKeyOverlay")
+        .classList
+        .add("visible");
+
+
+    const title =
+        $("moderatorKeyOverlay")
+            .querySelector(
+                ".moderatorKeyTitle"
+            );
+
+
+    if(title){
+
+        title.textContent =
+            "Выдача денег";
+
+    }
+
+
+    const input =
+        $("moderatorKeyInput");
+
+
+    input.placeholder =
+        "Сумма, например 1000000";
+
+
+    setTimeout(
+        () => {
+
+            input.focus();
+
+        },
+        50
+    );
+
+}
+      
 /* =========================================================
    RENDER USERS
 ========================================================= */
@@ -11168,7 +11458,21 @@ function processModeratorCommand(){
         return true;
 
     }
-
+      /*
+         !money
+         /money
+      */
+      
+      if(
+          value === "!money" ||
+          value === "/money"
+      ){
+      
+          loadModeratorMoneyCountries();
+      
+          return true;
+      
+      }
 
     /*
        Пока существует только одна команда.
