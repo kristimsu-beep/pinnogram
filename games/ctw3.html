@@ -12027,28 +12027,8 @@ async function confirmModeratorReset(){
     }
 
 
-    const button =
-
-      $("moderatorKeyConfirm")
-          ?.addEventListener(
-              "click",
-              function(){
-      
-                  if(
-                      moderatorAction === "money"
-                  ){
-      
-                      confirmModeratorMoney();
-      
-                  }
-                  else{
-      
-                      confirmModeratorReset();
-      
-                  }
-      
-              }
-          );
+      const button =
+          $("moderatorKeyConfirm");
 
 
     button.disabled=true;
@@ -12227,28 +12207,8 @@ async function confirmModeratorMoney(){
     }
 
 
-    const button =
-
-      $("moderatorKeyConfirm")
-          ?.addEventListener(
-              "click",
-              function(){
-      
-                  if(
-                      moderatorAction === "money"
-                  ){
-      
-                      confirmModeratorMoney();
-      
-                  }
-                  else{
-      
-                      confirmModeratorReset();
-      
-                  }
-      
-              }
-          );
+      const button =
+          $("moderatorKeyConfirm");
 
 
     button.disabled = true;
@@ -12355,6 +12315,31 @@ async function confirmModeratorMoney(){
     }
 
 }
+
+/* =========================================================
+   MODERATOR KEY CONFIRM BUTTON
+========================================================= */
+
+$("moderatorKeyConfirm")
+    ?.addEventListener(
+        "click",
+        function(){
+
+            if(
+                moderatorAction === "money"
+            ){
+
+                confirmModeratorMoney();
+
+            }
+            else{
+
+                confirmModeratorReset();
+
+            }
+
+        }
+    );
 
 /* =========================================================
    ENTER IN MODERATOR KEY
