@@ -6398,7 +6398,27 @@ async def ctw3_shootdown_aircraft(data: dict, request: Request):
             detail="Нельзя сбить собственный самолёт"
         )
 
+    # Каждое сбитие расходует одну обычную ракету страны.
+    missile_stock = int(
+        attacker.get("missile_stock", 0)
+    )
+
+    if missile_stock <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="У страны нет готовых ракет"
+        )
+
     now = datetime.utcnow()
+
+    await ctw3_countries.update_one(
+        {"_id": attacker["_id"]},
+        {
+            "$set": {
+                "missile_stock": missile_stock - 1
+            }
+        }
+    )
 
     await ctw3_flights.update_one(
         {"_id": flight["_id"]},
