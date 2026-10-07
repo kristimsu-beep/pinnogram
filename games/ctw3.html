@@ -2684,6 +2684,8 @@ select{
 
 }
 
+
+#ctw3AviationPanel{position:fixed;top:18px;right:18px;width:360px;max-width:calc(100vw - 36px);max-height:calc(100vh - 36px);overflow:auto;z-index:6100;display:none;background:rgba(10,16,25,.97);border:1px solid rgba(90,210,255,.35);border-radius:16px;box-shadow:0 18px 55px rgba(0,0,0,.55);color:#fff;padding:16px}#ctw3AviationPanel.visible{display:block}.ctw3-aviation-title{font-size:18px;font-weight:800;margin-bottom:12px}.ctw3-aviation-section{margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.09)}#ctw3AviationPanel input,#ctw3AviationPanel select{width:100%;box-sizing:border-box;background:#111c2a;color:#fff;border:1px solid #30455c;border-radius:9px;padding:9px;margin-top:7px}.ctw3-aviation-button{width:100%;border:0;border-radius:9px;padding:10px;cursor:pointer;background:#168bd0;color:#fff;font-weight:800;margin-top:7px}.ctw3-aviation-button.secondary{background:#26384c}.ctw3-flight-item{padding:9px;border-radius:10px;background:rgba(255,255,255,.055);cursor:pointer;margin-top:7px}.ctw3-flight-main{font-weight:800}.ctw3-flight-sub{font-size:12px;color:#9fb0c1;margin-top:3px}.ctw3-aviation-hint{font-size:12px;color:#91a2b4;line-height:1.4}.ctw3-plane-marker{font-size:26px;filter:drop-shadow(0 2px 5px #000);cursor:pointer}
 </style>
 </head>
 
@@ -3953,6 +3955,14 @@ function connectCTW3WebSocket(){
                     data.countries || {}
                 );
 
+            }
+
+            if(
+                handleCTW3AviationWS(
+                    data
+                )
+            ){
+                return;
             }
 
             if(
@@ -13457,7 +13467,38 @@ function resetMeasurement(){
 
 }
 
+
+let ctw3AviationState={airline:null,aircraft:[],airports:[],flights:[],aircraft_types:[]};
+let ctw3AviationMarkers={};
+function openAviationPanel(){ $("ctw3AviationPanel")?.classList.add("visible"); loadCTW3Aviation(); }
+function closeAviationPanel(){ $("ctw3AviationPanel")?.classList.remove("visible"); }
+function aviationMoney(v){return Number(v||0).toLocaleString("ru-RU")+"$";}
+function renderCTW3AviationPanel(){
+ const box=$("ctw3AviationContent");if(!box)return;
+ const a=ctw3AviationState.airline,planes=ctw3AviationState.aircraft||[],types=ctw3AviationState.aircraft_types||[],airports=ctw3AviationState.airports||[];let h="";
+ if(!a){h+="<div class='ctw3-aviation-hint'>Создайте авиакомпанию. Она будет сохранена в MongoDB.</div><input id='ctw3AirlineName' maxlength='40' placeholder='Название авиакомпании'><button class='ctw3-aviation-button' onclick='createCTW3Airline()'>Создать авиакомпанию — $5M</button>";}
+ else{
+  h+="<div><b>"+escapeHtml(a.name||"Авиакомпания")+"</b><div class='ctw3-aviation-hint'>Самолётов: "+planes.length+" · В БД: "+Number(a.aircraft_count||0)+"</div></div>";
+  h+="<div class='ctw3-aviation-section'><b>🛩️ Купить самолёт</b><select id='ctw3AircraftTypeSelect'>";types.forEach(function(t){h+="<option value='"+escapeHtml(t.type_id)+"'>"+escapeHtml(t.name)+" — "+aviationMoney(t.price)+"</option>"});h+="</select><button class='ctw3-aviation-button' onclick='buyCTW3Aircraft()'>Купить самолёт</button></div>";
+  const own=airports.filter(function(x){return String(x.country_id)===String(ctw3AviationState.country_id)});
+  h+="<div class='ctw3-aviation-section'><b>🛫 Создать рейс</b><select id='ctw3FlightAircraftSelect'>";planes.filter(function(x){return x.status==="available"}).forEach(function(x){h+="<option value='"+escapeHtml(String(x.id||x._id||""))+"'>"+escapeHtml(x.registration||"Самолёт")+" · "+escapeHtml(x.type_name||"")+"</option>"});h+="</select><select id='ctw3FlightOriginSelect'>";own.forEach(function(x){h+="<option value='"+escapeHtml(String(x.id))+"'>"+escapeHtml(x.name||"Аэропорт")+"</option>"});h+="</select><select id='ctw3FlightDestinationSelect'>";airports.forEach(function(x){h+="<option value='"+escapeHtml(String(x.id))+"'>"+escapeHtml(x.country_flag||"🏳️")+" "+escapeHtml(x.country_name||"")+" · "+escapeHtml(x.name||"Аэропорт")+"</option>"});h+="</select><button class='ctw3-aviation-button' onclick='createCTW3Flight()'>Запустить рейс</button></div>";
+  h+="<div class='ctw3-aviation-section'><b>✈️ Мои самолёты</b>";if(!planes.length)h+="<div class='ctw3-aviation-hint'>Самолётов пока нет.</div>";planes.forEach(function(x){h+="<div class='ctw3-flight-item'><div class='ctw3-flight-main'>✈️ "+escapeHtml(x.registration||"PN-000000")+"</div><div class='ctw3-flight-sub'>"+escapeHtml(x.type_name||"")+" · "+escapeHtml(x.status||"")+"</div></div>"});h+="</div>";
+ }
+ h+="<div class='ctw3-aviation-section'><b>🌍 Самолёты в небе</b>";const fs=ctw3AviationState.flights||[];if(!fs.length)h+="<div class='ctw3-aviation-hint'>Активных рейсов нет.</div>";fs.forEach(function(f){h+="<div class='ctw3-flight-item' onclick='focusCTW3Flight(\""+escapeHtml(String(f.id))+"\")'><div class='ctw3-flight-main'>✈️ "+escapeHtml(f.flight_number||"")+"</div><div class='ctw3-flight-sub'>"+escapeHtml(f.country_flag||"🏳️")+" "+escapeHtml(f.airline_name||"")+" · "+escapeHtml(f.aircraft_registration||"")+"</div></div>"});h+="</div><button class='ctw3-aviation-button secondary' onclick='closeAviationPanel()'>Закрыть</button>";box.innerHTML=h;
+}
+async function loadCTW3Aviation(){try{const d=await api("/api/ctw3/aviation/state");ctw3AviationState=Object.assign(ctw3AviationState,d);renderCTW3AviationPanel();renderCTW3Flights()}catch(e){console.error("[CTW3 AVIATION]",e);const b=$("ctw3AviationContent");if(b)b.innerHTML="<div class='ctw3-aviation-hint'>❌ "+escapeHtml(e.message)+"</div>"}}
+async function createCTW3Airline(){const i=$("ctw3AirlineName"),n=i?i.value.trim():"";if(!n){setStatus("⚠️ Введите название авиакомпании");return}try{await api("/api/ctw3/aviation/airline",{method:"POST",body:JSON.stringify({name:n})});setStatus("✈️ Авиакомпания создана");await refreshState();await loadCountries();await loadCTW3Aviation()}catch(e){setStatus("❌ "+e.message)}}
+async function buyCTW3Aircraft(){const s=$("ctw3AircraftTypeSelect");if(!s||!s.value)return;try{const r=await api("/api/ctw3/aviation/aircraft",{method:"POST",body:JSON.stringify({type_id:s.value})});setStatus("✈️ Куплен "+(r.aircraft?.type_name||"самолёт"));await refreshState();await loadCountries();await loadCTW3Aviation()}catch(e){setStatus("❌ "+e.message)}}
+async function createCTW3Flight(){const a=$("ctw3FlightAircraftSelect"),o=$("ctw3FlightOriginSelect"),d=$("ctw3FlightDestinationSelect");if(!a||!o||!d||!a.value||!o.value||!d.value){setStatus("⚠️ Недостаточно данных для рейса");return}try{const r=await api("/api/ctw3/aviation/flight",{method:"POST",body:JSON.stringify({aircraft_id:a.value,origin_airport_id:o.value,destination_airport_id:d.value})});setStatus("🛫 Рейс "+(r.flight?.flight_number||"")+" запущен");await loadCTW3Aviation()}catch(e){setStatus("❌ "+e.message)}}
+function renderCTW3Flights(){if(!map)return;const active={};(ctw3AviationState.flights||[]).forEach(function(f){const id=String(f.id);active[id]=true;const lat=Number(f.current_latitude),lng=Number(f.current_longitude);if(!Number.isFinite(lat)||!Number.isFinite(lng))return;const icon=L.divIcon({className:"",html:"<div class='ctw3-plane-marker' style='transform:rotate("+Number(f.heading||0)+"deg)'>✈</div>",iconSize:[32,32],iconAnchor:[16,16]});if(ctw3AviationMarkers[id]){ctw3AviationMarkers[id].setLatLng([lat,lng]);ctw3AviationMarkers[id].setIcon(icon)}else{const m=L.marker([lat,lng],{icon:icon,zIndexOffset:500});m.on("click",function(e){L.DomEvent.stopPropagation(e);selectCTW3Flight(f)});m.addTo(map);ctw3AviationMarkers[id]=m}});Object.keys(ctw3AviationMarkers).forEach(function(id){if(!active[id]){if(map.hasLayer(ctw3AviationMarkers[id]))map.removeLayer(ctw3AviationMarkers[id]);delete ctw3AviationMarkers[id]}})}
+function selectCTW3Flight(f){showMapPointInfo(Number(f.current_latitude),Number(f.current_longitude),{type:"aircraft",object:f,country:{id:f.country_id,name:f.country_name,flag:f.country_flag},canShootAircraft:String(country?.id||"")!==String(f.country_id||"")})}
+function focusCTW3Flight(id){const f=(ctw3AviationState.flights||[]).find(function(x){return String(x.id)===String(id)});if(!f)return;map.setView([Number(f.current_latitude),Number(f.current_longitude)],Math.max(map.getZoom(),5));selectCTW3Flight(f)}
+async function shootDownCTW3Flight(id){try{await api("/api/ctw3/aviation/shootdown",{method:"POST",body:JSON.stringify({flight_id:String(id)})});setStatus("🚀 Самолёт уничтожен");closePointInfo();await refreshState();await loadCTW3Aviation()}catch(e){setStatus("❌ "+e.message)}}
+function handleCTW3AviationWS(d){if(d.type!=="aviation_update"&&d.type!=="aviation_state")return false;ctw3AviationState.flights=d.flights||[];renderCTW3Flights();if($("ctw3AviationPanel")?.classList.contains("visible"))renderCTW3AviationPanel();return true}
+
 </script>
 
+
+<div id="ctw3AviationPanel"><div class="ctw3-aviation-title">✈️ Авиация CTW3</div><div id="ctw3AviationContent">Загрузка...</div></div><button id="ctw3AviationOpenButton" class="ctw3-aviation-button" style="position:fixed;right:18px;bottom:18px;width:auto;z-index:6050;padding:12px 16px" onclick="openAviationPanel()">✈️ Авиация</button>
 </body>
 </html>
