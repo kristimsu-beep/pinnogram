@@ -3770,6 +3770,8 @@ let countries=[];
 
 let moderatorUsers=[];
 
+let moderatorAction = null;
+  
 let moderatorSelectedIndex=-1;
 
 let moderatorSelectedUser=null;
@@ -11285,6 +11287,8 @@ function openModeratorMoneyAmount(){
 
 function openModeratorMoneyKey(){
 
+    moderatorAction = "money";
+      
     $("moderatorKeyInput")
         .value = "";
 
@@ -11928,6 +11932,8 @@ document.addEventListener(
 
 function openModeratorKey(){
 
+    moderatorAction = "reset";
+
     if(
         !moderatorSelectedUser
     ){
@@ -12022,7 +12028,27 @@ async function confirmModeratorReset(){
 
 
     const button =
-        $("moderatorKeyConfirm");
+
+      $("moderatorKeyConfirm")
+          ?.addEventListener(
+              "click",
+              function(){
+      
+                  if(
+                      moderatorAction === "money"
+                  ){
+      
+                      confirmModeratorMoney();
+      
+                  }
+                  else{
+      
+                      confirmModeratorReset();
+      
+                  }
+      
+              }
+          );
 
 
     button.disabled=true;
@@ -12202,7 +12228,27 @@ async function confirmModeratorMoney(){
 
 
     const button =
-        $("moderatorKeyConfirm");
+
+      $("moderatorKeyConfirm")
+          ?.addEventListener(
+              "click",
+              function(){
+      
+                  if(
+                      moderatorAction === "money"
+                  ){
+      
+                      confirmModeratorMoney();
+      
+                  }
+                  else{
+      
+                      confirmModeratorReset();
+      
+                  }
+      
+              }
+          );
 
 
     button.disabled = true;
@@ -12326,25 +12372,14 @@ $("moderatorKeyInput")
                 event.preventDefault();
 
 
-                /*
-                   Если сейчас открыта
-                   выдача денег —
-                   подтверждаем MONEY.
-                */
-
                 if(
-                    moderatorMoneySelectedCountry
+                    moderatorAction === "money"
                 ){
 
                     confirmModeratorMoney();
 
                 }
                 else{
-
-                    /*
-                       Иначе это обычный
-                       /reset.
-                    */
 
                     confirmModeratorReset();
 
