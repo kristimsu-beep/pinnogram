@@ -4912,6 +4912,109 @@ async function showMapPointInfo(
     selectedPointTimezone = null;
 
     /* =====================================================
+       AIRCRAFT INFORMATION
+       ===================================================== */
+
+    if(
+        objectInfo &&
+        objectInfo.type === "aircraft" &&
+        objectInfo.object
+    ){
+
+        const flight =
+            objectInfo.object;
+
+        const aircraftType =
+            flight.aircraft_type &&
+            flight.aircraft_type.name
+                ? flight.aircraft_type.name
+                : "Самолёт";
+
+        $("ctw3PointIcon")
+            .textContent = "✈️";
+
+        $("ctw3PointTitle")
+            .textContent =
+                (
+                    flight.flight_number ||
+                    "Рейс"
+                )+
+                " · "+
+                aircraftType;
+
+        let aircraftInfo =
+            "Авиакомпания: "+
+            (
+                flight.airline_name ||
+                "—"
+            )+
+            "<br>"+
+            "Борт: "+
+            (
+                flight.aircraft_registration ||
+                "—"
+            )+
+            "<br>"+
+            "Маршрут: "+
+            (
+                flight.origin?.name ||
+                "—"
+            )+
+            " → "+
+            (
+                flight.destination?.name ||
+                "—"
+            )+
+            "<br>"+
+            "Высота: "+
+            Number(
+                flight.altitude_m || 0
+            ).toLocaleString(
+                "ru-RU"
+            )+
+            " м"+
+            "<br>"+
+            "Курс: "+
+            Math.round(
+                Number(
+                    flight.heading || 0
+                )
+            )+
+            "°";
+
+        $("ctw3PointSubtitle")
+            .innerHTML =
+                aircraftInfo;
+
+        if(
+            objectInfo.canShootAircraft
+        ){
+
+            $("ctw3PointSubtitle")
+                .innerHTML +=
+                "<br><button "+
+                "class='ctw3-aviation-button' "+
+                "style='margin-top:10px' "+
+                "onclick='shootDownCTW3Flight(""+
+                String(
+                    flight.id
+                )+
+                "")'>"+
+                "🚀 Сбить самолёт (1 ракета)"+
+                "</button>";
+
+        }
+
+    }
+    else{
+
+        $("ctw3PointIcon")
+            .textContent = "📍";
+
+    }
+
+
+    /* =====================================================
        RESET WEATHER
        ===================================================== */
 
