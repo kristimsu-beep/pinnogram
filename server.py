@@ -4824,11 +4824,36 @@ async def ctw3_aviation_state(
             }
         ):
 
-            aircraft.append(
-                serialize_ctw3_document(
-                    plane
+            planes.append({
+                "id": str(
+                    plane.get("_id")
+                ),
+                "aircraft_id": str(
+                    plane.get("_id")
+                ),
+                "country_id": plane.get(
+                    "country_id"
+                ),
+                "airline_id": plane.get(
+                    "airline_id"
+                ),
+                "airline_name": plane.get(
+                    "airline_name",
+                    ""
+                ),
+                "registration": plane.get(
+                    "registration",
+                    ""
+                ),
+                "aircraft_type": plane.get(
+                    "aircraft_type",
+                    ""
+                ),
+                "status": plane.get(
+                    "status",
+                    "available"
                 )
-            )
+            })
 
     airports = await ctw3_get_airports_for_aviation()
 
