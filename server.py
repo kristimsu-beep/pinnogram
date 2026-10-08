@@ -2715,7 +2715,22 @@ async def startup():
         )
     try:
         await ctw3_init_airports()
-    
+        global ctw3_aviation_task
+
+            if (
+                ctw3_aviation_task is None
+                or ctw3_aviation_task.done()
+            ):
+        
+                ctw3_aviation_task = asyncio.create_task(
+                    ctw3_aviation_loop()
+                )
+        
+            print(
+                "✈️ [CTW3 AVIATION] "
+                "Фоновый движок полётов запущен!"
+            )
+
         print(
             "🌍 [CTW3 AVIATION] "
             "Аэропорты успешно инициализированы!"
@@ -4871,6 +4886,48 @@ async def ctw3_aviation_state(
                         {}
                     ),
 
+                "current_latitude":
+                    float(
+                        flight.get(
+                            "lat",
+                            0
+                        )
+                    ),
+                
+                "current_longitude":
+                    float(
+                        flight.get(
+                            "lng",
+                            0
+                        )
+                    ),
+                
+                "country_name":
+                    flight.get(
+                        "country_name",
+                        ""
+                    ),
+                
+                "country_flag":
+                    flight.get(
+                        "country_flag",
+                        ""
+                    ),
+                
+                "speed_kmh":
+                    float(
+                        flight.get(
+                            "speed_kmh",
+                            flight.get(
+                                "aircraft_type",
+                                {}
+                            ).get(
+                                "speed_kmh",
+                                0
+                            )
+                        )
+                    ),
+                
                 "status":
                     plane.get(
                         "status",
@@ -5514,6 +5571,18 @@ async def ctw3_create_flight(
         "country_id":
             country_id,
 
+        "country_name":
+            country.get(
+                "name",
+                ""
+            ),
+        
+        "country_flag":
+            country.get(
+                "flag",
+                ""
+            ),
+
         "airline_name":
             "",
 
@@ -5556,6 +5625,14 @@ async def ctw3_create_flight(
 
         "heading":
             0,
+
+        "speed_kmh":
+            float(
+                aircraft_type.get(
+                    "speed_kmh",
+                    800
+                )
+            ),
 
         "altitude":
             int(
@@ -5858,6 +5935,597 @@ async def ctw3_shoot_down_aircraft(
         "missile_stock":
             missile_stock - 1
     }
+
+# =========================================================
+# CTW3 AVIATION — REAL-TIME FLIGHT ENGINE
+# =========================================================
+
+CTW3_AVIATION_TIME_SCALE = 60.0
+
+ctw3_aviation_task = None
+
+
+async def ctw3_broadcast_aviation_event(
+    event_type,
+    flight
+):
+
+    payload = {
+        "type": event_type,
+
+        "flight": {
+            "id": str(
+                flight.get("_id")
+            ),
+
+            "flight_number":
+                flight.get(
+                    "flight_number",
+                    ""
+                ),
+
+            "aircraft_id":
+                flight.get(
+                    "aircraft_id",
+                    ""
+                ),
+
+            "airline_id":
+                flight.get(
+                    "airline_id",
+                    ""
+                ),
+
+            "country_id":
+                flight.get(
+                    "country_id",
+                    ""
+                ),
+
+            "country_name":
+                flight.get(
+                    "country_name",
+                    ""
+                ),
+
+            "country_flag":
+                flight.get(
+                    "country_flag",
+                    ""
+                ),
+
+            "airline_name":
+                flight.get(
+                    "airline_name",
+                    ""
+                ),
+
+            "aircraft_registration":
+                flight.get(
+                    "aircraft_registration",
+                    ""
+                ),
+
+            "aircraft_type":
+                flight.get(
+                    "aircraft_type",
+                    {}
+                ),
+
+            "origin":
+                flight.get(
+                    "origin",
+                    {}
+                ),
+
+            "destination":
+                flight.get(
+                    "destination",
+                    {}
+                ),
+
+            "origin_airport_id":
+                flight.get(
+                    "origin_airport_id",
+                    ""
+                ),
+
+            "destination_airport_id":
+                flight.get(
+                    "destination_airport_id",
+                    ""
+                ),
+
+            "lat":
+                float(
+                    flight.get(
+                        "lat",
+                        0
+                    )
+                ),
+
+            "lng":
+                float(
+                    flight.get(
+                        "lng",
+                        0
+                    )
+                ),
+
+            "current_latitude":
+                float(
+                    flight.get(
+                        "lat",
+                        0
+                    )
+                ),
+
+            "current_longitude":
+                float(
+                    flight.get(
+                        "lng",
+                        0
+                    )
+                ),
+
+            "heading":
+                float(
+                    flight.get(
+                        "heading",
+                        0
+                    )
+                ),
+
+            "altitude":
+                int(
+                    flight.get(
+                        "altitude",
+                        10000
+                    )
+                ),
+
+            "speed_kmh":
+                float(
+                    flight.get(
+                        "speed_kmh",
+                        0
+                    )
+                ),
+
+            "progress":
+                float(
+                    flight.get(
+                        "progress",
+                        0
+                    )
+                ),
+
+            "status":
+                flight.get(
+                    "status",
+                    "active"
+                )
+        }
+    }
+
+    message = json.dumps(
+        payload,
+        ensure_ascii=False
+    )
+
+    disconnected = []
+
+    for (
+        player_id,
+        websocket
+    ) in list(
+        ctw3_players.items()
+    ):
+
+        try:
+
+            await websocket.send_text(
+                message
+            )
+
+        except Exception:
+
+            disconnected.append(
+                player_id
+            )
+
+    for player_id in disconnected:
+
+        ctw3_players.pop(
+            player_id,
+            None
+        )
+
+
+def ctw3_aviation_distance_km(
+    lat1,
+    lng1,
+    lat2,
+    lng2
+):
+
+    import math
+
+    earth_radius = 6371.0
+
+    d_lat = math.radians(
+        lat2 - lat1
+    )
+
+    d_lng = math.radians(
+        lng2 - lng1
+    )
+
+    a = (
+        math.sin(
+            d_lat / 2
+        ) ** 2
+
+        +
+
+        math.cos(
+            math.radians(lat1)
+        )
+
+        *
+
+        math.cos(
+            math.radians(lat2)
+        )
+
+        *
+
+        math.sin(
+            d_lng / 2
+        ) ** 2
+    )
+
+    return (
+        earth_radius
+        *
+        2
+        *
+        math.atan2(
+            math.sqrt(a),
+            math.sqrt(
+                max(
+                    0.0,
+                    1.0 - a
+                )
+            )
+        )
+    )
+
+
+def ctw3_aviation_bearing(
+    lat1,
+    lng1,
+    lat2,
+    lng2
+):
+
+    import math
+
+    y = (
+        math.sin(
+            math.radians(
+                lng2 - lng1
+            )
+        )
+        *
+        math.cos(
+            math.radians(lat2)
+        )
+    )
+
+    x = (
+        math.cos(
+            math.radians(lat1)
+        )
+        *
+        math.sin(
+            math.radians(lat2)
+        )
+
+        -
+
+        math.sin(
+            math.radians(lat1)
+        )
+        *
+        math.cos(
+            math.radians(lat2)
+        )
+        *
+        math.cos(
+            math.radians(
+                lng2 - lng1
+            )
+        )
+    )
+
+    return (
+        math.degrees(
+            math.atan2(
+                y,
+                x
+            )
+        )
+        + 360
+    ) % 360
+
+
+async def ctw3_aviation_loop():
+
+    print(
+        "✈️ [CTW3 AVIATION] "
+        "Движок полётов запущен"
+    )
+
+    while True:
+
+        try:
+
+            async for flight in ctw3_flights.find(
+                {
+                    "status":
+                        "active"
+                }
+            ):
+
+                origin = flight.get(
+                    "origin",
+                    {}
+                )
+
+                destination = flight.get(
+                    "destination",
+                    {}
+                )
+
+                origin_lat = float(
+                    origin.get(
+                        "lat",
+                        0
+                    )
+                )
+
+                origin_lng = float(
+                    origin.get(
+                        "lng",
+                        0
+                    )
+                )
+
+                destination_lat = float(
+                    destination.get(
+                        "lat",
+                        0
+                    )
+                )
+
+                destination_lng = float(
+                    destination.get(
+                        "lng",
+                        0
+                    )
+                )
+
+                total_distance = max(
+                    ctw3_aviation_distance_km(
+                        origin_lat,
+                        origin_lng,
+                        destination_lat,
+                        destination_lng
+                    ),
+                    1.0
+                )
+
+                aircraft_type = flight.get(
+                    "aircraft_type",
+                    {}
+                )
+
+                speed_kmh = float(
+                    flight.get(
+                        "speed_kmh",
+                        aircraft_type.get(
+                            "speed_kmh",
+                            800
+                        )
+                    )
+                )
+
+                progress = float(
+                    flight.get(
+                        "progress",
+                        0
+                    )
+                )
+
+                progress += (
+                    speed_kmh
+                    *
+                    CTW3_AVIATION_TIME_SCALE
+                    /
+                    3600.0
+                    /
+                    total_distance
+                )
+
+                progress = min(
+                    progress,
+                    1.0
+                )
+
+                latitude = (
+                    origin_lat
+                    +
+                    (
+                        destination_lat
+                        -
+                        origin_lat
+                    )
+                    *
+                    progress
+                )
+
+                longitude = (
+                    origin_lng
+                    +
+                    (
+                        destination_lng
+                        -
+                        origin_lng
+                    )
+                    *
+                    progress
+                )
+
+                heading = (
+                    ctw3_aviation_bearing(
+                        latitude,
+                        longitude,
+                        destination_lat,
+                        destination_lng
+                    )
+                )
+
+                if progress >= 1.0:
+
+                    latitude = (
+                        destination_lat
+                    )
+
+                    longitude = (
+                        destination_lng
+                    )
+
+                await ctw3_flights.update_one(
+                    {
+                        "_id":
+                            flight["_id"]
+                    },
+                    {
+                        "$set": {
+                            "lat":
+                                latitude,
+
+                            "lng":
+                                longitude,
+
+                            "progress":
+                                progress,
+
+                            "heading":
+                                float(
+                                    heading
+                                ),
+
+                            "speed_kmh":
+                                speed_kmh,
+
+                            "updated_at":
+                                datetime.utcnow()
+                        }
+                    }
+                )
+
+                flight["lat"] = latitude
+                flight["lng"] = longitude
+                flight["progress"] = progress
+                flight["heading"] = float(
+                    heading
+                )
+                flight["speed_kmh"] = speed_kmh
+
+                if progress >= 1.0:
+
+                    await ctw3_flights.update_one(
+                        {
+                            "_id":
+                                flight["_id"]
+                        },
+                        {
+                            "$set": {
+                                "status":
+                                    "arrived",
+
+                                "arrived_at":
+                                    datetime.utcnow()
+                            }
+                        }
+                    )
+
+                    try:
+
+                        await ctw3_aircraft_collection.update_one(
+                            {
+                                "_id":
+                                    ObjectId(
+                                        flight[
+                                            "aircraft_id"
+                                        ]
+                                    )
+                            },
+                            {
+                                "$set": {
+                                    "status":
+                                        "available",
+
+                                    "current_airport_id":
+                                        flight.get(
+                                            "destination_airport_id"
+                                        )
+                                }
+                            }
+                        )
+
+                    except Exception as error:
+
+                        print(
+                            "⚠️ [CTW3 AVIATION] "
+                            "Не удалось обновить самолёт:",
+                            error
+                        )
+
+                    flight["status"] = "arrived"
+
+                    await ctw3_broadcast_aviation_event(
+                        "aviation_flight_arrived",
+                        flight
+                    )
+
+                else:
+
+                    await ctw3_broadcast_aviation_event(
+                        "aviation_flight_update",
+                        flight
+                    )
+
+            await asyncio.sleep(
+                1
+            )
+
+        except asyncio.CancelledError:
+
+            raise
+
+        except Exception as error:
+
+            print(
+                "🚨 [CTW3 AVIATION LOOP ERROR]",
+                repr(error)
+            )
+
+            await asyncio.sleep(
+                3
+            )
 
 # =========================================================
 # CTW3 — WEATHER API
