@@ -5859,6 +5859,88 @@ async def ctw3_shoot_down_aircraft(
             missile_stock - 1
     }
 
+async function buyCTW3Aircraft(typeId){
+
+    console.log(
+        "[✈️ CTW3] Покупка самолёта. typeId:",
+        typeId
+    );
+
+    if(
+        !typeId ||
+        String(typeId).trim() === ""
+    ){
+
+        alert(
+            "Не выбран тип самолёта."
+        );
+
+        console.error(
+            "[✈️ CTW3] Пустой aircraft_type_id"
+        );
+
+        return;
+    }
+
+    try{
+
+        const response = await fetch(
+            "/api/ctw3/aviation/aircraft",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                body: JSON.stringify({
+                    aircraft_type_id:
+                        String(typeId)
+                })
+            }
+        );
+
+        const data =
+            await response.json();
+
+        console.log(
+            "[✈️ CTW3] Ответ покупки:",
+            data
+        );
+
+        if(
+            !response.ok
+        ){
+
+            alert(
+                data.detail ||
+                "Не удалось купить самолёт"
+            );
+
+            return;
+        }
+
+        alert(
+            "✈️ Самолёт успешно куплен!"
+        );
+
+        await loadCTW3Aviation();
+
+    }
+    catch(error){
+
+        console.error(
+            "[✈️ CTW3] Ошибка покупки самолёта:",
+            error
+        );
+
+        alert(
+            "Ошибка соединения с сервером."
+        );
+    }
+}
+
 # =========================================================
 # CTW3 — WEATHER API
 # =========================================================
