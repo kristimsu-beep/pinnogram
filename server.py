@@ -2713,7 +2713,19 @@ async def startup():
         print(
             f"🚨 [CTW3 AVIATION START ERROR] {e}"
         )
-
+    try:
+        await ctw3_init_airports()
+    
+        print(
+            "🌍 [CTW3 AVIATION] "
+            "Аэропорты успешно инициализированы!"
+        )
+    
+    except Exception as e:
+    
+        print(
+            f"🚨 [CTW3 AIRPORTS START ERROR] {e}"
+        )
 # =====================================================================
 # 🪐 СИНХРОНИЗАТОР GERAGRAM: DISCORD AI RAM ROUTE INJECTOR (G4F ENGINE)
 # =====================================================================
@@ -3938,6 +3950,7 @@ try:
     ctw3_aircraft = db["ctw3_aircraft"]
     ctw3_flights = db["ctw3_flights"]
     ctw3_aircraft_types = db["ctw3_aircraft_types"]
+    ctw3_airports = db["ctw3_airports"]
     
     print("[🌍 CTW3] MongoDB database initialized: ctw3_db")
     print("[🎉 MONGO-УСПЕХ] Облачный шлюз MongoDB успешно запущен!")
@@ -4613,6 +4626,162 @@ def ctw3_point_in_polygon(
         j = i
 
     return inside
+
+
+# =========================================================
+# CTW3 AVIATION — СОБСТВЕННЫЕ АЭРОПОРТЫ
+# =========================================================
+
+CTW3_AIRPORTS = [
+    {
+        "airport_id": "ctw3_taipei",
+        "name": "Taipei International",
+        "lat": 25.0797,
+        "lng": 121.2342,
+        "country_id": None,
+        "runway_length": 3800,
+        "capacity": 50
+    },
+    {
+        "airport_id": "ctw3_london",
+        "name": "London International",
+        "lat": 51.4700,
+        "lng": -0.4543,
+        "country_id": None,
+        "runway_length": 3900,
+        "capacity": 70
+    },
+    {
+        "airport_id": "ctw3_new_york",
+        "name": "New York International",
+        "lat": 40.6413,
+        "lng": -73.7781,
+        "country_id": None,
+        "runway_length": 4400,
+        "capacity": 80
+    },
+    {
+        "airport_id": "ctw3_paris",
+        "name": "Paris International",
+        "lat": 49.0097,
+        "lng": 2.5479,
+        "country_id": None,
+        "runway_length": 4200,
+        "capacity": 70
+    },
+    {
+        "airport_id": "ctw3_dubai",
+        "name": "Dubai International",
+        "lat": 25.2532,
+        "lng": 55.3657,
+        "country_id": None,
+        "runway_length": 4500,
+        "capacity": 90
+    },
+    {
+        "airport_id": "ctw3_tokyo",
+        "name": "Tokyo International",
+        "lat": 35.5494,
+        "lng": 139.7798,
+        "country_id": None,
+        "runway_length": 3000,
+        "capacity": 85
+    },
+    {
+        "airport_id": "ctw3_singapore",
+        "name": "Singapore International",
+        "lat": 1.3644,
+        "lng": 103.9915,
+        "country_id": None,
+        "runway_length": 4000,
+        "capacity": 80
+    },
+    {
+        "airport_id": "ctw3_sydney",
+        "name": "Sydney International",
+        "lat": -33.9399,
+        "lng": 151.1753,
+        "country_id": None,
+        "runway_length": 3962,
+        "capacity": 75
+    }
+]
+
+
+async def ctw3_init_airports():
+
+    for airport in CTW3_AIRPORTS:
+
+        await ctw3_airports.update_one(
+            {
+                "airport_id":
+                    airport["airport_id"]
+            },
+            {
+                "$set":
+                    airport
+            },
+            upsert=True
+        )
+
+
+async def ctw3_get_airports_for_aviation():
+
+    airports = []
+
+    async for airport in ctw3_airports.find({}):
+
+        airports.append({
+            "id":
+                airport.get(
+                    "airport_id"
+                ),
+
+            "name":
+                airport.get(
+                    "name",
+                    "CTW3 Airport"
+                ),
+
+            "lat":
+                float(
+                    airport.get(
+                        "lat",
+                        0
+                    )
+                ),
+
+            "lng":
+                float(
+                    airport.get(
+                        "lng",
+                        0
+                    )
+                ),
+
+            "country_id":
+                airport.get(
+                    "country_id"
+                ),
+
+            "runway_length":
+                int(
+                    airport.get(
+                        "runway_length",
+                        0
+                    )
+                ),
+
+            "capacity":
+                int(
+                    airport.get(
+                        "capacity",
+                        0
+                    )
+                )
+        })
+
+    return airports
 
 @app.get("/api/ctw3/aviation/state")
 async def ctw3_aviation_state(
