@@ -2696,6 +2696,24 @@ async def startup():
             except Exception as e:
                 print(f"🛑 [KONATA START ERROR] Ошибка запуска бота: {e}")
 
+
+    # ============================================================
+    # ✈️ CTW3 AVIATION INITIALIZATION
+    # ============================================================
+
+    try:
+        await ctw3_init_aircraft_types()
+
+        print(
+            "✈️ [CTW3 AVIATION] "
+            "Типы самолётов успешно инициализированы!"
+        )
+
+    except Exception as e:
+        print(
+            f"🚨 [CTW3 AVIATION START ERROR] {e}"
+        )
+
 # =====================================================================
 # 🪐 СИНХРОНИЗАТОР GERAGRAM: DISCORD AI RAM ROUTE INJECTOR (G4F ENGINE)
 # =====================================================================
@@ -3916,7 +3934,11 @@ try:
     ctw3_db = mongo_client["ctw3_db"]
     ctw3_countries = ctw3_db["countries"]
     ctw3_chat = ctw3_db["chat"]
-
+    ctw3_airlines = db["ctw3_airlines"]
+    ctw3_aircraft = db["ctw3_aircraft"]
+    ctw3_flights = db["ctw3_flights"]
+    ctw3_aircraft_types = db["ctw3_aircraft_types"]
+    
     print("[🌍 CTW3] MongoDB database initialized: ctw3_db")
     print("[🎉 MONGO-УСПЕХ] Облачный шлюз MongoDB успешно запущен!")
 
@@ -3998,6 +4020,83 @@ class CTW3ModeratorReset(BaseModel):
     target_country_id: str
 
     moderator_key: str
+
+# =========================================================
+# CTW3 AVIATION — AIRCRAFT TYPES
+# =========================================================
+
+CTW3_AIRCRAFT_TYPES = [
+    {
+        "type_id": "boeing_737_800",
+        "name": "Boeing 737-800",
+        "manufacturer": "Boeing",
+        "price": 35_000_000,
+        "speed_kmh": 842,
+        "range_km": 5436,
+        "cruise_altitude_m": 10668,
+        "capacity": 189
+    },
+
+    {
+        "type_id": "airbus_a320neo",
+        "name": "Airbus A320neo",
+        "manufacturer": "Airbus",
+        "price": 45_000_000,
+        "speed_kmh": 840,
+        "range_km": 6300,
+        "cruise_altitude_m": 11800,
+        "capacity": 194
+    },
+
+    {
+        "type_id": "boeing_787_9",
+        "name": "Boeing 787-9",
+        "manufacturer": "Boeing",
+        "price": 250_000_000,
+        "speed_kmh": 907,
+        "range_km": 14100,
+        "cruise_altitude_m": 13000,
+        "capacity": 296
+    },
+
+    {
+        "type_id": "airbus_a350_900",
+        "name": "Airbus A350-900",
+        "manufacturer": "Airbus",
+        "price": 300_000_000,
+        "speed_kmh": 903,
+        "range_km": 15000,
+        "cruise_altitude_m": 13000,
+        "capacity": 325
+    },
+
+    {
+        "type_id": "boeing_777_300er",
+        "name": "Boeing 777-300ER",
+        "manufacturer": "Boeing",
+        "price": 350_000_000,
+        "speed_kmh": 905,
+        "range_km": 13650,
+        "cruise_altitude_m": 13100,
+        "capacity": 550
+    }
+]
+
+async def ctw3_init_aircraft_types():
+
+    for aircraft_type in CTW3_AIRCRAFT_TYPES:
+
+        await ctw3_aircraft_types.update_one(
+            {
+                "type_id":
+                    aircraft_type["type_id"]
+            },
+            {
+                "$set":
+                    aircraft_type
+            },
+            upsert=True
+        )
 
 # =========================================================
 # CTW3 HELPERS
@@ -4514,6 +4613,91 @@ def ctw3_point_in_polygon(
         j = i
 
     return inside
+
+@app.get("/api/ctw3/aviation/state")
+async def ctw3_aviation_state():
+
+    require_db()
+
+    country = await ctw3_get_current_country()
+
+    if not country:
+
+        return {
+            "airline": None,
+            "aircraft": [],
+            "airports": [],
+            "flights": [],
+            "aircraft_types": []
+        }
+
+    country_id = str(
+        country["_id"]
+    )
+
+    airline = await ctw3_airlines.find_one(
+        {
+            "country_id":
+                country_id
+        }
+    )
+
+    aircraft = []
+
+    if airline:
+
+        async for plane in ctw3_aircraft.find(
+            {
+                "airline_id":
+                    str(airline["_id"])
+            }
+        ):
+
+            aircraft.append(
+                serialize_ctw3_document(
+                    plane
+                )
+            )
+
+    airports = await ctw3_get_airports_for_aviation()
+
+    flights = []
+
+    async for flight in ctw3_flights.find(
+        {
+            "status": "active"
+        }
+    ):
+
+        flights.append(
+            serialize_ctw3_document(
+                flight
+            )
+        )
+
+    return {
+        "country_id":
+            country_id,
+
+        "airline":
+            serialize_ctw3_document(
+                airline
+            )
+            if airline
+            else None,
+
+        "aircraft":
+            aircraft,
+
+        "airports":
+            airports,
+
+        "flights":
+            flights,
+
+        "aircraft_types":
+            CTW3_AIRCRAFT_TYPES
+    }
 
 # =========================================================
 # CTW3 — WEATHER API
