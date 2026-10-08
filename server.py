@@ -4617,7 +4617,9 @@ def ctw3_point_in_polygon(
 @app.get("/api/ctw3/aviation/state")
 async def ctw3_aviation_state():
 
-    country = await ctw3_get_current_country()
+    _, country = await ctw3_get_country_for_request(
+        request
+    )
 
     if not country:
 
@@ -4700,7 +4702,9 @@ async def ctw3_aviation_state():
 @app.post("/api/ctw3/aviation/airline")
 async def ctw3_create_airline(request: Request):
 
-    country = await ctw3_get_current_country()
+    _, country = await ctw3_get_country_for_request(
+        request
+    )
 
     if not country:
         raise HTTPException(
@@ -4758,7 +4762,9 @@ async def ctw3_create_airline(request: Request):
 @app.post("/api/ctw3/aviation/aircraft")
 async def ctw3_buy_aircraft(request: Request):
 
-    country = await ctw3_get_current_country()
+    _, country = await ctw3_get_country_for_request(
+        request
+    )
 
     if not country:
         raise HTTPException(
@@ -4880,7 +4886,9 @@ async def ctw3_create_flight(
     request: Request
 ):
 
-    country = await ctw3_get_current_country()
+    _, country = await ctw3_get_country_for_request(
+        request
+    )
 
     if not country:
         raise HTTPException(
@@ -5053,7 +5061,7 @@ async def ctw3_create_flight(
         "altitude":
             int(
                 aircraft_type.get(
-                    "cruise_altitude",
+                    "cruise_altitude_m",
                     10000
                 )
             ),
@@ -5120,7 +5128,9 @@ async def ctw3_shoot_down_aircraft(
     request: Request
 ):
 
-    country = await ctw3_get_current_country()
+    _, country = await ctw3_get_country_for_request(
+        request
+    )
 
     if not country:
         raise HTTPException(
@@ -5193,21 +5203,26 @@ async def ctw3_shoot_down_aircraft(
         )
     )
 
+    # ------------------------------------------------------------
+    # Проверяем, находится ли самолёт внутри территории
+    # атакующей страны.
+    # ------------------------------------------------------------
+
+    territory = country.get(
+        "territory"
+    )
+
     inside_territory = False
 
-    # Используем существующую проверку CTW3,
-    # если она есть в проекте.
-    try:
+    if territory:
 
-        inside_territory = await ctw3_point_inside_country(
-            attacker_country_id,
+        # Наша CTW3 территория хранится
+        # как массив координат.
+        inside_territory = ctw3_point_in_polygon(
             lat,
-            lng
+            lng,
+            territory
         )
-
-    except Exception:
-
-        inside_territory = False
 
     if not inside_territory:
 
