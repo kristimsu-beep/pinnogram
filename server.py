@@ -5232,10 +5232,27 @@ async def ctw3_buy_aircraft(
             break
 
     if not aircraft_type:
-
+    
+        print(
+            "[✈️ CTW3 AIRCRAFT ERROR] "
+            f"Получен aircraft_type_id: {aircraft_type_id}"
+        )
+    
+        print(
+            "[✈️ CTW3 AIRCRAFT ERROR] "
+            "Доступные type_id: "
+            + str([
+                item.get("type_id")
+                for item in CTW3_AIRCRAFT_TYPES
+            ])
+        )
+    
         raise HTTPException(
             status_code=400,
-            detail="Тип самолёта не найден"
+            detail=(
+                "Тип самолёта не найден: "
+                + aircraft_type_id
+            )
         )
 
     aircraft_count = int(
