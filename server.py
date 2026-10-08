@@ -3947,7 +3947,7 @@ try:
     ctw3_countries = ctw3_db["countries"]
     ctw3_chat = ctw3_db["chat"]
     ctw3_airlines = db["ctw3_airlines"]
-    ctw3_aircraft = db["ctw3_aircraft"]
+    ctw3_aircraft_collection = db["ctw3_aircraft"]
     ctw3_flights = db["ctw3_flights"]
     ctw3_aircraft_types = db["ctw3_aircraft_types"]
     ctw3_airports = db["ctw3_airports"]
