@@ -4615,7 +4615,9 @@ def ctw3_point_in_polygon(
     return inside
 
 @app.get("/api/ctw3/aviation/state")
-async def ctw3_aviation_state():
+async def ctw3_aviation_state(
+    request: Request
+):
 
     _, country = await ctw3_get_country_for_request(
         request
