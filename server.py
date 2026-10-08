@@ -4924,10 +4924,27 @@ async def ctw3_create_airline(request: Request):
 
     return {
         "ok": True,
-        "airline":
-            serialize_ctw3_document(
-                airline
+        "airline": {
+            "id": str(
+                airline["_id"]
+            ),
+            "name": airline.get(
+                "name",
+                ""
+            ),
+            "country_id": airline.get(
+                "country_id"
+            ),
+            "created_at": (
+                airline.get(
+                    "created_at"
+                ).isoformat()
+                if airline.get(
+                    "created_at"
+                )
+                else None
             )
+        }
     }
 
 @app.post("/api/ctw3/aviation/aircraft")
