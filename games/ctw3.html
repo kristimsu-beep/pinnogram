@@ -14072,69 +14072,83 @@ async function createCTW3Airline(){
 
 }
 
+async function buyCTW3Aircraft(typeId){
 
-async function buyCTW3Aircraft(){
-
-    const select =
-        $("ctw3AircraftTypeSelect");
-
+    console.log(
+        "[✈️ CTW3] Покупка самолёта. typeId:",
+        typeId
+    );
 
     if(
-        !select ||
-        !select.value
+        !typeId ||
+        String(typeId).trim() === ""
     ){
 
+        alert(
+            "Не выбран тип самолёта."
+        );
+
+        console.error(
+            "[✈️ CTW3] Пустой aircraft_type_id"
+        );
+
         return;
-
     }
-
 
     try{
 
-        const result =
-            await api(
-                "/api/ctw3/aviation/aircraft",
-                {
-                    method:"POST",
-
-                    body:
-                        JSON.stringify({
-
-                            type_id:
-                                select.value
-
-                        })
-                }
-            );
-
-
-        setStatus(
-            "✈️ Куплен "+
-            (
-                result.aircraft?.type_name ||
-                "самолёт"
-            )
+        const response = await fetch(
+            "/api/ctw3/aviation/aircraft",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+                body: JSON.stringify({
+                    aircraft_type_id:
+                        String(typeId)
+                })
+            }
         );
 
+        const data =
+            await response.json();
 
-        await refreshState();
+        console.log(
+            "[✈️ CTW3] Ответ покупки:",
+            data
+        );
 
-        await loadCountries();
+        if(!response.ok){
+
+            alert(
+                data.detail ||
+                "Не удалось купить самолёт"
+            );
+
+            return;
+        }
+
+        alert(
+            "✈️ Самолёт успешно куплен!"
+        );
 
         await loadCTW3Aviation();
 
+    }
+    catch(error){
 
-    }catch(error){
-
-        setStatus(
-            "❌ "+
-            error.message
+        console.error(
+            "[✈️ CTW3] Ошибка покупки самолёта:",
+            error
         );
 
+        alert(
+            "Ошибка соединения с сервером."
+        );
     }
-
 }
-
 
 function renderCTW3Flights(){
 
