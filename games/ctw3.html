@@ -13886,7 +13886,11 @@ function renderCTW3AviationPanel(){
                 <button
                     class="ctw3-aviation-button"
                     onclick="
-                        buyCTW3Aircraft()
+                        buyCTW3Aircraft(
+                            document.getElementById(
+                                'ctw3AircraftTypeSelect'
+                            ).value
+                        )
                     "
                 >
 
