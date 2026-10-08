@@ -4617,8 +4617,6 @@ def ctw3_point_in_polygon(
 @app.get("/api/ctw3/aviation/state")
 async def ctw3_aviation_state():
 
-    require_db()
-
     country = await ctw3_get_current_country()
 
     if not country:
@@ -4697,6 +4695,622 @@ async def ctw3_aviation_state():
 
         "aircraft_types":
             CTW3_AIRCRAFT_TYPES
+    }
+
+@app.post("/api/ctw3/aviation/airline")
+async def ctw3_create_airline(request: Request):
+
+    country = await ctw3_get_current_country()
+
+    if not country:
+        raise HTTPException(
+            status_code=400,
+            detail="Страна не найдена"
+        )
+
+    country_id = str(country["_id"])
+
+    existing = await ctw3_airlines.find_one(
+        {
+            "country_id": country_id
+        }
+    )
+
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="У этой страны уже есть авиакомпания"
+        )
+
+    data = await request.json()
+
+    name = str(
+        data.get("name", "")
+    ).strip()
+
+    if not name:
+        raise HTTPException(
+            status_code=400,
+            detail="Введите название авиакомпании"
+        )
+
+    airline = {
+        "country_id": country_id,
+        "name": name,
+        "aircraft_count": 0,
+        "created_at": datetime.utcnow()
+    }
+
+    result = await ctw3_airlines.insert_one(
+        airline
+    )
+
+    airline["_id"] = result.inserted_id
+
+    return {
+        "ok": True,
+        "airline":
+            serialize_ctw3_document(
+                airline
+            )
+    }
+
+@app.post("/api/ctw3/aviation/aircraft")
+async def ctw3_buy_aircraft(request: Request):
+
+    country = await ctw3_get_current_country()
+
+    if not country:
+        raise HTTPException(
+            status_code=400,
+            detail="Страна не найдена"
+        )
+
+    country_id = str(
+        country["_id"]
+    )
+
+    airline = await ctw3_airlines.find_one(
+        {
+            "country_id": country_id
+        }
+    )
+
+    if not airline:
+        raise HTTPException(
+            status_code=400,
+            detail="Сначала создайте авиакомпанию"
+        )
+
+    data = await request.json()
+
+    aircraft_type_id = str(
+        data.get(
+            "aircraft_type_id",
+            ""
+        )
+    )
+
+    aircraft_type = None
+
+    for item in CTW3_AIRCRAFT_TYPES:
+
+        if str(
+            item.get("id", "")
+        ) == aircraft_type_id:
+
+            aircraft_type = item
+            break
+
+    if not aircraft_type:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Тип самолёта не найден"
+        )
+
+    aircraft_count = int(
+        airline.get(
+            "aircraft_count",
+            0
+        )
+    )
+
+    registration = (
+        "PIN-"
+        + country_id[-3:].upper()
+        + "-"
+        + str(aircraft_count + 1).zfill(3)
+    )
+
+    aircraft = {
+        "airline_id":
+            str(airline["_id"]),
+
+        "country_id":
+            country_id,
+
+        "type_id":
+            aircraft_type_id,
+
+        "type":
+            aircraft_type,
+
+        "registration":
+            registration,
+
+        "status":
+            "available",
+
+        "current_airport_id":
+            None,
+
+        "created_at":
+            datetime.utcnow()
+    }
+
+    result = await ctw3_aircraft.insert_one(
+        aircraft
+    )
+
+    aircraft["_id"] = result.inserted_id
+
+    await ctw3_airlines.update_one(
+        {
+            "_id":
+                airline["_id"]
+        },
+        {
+            "$inc": {
+                "aircraft_count": 1
+            }
+        }
+    )
+
+    return {
+        "ok": True,
+        "aircraft":
+            serialize_ctw3_document(
+                aircraft
+            )
+    }
+
+@app.post("/api/ctw3/aviation/flight")
+async def ctw3_create_flight(
+    request: Request
+):
+
+    country = await ctw3_get_current_country()
+
+    if not country:
+        raise HTTPException(
+            status_code=400,
+            detail="Страна не найдена"
+        )
+
+    country_id = str(
+        country["_id"]
+    )
+
+    data = await request.json()
+
+    aircraft_id = str(
+        data.get(
+            "aircraft_id",
+            ""
+        )
+    )
+
+    origin_airport_id = str(
+        data.get(
+            "origin_airport_id",
+            ""
+        )
+    )
+
+    destination_airport_id = str(
+        data.get(
+            "destination_airport_id",
+            ""
+        )
+    )
+
+    aircraft = await ctw3_aircraft.find_one(
+        {
+            "_id":
+                ObjectId(aircraft_id),
+            "country_id":
+                country_id
+        }
+    )
+
+    if not aircraft:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Самолёт не найден"
+        )
+
+    if aircraft.get("status") != "available":
+
+        raise HTTPException(
+            status_code=400,
+            detail="Самолёт уже используется"
+        )
+
+    airports = await ctw3_get_airports_for_aviation()
+
+    origin = None
+    destination = None
+
+    for airport in airports:
+
+        if str(
+            airport.get("id", "")
+        ) == origin_airport_id:
+
+            origin = airport
+
+        if str(
+            airport.get("id", "")
+        ) == destination_airport_id:
+
+            destination = airport
+
+    if not origin:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Аэропорт отправления не найден"
+        )
+
+    if not destination:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Аэропорт назначения не найден"
+        )
+
+    if origin_airport_id == destination_airport_id:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Аэропорты должны отличаться"
+        )
+
+    aircraft_type = aircraft.get(
+        "type",
+        {}
+    )
+
+    flight_number = (
+        "PIN"
+        + str(
+            random.randint(
+                100,
+                999
+            )
+        )
+    )
+
+    flight = {
+
+        "flight_number":
+            flight_number,
+
+        "aircraft_id":
+            str(aircraft["_id"]),
+
+        "airline_id":
+            str(aircraft["airline_id"]),
+
+        "country_id":
+            country_id,
+
+        "airline_name":
+            "",
+
+        "aircraft_registration":
+            aircraft.get(
+                "registration",
+                ""
+            ),
+
+        "aircraft_type":
+            aircraft_type,
+
+        "origin":
+            origin,
+
+        "destination":
+            destination,
+
+        "origin_airport_id":
+            origin_airport_id,
+
+        "destination_airport_id":
+            destination_airport_id,
+
+        "lat":
+            float(
+                origin.get(
+                    "lat",
+                    0
+                )
+            ),
+
+        "lng":
+            float(
+                origin.get(
+                    "lng",
+                    0
+                )
+            ),
+
+        "heading":
+            0,
+
+        "altitude":
+            int(
+                aircraft_type.get(
+                    "cruise_altitude",
+                    10000
+                )
+            ),
+
+        "progress":
+            0,
+
+        "status":
+            "active",
+
+        "created_at":
+            datetime.utcnow(),
+
+        "updated_at":
+            datetime.utcnow()
+    }
+
+    airline = await ctw3_airlines.find_one(
+        {
+            "_id":
+                ObjectId(
+                    aircraft["airline_id"]
+                )
+        }
+    )
+
+    if airline:
+
+        flight["airline_name"] = airline.get(
+            "name",
+            ""
+        )
+
+    result = await ctw3_flights.insert_one(
+        flight
+    )
+
+    flight["_id"] = result.inserted_id
+
+    await ctw3_aircraft.update_one(
+        {
+            "_id":
+                aircraft["_id"]
+        },
+        {
+            "$set": {
+                "status":
+                    "in_flight"
+            }
+        }
+    )
+
+    return {
+        "ok": True,
+
+        "flight":
+            serialize_ctw3_document(
+                flight
+            )
+    }
+
+@app.post("/api/ctw3/aviation/shootdown")
+async def ctw3_shoot_down_aircraft(
+    request: Request
+):
+
+    country = await ctw3_get_current_country()
+
+    if not country:
+        raise HTTPException(
+            status_code=400,
+            detail="Страна не найдена"
+        )
+
+    attacker_country_id = str(
+        country["_id"]
+    )
+
+    data = await request.json()
+
+    flight_id = str(
+        data.get(
+            "flight_id",
+            ""
+        )
+    )
+
+    try:
+
+        flight = await ctw3_flights.find_one(
+            {
+                "_id":
+                    ObjectId(flight_id),
+
+                "status":
+                    "active"
+            }
+        )
+
+    except Exception:
+
+        flight = None
+
+    if not flight:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Активный рейс не найден"
+        )
+
+    # Нельзя сбивать собственный самолёт
+    if str(
+        flight.get("country_id", "")
+    ) == attacker_country_id:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Нельзя сбить собственный самолёт"
+        )
+
+    # ------------------------------------------------------------
+    # Проверяем, находится ли самолёт над территорией атакующей
+    # страны.
+    # ------------------------------------------------------------
+
+    lat = float(
+        flight.get(
+            "lat",
+            0
+        )
+    )
+
+    lng = float(
+        flight.get(
+            "lng",
+            0
+        )
+    )
+
+    inside_territory = False
+
+    # Используем существующую проверку CTW3,
+    # если она есть в проекте.
+    try:
+
+        inside_territory = await ctw3_point_inside_country(
+            attacker_country_id,
+            lat,
+            lng
+        )
+
+    except Exception:
+
+        inside_territory = False
+
+    if not inside_territory:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Самолёт сейчас не находится над территорией вашей страны"
+        )
+
+    # ------------------------------------------------------------
+    # Проверяем запас ракет
+    # ------------------------------------------------------------
+
+    missile_stock = int(
+        country.get(
+            "missile_stock",
+            0
+        )
+    )
+
+    if missile_stock <= 0:
+
+        raise HTTPException(
+            status_code=400,
+            detail="У страны нет готовых ракет"
+        )
+
+    # ------------------------------------------------------------
+    # Расходуем одну ракету
+    # ------------------------------------------------------------
+
+    await ctw3_countries.update_one(
+        {
+            "_id":
+                country["_id"]
+        },
+        {
+            "$set": {
+                "missile_stock":
+                    missile_stock - 1
+            }
+        }
+    )
+
+    # ------------------------------------------------------------
+    # Уничтожаем рейс
+    # ------------------------------------------------------------
+
+    await ctw3_flights.update_one(
+        {
+            "_id":
+                flight["_id"]
+        },
+        {
+            "$set": {
+                "status":
+                    "destroyed",
+
+                "destroyed_by":
+                    attacker_country_id,
+
+                "destroyed_at":
+                    datetime.utcnow()
+            }
+        }
+    )
+
+    # ------------------------------------------------------------
+    # Самолёт уничтожен
+    # ------------------------------------------------------------
+
+    try:
+
+        await ctw3_aircraft.update_one(
+            {
+                "_id":
+                    ObjectId(
+                        flight["aircraft_id"]
+                    )
+            },
+            {
+                "$set": {
+                    "status":
+                        "destroyed"
+                }
+            }
+        )
+
+    except Exception:
+        pass
+
+    return {
+
+        "ok":
+            True,
+
+        "message":
+            "Самолёт сбит",
+
+        "flight_id":
+            flight_id,
+
+        "missile_stock":
+            missile_stock - 1
     }
 
 # =========================================================
