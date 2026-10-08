@@ -4817,7 +4817,7 @@ async def ctw3_aviation_state(
 
     if airline:
 
-        async for plane in ctw3_aircraft.find(
+        async for plane in ctw3_aircraft_collection.find(
             {
                 "airline_id":
                     str(airline["_id"])
@@ -5043,7 +5043,7 @@ async def ctw3_buy_aircraft(request: Request):
             datetime.utcnow()
     }
 
-    result = await ctw3_aircraft.insert_one(
+    result = await ctw3_aircraft_collection.insert_one(
         aircraft
     )
 
@@ -5111,7 +5111,7 @@ async def ctw3_create_flight(
         )
     )
 
-    aircraft = await ctw3_aircraft.find_one(
+    aircraft = await ctw3_aircraft_collection.find_one(
         {
             "_id":
                 ObjectId(aircraft_id),
@@ -5289,7 +5289,7 @@ async def ctw3_create_flight(
 
     flight["_id"] = result.inserted_id
 
-    await ctw3_aircraft.update_one(
+    await ctw3_aircraft_collection.update_one(
         {
             "_id":
                 aircraft["_id"]
