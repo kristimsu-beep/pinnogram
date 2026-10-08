@@ -2684,6 +2684,200 @@ select{
 
 }
 
+/* =========================================================
+   CTW3 AVIATION
+========================================================= */
+
+#ctw3AviationPanel{
+
+    position:fixed;
+
+    top:18px;
+    right:18px;
+
+    width:360px;
+    max-width:
+        calc(100vw - 36px);
+
+    max-height:
+        calc(100vh - 36px);
+
+    overflow:auto;
+
+    z-index:6100;
+
+    display:none;
+
+    background:
+        rgba(10,16,25,.97);
+
+    border:
+        1px solid
+        rgba(90,210,255,.35);
+
+    border-radius:16px;
+
+    box-shadow:
+        0 18px 55px
+        rgba(0,0,0,.55);
+
+    color:#fff;
+
+    padding:16px;
+}
+
+
+#ctw3AviationPanel.visible{
+
+    display:block;
+
+}
+
+
+.ctw3-aviation-title{
+
+    font-size:18px;
+
+    font-weight:800;
+
+    margin-bottom:12px;
+
+}
+
+
+.ctw3-aviation-section{
+
+    margin-top:14px;
+
+    padding-top:12px;
+
+    border-top:
+        1px solid
+        rgba(255,255,255,.09);
+
+}
+
+
+#ctw3AviationPanel input,
+#ctw3AviationPanel select{
+
+    width:100%;
+
+    box-sizing:border-box;
+
+    background:#111c2a;
+
+    color:#fff;
+
+    border:
+        1px solid
+        #30455c;
+
+    border-radius:9px;
+
+    padding:9px;
+
+    margin-top:7px;
+
+}
+
+
+.ctw3-aviation-button{
+
+    width:100%;
+
+    border:0;
+
+    border-radius:9px;
+
+    padding:10px;
+
+    cursor:pointer;
+
+    background:#168bd0;
+
+    color:#fff;
+
+    font-weight:800;
+
+    margin-top:7px;
+
+}
+
+
+.ctw3-aviation-button.secondary{
+
+    background:#26384c;
+
+}
+
+
+.ctw3-flight-item{
+
+    padding:9px;
+
+    border-radius:10px;
+
+    background:
+        rgba(255,255,255,.055);
+
+    cursor:pointer;
+
+    margin-top:7px;
+
+}
+
+
+.ctw3-flight-item:hover{
+
+    background:
+        rgba(80,190,255,.13);
+
+}
+
+
+.ctw3-flight-main{
+
+    font-weight:800;
+
+}
+
+
+.ctw3-flight-sub{
+
+    font-size:12px;
+
+    color:#9fb0c1;
+
+    margin-top:3px;
+
+}
+
+
+.ctw3-aviation-hint{
+
+    font-size:12px;
+
+    color:#91a2b4;
+
+    line-height:1.4;
+
+}
+
+
+.ctw3-plane-marker{
+
+    font-size:26px;
+
+    filter:
+        drop-shadow(
+            0 2px 5px #000
+        );
+
+    cursor:pointer;
+
+}
+
 </style>
 </head>
 
@@ -3740,6 +3934,35 @@ select{
     </div>
 
 </div>
+
+<div id="ctw3AviationPanel">
+
+    <div class="ctw3-aviation-title">
+        ✈️ Авиация CTW3
+    </div>
+
+    <div id="ctw3AviationContent">
+        Загрузка...
+    </div>
+
+</div>
+
+
+<button
+    id="ctw3AviationOpenButton"
+    class="ctw3-aviation-button"
+    style="
+        position:fixed;
+        right:18px;
+        bottom:18px;
+        width:auto;
+        z-index:6050;
+        padding:12px 16px;
+    "
+    onclick="openAviationPanel()"
+>
+    ✈️ Авиация
+</button>
 
 <script>
 
@@ -13454,6 +13677,786 @@ function resetMeasurement(){
     setStatus(
         ""
     );
+
+}
+
+/* =========================================================
+   CTW3 AVIATION
+========================================================= */
+
+let ctw3AviationState = {
+
+    airline:null,
+
+    aircraft:[],
+
+    airports:[],
+
+    flights:[],
+
+    aircraft_types:[]
+
+};
+
+
+let ctw3AviationMarkers = {};
+
+
+function openAviationPanel(){
+
+    $("ctw3AviationPanel")
+        ?.classList
+        .add("visible");
+
+    loadCTW3Aviation();
+
+}
+
+
+function closeAviationPanel(){
+
+    $("ctw3AviationPanel")
+        ?.classList
+        .remove("visible");
+
+}
+
+
+async function loadCTW3Aviation(){
+
+    try{
+
+        const data =
+            await api(
+                "/api/ctw3/aviation/state"
+            );
+
+
+        ctw3AviationState =
+            Object.assign(
+                ctw3AviationState,
+                data
+            );
+
+
+        renderCTW3AviationPanel();
+
+        renderCTW3Flights();
+
+
+    }catch(error){
+
+        console.error(
+            "[CTW3 AVIATION]",
+            error
+        );
+
+    }
+
+}
+
+
+function renderCTW3AviationPanel(){
+
+    const box =
+        $("ctw3AviationContent");
+
+
+    if(!box){
+
+        return;
+
+    }
+
+
+    const airline =
+        ctw3AviationState.airline;
+
+
+    const aircraft =
+        ctw3AviationState.aircraft || [];
+
+
+    const types =
+        ctw3AviationState.aircraft_types || [];
+
+
+    let html = "";
+
+
+    if(!airline){
+
+        html += `
+
+            <div
+                class="ctw3-aviation-hint">
+
+                Создайте собственную
+                авиакомпанию.
+
+            </div>
+
+
+            <input
+                id="ctw3AirlineName"
+                maxlength="40"
+                placeholder="Название авиакомпании"
+            >
+
+
+            <button
+                class="ctw3-aviation-button"
+                onclick="
+                    createCTW3Airline()
+                "
+            >
+
+                Создать авиакомпанию — $5M
+
+            </button>
+
+        `;
+
+    }
+
+    else{
+
+        html += `
+
+            <div>
+
+                <b>
+                    ${escapeHtml(
+                        airline.name ||
+                        "Авиакомпания"
+                    )}
+                </b>
+
+                <div
+                    class="ctw3-aviation-hint">
+
+                    Самолётов:
+                    ${aircraft.length}
+
+                </div>
+
+            </div>
+
+
+            <div
+                class="ctw3-aviation-section">
+
+                <b>
+                    🛩️ Купить самолёт
+                </b>
+
+
+                <select
+                    id="ctw3AircraftTypeSelect"
+                >
+
+                    ${types.map(
+                        type => `
+
+                            <option
+                                value="${escapeHtml(
+                                    type.type_id
+                                )}"
+                            >
+
+                                ${escapeHtml(
+                                    type.name
+                                )}
+
+                                —
+                                ${Number(
+                                    type.price || 0
+                                ).toLocaleString(
+                                    "ru-RU"
+                                )}$
+
+                            </option>
+
+                        `
+                    ).join("")}
+
+                </select>
+
+
+                <button
+                    class="ctw3-aviation-button"
+                    onclick="
+                        buyCTW3Aircraft()
+                    "
+                >
+
+                    Купить самолёт
+
+                </button>
+
+            </div>
+
+        `;
+
+    }
+
+
+    html += `
+
+        <div
+            class="ctw3-aviation-section">
+
+            <b>
+                🌍 Самолёты в небе
+            </b>
+
+            <div>
+
+                ${
+                    (
+                        ctw3AviationState
+                            .flights ||
+                        []
+                    ).length
+
+                        ? ctw3AviationState
+                            .flights
+                            .map(
+                                flight => `
+
+                                    <div
+                                        class="
+                                            ctw3-flight-item
+                                        "
+                                        onclick="
+                                            focusCTW3Flight(
+                                                '${flight.id}'
+                                            )
+                                        "
+                                    >
+
+                                        <div
+                                            class="
+                                                ctw3-flight-main
+                                            "
+                                        >
+
+                                            ✈️
+                                            ${escapeHtml(
+                                                flight.flight_number ||
+                                                ""
+                                            )}
+
+                                        </div>
+
+                                        <div
+                                            class="
+                                                ctw3-flight-sub
+                                            "
+                                        >
+
+                                            ${escapeHtml(
+                                                flight.airline_name ||
+                                                ""
+                                            )}
+
+                                        </div>
+
+                                    </div>
+
+                                `
+                            )
+                            .join("")
+
+                        : `
+
+                            <div
+                                class="
+                                    ctw3-aviation-hint
+                                "
+                            >
+
+                                Активных рейсов нет.
+
+                            </div>
+
+                        `
+                }
+
+            </div>
+
+        </div>
+
+
+        <button
+            class="
+                ctw3-aviation-button
+                secondary
+            "
+            onclick="
+                closeAviationPanel()
+            "
+        >
+
+            Закрыть
+
+        </button>
+
+    `;
+
+
+    box.innerHTML =
+        html;
+
+}
+
+
+async function createCTW3Airline(){
+
+    const input =
+        $("ctw3AirlineName");
+
+
+    const name =
+        input
+            ? input.value.trim()
+            : "";
+
+
+    if(!name){
+
+        setStatus(
+            "⚠️ Введите название авиакомпании"
+        );
+
+        return;
+
+    }
+
+
+    try{
+
+        await api(
+            "/api/ctw3/aviation/airline",
+            {
+                method:"POST",
+
+                body:
+                    JSON.stringify({
+                        name:name
+                    })
+            }
+        );
+
+
+        setStatus(
+            "✈️ Авиакомпания создана"
+        );
+
+
+        await refreshState();
+
+        await loadCountries();
+
+        await loadCTW3Aviation();
+
+
+    }catch(error){
+
+        setStatus(
+            "❌ "+
+            error.message
+        );
+
+    }
+
+}
+
+
+async function buyCTW3Aircraft(){
+
+    const select =
+        $("ctw3AircraftTypeSelect");
+
+
+    if(
+        !select ||
+        !select.value
+    ){
+
+        return;
+
+    }
+
+
+    try{
+
+        const result =
+            await api(
+                "/api/ctw3/aviation/aircraft",
+                {
+                    method:"POST",
+
+                    body:
+                        JSON.stringify({
+
+                            type_id:
+                                select.value
+
+                        })
+                }
+            );
+
+
+        setStatus(
+            "✈️ Куплен "+
+            (
+                result.aircraft?.type_name ||
+                "самолёт"
+            )
+        );
+
+
+        await refreshState();
+
+        await loadCountries();
+
+        await loadCTW3Aviation();
+
+
+    }catch(error){
+
+        setStatus(
+            "❌ "+
+            error.message
+        );
+
+    }
+
+}
+
+
+function renderCTW3Flights(){
+
+    if(!map){
+
+        return;
+
+    }
+
+
+    const active = {};
+
+
+    (
+        ctw3AviationState
+            .flights ||
+        []
+    ).forEach(
+        flight => {
+
+            const id =
+                String(
+                    flight.id
+                );
+
+
+            active[id] = true;
+
+
+            const lat =
+                Number(
+                    flight.current_latitude
+                );
+
+
+            const lng =
+                Number(
+                    flight.current_longitude
+                );
+
+
+            if(
+                !Number.isFinite(lat) ||
+                !Number.isFinite(lng)
+            ){
+
+                return;
+
+            }
+
+
+            const icon =
+                L.divIcon({
+
+                    className:"",
+
+                    html:`
+
+                        <div
+                            class="
+                                ctw3-plane-marker
+                            "
+                        >
+
+                            ✈️
+
+                        </div>
+
+                    `,
+
+                    iconSize:[
+                        32,
+                        32
+                    ],
+
+                    iconAnchor:[
+                        16,
+                        16
+                    ]
+
+                });
+
+
+            if(
+                ctw3AviationMarkers[id]
+            ){
+
+                ctw3AviationMarkers[id]
+                    .setLatLng(
+                        [
+                            lat,
+                            lng
+                        ]
+                    );
+
+            }
+
+            else{
+
+                const marker =
+                    L.marker(
+                        [
+                            lat,
+                            lng
+                        ],
+                        {
+                            icon:icon,
+
+                            zIndexOffset:
+                                500
+                        }
+                    );
+
+
+                marker.on(
+                    "click",
+                    function(event){
+
+                        L.DomEvent
+                            .stopPropagation(
+                                event
+                            );
+
+
+                        selectCTW3Flight(
+                            flight
+                        );
+
+                    }
+                );
+
+
+                marker.addTo(
+                    map
+                );
+
+
+                ctw3AviationMarkers[id] =
+                    marker;
+
+            }
+
+        }
+    );
+
+
+    Object.keys(
+        ctw3AviationMarkers
+    ).forEach(
+        id => {
+
+            if(
+                !active[id]
+            ){
+
+                if(
+                    map.hasLayer(
+                        ctw3AviationMarkers[id]
+                    )
+                ){
+
+                    map.removeLayer(
+                        ctw3AviationMarkers[id]
+                    );
+
+                }
+
+
+                delete
+                    ctw3AviationMarkers[id];
+
+            }
+
+        }
+    );
+
+}
+
+
+function selectCTW3Flight(
+    flight
+){
+
+    showMapPointInfo(
+
+        Number(
+            flight.current_latitude
+        ),
+
+        Number(
+            flight.current_longitude
+        ),
+
+        {
+
+            type:
+                "aircraft",
+
+            object:
+                flight,
+
+            country:{
+
+                id:
+                    flight.country_id,
+
+                name:
+                    flight.country_name,
+
+                flag:
+                    flight.country_flag
+
+            },
+
+            canShootAircraft:
+
+                String(
+                    country?.id ||
+                    ""
+                ) !==
+                String(
+                    flight.country_id ||
+                    ""
+                )
+
+        }
+
+    );
+
+}
+
+
+function focusCTW3Flight(
+    id
+){
+
+    const flight =
+        (
+            ctw3AviationState
+                .flights ||
+            []
+        ).find(
+            x =>
+                String(x.id) ===
+                String(id)
+        );
+
+
+    if(!flight){
+
+        return;
+
+    }
+
+
+    map.setView(
+        [
+            Number(
+                flight.current_latitude
+            ),
+
+            Number(
+                flight.current_longitude
+            )
+        ],
+
+        Math.max(
+            map.getZoom(),
+            5
+        )
+    );
+
+
+    selectCTW3Flight(
+        flight
+    );
+
+}
+
+
+async function shootDownCTW3Flight(
+    id
+){
+
+    try{
+
+        await api(
+            "/api/ctw3/aviation/shootdown",
+            {
+                method:"POST",
+
+                body:
+                    JSON.stringify({
+
+                        flight_id:
+                            String(id)
+
+                    })
+            }
+        );
+
+
+        setStatus(
+            "🚀 Самолёт уничтожен"
+        );
+
+
+        closePointInfo();
+
+        await refreshState();
+
+        await loadCTW3Aviation();
+
+
+    }catch(error){
+
+        setStatus(
+            "❌ "+
+            error.message
+        );
+
+    }
 
 }
 
