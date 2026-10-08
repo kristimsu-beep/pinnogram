@@ -4799,12 +4799,16 @@ async def ctw3_aviation_state(
             "aircraft": [],
             "airports": [],
             "flights": [],
-            "aircraft_types": []
+            "aircraft_types": CTW3_AIRCRAFT_TYPES
         }
 
     country_id = str(
         country["_id"]
     )
+
+    # =========================================================
+    # АВИАКОМПАНИЯ
+    # =========================================================
 
     airline = await ctw3_airlines.find_one(
         {
@@ -4812,6 +4816,10 @@ async def ctw3_aviation_state(
                 country_id
         }
     )
+
+    # =========================================================
+    # САМОЛЁТЫ
+    # =========================================================
 
     aircraft = []
 
@@ -4824,61 +4832,236 @@ async def ctw3_aviation_state(
             }
         ):
 
-            planes.append({
-                "id": str(
-                    plane.get("_id")
-                ),
-                "aircraft_id": str(
-                    plane.get("_id")
-                ),
-                "country_id": plane.get(
-                    "country_id"
-                ),
-                "airline_id": plane.get(
-                    "airline_id"
-                ),
-                "airline_name": plane.get(
-                    "airline_name",
-                    ""
-                ),
-                "registration": plane.get(
-                    "registration",
-                    ""
-                ),
-                "aircraft_type": plane.get(
-                    "aircraft_type",
-                    ""
-                ),
-                "status": plane.get(
-                    "status",
-                    "available"
-                )
+            aircraft.append({
+                "id":
+                    str(
+                        plane.get("_id")
+                    ),
+
+                "aircraft_id":
+                    str(
+                        plane.get("_id")
+                    ),
+
+                "country_id":
+                    plane.get(
+                        "country_id"
+                    ),
+
+                "airline_id":
+                    plane.get(
+                        "airline_id"
+                    ),
+
+                "airline_name":
+                    airline.get(
+                        "name",
+                        ""
+                    ),
+
+                "registration":
+                    plane.get(
+                        "registration",
+                        ""
+                    ),
+
+                "aircraft_type":
+                    plane.get(
+                        "type",
+                        {}
+                    ),
+
+                "status":
+                    plane.get(
+                        "status",
+                        "available"
+                    ),
+
+                "current_airport_id":
+                    plane.get(
+                        "current_airport_id"
+                    )
             })
 
+    # =========================================================
+    # АЭРОПОРТЫ CTW3
+    # =========================================================
+
     airports = await ctw3_get_airports_for_aviation()
+
+    # =========================================================
+    # АКТИВНЫЕ РЕЙСЫ
+    # =========================================================
 
     flights = []
 
     async for flight in ctw3_flights.find(
         {
-            "status": "active"
+            "status":
+                "active"
         }
     ):
 
-        flights.append(
-            serialize_ctw3_document(
-                flight
-            )
-        )
+        flights.append({
+            "id":
+                str(
+                    flight.get("_id")
+                ),
+
+            "flight_number":
+                flight.get(
+                    "flight_number",
+                    ""
+                ),
+
+            "aircraft_id":
+                flight.get(
+                    "aircraft_id",
+                    ""
+                ),
+
+            "airline_id":
+                flight.get(
+                    "airline_id",
+                    ""
+                ),
+
+            "country_id":
+                flight.get(
+                    "country_id",
+                    ""
+                ),
+
+            "airline_name":
+                flight.get(
+                    "airline_name",
+                    ""
+                ),
+
+            "aircraft_registration":
+                flight.get(
+                    "aircraft_registration",
+                    ""
+                ),
+
+            "aircraft_type":
+                flight.get(
+                    "aircraft_type",
+                    {}
+                ),
+
+            "origin":
+                flight.get(
+                    "origin",
+                    {}
+                ),
+
+            "destination":
+                flight.get(
+                    "destination",
+                    {}
+                ),
+
+            "origin_airport_id":
+                flight.get(
+                    "origin_airport_id",
+                    ""
+                ),
+
+            "destination_airport_id":
+                flight.get(
+                    "destination_airport_id",
+                    ""
+                ),
+
+            "lat":
+                float(
+                    flight.get(
+                        "lat",
+                        0
+                    )
+                ),
+
+            "lng":
+                float(
+                    flight.get(
+                        "lng",
+                        0
+                    )
+                ),
+
+            "heading":
+                float(
+                    flight.get(
+                        "heading",
+                        0
+                    )
+                ),
+
+            "altitude":
+                int(
+                    flight.get(
+                        "altitude",
+                        10000
+                    )
+                ),
+
+            "progress":
+                float(
+                    flight.get(
+                        "progress",
+                        0
+                    )
+                ),
+
+            "status":
+                flight.get(
+                    "status",
+                    "active"
+                )
+        })
 
     return {
         "country_id":
             country_id,
 
         "airline":
-            serialize_ctw3_document(
-                airline
-            )
+            {
+                "id":
+                    str(
+                        airline["_id"]
+                    ),
+
+                "name":
+                    airline.get(
+                        "name",
+                        ""
+                    ),
+
+                "country_id":
+                    airline.get(
+                        "country_id"
+                    ),
+
+                "aircraft_count":
+                    int(
+                        airline.get(
+                            "aircraft_count",
+                            0
+                        )
+                    ),
+
+                "created_at":
+                    (
+                        airline.get(
+                            "created_at"
+                        ).isoformat()
+                        if airline.get(
+                            "created_at"
+                        )
+                        else None
+                    )
+            }
             if airline
             else None,
 
@@ -4895,28 +5078,36 @@ async def ctw3_aviation_state(
             CTW3_AIRCRAFT_TYPES
     }
 
+
 @app.post("/api/ctw3/aviation/airline")
-async def ctw3_create_airline(request: Request):
+async def ctw3_create_airline(
+    request: Request
+):
 
     _, country = await ctw3_get_country_for_request(
         request
     )
 
     if not country:
+
         raise HTTPException(
             status_code=400,
             detail="Страна не найдена"
         )
 
-    country_id = str(country["_id"])
+    country_id = str(
+        country["_id"]
+    )
 
     existing = await ctw3_airlines.find_one(
         {
-            "country_id": country_id
+            "country_id":
+                country_id
         }
     )
 
     if existing:
+
         raise HTTPException(
             status_code=400,
             detail="У этой страны уже есть авиакомпания"
@@ -4925,20 +5116,31 @@ async def ctw3_create_airline(request: Request):
     data = await request.json()
 
     name = str(
-        data.get("name", "")
+        data.get(
+            "name",
+            ""
+        )
     ).strip()
 
     if not name:
+
         raise HTTPException(
             status_code=400,
             detail="Введите название авиакомпании"
         )
 
     airline = {
-        "country_id": country_id,
-        "name": name,
-        "aircraft_count": 0,
-        "created_at": datetime.utcnow()
+        "country_id":
+            country_id,
+
+        "name":
+            name,
+
+        "aircraft_count":
+            0,
+
+        "created_at":
+            datetime.utcnow()
     }
 
     result = await ctw3_airlines.insert_one(
@@ -4948,38 +5150,41 @@ async def ctw3_create_airline(request: Request):
     airline["_id"] = result.inserted_id
 
     return {
-        "ok": True,
+        "ok":
+            True,
+
         "airline": {
-            "id": str(
-                airline["_id"]
-            ),
-            "name": airline.get(
-                "name",
-                ""
-            ),
-            "country_id": airline.get(
-                "country_id"
-            ),
-            "created_at": (
-                airline.get(
-                    "created_at"
-                ).isoformat()
-                if airline.get(
-                    "created_at"
-                )
-                else None
-            )
+            "id":
+                str(
+                    airline["_id"]
+                ),
+
+            "name":
+                airline["name"],
+
+            "country_id":
+                airline["country_id"],
+
+            "aircraft_count":
+                0,
+
+            "created_at":
+                airline["created_at"].isoformat()
         }
     }
 
+
 @app.post("/api/ctw3/aviation/aircraft")
-async def ctw3_buy_aircraft(request: Request):
+async def ctw3_buy_aircraft(
+    request: Request
+):
 
     _, country = await ctw3_get_country_for_request(
         request
     )
 
     if not country:
+
         raise HTTPException(
             status_code=400,
             detail="Страна не найдена"
@@ -4991,11 +5196,13 @@ async def ctw3_buy_aircraft(request: Request):
 
     airline = await ctw3_airlines.find_one(
         {
-            "country_id": country_id
+            "country_id":
+                country_id
         }
     )
 
     if not airline:
+
         raise HTTPException(
             status_code=400,
             detail="Сначала создайте авиакомпанию"
@@ -5015,7 +5222,10 @@ async def ctw3_buy_aircraft(request: Request):
     for item in CTW3_AIRCRAFT_TYPES:
 
         if str(
-            item.get("id", "")
+            item.get(
+                "type_id",
+                ""
+            )
         ) == aircraft_type_id:
 
             aircraft_type = item
@@ -5039,12 +5249,17 @@ async def ctw3_buy_aircraft(request: Request):
         "PIN-"
         + country_id[-3:].upper()
         + "-"
-        + str(aircraft_count + 1).zfill(3)
+        + str(
+            aircraft_count + 1
+        ).zfill(3)
     )
 
     aircraft = {
+
         "airline_id":
-            str(airline["_id"]),
+            str(
+                airline["_id"]
+            ),
 
         "country_id":
             country_id,
@@ -5081,18 +5296,47 @@ async def ctw3_buy_aircraft(request: Request):
         },
         {
             "$inc": {
-                "aircraft_count": 1
+                "aircraft_count":
+                    1
             }
         }
     )
 
     return {
-        "ok": True,
-        "aircraft":
-            serialize_ctw3_document(
-                aircraft
-            )
+        "ok":
+            True,
+
+        "aircraft": {
+            "id":
+                str(
+                    aircraft["_id"]
+                ),
+
+            "aircraft_id":
+                str(
+                    aircraft["_id"]
+                ),
+
+            "country_id":
+                country_id,
+
+            "airline_id":
+                aircraft["airline_id"],
+
+            "registration":
+                registration,
+
+            "aircraft_type":
+                aircraft_type,
+
+            "status":
+                "available",
+
+            "current_airport_id":
+                None
+        }
     }
+
 
 @app.post("/api/ctw3/aviation/flight")
 async def ctw3_create_flight(
@@ -5104,6 +5348,7 @@ async def ctw3_create_flight(
     )
 
     if not country:
+
         raise HTTPException(
             status_code=400,
             detail="Страна не найдена"
@@ -5136,14 +5381,23 @@ async def ctw3_create_flight(
         )
     )
 
-    aircraft = await ctw3_aircraft_collection.find_one(
-        {
-            "_id":
-                ObjectId(aircraft_id),
-            "country_id":
-                country_id
-        }
-    )
+    try:
+
+        aircraft = await ctw3_aircraft_collection.find_one(
+            {
+                "_id":
+                    ObjectId(
+                        aircraft_id
+                    ),
+
+                "country_id":
+                    country_id
+            }
+        )
+
+    except Exception:
+
+        aircraft = None
 
     if not aircraft:
 
@@ -5152,7 +5406,9 @@ async def ctw3_create_flight(
             detail="Самолёт не найден"
         )
 
-    if aircraft.get("status") != "available":
+    if aircraft.get(
+        "status"
+    ) != "available":
 
         raise HTTPException(
             status_code=400,
@@ -5167,13 +5423,19 @@ async def ctw3_create_flight(
     for airport in airports:
 
         if str(
-            airport.get("id", "")
+            airport.get(
+                "id",
+                ""
+            )
         ) == origin_airport_id:
 
             origin = airport
 
         if str(
-            airport.get("id", "")
+            airport.get(
+                "id",
+                ""
+            )
         ) == destination_airport_id:
 
             destination = airport
@@ -5192,7 +5454,10 @@ async def ctw3_create_flight(
             detail="Аэропорт назначения не найден"
         )
 
-    if origin_airport_id == destination_airport_id:
+    if (
+        origin_airport_id ==
+        destination_airport_id
+    ):
 
         raise HTTPException(
             status_code=400,
@@ -5220,10 +5485,14 @@ async def ctw3_create_flight(
             flight_number,
 
         "aircraft_id":
-            str(aircraft["_id"]),
+            str(
+                aircraft["_id"]
+            ),
 
         "airline_id":
-            str(aircraft["airline_id"]),
+            str(
+                aircraft["airline_id"]
+            ),
 
         "country_id":
             country_id,
@@ -5328,13 +5597,68 @@ async def ctw3_create_flight(
     )
 
     return {
-        "ok": True,
+        "ok":
+            True,
 
-        "flight":
-            serialize_ctw3_document(
-                flight
-            )
+        "flight": {
+            "id":
+                str(
+                    flight["_id"]
+                ),
+
+            "flight_number":
+                flight["flight_number"],
+
+            "aircraft_id":
+                flight["aircraft_id"],
+
+            "airline_id":
+                flight["airline_id"],
+
+            "country_id":
+                flight["country_id"],
+
+            "airline_name":
+                flight["airline_name"],
+
+            "aircraft_registration":
+                flight["aircraft_registration"],
+
+            "aircraft_type":
+                flight["aircraft_type"],
+
+            "origin":
+                flight["origin"],
+
+            "destination":
+                flight["destination"],
+
+            "origin_airport_id":
+                flight["origin_airport_id"],
+
+            "destination_airport_id":
+                flight["destination_airport_id"],
+
+            "lat":
+                flight["lat"],
+
+            "lng":
+                flight["lng"],
+
+            "heading":
+                flight["heading"],
+
+            "altitude":
+                flight["altitude"],
+
+            "progress":
+                flight["progress"],
+
+            "status":
+                flight["status"]
+        }
     }
+
 
 @app.post("/api/ctw3/aviation/shootdown")
 async def ctw3_shoot_down_aircraft(
@@ -5346,6 +5670,7 @@ async def ctw3_shoot_down_aircraft(
     )
 
     if not country:
+
         raise HTTPException(
             status_code=400,
             detail="Страна не найдена"
@@ -5369,7 +5694,9 @@ async def ctw3_shoot_down_aircraft(
         flight = await ctw3_flights.find_one(
             {
                 "_id":
-                    ObjectId(flight_id),
+                    ObjectId(
+                        flight_id
+                    ),
 
                 "status":
                     "active"
@@ -5387,20 +5714,17 @@ async def ctw3_shoot_down_aircraft(
             detail="Активный рейс не найден"
         )
 
-    # Нельзя сбивать собственный самолёт
     if str(
-        flight.get("country_id", "")
+        flight.get(
+            "country_id",
+            ""
+        )
     ) == attacker_country_id:
 
         raise HTTPException(
             status_code=400,
             detail="Нельзя сбить собственный самолёт"
         )
-
-    # ------------------------------------------------------------
-    # Проверяем, находится ли самолёт над территорией атакующей
-    # страны.
-    # ------------------------------------------------------------
 
     lat = float(
         flight.get(
@@ -5416,11 +5740,6 @@ async def ctw3_shoot_down_aircraft(
         )
     )
 
-    # ------------------------------------------------------------
-    # Проверяем, находится ли самолёт внутри территории
-    # атакующей страны.
-    # ------------------------------------------------------------
-
     territory = country.get(
         "territory"
     )
@@ -5429,8 +5748,6 @@ async def ctw3_shoot_down_aircraft(
 
     if territory:
 
-        # Наша CTW3 территория хранится
-        # как массив координат.
         inside_territory = ctw3_point_in_polygon(
             lat,
             lng,
@@ -5443,10 +5760,6 @@ async def ctw3_shoot_down_aircraft(
             status_code=400,
             detail="Самолёт сейчас не находится над территорией вашей страны"
         )
-
-    # ------------------------------------------------------------
-    # Проверяем запас ракет
-    # ------------------------------------------------------------
 
     missile_stock = int(
         country.get(
@@ -5462,10 +5775,6 @@ async def ctw3_shoot_down_aircraft(
             detail="У страны нет готовых ракет"
         )
 
-    # ------------------------------------------------------------
-    # Расходуем одну ракету
-    # ------------------------------------------------------------
-
     await ctw3_countries.update_one(
         {
             "_id":
@@ -5478,10 +5787,6 @@ async def ctw3_shoot_down_aircraft(
             }
         }
     )
-
-    # ------------------------------------------------------------
-    # Уничтожаем рейс
-    # ------------------------------------------------------------
 
     await ctw3_flights.update_one(
         {
@@ -5502,13 +5807,9 @@ async def ctw3_shoot_down_aircraft(
         }
     )
 
-    # ------------------------------------------------------------
-    # Самолёт уничтожен
-    # ------------------------------------------------------------
-
     try:
 
-        await ctw3_aircraft.update_one(
+        await ctw3_aircraft_collection.update_one(
             {
                 "_id":
                     ObjectId(
