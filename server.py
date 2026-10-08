@@ -2715,32 +2715,33 @@ async def startup():
         )
     try:
         await ctw3_init_airports()
-        global ctw3_aviation_task
-
-            if (
-                ctw3_aviation_task is None
-                or ctw3_aviation_task.done()
-            ):
-        
-                ctw3_aviation_task = asyncio.create_task(
-                    ctw3_aviation_loop()
-                )
-        
-            print(
-                "✈️ [CTW3 AVIATION] "
-                "Фоновый движок полётов запущен!"
-            )
 
         print(
             "🌍 [CTW3 AVIATION] "
             "Аэропорты успешно инициализированы!"
         )
-    
+
     except Exception as e:
-    
+
         print(
             f"🚨 [CTW3 AIRPORTS START ERROR] {e}"
         )
+
+    global ctw3_aviation_task
+
+    if (
+        ctw3_aviation_task is None
+        or ctw3_aviation_task.done()
+    ):
+
+        ctw3_aviation_task = asyncio.create_task(
+            ctw3_aviation_loop()
+        )
+
+    print(
+        "✈️ [CTW3 AVIATION] "
+        "Фоновый движок полётов запущен!"
+    )
 # =====================================================================
 # 🪐 СИНХРОНИЗАТОР GERAGRAM: DISCORD AI RAM ROUTE INJECTOR (G4F ENGINE)
 # =====================================================================
