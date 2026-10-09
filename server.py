@@ -5676,18 +5676,6 @@ async def ctw3_shoot_down_aircraft(
             detail="Активный рейс не найден"
         )
 
-    if str(
-        flight.get(
-            "country_id",
-            ""
-        )
-    ) == attacker_country_id:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Нельзя сбить собственный самолёт"
-        )
-
     lat = float(
         flight.get(
             "lat",
