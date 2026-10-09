@@ -8109,7 +8109,6 @@ async def ctw3_map_action(
             "object": factory
         }
 
-
     if action == "airport":
 
         cost = 25_000_000
@@ -8120,15 +8119,47 @@ async def ctw3_map_action(
                 detail="Недостаточно средств"
             )
 
+        # Проверяем, что точка строительства
+        # находится внутри территории государства.
+        territory = country.get("territory") or {}
+        geometry = territory.get("geometry") or {}
+        coordinates = geometry.get("coordinates") or []
+
+        polygon = coordinates[0] if coordinates else []
+
+        if not ctw3_point_in_polygon(
+            data.latitude,
+            data.longitude,
+            polygon
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Аэропорт можно построить только на своей территории"
+            )
+
+        # Генерируем уникальный ID и название.
+        airports = list(country.get("airports", []))
+
+        airport_id = str(uuid4())
+
+        airport_name = (
+            data.name.strip()
+            if data.name and data.name.strip()
+            else f"Аэропорт {len(airports) + 1}"
+        )
+
         airport = {
-            "id": str(uuid4()),
+            "id": airport_id,
+            "name": airport_name,
             "latitude": data.latitude,
             "longitude": data.longitude,
             "created_at": datetime.utcnow()
         }
 
-        airports = list(country.get("airports", []))
+        # Сохраняем аэропорт в государстве.
         airports.append(airport)
+
+        country_id = str(country["_id"])
 
         await ctw3_countries.update_one(
             {"_id": country["_id"]},
@@ -8142,12 +8173,31 @@ async def ctw3_map_action(
             }
         )
 
+        # Регистрируем тот же аэропорт в авиационной системе.
+        # Используем тот же ID, чтобы не создавать дубликаты.
+        await ctw3_airports.update_one(
+            {"airport_id": airport_id},
+            {
+                "$set": {
+                    "airport_id": airport_id,
+                    "name": airport_name,
+                    "lat": data.latitude,
+                    "lng": data.longitude,
+                    "country_id": country_id,
+                    "runway_length": 2500,
+                    "capacity": 20,
+                    "built_by_player": True,
+                    "created_at": datetime.utcnow()
+                }
+            },
+            upsert=True
+        )
+
         return {
             "status": "success",
             "object_type": "airport",
             "object": airport
         }
-
 
     if action == "air_defense":
 
