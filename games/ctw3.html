@@ -5088,7 +5088,23 @@ function initMap(){
         }
     );
 
-
+      // Мгновенно обновляем отображение самолётов после изменения зума.
+      // Не вызываем renderCTW3Flights(), чтобы не сбрасывать анимацию.
+      map.on("zoomend", function () {
+          Object.values(ctw3AviationMarkers).forEach(marker => {
+              if (!marker || !marker.options || !marker.options.icon) {
+                  return;
+              }
+      
+              // Принудительно обновляем иконку, сохраняя координаты маркера.
+              marker.setIcon(marker.options.icon);
+          });
+      
+          if (ctw3FlightRouteLine && map.hasLayer(ctw3FlightRouteLine)) {
+              ctw3FlightRouteLine.redraw();
+          }
+      });
+      
     normalLayer=L.tileLayer(
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
         {
@@ -6874,36 +6890,56 @@ function toggleCTW3Weather() {
         : "Скрыть погоду";
 }
 
-function closePointInfo(){
 
-    const panel =
-        $("ctw3PointInfo");
+function closePointInfo() {
+    const panel = $("ctw3PointInfo");
 
-
-    if(panel){
-
-        panel.classList.remove(
-            "visible"
-        );
-
+    if (panel) {
+        panel.classList.remove("visible", "aircraft-selected");
     }
 
+    // Убираем данные выбранного самолёта.
+    $("ctw3AircraftInfo")?.remove();
+    ctw3SelectedFlightId = null;
 
-    selectedPoint=null;
+    // Удаляем маршрутную линию.
+    if (ctw3FlightRouteLine && map) {
+        if (map.hasLayer(ctw3FlightRouteLine)) {
+            map.removeLayer(ctw3FlightRouteLine);
+        }
 
-    selectedPointTimezone=null;
-
-
-    if(pointInfoTimer){
-
-        clearInterval(
-            pointInfoTimer
-        );
-
-        pointInfoTimer=null;
-
+        ctw3FlightRouteLine = null;
     }
 
+    // Возвращаем стандартный вид карточки точки.
+    if ($("ctw3PointIcon")) {
+        $("ctw3PointIcon").textContent = "📍";
+    }
+
+    if ($("ctw3PointTitle")) {
+        $("ctw3PointTitle").textContent = "Точка на карте";
+    }
+
+    if ($("ctw3PointSubtitle")) {
+        $("ctw3PointSubtitle").textContent =
+            "Информация о выбранной точке";
+    }
+
+    if ($("ctw3PointObject")) {
+        $("ctw3PointObject").textContent = "—";
+    }
+
+    if ($("ctw3PointCoordinates")) {
+        $("ctw3PointCoordinates").textContent = "—";
+    }
+
+    selectedPoint = null;
+    selectedPointTimezone = null;
+
+    if (pointInfoTimer) {
+        clearInterval(pointInfoTimer);
+        pointInfoTimer = null;
+    }
 }
 
 /* =========================================================
