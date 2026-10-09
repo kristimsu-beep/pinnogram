@@ -5142,6 +5142,21 @@ async function showMapPointInfo(
     panel.classList.remove("aircraft-selected");
     $("ctw3AircraftInfo")?.remove();
 
+    // Сбрасываем данные предыдущего самолёта.
+      ctw3SelectedFlightId = null;
+      
+      if (ctw3FlightRouteLine && map) {
+          map.removeLayer(ctw3FlightRouteLine);
+          ctw3FlightRouteLine = null;
+      }
+      
+      $("ctw3PointIcon").textContent = "📍";
+      $("ctw3PointTitle").textContent = "Точка на карте";
+      $("ctw3PointSubtitle").textContent = "Информация о выбранной точке";
+      $("ctw3PointCountry").textContent = "Определяется...";
+      $("ctw3PointObject").textContent = "—";
+      $("ctw3PointCoordinates").textContent = "—";
+
     /* =====================================================
        SHOW POINT INFORMATION PANEL
        ===================================================== */
@@ -13811,6 +13826,10 @@ let ctw3AviationState = {
 
 let ctw3AviationMarkers = {};
 
+let ctw3FlightRouteLine = null;
+let ctw3SelectedFlightId = null;
+let ctw3FlightAnimationFrame = null;
+
 let ctw3AirportMarkers = {};
 
 let ctw3AirportSelection = null;
@@ -14600,186 +14619,123 @@ function renderCTW3Airports() {
     });
 }
 
-function renderCTW3Flights(){
 
-    if(!map){
-
-        return;
-
-    }
-
+function renderCTW3Flights() {
+    if (!map) return;
 
     const active = {};
+    const now = performance.now();
 
+    (ctw3AviationState.flights || []).forEach(flight => {
+        const id = String(flight.id);
+        const lat = Number(flight.current_latitude ?? flight.lat);
+        const lng = Number(flight.current_longitude ?? flight.lng);
 
-    (
-        ctw3AviationState
-            .flights ||
-        []
-    ).forEach(
-        flight => {
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
-            const id =
-                String(
-                    flight.id
+        active[id] = true;
+
+        const heading = Number(flight.heading || 0);
+        // Эмодзи ✈️ изначально смотрит примерно на северо-восток.
+        const rotation = heading - 45;
+
+        const icon = L.divIcon({
+            className: "",
+            html: `
+                <div class="ctw3-plane-marker"
+                     style="transform:rotate(${rotation}deg);
+                            transform-origin:center center;"
+                     title="${escapeHtml(flight.flight_number || "Самолёт")}">
+                    ✈️
+                </div>
+            `,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+        });
+
+        let marker = ctw3AviationMarkers[id];
+
+        if (!marker) {
+            marker = L.marker([lat, lng], {
+                icon,
+                zIndexOffset: 500
+            }).addTo(map);
+
+            marker._ctw3From = L.latLng(lat, lng);
+            marker._ctw3To = L.latLng(lat, lng);
+            marker._ctw3Started = now;
+            marker._ctw3Duration = 1000;
+
+            marker.on("click", event => {
+                L.DomEvent.stopPropagation(event);
+                selectCTW3Flight(
+                    (ctw3AviationState.flights || [])
+                        .find(f => String(f.id) === id) || flight
                 );
+            });
 
+            ctw3AviationMarkers[id] = marker;
+        } else {
+            // Начинаем следующий участок от фактического положения маркера,
+            // а не от старой серверной координаты.
+            marker._ctw3From = marker.getLatLng();
+            marker._ctw3To = L.latLng(lat, lng);
+            marker._ctw3Started = now;
+            marker._ctw3Duration = 1100;
 
-            active[id] = true;
-
-
-            const lat =
-                Number(
-                    flight.current_latitude
-                );
-
-
-            const lng =
-                Number(
-                    flight.current_longitude
-                );
-
-
-            if(
-                !Number.isFinite(lat) ||
-                !Number.isFinite(lng)
-            ){
-
-                return;
-
-            }
-
-
-            const icon =
-                L.divIcon({
-
-                    className:"",
-
-                    html: `
-                        <div
-                            class="ctw3-plane-marker"
-                            style="
-                                transform: rotate(${Number(flight.heading || 0)}deg);
-                                transform-origin: center center;
-                            "
-                            title="${escapeHtml(flight.flight_number || "Самолёт")}"
-                        >✈️</div>
-                    `,
-
-                    iconSize:[
-                        32,
-                        32
-                    ],
-
-                    iconAnchor:[
-                        16,
-                        16
-                    ]
-
-                });
-
-
-            if (ctw3AviationMarkers[id]) {
-                ctw3AviationMarkers[id].setLatLng([lat, lng]);
-
-                ctw3AviationMarkers[id].setIcon(
-                    L.divIcon({
-                        className: "",
-                        html: `
-                            <div
-                                class="ctw3-plane-marker"
-                                style="
-                                    transform: rotate(${Number(flight.heading || 0)}deg);
-                                    transform-origin: center center;
-                                "
-                                title="${escapeHtml(flight.flight_number || "Самолёт")}"
-                            >✈️</div>
-                        `,
-                        iconSize: [32, 32],
-                        iconAnchor: [16, 16]
-                    })
-                );
-            }
-
-            else{
-
-                const marker =
-                    L.marker(
-                        [
-                            lat,
-                            lng
-                        ],
-                        {
-                            icon:icon,
-
-                            zIndexOffset:
-                                500
-                        }
-                    );
-
-
-                marker.on(
-                    "click",
-                    function(event){
-
-                        L.DomEvent
-                            .stopPropagation(
-                                event
-                            );
-
-
-                        selectCTW3Flight(
-                            flight
-                        );
-
-                    }
-                );
-
-
-                marker.addTo(
-                    map
-                );
-
-
-                ctw3AviationMarkers[id] =
-                    marker;
-
-            }
-
+            marker.setIcon(icon);
         }
-    );
 
+        // Если открыта карточка этого самолёта — обновляем координаты.
+        if (ctw3SelectedFlightId === id) {
+            const coords = $("ctw3PointCoordinates");
+            if (coords) {
+                coords.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            }
+        }
+    });
 
-    Object.keys(
-        ctw3AviationMarkers
-    ).forEach(
-        id => {
-
-            if(
-                !active[id]
-            ){
-
-                if(
-                    map.hasLayer(
-                        ctw3AviationMarkers[id]
-                    )
-                ){
-
-                    map.removeLayer(
-                        ctw3AviationMarkers[id]
-                    );
-
-                }
-
-
-                delete
-                    ctw3AviationMarkers[id];
-
+    // Удаляем маркеры рейсов, которых больше нет среди активных.
+    Object.keys(ctw3AviationMarkers).forEach(id => {
+        if (!active[id]) {
+            if (map.hasLayer(ctw3AviationMarkers[id])) {
+                map.removeLayer(ctw3AviationMarkers[id]);
             }
 
-        }
-    );
+            delete ctw3AviationMarkers[id];
 
+            if (ctw3SelectedFlightId === id) {
+                closePointInfo();
+            }
+        }
+    });
+
+    // Запускаем только один общий цикл анимации.
+    if (ctw3FlightAnimationFrame === null) {
+        animateCTW3Flights();
+    }
+}
+
+function animateCTW3Flights() {
+    const now = performance.now();
+
+    Object.values(ctw3AviationMarkers).forEach(marker => {
+        const from = marker._ctw3From;
+        const to = marker._ctw3To;
+
+        if (!from || !to) return;
+
+        const duration = marker._ctw3Duration || 1000;
+        const elapsed = now - (marker._ctw3Started || now);
+        const progress = Math.min(1, elapsed / duration);
+
+        const lat = from.lat + (to.lat - from.lat) * progress;
+        const lng = from.lng + (to.lng - from.lng) * progress;
+
+        marker.setLatLng([lat, lng]);
+    });
+
+    ctw3FlightAnimationFrame = requestAnimationFrame(animateCTW3Flights);
 }
 
 function selectCTW3Flight(flight) {
@@ -14809,6 +14765,43 @@ function selectCTW3Flight(flight) {
         },
         canShootAircraft: true
     });
+
+    ctw3SelectedFlightId = String(latestFlight.id);
+
+      // Удаляем старую линию, если выбран другой рейс.
+      if (ctw3FlightRouteLine && map) {
+          map.removeLayer(ctw3FlightRouteLine);
+          ctw3FlightRouteLine = null;
+      }
+      
+      const origin = latestFlight.origin || {};
+      const destination = latestFlight.destination || {};
+      
+      const originLat = Number(origin.lat);
+      const originLng = Number(origin.lng);
+      const destinationLat = Number(destination.lat);
+      const destinationLng = Number(destination.lng);
+      
+      if (
+          map &&
+          Number.isFinite(originLat) &&
+          Number.isFinite(originLng) &&
+          Number.isFinite(destinationLat) &&
+          Number.isFinite(destinationLng)
+      ) {
+          ctw3FlightRouteLine = L.polyline(
+              [
+                  [originLat, originLng],
+                  [destinationLat, destinationLng]
+              ],
+              {
+                  color: "#38bdf8",
+                  weight: 3,
+                  opacity: 0.9,
+                  dashArray: "8 7"
+              }
+          ).addTo(map);
+      }
 
     const panel = $("ctw3PointInfo");
     if (!panel) return;
