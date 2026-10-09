@@ -2733,6 +2733,9 @@ select{
 
 }
 
+#ctw3AviationPanel.collapsed #ctw3AviationContent {
+    display: none;
+}
 
 .ctw3-aviation-title{
 
@@ -2742,6 +2745,10 @@ select{
 
     margin-bottom:12px;
 
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
 }
 
 
@@ -3938,7 +3945,16 @@ select{
 <div id="ctw3AviationPanel">
 
     <div class="ctw3-aviation-title">
-        ✈️ Авиация CTW3
+        <span>✈️ Авиация CTW3</span>
+
+        <button
+            type="button"
+            class="ctw3-aviation-button secondary"
+            style="width:auto;margin:0;padding:5px 9px"
+            onclick="toggleCTW3AviationCollapse()"
+        >
+            ↕
+        </button>
     </div>
 
     <div id="ctw3AviationContent">
@@ -13711,7 +13727,10 @@ let ctw3AviationState = {
 
 let ctw3AviationMarkers = {};
 
+let ctw3AirportMarkers = {};
 
+let ctw3AirportSelection = null;
+  
 function openAviationPanel(){
 
     $("ctw3AviationPanel")
@@ -13722,6 +13741,14 @@ function openAviationPanel(){
 
 }
 
+
+function toggleCTW3AviationCollapse() {
+    const panel = $("ctw3AviationPanel");
+
+    if (!panel) return;
+
+    panel.classList.toggle("collapsed");
+}
 
 function closeAviationPanel(){
 
@@ -13751,8 +13778,9 @@ async function loadCTW3Aviation(){
 
         renderCTW3AviationPanel();
 
-        renderCTW3Flights();
+        renderCTW3Airports();
 
+        renderCTW3Flights();
 
     }catch(error){
 
@@ -13965,6 +13993,24 @@ function renderCTW3AviationPanel(){
                                                 </option>
                                             `).join("")}
                                         </select>
+                                        <button
+                                              class="ctw3-aviation-button secondary"
+                                              onclick="ctw3AirportSelection = {
+                                                  aircraftId: '${id}',
+                                                  role: 'destination'
+                                              }; setStatus('🛬 Теперь нажми на аэропорт назначения на карте')"
+                                          >
+                                              📍 Выбрать назначение на карте
+                                          </button>
+                                        <button
+                                              class="ctw3-aviation-button secondary"
+                                              onclick="ctw3AirportSelection = {
+                                                  aircraftId: '${id}',
+                                                  role: 'origin'
+                                              }; setStatus('🛫 Теперь нажми на аэропорт отправления на карте')"
+                                          >
+                                              📍 Выбрать вылет на карте
+                                          </button>
 
                                         <button
                                             class="ctw3-aviation-button"
@@ -14346,6 +14392,98 @@ function handleCTW3AviationWS(data) {
     loadCTW3Aviation();
 }
 
+function renderCTW3Airports() {
+    if (!map) return;
+
+    const active = {};
+
+    (ctw3AviationState.airports || []).forEach(airport => {
+        const id = String(airport.id || "");
+        const lat = Number(airport.lat);
+        const lng = Number(airport.lng);
+
+        if (!id || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+            return;
+        }
+
+        active[id] = true;
+
+        if (!ctw3AirportMarkers[id]) {
+            const marker = L.marker([lat, lng], {
+                icon: L.divIcon({
+                    className: "",
+                    html: `
+                        <div style="
+                            font-size:23px;
+                            width:30px;
+                            height:30px;
+                            display:flex;
+                            align-items:center;
+                            justify-content:center;
+                            filter:drop-shadow(0 2px 4px #000);
+                            cursor:pointer;
+                        ">🛫</div>
+                    `,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                }),
+                zIndexOffset: 300
+            });
+
+            marker.bindTooltip(
+                escapeHtml(airport.name || "Аэропорт"),
+                { direction: "top" }
+            );
+
+            marker.on("click", event => {
+                L.DomEvent.stopPropagation(event);
+
+                if (!ctw3AirportSelection) {
+                    setStatus(
+                        "✈️ Чтобы выбрать аэропорт, нажми кнопку выбора вылета или назначения в панели авиации."
+                    );
+                    return;
+                }
+
+                const { aircraftId, role } = ctw3AirportSelection;
+                const select = document.getElementById(
+                    `ctw3${role === "origin" ? "Origin" : "Destination"}_${aircraftId}`
+                );
+
+                if (!select) {
+                    ctw3AirportSelection = null;
+                    return;
+                }
+
+                select.value = id;
+
+                ctw3AirportSelection = null;
+
+                setStatus(
+                    "✅ Выбран аэропорт: " + (airport.name || "Аэропорт")
+                );
+
+                renderCTW3AviationPanel();
+            });
+
+            marker.addTo(map);
+            ctw3AirportMarkers[id] = marker;
+        } else {
+            ctw3AirportMarkers[id].setLatLng([lat, lng]);
+        }
+    });
+
+    Object.keys(ctw3AirportMarkers).forEach(id => {
+        if (!active[id]) {
+            if (map.hasLayer(ctw3AirportMarkers[id])) {
+                map.removeLayer(ctw3AirportMarkers[id]);
+            }
+
+            delete ctw3AirportMarkers[id];
+        }
+    });
+}
+
 function renderCTW3Flights(){
 
     if(!map){
@@ -14401,18 +14539,15 @@ function renderCTW3Flights(){
 
                     className:"",
 
-                    html:`
-
+                    html: `
                         <div
-                            class="
-                                ctw3-plane-marker
+                            class="ctw3-plane-marker"
+                            style="
+                                transform: rotate(${Number(flight.heading || 0)}deg);
+                                transform-origin: center center;
                             "
-                        >
-
-                            ✈️
-
-                        </div>
-
+                            title="${escapeHtml(flight.flight_number || "Самолёт")}"
+                        >✈️</div>
                     `,
 
                     iconSize:[
@@ -14428,18 +14563,26 @@ function renderCTW3Flights(){
                 });
 
 
-            if(
-                ctw3AviationMarkers[id]
-            ){
+            if (ctw3AviationMarkers[id]) {
+                ctw3AviationMarkers[id].setLatLng([lat, lng]);
 
-                ctw3AviationMarkers[id]
-                    .setLatLng(
-                        [
-                            lat,
-                            lng
-                        ]
-                    );
-
+                ctw3AviationMarkers[id].setIcon(
+                    L.divIcon({
+                        className: "",
+                        html: `
+                            <div
+                                class="ctw3-plane-marker"
+                                style="
+                                    transform: rotate(${Number(flight.heading || 0)}deg);
+                                    transform-origin: center center;
+                                "
+                                title="${escapeHtml(flight.flight_number || "Самолёт")}"
+                            >✈️</div>
+                        `,
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 16]
+                    })
+                );
             }
 
             else{
