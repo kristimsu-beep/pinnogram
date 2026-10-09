@@ -5736,24 +5736,10 @@ async def ctw3_shoot_down_aircraft(
         }
     )
 
-    await ctw3_flights.update_one(
-        {
-            "_id":
-                flight["_id"]
-        },
-        {
-            "$set": {
-                "status":
-                    "destroyed",
-
-                "destroyed_by":
-                    attacker_country_id,
-
-                "destroyed_at":
-                    datetime.utcnow()
-            }
-        }
-    )
+    # Удаляем рейс из базы после успешного подтверждения сбития.
+    await ctw3_flights.delete_one({
+        "_id": flight["_id"]
+    })
 
     try:
 
