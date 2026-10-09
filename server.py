@@ -5388,6 +5388,14 @@ async def ctw3_create_flight(
             detail="Аэропорт назначения не найден"
         )
 
+    # Вылет разрешён только из собственного аэропорта.
+    if str(origin.get("country_id") or "") != country_id:
+
+        raise HTTPException(
+            status_code=403,
+            detail="Вылет разрешён только из собственного аэропорта"
+        )
+
     if (
         origin_airport_id ==
         destination_airport_id
@@ -5694,22 +5702,20 @@ async def ctw3_shoot_down_aircraft(
         )
     )
 
-    territory = country.get(
-        "territory"
+    territory = country.get("territory") or {}
+
+    geometry = territory.get("geometry") or {}
+    coordinates = geometry.get("coordinates") or []
+
+    polygon = coordinates[0] if coordinates else []
+
+    inside_territory = ctw3_point_in_polygon(
+        lat,
+        lng,
+        polygon
     )
 
-    inside_territory = False
-
-    if territory:
-
-        inside_territory = ctw3_point_in_polygon(
-            lat,
-            lng,
-            territory
-        )
-
     if not inside_territory:
-
         raise HTTPException(
             status_code=400,
             detail="Самолёт сейчас не находится над территорией вашей страны"
