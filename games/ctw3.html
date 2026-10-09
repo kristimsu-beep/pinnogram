@@ -2940,8 +2940,9 @@ select{
 }
 
 
+
 /* =====================================================
-   CTW3 — ЭФФЕКТ СБИТИЯ САМОЛЁТА
+   CTW3 — ЭФФЕКТ ПОПАДАНИЯ РАКЕТЫ В САМОЛЁТ
 ===================================================== */
 
 .ctw3-shootdown-icon {
@@ -2951,68 +2952,61 @@ select{
     pointer-events: none !important;
 }
 
-.ctw3-shootdown-scene {
-    position: relative;
-    width: 1px;
-    height: 1px;
-    overflow: visible;
-    pointer-events: none;
-}
-
-.ctw3-shootdown-rocket {
-    position: absolute;
-    left: -90px;
-    top: 55px;
+.ctw3-shootdown-rocket-marker {
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 27px;
     line-height: 1;
-    filter: drop-shadow(0 0 7px #ff7b22);
-    animation: ctw3RocketHit 0.7s cubic-bezier(.2,.7,.3,1) forwards;
+    filter:
+        drop-shadow(0 0 5px #ff7b22)
+        drop-shadow(0 0 12px rgba(255, 80, 0, .8));
+    will-change: transform;
 }
 
-.ctw3-shootdown-flash {
-    position: absolute;
-    left: -24px;
-    top: -24px;
-    font-size: 42px;
+.ctw3-shootdown-explosion {
+    width: 70px;
+    height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 54px;
     line-height: 1;
+    animation: ctw3ExplosionBurst .8s ease-out forwards;
+    filter: drop-shadow(0 0 15px #ff6a00);
+}
+
+.ctw3-shootdown-smoke-marker {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 38px;
     opacity: 0;
-    transform: scale(0.1);
-    filter: drop-shadow(0 0 12px #ff8c00);
-    animation: ctw3Explosion 0.75s ease-out 0.62s forwards;
+    animation: ctw3SmokeRise 1.5s ease-out forwards;
 }
 
-.ctw3-shootdown-smoke {
-    position: absolute;
-    left: -18px;
-    top: -12px;
-    font-size: 34px;
-    opacity: 0;
-    animation: ctw3Smoke 0.9s ease-out 0.8s forwards;
+.ctw3-shootdown-trail {
+    stroke: #ff8a35;
+    stroke-width: 3;
+    stroke-dasharray: 7 7;
+    opacity: .9;
+    filter: drop-shadow(0 0 4px #ff4d00);
 }
 
-@keyframes ctw3RocketHit {
-    0% {
-        transform: translate(0, 0) rotate(45deg) scale(1);
-    }
-    85% {
-        transform: translate(78px, -48px) rotate(45deg) scale(0.9);
-    }
-    100% {
-        transform: translate(90px, -55px) rotate(45deg) scale(0.45);
-        opacity: 0;
-    }
-}
-
-@keyframes ctw3Explosion {
+@keyframes ctw3ExplosionBurst {
     0% {
         opacity: 0;
-        transform: scale(0.1) rotate(-20deg);
+        transform: scale(.1) rotate(-20deg);
     }
-    25% {
+    20% {
         opacity: 1;
-        transform: scale(1.35) rotate(8deg);
+        transform: scale(1.4) rotate(8deg);
     }
-    65% {
+    55% {
         opacity: 1;
         transform: scale(1);
     }
@@ -3022,17 +3016,17 @@ select{
     }
 }
 
-@keyframes ctw3Smoke {
+@keyframes ctw3SmokeRise {
     0% {
         opacity: 0;
-        transform: translateY(0) scale(0.3);
+        transform: translateY(5px) scale(.4);
     }
-    35% {
-        opacity: 0.8;
+    25% {
+        opacity: .85;
     }
     100% {
         opacity: 0;
-        transform: translateY(-28px) scale(1.7);
+        transform: translateY(-35px) scale(1.5);
     }
 }
 
