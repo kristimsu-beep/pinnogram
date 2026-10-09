@@ -4803,13 +4803,11 @@ async def ctw3_get_airports_for_aviation():
 async def ctw3_aviation_state(
     request: Request
 ):
-
     _, country = await ctw3_get_country_for_request(
         request
     )
 
     if not country:
-
         return {
             "airline": None,
             "aircraft": [],
@@ -4818,20 +4816,15 @@ async def ctw3_aviation_state(
             "aircraft_types": CTW3_AIRCRAFT_TYPES
         }
 
-    country_id = str(
-        country["_id"]
-    )
+    country_id = str(country["_id"])
 
     # =========================================================
     # АВИАКОМПАНИЯ
     # =========================================================
 
-    airline = await ctw3_airlines.find_one(
-        {
-            "country_id":
-                country_id
-        }
-    )
+    airline = await ctw3_airlines.find_one({
+        "country_id": country_id
+    })
 
     # =========================================================
     # САМОЛЁТЫ
@@ -4840,105 +4833,26 @@ async def ctw3_aviation_state(
     aircraft = []
 
     if airline:
-
-        async for plane in ctw3_aircraft_collection.find(
-            {
-                "airline_id":
-                    str(airline["_id"])
-            }
-        ):
-
+        async for plane in ctw3_aircraft_collection.find({
+            "airline_id": str(airline["_id"])
+        }):
             aircraft.append({
-                "id":
-                    str(
-                        plane.get("_id")
-                    ),
+                "id": str(plane.get("_id")),
+                "aircraft_id": str(plane.get("_id")),
 
-                "aircraft_id":
-                    str(
-                        plane.get("_id")
-                    ),
+                "country_id": plane.get("country_id"),
+                "airline_id": plane.get("airline_id"),
 
-                "country_id":
-                    plane.get(
-                        "country_id"
-                    ),
+                "airline_name": airline.get("name", ""),
+                "registration": plane.get("registration", ""),
 
-                "airline_id":
-                    plane.get(
-                        "airline_id"
-                    ),
+                "aircraft_type": plane.get("type", {}),
 
-                "airline_name":
-                    airline.get(
-                        "name",
-                        ""
-                    ),
+                "status": plane.get("status", "available"),
 
-                "registration":
-                    plane.get(
-                        "registration",
-                        ""
-                    ),
-
-                "aircraft_type":
-                    plane.get(
-                        "type",
-                        {}
-                    ),
-
-                "current_latitude":
-                    float(
-                        flight.get(
-                            "lat",
-                            0
-                        )
-                    ),
-                
-                "current_longitude":
-                    float(
-                        flight.get(
-                            "lng",
-                            0
-                        )
-                    ),
-                
-                "country_name":
-                    flight.get(
-                        "country_name",
-                        ""
-                    ),
-                
-                "country_flag":
-                    flight.get(
-                        "country_flag",
-                        ""
-                    ),
-                
-                "speed_kmh":
-                    float(
-                        flight.get(
-                            "speed_kmh",
-                            flight.get(
-                                "aircraft_type",
-                                {}
-                            ).get(
-                                "speed_kmh",
-                                0
-                            )
-                        )
-                    ),
-                
-                "status":
-                    plane.get(
-                        "status",
-                        "available"
-                    ),
-
-                "current_airport_id":
-                    plane.get(
-                        "current_airport_id"
-                    )
+                "current_airport_id": plane.get(
+                    "current_airport_id"
+                )
             })
 
     # =========================================================
@@ -4953,189 +4867,134 @@ async def ctw3_aviation_state(
 
     flights = []
 
-    async for flight in ctw3_flights.find(
-        {
-            "status":
-                "active"
-        }
-    ):
-
+    async for flight in ctw3_flights.find({
+        "status": "active"
+    }):
         flights.append({
-            "id":
-                str(
-                    flight.get("_id")
-                ),
+            "id": str(flight.get("_id")),
 
-            "flight_number":
+            "flight_number": flight.get(
+                "flight_number", ""
+            ),
+
+            "aircraft_id": flight.get(
+                "aircraft_id", ""
+            ),
+
+            "airline_id": flight.get(
+                "airline_id", ""
+            ),
+
+            "country_id": flight.get(
+                "country_id", ""
+            ),
+
+            "country_name": flight.get(
+                "country_name", ""
+            ),
+
+            "country_flag": flight.get(
+                "country_flag", ""
+            ),
+
+            "airline_name": flight.get(
+                "airline_name", ""
+            ),
+
+            "aircraft_registration": flight.get(
+                "aircraft_registration", ""
+            ),
+
+            "aircraft_type": flight.get(
+                "aircraft_type", {}
+            ),
+
+            "origin": flight.get(
+                "origin", {}
+            ),
+
+            "destination": flight.get(
+                "destination", {}
+            ),
+
+            "origin_airport_id": flight.get(
+                "origin_airport_id", ""
+            ),
+
+            "destination_airport_id": flight.get(
+                "destination_airport_id", ""
+            ),
+
+            "lat": float(
+                flight.get("lat", 0)
+            ),
+
+            "lng": float(
+                flight.get("lng", 0)
+            ),
+
+            "current_latitude": float(
+                flight.get("lat", 0)
+            ),
+
+            "current_longitude": float(
+                flight.get("lng", 0)
+            ),
+
+            "heading": float(
+                flight.get("heading", 0)
+            ),
+
+            "altitude": int(
+                flight.get("altitude", 10000)
+            ),
+
+            "progress": float(
+                flight.get("progress", 0)
+            ),
+
+            "speed_kmh": float(
                 flight.get(
-                    "flight_number",
-                    ""
-                ),
-
-            "aircraft_id":
-                flight.get(
-                    "aircraft_id",
-                    ""
-                ),
-
-            "airline_id":
-                flight.get(
-                    "airline_id",
-                    ""
-                ),
-
-            "country_id":
-                flight.get(
-                    "country_id",
-                    ""
-                ),
-
-            "airline_name":
-                flight.get(
-                    "airline_name",
-                    ""
-                ),
-
-            "aircraft_registration":
-                flight.get(
-                    "aircraft_registration",
-                    ""
-                ),
-
-            "aircraft_type":
-                flight.get(
-                    "aircraft_type",
-                    {}
-                ),
-
-            "origin":
-                flight.get(
-                    "origin",
-                    {}
-                ),
-
-            "destination":
-                flight.get(
-                    "destination",
-                    {}
-                ),
-
-            "origin_airport_id":
-                flight.get(
-                    "origin_airport_id",
-                    ""
-                ),
-
-            "destination_airport_id":
-                flight.get(
-                    "destination_airport_id",
-                    ""
-                ),
-
-            "lat":
-                float(
+                    "speed_kmh",
                     flight.get(
-                        "lat",
-                        0
-                    )
-                ),
-
-            "lng":
-                float(
-                    flight.get(
-                        "lng",
-                        0
-                    )
-                ),
-
-            "heading":
-                float(
-                    flight.get(
-                        "heading",
-                        0
-                    )
-                ),
-
-            "altitude":
-                int(
-                    flight.get(
-                        "altitude",
-                        10000
-                    )
-                ),
-
-            "progress":
-                float(
-                    flight.get(
-                        "progress",
-                        0
-                    )
-                ),
-
-            "status":
-                flight.get(
-                    "status",
-                    "active"
+                        "aircraft_type", {}
+                    ).get("speed_kmh", 0)
                 )
+            ),
+
+            "status": flight.get(
+                "status", "active"
+            )
         })
 
+    # =========================================================
+    # ОТВЕТ API
+    # =========================================================
+
     return {
-        "country_id":
-            country_id,
+        "country_id": country_id,
 
-        "airline":
-            {
-                "id":
-                    str(
-                        airline["_id"]
-                    ),
+        "airline": {
+            "id": str(airline["_id"]),
+            "name": airline.get("name", ""),
+            "country_id": airline.get("country_id"),
 
-                "name":
-                    airline.get(
-                        "name",
-                        ""
-                    ),
+            "aircraft_count": int(
+                airline.get("aircraft_count", 0)
+            ),
 
-                "country_id":
-                    airline.get(
-                        "country_id"
-                    ),
+            "created_at": (
+                airline.get("created_at").isoformat()
+                if airline.get("created_at")
+                else None
+            )
+        } if airline else None,
 
-                "aircraft_count":
-                    int(
-                        airline.get(
-                            "aircraft_count",
-                            0
-                        )
-                    ),
-
-                "created_at":
-                    (
-                        airline.get(
-                            "created_at"
-                        ).isoformat()
-                        if airline.get(
-                            "created_at"
-                        )
-                        else None
-                    )
-            }
-            if airline
-            else None,
-
-        "aircraft":
-            aircraft,
-
-        "airports":
-            airports,
-
-        "flights":
-            flights,
-
-        "aircraft_types":
-            CTW3_AIRCRAFT_TYPES
+        "aircraft": aircraft,
+        "airports": airports,
+        "flights": flights,
+        "aircraft_types": CTW3_AIRCRAFT_TYPES
     }
-
 
 @app.post("/api/ctw3/aviation/airline")
 async def ctw3_create_airline(
