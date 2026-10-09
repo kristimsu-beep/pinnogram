@@ -4167,6 +4167,16 @@ function connectCTW3WebSocket(){
                     event.data
                 );
 
+            if (
+                data.type === "aviation_flight_update" ||
+                data.type === "aviation_flight_arrived" ||
+                data.type === "aviation_flight_destroyed"
+            ) {
+                handleCTW3AviationWS(data);
+                return;
+            }
+
+
             if(
                 data.type ===
                 "world_update"
@@ -13904,6 +13914,82 @@ function renderCTW3AviationPanel(){
 
     }
 
+    // =====================================================
+    // CTW3 — МОЙ АВИАПАРК И ЗАПУСК РЕЙСОВ
+    // =====================================================
+
+    const airports =
+        ctw3AviationState.airports || [];
+
+    html += `
+        <div class="ctw3-aviation-section">
+            <b>🛫 Мой авиапарк</b>
+
+            ${
+                aircraft.length
+                    ? aircraft.map(plane => {
+                        const id = String(plane.id || plane.aircraft_id || "");
+                        const planeType = plane.aircraft_type || {};
+                        const available = plane.status === "available";
+
+                        return `
+                            <div class="ctw3-flight-item">
+                                <div class="ctw3-flight-main">
+                                    ✈️ ${escapeHtml(plane.registration || "Самолёт")}
+                                </div>
+
+                                <div class="ctw3-flight-sub">
+                                    ${escapeHtml(planeType.name || "Неизвестная модель")}
+                                    · ${escapeHtml(plane.status || "available")}
+                                </div>
+
+                                ${
+                                    available
+                                    ? `
+                                        <label>Аэропорт отправления</label>
+                                        <select id="ctw3Origin_${id}">
+                                            <option value="">Выберите аэропорт</option>
+                                            ${airports.map(a => `
+                                                <option value="${escapeHtml(a.id)}">
+                                                    ${escapeHtml(a.name)}
+                                                </option>
+                                            `).join("")}
+                                        </select>
+
+                                        <label>Аэропорт назначения</label>
+                                        <select id="ctw3Destination_${id}">
+                                            <option value="">Выберите аэропорт</option>
+                                            ${airports.map(a => `
+                                                <option value="${escapeHtml(a.id)}">
+                                                    ${escapeHtml(a.name)}
+                                                </option>
+                                            `).join("")}
+                                        </select>
+
+                                        <button
+                                            class="ctw3-aviation-button"
+                                            onclick="createCTW3Flight('${id}')"
+                                        >
+                                            🛫 Запустить рейс
+                                        </button>
+                                    `
+                                    : `
+                                        <div class="ctw3-aviation-hint">
+                                            Самолёт сейчас недоступен для нового рейса.
+                                        </div>
+                                    `
+                                }
+                            </div>
+                        `;
+                    }).join("")
+                    : `
+                        <div class="ctw3-aviation-hint">
+                            Самолётов пока нет. Купите первый самолёт выше.
+                        </div>
+                    `
+            }
+        </div>
+    `;
 
     html += `
 
@@ -14152,6 +14238,112 @@ async function buyCTW3Aircraft(typeId){
             "Ошибка соединения с сервером."
         );
     }
+}
+
+async function createCTW3Flight(aircraftId) {
+    const originSelect =
+        document.getElementById(
+            "ctw3Origin_" + aircraftId
+        );
+
+    const destinationSelect =
+        document.getElementById(
+            "ctw3Destination_" + aircraftId
+        );
+
+    const originAirportId =
+        originSelect?.value || "";
+
+    const destinationAirportId =
+        destinationSelect?.value || "";
+
+    if (!originAirportId || !destinationAirportId) {
+        setStatus("⚠️ Выбери оба аэропорта");
+        return;
+    }
+
+    if (originAirportId === destinationAirportId) {
+        setStatus("⚠️ Аэропорты должны отличаться");
+        return;
+    }
+
+    try {
+        const result = await api(
+            "/api/ctw3/aviation/flight",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    aircraft_id: aircraftId,
+                    origin_airport_id: originAirportId,
+                    destination_airport_id: destinationAirportId
+                })
+            }
+        );
+
+        setStatus(
+            "✈️ Рейс " +
+            (result.flight?.flight_number || "") +
+            " запущен!"
+        );
+
+        await loadCTW3Aviation();
+
+    } catch (error) {
+        console.error(
+            "[CTW3 AVIATION] Ошибка запуска рейса:",
+            error
+        );
+
+        setStatus("❌ " + error.message);
+    }
+}
+
+function handleCTW3AviationWS(data) {
+    const flight = data.flight;
+
+    if (!flight || !flight.id) {
+        return;
+    }
+
+    const flightId = String(flight.id);
+
+    if (data.type === "aviation_flight_update") {
+        const index =
+            ctw3AviationState.flights.findIndex(
+                item => String(item.id) === flightId
+            );
+
+        if (index >= 0) {
+            ctw3AviationState.flights[index] = {
+                ...ctw3AviationState.flights[index],
+                ...flight
+            };
+        } else {
+            ctw3AviationState.flights.push(flight);
+        }
+
+        renderCTW3Flights();
+        return;
+    }
+
+    // После прибытия или уничтожения обновляем
+    // список рейсов и статусы самолётов с сервера.
+    ctw3AviationState.flights =
+        ctw3AviationState.flights.filter(
+            item => String(item.id) !== flightId
+        );
+
+    if (ctw3AviationMarkers[flightId]) {
+        if (map.hasLayer(ctw3AviationMarkers[flightId])) {
+            map.removeLayer(ctw3AviationMarkers[flightId]);
+        }
+
+        delete ctw3AviationMarkers[flightId];
+    }
+
+    renderCTW3Flights();
+
+    loadCTW3Aviation();
 }
 
 function renderCTW3Flights(){
