@@ -2927,6 +2927,103 @@ select{
 
 }
 
+
+/* =====================================================
+   CTW3 — ЭФФЕКТ СБИТИЯ САМОЛЁТА
+===================================================== */
+
+.ctw3-shootdown-icon {
+    background: transparent !important;
+    border: none !important;
+    overflow: visible !important;
+    pointer-events: none !important;
+}
+
+.ctw3-shootdown-scene {
+    position: relative;
+    width: 1px;
+    height: 1px;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.ctw3-shootdown-rocket {
+    position: absolute;
+    left: -90px;
+    top: 55px;
+    font-size: 27px;
+    line-height: 1;
+    filter: drop-shadow(0 0 7px #ff7b22);
+    animation: ctw3RocketHit 0.7s cubic-bezier(.2,.7,.3,1) forwards;
+}
+
+.ctw3-shootdown-flash {
+    position: absolute;
+    left: -24px;
+    top: -24px;
+    font-size: 42px;
+    line-height: 1;
+    opacity: 0;
+    transform: scale(0.1);
+    filter: drop-shadow(0 0 12px #ff8c00);
+    animation: ctw3Explosion 0.75s ease-out 0.62s forwards;
+}
+
+.ctw3-shootdown-smoke {
+    position: absolute;
+    left: -18px;
+    top: -12px;
+    font-size: 34px;
+    opacity: 0;
+    animation: ctw3Smoke 0.9s ease-out 0.8s forwards;
+}
+
+@keyframes ctw3RocketHit {
+    0% {
+        transform: translate(0, 0) rotate(45deg) scale(1);
+    }
+    85% {
+        transform: translate(78px, -48px) rotate(45deg) scale(0.9);
+    }
+    100% {
+        transform: translate(90px, -55px) rotate(45deg) scale(0.45);
+        opacity: 0;
+    }
+}
+
+@keyframes ctw3Explosion {
+    0% {
+        opacity: 0;
+        transform: scale(0.1) rotate(-20deg);
+    }
+    25% {
+        opacity: 1;
+        transform: scale(1.35) rotate(8deg);
+    }
+    65% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(1.8);
+    }
+}
+
+@keyframes ctw3Smoke {
+    0% {
+        opacity: 0;
+        transform: translateY(0) scale(0.3);
+    }
+    35% {
+        opacity: 0.8;
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-28px) scale(1.7);
+    }
+}
+
 </style>
 </head>
 
@@ -14915,49 +15012,103 @@ function focusCTW3Flight(
 }
 
 
-async function shootDownCTW3Flight(
-    id
-){
 
-    try{
+function playCTW3ShootdownEffect(lat, lng) {
+    return new Promise(resolve => {
+        if (
+            !map ||
+            !Number.isFinite(lat) ||
+            !Number.isFinite(lng)
+        ) {
+            resolve();
+            return;
+        }
 
-        await api(
-            "/api/ctw3/aviation/shootdown",
-            {
-                method:"POST",
+        const effectIcon = L.divIcon({
+            className: "ctw3-shootdown-icon",
+            html: `
+                <div class="ctw3-shootdown-scene">
+                    <span class="ctw3-shootdown-rocket">🚀</span>
+                    <span class="ctw3-shootdown-flash">💥</span>
+                    <span class="ctw3-shootdown-smoke">☁️</span>
+                </div>
+            `,
+            iconSize: [1, 1],
+            iconAnchor: [0, 0]
+        });
 
-                body:
-                    JSON.stringify({
+        const effectMarker = L.marker([lat, lng], {
+            icon: effectIcon,
+            interactive: false,
+            keyboard: false,
+            zIndexOffset: 5000
+        }).addTo(map);
 
-                        flight_id:
-                            String(id)
-
-                    })
+        // Длительность полёта ракеты, взрыва и дыма.
+        setTimeout(() => {
+            if (map && map.hasLayer(effectMarker)) {
+                map.removeLayer(effectMarker);
             }
-        );
+
+            resolve();
+        }, 1900);
+    });
+}
 
 
-        setStatus(
-            "🚀 Самолёт уничтожен"
-        );
+async function shootDownCTW3Flight(id) {
+    const flight = (
+        ctw3AviationState.flights || []
+    ).find(item => String(item.id) === String(id));
 
-
-        closePointInfo();
-
-        await refreshState();
-
-        await loadCTW3Aviation();
-
-
-    }catch(error){
-
-        setStatus(
-            "❌ "+
-            error.message
-        );
-
+    if (!flight) {
+        setStatus("❌ Не удалось найти активный рейс");
+        return;
     }
 
+    const lat = Number(
+        flight.current_latitude ?? flight.lat
+    );
+
+    const lng = Number(
+        flight.current_longitude ?? flight.lng
+    );
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        setStatus("❌ Не удалось определить координаты самолёта");
+        return;
+    }
+
+    try {
+        // Сначала сервер подтверждает сбитие и удаляет рейс из БД.
+        await api("/api/ctw3/aviation/shootdown", {
+            method: "POST",
+            body: JSON.stringify({
+                flight_id: String(id)
+            })
+        });
+
+        setStatus("🚀 Ракета запущена! Самолёт сбит");
+
+        // Показываем ракету и взрыв в последней известной позиции.
+        await playCTW3ShootdownEffect(lat, lng);
+
+        // Закрываем карточку самолёта и обновляем состояние мира.
+        closePointInfo();
+
+        if (ctw3FlightRouteLine && map) {
+            map.removeLayer(ctw3FlightRouteLine);
+            ctw3FlightRouteLine = null;
+        }
+
+        ctw3SelectedFlightId = null;
+
+        await refreshState();
+        await loadCTW3Aviation();
+
+    } catch (error) {
+        setStatus("❌ " + (error.message || "Не удалось сбить самолёт"));
+    }
 }
 
 </script>
