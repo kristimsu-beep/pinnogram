@@ -15463,50 +15463,153 @@ function focusCTW3Flight(
 
 }
 
-
-
 function playCTW3ShootdownEffect(lat, lng) {
     return new Promise(resolve => {
         if (
             !map ||
-            !Number.isFinite(lat) ||
-            !Number.isFinite(lng)
+            !Number.isFinite(Number(lat)) ||
+            !Number.isFinite(Number(lng))
         ) {
             resolve();
             return;
         }
 
-        const effectIcon = L.divIcon({
-            className: "ctw3-shootdown-icon",
-            html: `
-                <div class="ctw3-shootdown-scene">
-                    <span class="ctw3-shootdown-rocket">🚀</span>
-                    <span class="ctw3-shootdown-flash">💥</span>
-                    <span class="ctw3-shootdown-smoke">☁️</span>
-                </div>
-            `,
-            iconSize: [1, 1],
-            iconAnchor: [0, 0]
-        });
+        const target = L.latLng(Number(lat), Number(lng));
+        const targetPoint = map.latLngToContainerPoint(target);
 
-        const effectMarker = L.marker([lat, lng], {
-            icon: effectIcon,
-            interactive: false,
-            keyboard: false,
-            zIndexOffset: 5000
+        // Точка запуска ракеты — немного левее и ниже самолёта.
+        const startPoint = L.point(
+            targetPoint.x - 125,
+            targetPoint.y + 85
+        );
+
+        const start = map.containerPointToLatLng(startPoint);
+
+        // Линия следа ракеты.
+        const trail = L.polyline([start, target], {
+            color: "#ff8733",
+            weight: 3,
+            opacity: 0.9,
+            dashArray: "7 7",
+            interactive: false
         }).addTo(map);
 
-        // Длительность полёта ракеты, взрыва и дыма.
-        setTimeout(() => {
-            if (map && map.hasLayer(effectMarker)) {
-                map.removeLayer(effectMarker);
+        const rocketIcon = L.divIcon({
+            className: "ctw3-shootdown-icon",
+            html: '<div class="ctw3-shootdown-rocket-marker">🚀</div>',
+            iconSize: [34, 34],
+            iconAnchor: [17, 17]
+        });
+
+        const rocket = L.marker(start, {
+            icon: rocketIcon,
+            interactive: false,
+            keyboard: false,
+            zIndexOffset: 10000
+        }).addTo(map);
+
+        const duration = 850;
+        const startedAt = performance.now();
+
+        function animateRocket(now) {
+            if (!map) {
+                resolve();
+                return;
             }
 
-            resolve();
-        }, 1900);
+            const progress = Math.min(
+                (now - startedAt) / duration,
+                1
+            );
+
+            // Плавное ускорение ракеты.
+            const eased = 1 - Math.pow(1 - progress, 3);
+
+            const currentTargetPoint =
+                map.latLngToContainerPoint(target);
+
+            const currentStartPoint = L.point(
+                currentTargetPoint.x - 125,
+                currentTargetPoint.y + 85
+            );
+
+            const currentPoint = L.point(
+                currentStartPoint.x +
+                    (currentTargetPoint.x - currentStartPoint.x) * eased,
+                currentStartPoint.y +
+                    (currentTargetPoint.y - currentStartPoint.y) * eased
+            );
+
+            const currentLatLng =
+                map.containerPointToLatLng(currentPoint);
+
+            rocket.setLatLng(currentLatLng);
+
+            trail.setLatLngs([
+                map.containerPointToLatLng(currentStartPoint),
+                currentLatLng
+            ]);
+
+            // Разворачиваем ракету по направлению движения.
+            const angle = Math.atan2(
+                currentTargetPoint.y - currentStartPoint.y,
+                currentTargetPoint.x - currentStartPoint.x
+            ) * 180 / Math.PI;
+
+            const rocketElement = rocket.getElement()?.querySelector(
+                ".ctw3-shootdown-rocket-marker"
+            );
+
+            if (rocketElement) {
+                rocketElement.style.transform =
+                    `rotate(${angle + 45}deg)`;
+            }
+
+            if (progress < 1) {
+                requestAnimationFrame(animateRocket);
+                return;
+            }
+
+            // Попадание: удаляем ракету и след.
+            if (map.hasLayer(rocket)) map.removeLayer(rocket);
+            if (map.hasLayer(trail)) map.removeLayer(trail);
+
+            // Яркая вспышка взрыва.
+            const explosion = L.marker(target, {
+                icon: L.divIcon({
+                    className: "ctw3-shootdown-icon",
+                    html: '<div class="ctw3-shootdown-explosion">💥</div>',
+                    iconSize: [70, 70],
+                    iconAnchor: [35, 35]
+                }),
+                interactive: false,
+                keyboard: false,
+                zIndexOffset: 10001
+            }).addTo(map);
+
+            // Дым после взрыва.
+            const smoke = L.marker(target, {
+                icon: L.divIcon({
+                    className: "ctw3-shootdown-icon",
+                    html: '<div class="ctw3-shootdown-smoke-marker">☁️</div>',
+                    iconSize: [48, 48],
+                    iconAnchor: [24, 24]
+                }),
+                interactive: false,
+                keyboard: false,
+                zIndexOffset: 10000
+            }).addTo(map);
+
+            setTimeout(() => {
+                if (map.hasLayer(explosion)) map.removeLayer(explosion);
+                if (map.hasLayer(smoke)) map.removeLayer(smoke);
+                resolve();
+            }, 1500);
+        }
+
+        requestAnimationFrame(animateRocket);
     });
 }
-
 
 async function shootDownCTW3Flight(id) {
     const flight = (
