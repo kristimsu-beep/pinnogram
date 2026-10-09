@@ -3024,6 +3024,339 @@ select{
     }
 }
 
+
+/* =====================================================
+   CTW3 — FULLSCREEN DISPATCH RADAR
+===================================================== */
+
+.ctw3-dispatcher {
+    position: fixed;
+    inset: 0;
+    z-index: 12000;
+    display: none;
+    overflow: auto;
+    color: #d8fbe9;
+    background:
+        radial-gradient(ellipse at center, #102b29 0%, #071411 48%, #030807 100%);
+    font-family: Arial, sans-serif;
+}
+
+.ctw3-dispatcher.visible {
+    display: block;
+}
+
+.ctw3-dispatcher-header {
+    min-height: 76px;
+    box-sizing: border-box;
+    padding: 16px 22px;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    border-bottom: 1px solid rgba(87, 255, 173, .22);
+    background: rgba(2, 10, 8, .94);
+}
+
+.ctw3-dispatcher-title {
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 1px;
+}
+
+.ctw3-dispatcher-subtitle {
+    margin-top: 5px;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: #71a993;
+}
+
+.ctw3-dispatcher-status {
+    margin-left: auto;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: #74ffb2;
+}
+
+.ctw3-dispatcher-status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: #42ff9b;
+    box-shadow: 0 0 12px #42ff9b;
+}
+
+.ctw3-dispatcher-close {
+    width: 38px;
+    height: 38px;
+    border: 1px solid rgba(120, 255, 190, .25);
+    border-radius: 10px;
+    color: #c9ffe3;
+    background: rgba(80, 255, 160, .08);
+    cursor: pointer;
+    font-size: 19px;
+}
+
+.ctw3-dispatcher-layout {
+    min-height: calc(100vh - 77px);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+.ctw3-radar-stage {
+    min-width: 0;
+    min-height: 600px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+#ctw3Radar {
+    position: relative;
+    width: min(72vh, 680px, 75vw);
+    aspect-ratio: 1;
+    border: 1px solid rgba(91, 255, 173, .5);
+    border-radius: 50%;
+    overflow: hidden;
+    background:
+        radial-gradient(circle, rgba(20, 94, 65, .3), rgba(2, 19, 14, .96) 72%);
+    box-shadow:
+        0 0 25px rgba(33, 255, 145, .1),
+        inset 0 0 45px rgba(41, 255, 150, .12);
+}
+
+.ctw3-radar-rings,
+.ctw3-radar-crosshair,
+.ctw3-radar-sweep,
+#ctw3RadarTargets {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+}
+
+.ctw3-radar-rings {
+    background:
+        radial-gradient(circle,
+            transparent 19.5%, rgba(90, 255, 170, .27) 19.8%, transparent 20.2%,
+            transparent 39.5%, rgba(90, 255, 170, .27) 39.8%, transparent 40.2%,
+            transparent 59.5%, rgba(90, 255, 170, .27) 59.8%, transparent 60.2%,
+            transparent 79.5%, rgba(90, 255, 170, .27) 79.8%, transparent 80.2%);
+}
+
+.ctw3-radar-crosshair {
+    background:
+        linear-gradient(90deg, transparent 49.8%, rgba(90, 255, 170, .28) 50%, transparent 50.2%),
+        linear-gradient(0deg, transparent 49.8%, rgba(90, 255, 170, .28) 50%, transparent 50.2%);
+}
+
+.ctw3-radar-sweep {
+    z-index: 2;
+    border-radius: 50%;
+    background: conic-gradient(
+        from 0deg,
+        transparent 0deg,
+        transparent 305deg,
+        rgba(40, 255, 143, .02) 320deg,
+        rgba(40, 255, 143, .12) 344deg,
+        rgba(40, 255, 143, .5) 359deg,
+        transparent 360deg
+    );
+    animation: ctw3RadarRotate 4s linear infinite;
+    pointer-events: none;
+}
+
+@keyframes ctw3RadarRotate {
+    to { transform: rotate(360deg); }
+}
+
+.ctw3-radar-center {
+    position: absolute;
+    z-index: 4;
+    left: 50%;
+    top: 50%;
+    color: #b5ffd6;
+    font-size: 16px;
+    transform: translate(-50%, -50%);
+    text-shadow: 0 0 12px #6affb0;
+}
+
+.ctw3-radar-direction {
+    position: absolute;
+    z-index: 4;
+    color: #9deec2;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.ctw3-radar-direction.north {
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.ctw3-radar-direction.east {
+    right: 9px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.ctw3-radar-direction.south {
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.ctw3-radar-direction.west {
+    left: 9px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+#ctw3RadarTargets {
+    z-index: 5;
+    pointer-events: none;
+}
+
+.ctw3-radar-target {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    margin: -4px 0 0 -4px;
+    border-radius: 50%;
+    background: #5bff9b;
+    box-shadow: 0 0 12px #43ff92;
+}
+
+.ctw3-radar-target-label {
+    position: absolute;
+    left: 11px;
+    top: -7px;
+    min-width: 105px;
+    color: #b6ffd2;
+    font: 10px/1.45 monospace;
+    text-shadow: 0 1px 3px #000, 0 0 5px #000;
+    white-space: nowrap;
+}
+
+.ctw3-radar-target.alert {
+    background: #ff3030;
+    box-shadow: 0 0 18px #ff2424;
+    animation: ctw3RadarAlert .55s ease-in-out infinite alternate;
+}
+
+.ctw3-radar-target.alert::before,
+.ctw3-radar-target.alert::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    border: 2px solid rgba(255, 40, 40, .65);
+    border-radius: 50%;
+    animation: ctw3RadarPulse 1.1s ease-out infinite;
+}
+
+.ctw3-radar-target.alert::after {
+    animation-delay: .55s;
+}
+
+@keyframes ctw3RadarAlert {
+    from { opacity: .55; }
+    to { opacity: 1; }
+}
+
+@keyframes ctw3RadarPulse {
+    from { transform: scale(.6); opacity: .8; }
+    to { transform: scale(2.8); opacity: 0; }
+}
+
+.ctw3-radar-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 18px;
+    margin-top: 20px;
+    color: #8dbba5;
+    font-size: 11px;
+}
+
+.ctw3-radar-legend i {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 5px;
+    border-radius: 50%;
+}
+
+.ctw3-radar-legend i.green { background: #5bff9b; }
+.ctw3-radar-legend i.red { background: #ff3030; }
+
+.ctw3-radar-sidebar {
+    padding: 20px;
+    border-left: 1px solid rgba(87, 255, 173, .18);
+    background: rgba(2, 12, 9, .7);
+}
+
+.ctw3-radar-card {
+    padding: 14px;
+    margin-bottom: 12px;
+    border: 1px solid rgba(87, 255, 173, .16);
+    border-radius: 12px;
+    background: rgba(45, 130, 88, .07);
+    overflow-wrap: anywhere;
+}
+
+.ctw3-radar-card-label {
+    margin-bottom: 9px;
+    color: #719c87;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+.ctw3-radar-big {
+    color: #6affad;
+    font-size: 32px;
+    font-weight: 900;
+}
+
+.ctw3-radar-flight {
+    padding: 9px 0;
+    border-bottom: 1px solid rgba(87, 255, 173, .12);
+    color: #c4f9dc;
+    font: 11px/1.6 monospace;
+}
+
+.ctw3-radar-flight:last-child {
+    border-bottom: 0;
+}
+
+.ctw3-radar-footer {
+    color: #638a76;
+    font-size: 10px;
+    line-height: 1.8;
+}
+
+@media (max-width: 850px) {
+    .ctw3-dispatcher-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .ctw3-radar-stage {
+        min-height: auto;
+        padding: 22px 10px;
+    }
+
+    #ctw3Radar {
+        width: min(88vw, 65vh);
+    }
+
+    .ctw3-radar-sidebar {
+        border-left: 0;
+        border-top: 1px solid rgba(87, 255, 173, .18);
+    }
+}
+
 </style>
 </head>
 
@@ -4093,25 +4426,102 @@ select{
 
 <div id="ctw3AviationPanel">
 
-    <div class="ctw3-aviation-title">
-        <span>✈️ Авиация CTW3</span>
+
+<div class="ctw3-aviation-title">
+    <span>✈️ Авиация CTW3</span>
+
+    <div style="display:flex;gap:6px;align-items:center">
+        <button
+            type="button"
+            class="ctw3-aviation-button secondary"
+            style="width:auto;margin:0;padding:5px 9px"
+            onclick="openCTW3Dispatcher()"
+        >
+            📡 Диспетчер
+        </button>
 
         <button
             type="button"
             class="ctw3-aviation-button secondary"
             style="width:auto;margin:0;padding:5px 9px"
             onclick="toggleCTW3AviationCollapse()"
+            title="Свернуть панель"
         >
             ↕
         </button>
     </div>
-
-    <div id="ctw3AviationContent">
-        Загрузка...
-    </div>
-
 </div>
 
+<div id="ctw3Dispatcher" class="ctw3-dispatcher">
+    <div class="ctw3-dispatcher-header">
+        <div>
+            <div class="ctw3-dispatcher-title">📡 CTW3 ATC</div>
+            <div class="ctw3-dispatcher-subtitle">
+                АВИАЦИОННЫЙ ДИСПЕТЧЕРСКИЙ ЦЕНТР
+            </div>
+        </div>
+
+        <div class="ctw3-dispatcher-status">
+            <span class="ctw3-dispatcher-status-dot"></span>
+            РАДАР АКТИВЕН
+        </div>
+
+        <button
+            type="button"
+            class="ctw3-dispatcher-close"
+            onclick="closeCTW3Dispatcher()"
+            title="Закрыть диспетчер"
+        >✕</button>
+    </div>
+
+    <div class="ctw3-dispatcher-layout">
+        <div class="ctw3-radar-stage">
+            <div id="ctw3Radar">
+                <div class="ctw3-radar-rings"></div>
+                <div class="ctw3-radar-crosshair"></div>
+                <div class="ctw3-radar-sweep"></div>
+                <div class="ctw3-radar-center">●</div>
+                <div class="ctw3-radar-direction north">N</div>
+                <div class="ctw3-radar-direction east">E</div>
+                <div class="ctw3-radar-direction south">S</div>
+                <div class="ctw3-radar-direction west">W</div>
+                <div id="ctw3RadarTargets"></div>
+            </div>
+
+            <div class="ctw3-radar-legend">
+                <span><i class="green"></i> Активный рейс</span>
+                <span><i class="red"></i> Воздушная тревога</span>
+            </div>
+        </div>
+
+        <aside class="ctw3-radar-sidebar">
+            <div class="ctw3-radar-card">
+                <div class="ctw3-radar-card-label">РАЙОН НАБЛЮДЕНИЯ</div>
+                <div id="ctw3RadarCountry">Определение страны…</div>
+            </div>
+
+            <div class="ctw3-radar-card">
+                <div class="ctw3-radar-card-label">ОТСЛЕЖИВАЕМЫЕ РЕЙСЫ</div>
+                <div id="ctw3RadarFlightCount" class="ctw3-radar-big">0</div>
+            </div>
+
+            <div class="ctw3-radar-card">
+                <div class="ctw3-radar-card-label">ВОЗДУШНАЯ ОБСТАНОВКА</div>
+                <div id="ctw3RadarStatus">Сканирование воздушного пространства…</div>
+            </div>
+
+            <div class="ctw3-radar-card">
+                <div class="ctw3-radar-card-label">СПИСОК РЕЙСОВ</div>
+                <div id="ctw3RadarFlightList"></div>
+            </div>
+
+            <div class="ctw3-radar-footer">
+                Данные обновляются автоматически
+                <div id="ctw3RadarLastUpdate">Ожидание данных…</div>
+            </div>
+        </aside>
+    </div>
+</div>
 
 <button
     id="ctw3AviationOpenButton"
@@ -15109,6 +15519,345 @@ async function shootDownCTW3Flight(id) {
     } catch (error) {
         setStatus("❌ " + (error.message || "Не удалось сбить самолёт"));
     }
+}
+
+
+/* =====================================================
+   CTW3 — DISPATCHER RADAR LOGIC
+===================================================== */
+
+let ctw3DispatcherTimer = null;
+let ctw3RadarPreviousFlights = new Map();
+let ctw3RadarAlerts = new Map();
+
+function openCTW3Dispatcher() {
+    const modal = $("ctw3Dispatcher");
+    if (!modal) return;
+
+    modal.classList.add("visible");
+    renderCTW3DispatcherRadar();
+
+    if (ctw3DispatcherTimer === null) {
+        ctw3DispatcherTimer = setInterval(
+            updateCTW3DispatcherRadar,
+            1000
+        );
+    }
+
+    updateCTW3DispatcherRadar();
+}
+
+function closeCTW3Dispatcher() {
+    $("ctw3Dispatcher")?.classList.remove("visible");
+
+    if (ctw3DispatcherTimer !== null) {
+        clearInterval(ctw3DispatcherTimer);
+        ctw3DispatcherTimer = null;
+    }
+}
+
+async function updateCTW3DispatcherRadar() {
+    if (!$("ctw3Dispatcher")?.classList.contains("visible")) return;
+
+    try {
+        const data = await api("/api/ctw3/aviation/state");
+
+        ctw3AviationState = Object.assign(
+            ctw3AviationState,
+            data
+        );
+
+        renderCTW3DispatcherRadar();
+    } catch (error) {
+        console.warn("[CTW3 RADAR] Ошибка обновления:", error);
+        const status = $("ctw3RadarStatus");
+        if (status) status.textContent = "Нет связи с сервером";
+    }
+}
+
+function ctw3RadarGetTerritory() {
+    // В игре country — текущая страна пользователя.
+    const territory = country?.territory;
+    const geometry = territory?.geometry || territory;
+
+    if (!geometry?.coordinates) return null;
+
+    return geometry;
+}
+
+function ctw3RadarRings(geometry) {
+    if (!geometry) return [];
+
+    if (geometry.type === "Polygon") {
+        return geometry.coordinates?.length
+            ? [geometry.coordinates[0]]
+            : [];
+    }
+
+    if (geometry.type === "MultiPolygon") {
+        return (geometry.coordinates || [])
+            .map(polygon => polygon?.[0])
+            .filter(ring => Array.isArray(ring) && ring.length >= 3);
+    }
+
+    return [];
+}
+
+function ctw3RadarPointInRing(lat, lng, ring) {
+    if (!ring || ring.length < 3) return false;
+
+    let inside = false;
+
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const xi = Number(ring[i][0]);
+        const yi = Number(ring[i][1]);
+        const xj = Number(ring[j][0]);
+        const yj = Number(ring[j][1]);
+
+        const intersects =
+            ((yi > lat) !== (yj > lat)) &&
+            (lng < (xj - xi) * (lat - yi) / ((yj - yi) || 1e-9) + xi);
+
+        if (intersects) inside = !inside;
+    }
+
+    return inside;
+}
+
+function ctw3RadarIsInsideCountry(lat, lng, geometry) {
+    if (!geometry) return false;
+
+    const polygons = geometry.type === "MultiPolygon"
+        ? geometry.coordinates || []
+        : geometry.type === "Polygon"
+            ? [geometry.coordinates || []]
+            : [];
+
+    return polygons.some(polygon => {
+        const rings = polygon || [];
+        if (!rings.length) return false;
+
+        // Внешний контур должен содержать самолёт.
+        if (!ctw3RadarPointInRing(lat, lng, rings[0])) return false;
+
+        // Внутренние кольца GeoJSON — отверстия, не относящиеся к территории.
+        for (let i = 1; i < rings.length; i++) {
+            if (ctw3RadarPointInRing(lat, lng, rings[i])) return false;
+        }
+
+        return true;
+    });
+}
+
+function ctw3RadarDistanceKm(a, b) {
+    const rad = value => value * Math.PI / 180;
+    const dLat = rad(b.lat - a.lat);
+    const dLng = rad(b.lng - a.lng);
+
+    const h =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(rad(a.lat)) *
+        Math.cos(rad(b.lat)) *
+        Math.sin(dLng / 2) ** 2;
+
+    return 6371 * 2 * Math.atan2(
+        Math.sqrt(h),
+        Math.sqrt(Math.max(0, 1 - h))
+    );
+}
+
+function ctw3RadarBearing(center, point) {
+    const rad = value => value * Math.PI / 180;
+    const y = Math.sin(rad(point.lng - center.lng)) * Math.cos(rad(point.lat));
+    const x =
+        Math.cos(rad(center.lat)) * Math.sin(rad(point.lat)) -
+        Math.sin(rad(center.lat)) * Math.cos(rad(point.lat)) *
+        Math.cos(rad(point.lng - center.lng));
+
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+function renderCTW3DispatcherRadar() {
+    const radar = $("ctw3Radar");
+    const targets = $("ctw3RadarTargets");
+    if (!radar || !targets) return;
+
+    const geometry = ctw3RadarGetTerritory();
+    const rings = ctw3RadarRings(geometry);
+    const flights = ctw3AviationState.flights || [];
+
+    const activeCountryId = String(
+        ctw3AviationState.country_id || country?.id || ""
+    );
+
+    const points = [];
+
+    flights.forEach(flight => {
+        const lat = Number(flight.current_latitude ?? flight.lat);
+        const lng = Number(flight.current_longitude ?? flight.lng);
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+        // Учитываем только рейсы, находящиеся над своей территорией.
+        if (!geometry || !ctw3RadarIsInsideCountry(lat, lng, geometry)) return;
+
+        // Если страна указана у рейса, она должна совпадать с текущей страной.
+        if (
+            activeCountryId &&
+            flight.country_id &&
+            String(flight.country_id) !== activeCountryId
+        ) return;
+
+        points.push({ flight, lat, lng });
+    });
+
+    // Если рейс пропал из списка активных, сохраняем его последнюю позицию
+    // как кратковременную красную отметку тревоги.
+    const currentIds = new Set(points.map(item => String(item.flight.id)));
+
+    for (const [id, previous] of ctw3RadarPreviousFlights.entries()) {
+        if (!currentIds.has(id) && !ctw3RadarAlerts.has(id)) {
+            ctw3RadarAlerts.set(id, {
+                ...previous,
+                expires: Date.now() + 2500
+            });
+        }
+    }
+
+    ctw3RadarPreviousFlights = new Map(
+        points.map(item => [
+            String(item.flight.id),
+            item
+        ])
+    );
+
+    const now = Date.now();
+    for (const [id, alert] of ctw3RadarAlerts.entries()) {
+        if (alert.expires <= now) ctw3RadarAlerts.delete(id);
+    }
+
+    // Центр радара — центр ограничивающего прямоугольника территории.
+    // Это устойчивее, чем усреднять координаты всех вершин сложной границы.
+    let center = null;
+    let maxDistance = 0;
+
+    if (rings.length) {
+        const allCoords = rings.flat().filter(
+            p => Array.isArray(p) && p.length >= 2
+        );
+
+        if (allCoords.length) {
+            const lngs = allCoords.map(p => Number(p[0]));
+            const lats = allCoords.map(p => Number(p[1]));
+
+            center = {
+                lat: (Math.min(...lats) + Math.max(...lats)) / 2,
+                lng: (Math.min(...lngs) + Math.max(...lngs)) / 2
+            };
+
+            allCoords.forEach(p => {
+                maxDistance = Math.max(
+                    maxDistance,
+                    ctw3RadarDistanceKm(center, {
+                        lat: Number(p[1]),
+                        lng: Number(p[0])
+                    })
+                );
+            });
+        }
+    }
+
+    const countryName = country?.name || "Территория игрока";
+    if ($("ctw3RadarCountry")) {
+        $("ctw3RadarCountry").textContent = countryName;
+    }
+
+    if ($("ctw3RadarFlightCount")) {
+        $("ctw3RadarFlightCount").textContent = String(points.length);
+    }
+
+    if ($("ctw3RadarStatus")) {
+        $("ctw3RadarStatus").textContent = points.length
+            ? "Воздушное пространство контролируется"
+            : "Активных рейсов над территорией не обнаружено";
+    }
+
+    if ($("ctw3RadarLastUpdate")) {
+        $("ctw3RadarLastUpdate").textContent =
+            "Обновлено: " + new Date().toLocaleTimeString();
+    }
+
+    if (!center || !maxDistance) {
+        targets.innerHTML = "";
+        if ($("ctw3RadarCountry")) {
+            $("ctw3RadarCountry").textContent =
+                "Сначала создайте территорию страны";
+        }
+        if ($("ctw3RadarStatus")) {
+            $("ctw3RadarStatus").textContent =
+                "Нет границ для расчёта центра радара";
+        }
+        $("ctw3RadarFlightList").innerHTML = "";
+        return;
+    }
+
+    const radius = radar.clientWidth / 2;
+    const radarScaleKm = Math.max(50, maxDistance * 1.2);
+
+    const targetMarkup = [];
+    const listMarkup = [];
+
+    function addTarget(item, alert = false) {
+        const flight = item.flight;
+        const id = String(flight.id || "");
+        const point = { lat: Number(item.lat), lng: Number(item.lng) };
+        const distance = ctw3RadarDistanceKm(center, point);
+        const bearing = ctw3RadarBearing(center, point);
+        const radialDistance = Math.min(.88, distance / radarScaleKm) * radius;
+        const angle = bearing * Math.PI / 180;
+
+        const x = radius + Math.sin(angle) * radialDistance;
+        const y = radius - Math.cos(angle) * radialDistance;
+
+        const label = alert
+            ? `${flight.flight_number || "Рейс"}<br>ТРЕВОГА: САМОЛЁТ ПОТЕРЯН`
+            : `${flight.flight_number || "Рейс"}<br>` +
+              `${Math.round(Number(flight.altitude || 10000))} м · ` +
+              `${Math.round(Number(flight.heading || 0))}°<br>` +
+              `${Math.round(Number(flight.speed_kmh || 0))} км/ч`;
+
+        targetMarkup.push(`
+            <div class="ctw3-radar-target ${alert ? "alert" : ""}"
+                 style="left:${x}px;top:${y}px">
+                <div class="ctw3-radar-target-label">${label}</div>
+            </div>
+        `);
+
+        listMarkup.push(`
+            <div class="ctw3-radar-flight">
+                <strong>${escapeHtml(flight.flight_number || "Рейс")}</strong>
+                ${alert ? " — <span style='color:#ff5656'>ТРЕВОГА</span>" : ""}
+                <br>
+                ${alert ? "Последняя известная позиция" :
+                    `${Math.round(Number(flight.altitude || 10000))} м · ` +
+                    `${Math.round(Number(flight.heading || 0))}° · ` +
+                    `${Math.round(Number(flight.speed_kmh || 0))} км/ч`}
+                <br>${escapeHtml(flight.airline_name || "Авиакомпания не указана")}
+            </div>
+        `);
+    }
+
+    points.forEach(item => addTarget(item, false));
+
+    // Красные отметки тревоги живут 2,5 секунды, затем исчезают.
+    for (const alert of ctw3RadarAlerts.values()) {
+        addTarget(alert, true);
+    }
+
+    targets.innerHTML = targetMarkup.join("");
+    $("ctw3RadarFlightList").innerHTML = listMarkup.length
+        ? listMarkup.join("")
+        : '<div class="ctw3-radar-flight">Рейсов пока нет</div>';
 }
 
 </script>
