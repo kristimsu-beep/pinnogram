@@ -1525,6 +1525,16 @@ select{
 }
 
 
+/* Скрываем погоду, когда открыта карточка самолёта */
+#ctw3PointInfo.aircraft-selected .ctw3-point-weather {
+    display: none !important;
+}
+
+/* Плавное перемещение маркера самолёта по карте */
+.leaflet-marker-icon:has(.ctw3-plane-marker) {
+    transition: transform 1s linear !important;
+}
+
 .ctw3-point-header {
 
     display: flex;
@@ -5129,6 +5139,8 @@ async function showMapPointInfo(
 
     if(!panel) return;
 
+    panel.classList.remove("aircraft-selected");
+    $("ctw3AircraftInfo")?.remove();
 
     /* =====================================================
        SHOW POINT INFORMATION PANEL
@@ -13882,7 +13894,7 @@ async function loadCTW3Aviation(){
         if (ctw3FlightRefreshTimer === null) {
           ctw3FlightRefreshTimer = setInterval(
               refreshCTW3FlightPositions,
-              2500
+              1000
           );
       }
 
@@ -14770,50 +14782,97 @@ function renderCTW3Flights(){
 
 }
 
+function selectCTW3Flight(flight) {
+    // Берём самые свежие данные, а не устаревшие данные маркера.
+    const latestFlight = (ctw3AviationState.flights || []).find(
+        item => String(item.id) === String(flight.id)
+    ) || flight;
 
-function selectCTW3Flight(
-    flight
-){
-
-    showMapPointInfo(
-
-        Number(
-            flight.current_latitude
-        ),
-
-        Number(
-            flight.current_longitude
-        ),
-
-        {
-
-            type:
-                "aircraft",
-
-            object:
-                flight,
-
-            country:{
-
-                id:
-                    flight.country_id,
-
-                name:
-                    flight.country_name,
-
-                flag:
-                    flight.country_flag
-
-            },
-
-            canShootAircraft: true
-
-        }
-
+    const lat = Number(
+        latestFlight.current_latitude ?? latestFlight.lat
+    );
+    const lng = Number(
+        latestFlight.current_longitude ?? latestFlight.lng
     );
 
-}
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return;
+    }
 
+    showMapPointInfo(lat, lng, {
+        type: "aircraft",
+        object: latestFlight,
+        country: {
+            id: latestFlight.country_id,
+            name: latestFlight.country_name,
+            flag: latestFlight.country_flag
+        },
+        canShootAircraft: true
+    });
+
+    const panel = $("ctw3PointInfo");
+    if (!panel) return;
+
+    panel.classList.add("aircraft-selected");
+
+    $("ctw3PointIcon").textContent = "✈️";
+    $("ctw3PointTitle").textContent =
+        latestFlight.flight_number || "Самолёт";
+    $("ctw3PointSubtitle").textContent =
+        latestFlight.airline_name || "Активный рейс";
+
+    $("ctw3PointCountry").textContent =
+        (latestFlight.country_flag || "🌐") + " " +
+        (latestFlight.country_name || "Неизвестная страна");
+
+    $("ctw3PointObject").textContent =
+        latestFlight.aircraft_registration ||
+        latestFlight.flight_number ||
+        "Самолёт";
+
+    $("ctw3PointCoordinates").textContent =
+        lat.toFixed(4) + ", " + lng.toFixed(4);
+
+    // Создаём карточку самолёта, если её ещё нет.
+    let info = $("ctw3AircraftInfo");
+
+    if (!info) {
+        info = document.createElement("div");
+        info.id = "ctw3AircraftInfo";
+        info.style.cssText =
+            "margin-top:10px;padding:12px;border-radius:12px;" +
+            "background:rgba(255,255,255,.05);" +
+            "border:1px solid rgba(255,255,255,.1);";
+
+        const weather = panel.querySelector(".ctw3-point-weather");
+        if (weather) {
+            panel.insertBefore(info, weather);
+        } else {
+            panel.appendChild(info);
+        }
+    }
+
+    info.innerHTML = `
+        <div style="font-weight:800;margin-bottom:8px">
+            ✈️ Информация о самолёте
+        </div>
+        <div style="font-size:12px;line-height:1.8">
+            <div>Рейс: ${escapeHtml(latestFlight.flight_number || "—")}</div>
+            <div>Авиакомпания: ${escapeHtml(latestFlight.airline_name || "—")}</div>
+            <div>Регистрация: ${escapeHtml(latestFlight.aircraft_registration || "—")}</div>
+            <div>Скорость: ${Math.round(Number(latestFlight.speed_kmh || 0))} км/ч</div>
+            <div>Курс: ${Math.round(Number(latestFlight.heading || 0))}°</div>
+        </div>
+        <button
+            type="button"
+            class="ctw3-aviation-button"
+            style="margin-top:10px;background:#a51d2d"
+            onclick="shootDownCTW3Flight('${String(latestFlight.id)}')"
+        >
+            🚀 Сбить самолёт
+        </button>
+    `;
+}
 
 function focusCTW3Flight(
     id
