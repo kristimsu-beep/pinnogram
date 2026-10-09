@@ -1820,6 +1820,38 @@ select{
     margin-bottom: 10px;
 }
 
+
+.ctw3-weather-toggle {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 9px;
+    background: rgba(255,255,255,0.06);
+    color: white;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.ctw3-weather-toggle:hover {
+    background: rgba(0,180,255,0.2);
+}
+
+.ctw3-point-weather.weather-collapsed
+.ctw3-weather-toggle {
+    font-size: 17px;
+}
+
+.ctw3-point-weather.weather-collapsed
+.ctw3-weather-forecast-title,
+.ctw3-point-weather.weather-collapsed
+#ctw3WeatherCurrent,
+.ctw3-point-weather.weather-collapsed
+#ctw3WeatherForecast {
+    display: none !important;
+}
+
 .ctw3-weather-title {
     display: flex;
     align-items: center;
@@ -3515,6 +3547,16 @@ select{
                 </div>
 
             </div>
+            
+            <button
+                type="button"
+                class="ctw3-weather-toggle"
+                onclick="toggleCTW3Weather()"
+                title="Скрыть или показать погоду"
+                aria-label="Скрыть или показать погоду"
+            >
+                −
+            </button>
 
         </div>
 
@@ -6267,6 +6309,36 @@ async function showMapPointInfo(
 /*
     Закрытие карточки.
 */
+
+
+function toggleCTW3Weather() {
+    const weather = document.querySelector(
+        ".ctw3-point-weather"
+    );
+
+    const button = weather?.querySelector(
+        ".ctw3-weather-toggle"
+    );
+
+    if (!weather || !button) return;
+
+    const collapsed = weather.classList.toggle(
+        "weather-collapsed"
+    );
+
+    weather.querySelectorAll(
+        "#ctw3WeatherCurrent, " +
+        ".ctw3-weather-forecast-title, " +
+        "#ctw3WeatherForecast"
+    ).forEach(element => {
+        element.hidden = collapsed;
+    });
+
+    button.textContent = collapsed ? "+" : "−";
+    button.title = collapsed
+        ? "Показать погоду"
+        : "Скрыть погоду";
+}
 
 function closePointInfo(){
 
@@ -13730,7 +13802,32 @@ let ctw3AviationMarkers = {};
 let ctw3AirportMarkers = {};
 
 let ctw3AirportSelection = null;
-  
+
+
+let ctw3FlightRefreshTimer = null;
+let ctw3FlightRefreshInProgress = false;
+
+async function refreshCTW3FlightPositions() {
+    if (ctw3FlightRefreshInProgress) return;
+
+    ctw3FlightRefreshInProgress = true;
+
+    try {
+        const data = await api("/api/ctw3/aviation/state");
+
+        ctw3AviationState.flights = data.flights || [];
+
+        renderCTW3Flights();
+    } catch (error) {
+        console.warn(
+            "[CTW3 AVIATION] Не удалось обновить позиции:",
+            error
+        );
+    } finally {
+        ctw3FlightRefreshInProgress = false;
+    }
+}
+
 function openAviationPanel(){
 
     $("ctw3AviationPanel")
@@ -13781,6 +13878,13 @@ async function loadCTW3Aviation(){
         renderCTW3Airports();
 
         renderCTW3Flights();
+
+        if (ctw3FlightRefreshTimer === null) {
+          ctw3FlightRefreshTimer = setInterval(
+              refreshCTW3FlightPositions,
+              2500
+          );
+      }
 
     }catch(error){
 
