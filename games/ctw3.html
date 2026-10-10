@@ -11940,10 +11940,12 @@ async function boot(){
 
     await loadCountries();
 
+    // Запускаем мировые новости и дипломатию
+    startCTW3DiplomacyPolling();
+
     setStatus(
         "🌍 CTW3 готов"
     );
-
 
     setInterval(
         async()=>{
