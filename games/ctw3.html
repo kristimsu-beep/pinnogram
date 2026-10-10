@@ -3364,6 +3364,203 @@ select{
     }
 }
 
+/* CTW3 NEWS AND DIPLOMACY */
+
+#ctw3NewsTicker {
+    position: fixed;
+    top: 76px;
+    left: 14px;
+    right: 14px;
+    z-index: 2050;
+    min-height: 38px;
+    max-height: 48px;
+    overflow: hidden;
+    padding: 9px 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+#ctw3NewsLabel {
+    color: #65d9ff;
+    font-size: 10px;
+    font-weight: 900;
+    white-space: nowrap;
+}
+
+#ctw3NewsItems {
+    display: flex;
+    gap: 18px;
+    overflow: hidden;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.ctw3-news-item {
+    font-size: 11px;
+    color: #e6edf6;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#ctw3DiplomacyPanel {
+    position: fixed;
+    top: 132px;
+    right: 14px;
+    z-index: 5200;
+    width: min(370px, calc(100vw - 28px));
+    max-height: calc(100vh - 150px);
+    overflow: auto;
+    padding: 14px;
+    display: none;
+}
+
+#ctw3DiplomacyPanel.visible {
+    display: block;
+}
+
+#ctw3DiplomacySearch {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 10px;
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 9px;
+    background: #0a111c;
+    color: white;
+}
+
+#ctw3CountryChoices {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 190px;
+    overflow: auto;
+    margin: 8px 0;
+}
+
+.ctw3-country-choice,
+.ctw3-diplomacy-action {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 9px;
+    background: rgba(255,255,255,.05);
+    color: white;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ctw3-country-choice.selected {
+    border-color: #49c8ff;
+    background: rgba(30,150,255,.18);
+}
+
+.ctw3-diplomacy-action {
+    margin-top: 8px;
+    background: #1379d5;
+    text-align: center;
+    font-weight: 800;
+}
+
+.ctw3-diplomacy-action.danger {
+    background: #b52b35;
+}
+
+.ctw3-diplomacy-action.truce {
+    background: #16866a;
+}
+
+.ctw3-diplomacy-action:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
+.ctw3-diplomacy-muted {
+    color: #9eacbd;
+    font-size: 11px;
+}
+
+#ctw3DiplomacyDetails {
+    font-size: 12px;
+    line-height: 1.5;
+    margin-top: 8px;
+}
+
+#ctw3WarWarning {
+    display: none;
+    position: fixed;
+    top: 135px;
+    left: 14px;
+    z-index: 5400;
+    width: min(340px, calc(100vw - 28px));
+    padding: 14px;
+    border: 1px solid rgba(255,91,91,.6);
+    border-radius: 13px;
+    background: rgba(48,12,20,.96);
+}
+
+#ctw3WarWarning.visible {
+    display: block;
+}
+
+#ctw3WarWarning strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #ffb2b2;
+}
+
+#ctw3WarCountdown {
+    display: none;
+    position: fixed;
+    left: 14px;
+    bottom: 18px;
+    z-index: 5100;
+    width: min(300px, calc(100vw - 28px));
+    padding: 12px;
+    border: 1px solid rgba(255,255,255,.14);
+    border-radius: 12px;
+    background: rgba(7,13,23,.95);
+}
+
+#ctw3WarCountdown.visible {
+    display: block;
+}
+
+#ctw3WarProgress {
+    height: 5px;
+    border-radius: 8px;
+    background: rgba(255,255,255,.12);
+    overflow: hidden;
+}
+
+#ctw3WarProgressFill {
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg,#e4b34e,#ff5555);
+}
+
+@media (max-width: 800px) {
+    #ctw3NewsTicker {
+        left: 8px;
+        right: 8px;
+    }
+
+    #ctw3DiplomacyPanel {
+        right: 8px;
+        max-height: calc(100vh - 125px);
+    }
+
+    #ctw3WarWarning {
+        left: 8px;
+    }
+
+    #ctw3WarCountdown {
+        left: 8px;
+        bottom: 8px;
+    }
+}
+
 </style>
 </head>
 
@@ -3563,6 +3760,45 @@ select{
 
 </div>
 
+<!-- WORLD NEWS -->
+<div id="ctw3NewsTicker" class="panel">
+    <span id="ctw3NewsLabel">МИРОВЫЕ НОВОСТИ</span>
+    <div id="ctw3NewsItems">
+        <span class="ctw3-news-item">Загрузка новостей…</span>
+    </div>
+</div>
+
+<!-- DIPLOMACY -->
+<div id="ctw3DiplomacyPanel" class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3>⚔️ Дипломатия</h3>
+        <button class="btn" onclick="toggleCTW3Diplomacy(false)">✕</button>
+    </div>
+
+    <input
+        id="ctw3DiplomacySearch"
+        placeholder="🔎 Найти государство…"
+        oninput="onCTW3DiplomacySearch(this.value)"
+    >
+
+    <div id="ctw3CountryChoices"></div>
+    <div id="ctw3DiplomacyDetails">Выберите государство.</div>
+    <div id="ctw3ActiveWars"></div>
+</div>
+
+<div id="ctw3WarWarning">
+    <strong>⚠️ Предупреждение о войне</strong>
+    <div id="ctw3WarWarningText"></div>
+    <button class="btn" onclick="dismissCTW3WarWarning()">Понятно</button>
+</div>
+
+<div id="ctw3WarCountdown">
+    <div id="ctw3WarCountdownLabel">Дипломатический срок</div>
+    <div id="ctw3WarProgress">
+        <div id="ctw3WarProgressFill"></div>
+    </div>
+    <div id="ctw3WarCountdownAction"></div>
+</div>
 
 <!-- =========================================================
      COUNTRY PANEL
@@ -3642,6 +3878,20 @@ select{
         <div class="card">
             ПКМ по карте открывает строительство.
         </div>
+
+    </div>
+
+    <!-- ДИПЛОМАТИЯ -->
+    <div class="section">
+
+        <h4>ДИПЛОМАТИЯ</h4>
+
+        <button
+            class="btn"
+            id="ctw3DiplomacyButton"
+            onclick="toggleCTW3Diplomacy()">
+            ⚔️ Открыть дипломатию
+        </button>
 
     </div>
 
@@ -4087,6 +4337,8 @@ select{
     </div>
 
 </div>
+
+
 
 <!-- =========================================================
      CHAT
@@ -16067,6 +16319,422 @@ function renderCTW3DispatcherRadar() {
         }
     };
 })();
+
+/* =========================================================
+   CTW3 — NEWS AND DIPLOMACY
+========================================================= */
+
+let ctw3DiplomacyState = {
+    news: [],
+    wars: [],
+    warnings: []
+};
+
+let ctw3DiplomacySelectedCountryId = null;
+let ctw3DiplomacySearch = "";
+let ctw3DiplomacyPollTimer = null;
+let ctw3WarCountdownTimer = null;
+let ctw3DismissedWarningId = null;
+
+function ctw3EscapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+    }[ch]));
+}
+
+function toggleCTW3Diplomacy(force) {
+    const panel = $("ctw3DiplomacyPanel");
+    if (!panel) return;
+
+    const open = typeof force === "boolean"
+        ? force
+        : !panel.classList.contains("visible");
+
+    panel.classList.toggle("visible", open);
+
+    if (open) {
+        renderCTW3DiplomacyPanel();
+        loadCTW3Diplomacy();
+        $("ctw3DiplomacySearch")?.focus();
+    }
+}
+
+function onCTW3DiplomacySearch(value) {
+    ctw3DiplomacySearch = value || "";
+    renderCTW3CountryChoices();
+}
+
+function renderCTW3CountryChoices() {
+    const list = $("ctw3CountryChoices");
+    if (!list) return;
+
+    const ownId = String(country?.id || country?._id || "");
+    const query = ctw3DiplomacySearch.trim().toLocaleLowerCase();
+
+    const options = (countries || []).filter(c =>
+        String(c.id || c._id) !== ownId &&
+        String(c.name || "").toLocaleLowerCase().includes(query)
+    );
+
+    if (!options.length) {
+        list.innerHTML =
+            '<div class="ctw3-diplomacy-muted">Страны не найдены.</div>';
+        return;
+    }
+
+    list.innerHTML = options.map(c => {
+        const id = String(c.id || c._id);
+        const selected =
+            id === String(ctw3DiplomacySelectedCountryId);
+
+        return `
+            <button
+                class="ctw3-country-choice ${selected ? "selected" : ""}"
+                onclick="selectCTW3DiplomacyCountry('${id}')">
+                ${ctw3EscapeHtml(c.flag || "🏳️")}
+                ${ctw3EscapeHtml(c.name || "Государство")}
+            </button>
+        `;
+    }).join("");
+}
+
+function selectCTW3DiplomacyCountry(id) {
+    ctw3DiplomacySelectedCountryId = String(id);
+    renderCTW3DiplomacyPanel();
+}
+
+function renderCTW3DiplomacyPanel() {
+    renderCTW3CountryChoices();
+
+    const details = $("ctw3DiplomacyDetails");
+    const activeWars = $("ctw3ActiveWars");
+
+    if (!details || !activeWars) return;
+
+    const ownId = String(country?.id || country?._id || "");
+
+    const selected = (countries || []).find(c =>
+        String(c.id || c._id) ===
+        String(ctw3DiplomacySelectedCountryId)
+    );
+
+    activeWars.innerHTML = "";
+
+    if (!selected) {
+        details.textContent = "Выберите государство.";
+        return;
+    }
+
+    const selectedId = String(selected.id || selected._id);
+
+    const pair = (ctw3DiplomacyState.wars || []).find(w =>
+        (
+            String(w.aggressor_country_id) === ownId &&
+            String(w.target_country_id) === selectedId
+        ) ||
+        (
+            String(w.aggressor_country_id) === selectedId &&
+            String(w.target_country_id) === ownId
+        )
+    );
+
+    if (pair?.status === "at_war") {
+        const offeredByOther =
+            pair.truce_offer_by &&
+            String(pair.truce_offer_by) !== ownId;
+
+        const offeredByMe =
+            String(pair.truce_offer_by || "") === ownId;
+
+        details.innerHTML =
+            `<b>⚔️ Вы находитесь в состоянии войны с ${
+                ctw3EscapeHtml(selected.name)
+            }.</b>`;
+
+        if (offeredByOther) {
+            activeWars.innerHTML = `
+                <button class="ctw3-diplomacy-action truce"
+                    onclick="acceptCTW3Truce('${pair.id}')">
+                    🕊️ Принять перемирие
+                </button>`;
+        } else if (!offeredByMe) {
+            activeWars.innerHTML = `
+                <button class="ctw3-diplomacy-action truce"
+                    onclick="offerCTW3Truce('${pair.id}')">
+                    🕊️ Предложить перемирие
+                </button>`;
+        } else {
+            activeWars.innerHTML =
+                '<div class="ctw3-diplomacy-muted">Ожидаем ответа на предложение о перемирии.</div>';
+        }
+
+    } else if (
+        pair?.status === "warning" &&
+        String(pair.aggressor_country_id) === ownId
+    ) {
+        const remaining = Math.max(
+            0,
+            Number(pair.ready_at || 0) - Date.now() / 1000
+        );
+
+        details.innerHTML = `
+            Вы предупредили государство
+            <b>${ctw3EscapeHtml(selected.name)}</b>
+            о намерении объявить войну.
+            <div class="ctw3-diplomacy-muted">
+                ${remaining > 0
+                    ? "Осталось " + Math.ceil(remaining) + " сек."
+                    : "Можно объявить войну."}
+            </div>
+            <button
+                class="ctw3-diplomacy-action danger"
+                ${remaining > 0 ? "disabled" : ""}
+                onclick="declareCTW3War('${selectedId}')">
+                ⚔️ Объявить войну
+                </button>
+        `;
+
+    } else if (pair?.status === "warning") {
+        details.innerHTML =
+            "⚠️ Это государство предупредило вас о намерении объявить войну.";
+
+    } else {
+        details.innerHTML = `
+            Мирные отношения с
+            <b>${ctw3EscapeHtml(selected.name)}</b>.
+            <button
+                class="ctw3-diplomacy-action danger"
+                onclick="sendCTW3Ultimatum('${selectedId}')">
+                ⚠️ Предупредить о войне
+            </button>
+        `;
+    }
+
+    const wars = (ctw3DiplomacyState.wars || []).filter(w =>
+        w.status === "at_war"
+    );
+
+    if (wars.length) {
+        activeWars.innerHTML +=
+            '<h4>АКТИВНЫЕ ВОЙНЫ</h4>' +
+            wars.map(w => {
+                const otherId =
+                    String(w.aggressor_country_id) === ownId
+                        ? String(w.target_country_id)
+                        : String(w.aggressor_country_id);
+
+                const other = (countries || []).find(c =>
+                    String(c.id || c._id) === otherId
+                );
+
+                return `<div>
+                    ⚔️ ${ctw3EscapeHtml(other?.name || "Государство")}
+                </div>`;
+            }).join("");
+    }
+}
+
+async function sendCTW3Ultimatum(targetId) {
+    try {
+        await api("/api/ctw3/diplomacy/ultimatum", {
+            method: "POST",
+            body: JSON.stringify({
+                target_country_id: targetId
+            })
+        });
+
+        ctw3DiplomacySelectedCountryId = String(targetId);
+        await loadCTW3Diplomacy();
+
+        setStatus("⚠️ Предупреждение отправлено.");
+    } catch (error) {
+        setStatus("❌ " + error.message);
+    }
+}
+
+async function declareCTW3War(targetId) {
+    try {
+        await api("/api/ctw3/diplomacy/declare", {
+            method: "POST",
+            body: JSON.stringify({
+                target_country_id: targetId
+            })
+        });
+
+        await loadCTW3Diplomacy();
+        setStatus("⚔️ Война объявлена.");
+    } catch (error) {
+        setStatus("❌ " + error.message);
+    }
+}
+
+async function offerCTW3Truce(warId) {
+    try {
+        await api("/api/ctw3/diplomacy/truce/offer", {
+            method: "POST",
+            body: JSON.stringify({ war_id: warId })
+        });
+
+        await loadCTW3Diplomacy();
+        setStatus("🕊️ Предложение о перемирии отправлено.");
+    } catch (error) {
+        setStatus("❌ " + error.message);
+    }
+}
+
+async function acceptCTW3Truce(warId) {
+    try {
+        await api("/api/ctw3/diplomacy/truce/accept", {
+            method: "POST",
+            body: JSON.stringify({ war_id: warId })
+        });
+
+        await loadCTW3Diplomacy();
+        setStatus("🕊️ Перемирие заключено.");
+    } catch (error) {
+        setStatus("❌ " + error.message);
+    }
+}
+
+function renderCTW3News() {
+    const box = $("ctw3NewsItems");
+    if (!box) return;
+
+    const news = (ctw3DiplomacyState.news || []).slice(0, 4);
+
+    box.innerHTML = news.length
+        ? news.map(item =>
+            `<span class="ctw3-news-item" title="${
+                ctw3EscapeHtml(item.message)
+            }">${ctw3EscapeHtml(item.message)}</span>`
+          ).join("")
+        : '<span class="ctw3-news-item">Пока нет мировых событий.</span>';
+}
+
+function renderCTW3WarWarning() {
+    const box = $("ctw3WarWarning");
+    const text = $("ctw3WarWarningText");
+    const warning = ctw3DiplomacyState.warnings?.[0];
+
+    if (!box || !text || !warning) {
+        box?.classList.remove("visible");
+        return;
+    }
+
+    if (ctw3DismissedWarningId === String(warning.id)) return;
+
+    text.textContent =
+        `${warning.aggressor_flag} ${warning.aggressor_name} ` +
+        "предупредило о намерении объявить вам войну.";
+
+    box.classList.add("visible");
+}
+
+function dismissCTW3WarWarning() {
+    const warning = ctw3DiplomacyState.warnings?.[0];
+
+    if (warning) {
+        ctw3DismissedWarningId = String(warning.id);
+    }
+
+    $("ctw3WarWarning")?.classList.remove("visible");
+}
+
+function renderCTW3WarCountdown() {
+    const box = $("ctw3WarCountdown");
+    if (!box) return;
+
+    const ownId = String(country?.id || country?._id || "");
+
+    const warning = (ctw3DiplomacyState.wars || []).find(w =>
+        w.status === "warning" &&
+        String(w.aggressor_country_id) === ownId
+    );
+
+    if (!warning) {
+        box.classList.remove("visible");
+        return;
+    }
+
+    const now = Date.now() / 1000;
+    const total = 30;
+
+    const remaining = Math.max(
+        0,
+        Number(warning.ready_at || 0) - now
+    );
+
+    const elapsed = Math.min(total, total - remaining);
+
+    $("ctw3WarProgressFill").style.width =
+        (elapsed / total * 100) + "%";
+
+    const target = (countries || []).find(c =>
+        String(c.id || c._id) ===
+        String(warning.target_country_id)
+    );
+
+    $("ctw3WarCountdownLabel").textContent =
+        remaining > 0
+            ? `До объявления войны против ${target?.name || "государства"}: ${Math.ceil(remaining)} сек.`
+            : `Срок истёк: ${target?.name || "государство"}`;
+
+    const action = $("ctw3WarCountdownAction");
+
+    if (
+        now >= Number(warning.ready_at || 0) &&
+        now <= Number(warning.prompt_expires_at || 0)
+    ) {
+        action.innerHTML = `
+            <button
+                class="ctw3-diplomacy-action danger"
+                onclick="declareCTW3War('${warning.target_country_id}')">
+                ⚔️ Объявить войну
+            </button>`;
+    } else {
+        action.innerHTML = remaining > 0
+            ? '<div class="ctw3-diplomacy-muted">Кнопка появится после заполнения шкалы.</div>'
+            : '<div class="ctw3-diplomacy-muted">Объявить войну можно в блоке дипломатии.</div>';
+    }
+
+    box.classList.add("visible");
+}
+
+async function loadCTW3Diplomacy() {
+    try {
+        ctw3DiplomacyState =
+            await api("/api/ctw3/diplomacy/state");
+
+        renderCTW3News();
+        renderCTW3WarWarning();
+        renderCTW3WarCountdown();
+
+        if ($("ctw3DiplomacyPanel")?.classList.contains("visible")) {
+            renderCTW3DiplomacyPanel();
+        }
+    } catch (error) {
+        console.warn("[CTW3 DIPLOMACY]", error);
+    }
+}
+
+function startCTW3DiplomacyPolling() {
+    loadCTW3Diplomacy();
+
+    if (ctw3DiplomacyPollTimer === null) {
+        ctw3DiplomacyPollTimer =
+            setInterval(loadCTW3Diplomacy, 3000);
+    }
+
+    if (ctw3WarCountdownTimer === null) {
+        ctw3WarCountdownTimer = setInterval(() => {
+            renderCTW3WarCountdown();
+        }, 500);
+    }
+}
 
 </script>
 
