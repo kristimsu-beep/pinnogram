@@ -16005,6 +16005,58 @@ function renderCTW3DispatcherRadar() {
         : '<div class="ctw3-radar-flight">Рейсов пока нет</div>';
 }
 
+/* =========================================================
+   CTW3: ALWAYS-VISIBLE AVIATION BUTTON
+========================================================= */
+
+(function ensureCTW3AviationButton() {
+    let button = document.getElementById("ctw3AviationOpenButton");
+
+    if (!button) {
+        button = document.createElement("button");
+        button.id = "ctw3AviationOpenButton";
+        button.textContent = "✈️ Авиация";
+        document.body.appendChild(button);
+    } else {
+        // Перемещаем кнопку непосредственно в body,
+        // чтобы её не перекрывали контейнеры интерфейса.
+        document.body.appendChild(button);
+    }
+
+    Object.assign(button.style, {
+        display: "block",
+        visibility: "visible",
+        opacity: "1",
+        position: "fixed",
+        right: "18px",
+        bottom: "18px",
+        left: "auto",
+        top: "auto",
+        width: "auto",
+        height: "auto",
+        minWidth: "130px",
+        zIndex: "2147483647",
+        pointerEvents: "auto",
+        padding: "12px 16px",
+        border: "1px solid rgba(90,210,255,.6)",
+        borderRadius: "12px",
+        background: "#168bd0",
+        color: "#ffffff",
+        fontSize: "15px",
+        fontWeight: "800",
+        cursor: "pointer",
+        boxShadow: "0 4px 20px rgba(0,0,0,.45)"
+    });
+
+    button.onclick = function () {
+        if (typeof openAviationPanel === "function") {
+            openAviationPanel();
+        } else {
+            console.error("Функция openAviationPanel не найдена");
+        }
+    };
+})();
+
 </script>
 
 </body>
