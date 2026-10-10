@@ -3962,6 +3962,8 @@ try:
     ctw3_db = mongo_client["ctw3_db"]
     ctw3_countries = ctw3_db["countries"]
     ctw3_chat = ctw3_db["chat"]
+    ctw3_news = ctw3_db["news"]
+    ctw3_wars = ctw3_db["wars"]
     ctw3_airlines = db["ctw3_airlines"]
     ctw3_aircraft_collection = db["ctw3_aircraft"]
     ctw3_flights = db["ctw3_flights"]
@@ -8040,6 +8042,12 @@ async def ctw3_map_action(
             }
         )
 
+        await ctw3_add_news_event(
+            "city_built",
+            f"🏙️ {country.get('name', 'Государство')} построило город «{city.get('name', 'Новый город')}»",
+            actor_country=country
+        )
+
         return {
             "status": "success",
             "object_type": "city",
@@ -8171,6 +8179,12 @@ async def ctw3_map_action(
                 }
             },
             upsert=True
+        )
+
+        await ctw3_add_news_event(
+            "airport_built",
+            f"✈️ {country.get('name', 'Государство')} построило аэропорт «{airport_name}»",
+            actor_country=country
         )
 
         return {
@@ -8351,6 +8365,353 @@ async def ctw3_set_production(
         "air_defense": air_defense
     }
 
+# =========================================================
+# CTW3 — WORLD NEWS AND DIPLOMACY
+# =========================================================
+
+async def ctw3_add_news_event(
+    kind: str,
+    message: str,
+    actor_country=None,
+    target_country=None
+):
+    event = {
+        "kind": kind,
+        "message": message,
+        "actor_country_id": str(actor_country["_id"]) if actor_country else None,
+        "target_country_id": str(target_country["_id"]) if target_country else None,
+        "created_at": datetime.utcnow(),
+        "created_at_ts": time.time()
+    }
+
+    await ctw3_news.insert_one(event)
+
+
+async def ctw3_diplomacy_country(country_id):
+    try:
+        return await ctw3_countries.find_one(
+            {"_id": ObjectId(str(country_id))}
+        )
+    except Exception:
+        return None
+
+
+def ctw3_public_war(war):
+    return {
+        "id": str(war.get("id", "")),
+        "aggressor_country_id": str(war.get("aggressor_country_id", "")),
+        "target_country_id": str(war.get("target_country_id", "")),
+        "status": war.get("status", "warning"),
+        "created_at": float(war.get("created_at", 0)),
+        "ready_at": float(war.get("ready_at", 0)),
+        "prompt_expires_at": float(war.get("prompt_expires_at", 0)),
+        "truce_offer_by": war.get("truce_offer_by")
+    }
+
+
+@app.get("/api/ctw3/diplomacy/state")
+async def ctw3_diplomacy_state(request: Request):
+    _, country = await ctw3_get_country_for_request(request)
+
+    if not country:
+        return {
+            "registered": False,
+            "news": [],
+            "wars": [],
+            "warnings": []
+        }
+
+    own_id = str(country["_id"])
+
+    news = []
+
+    async for item in ctw3_news.find({}).sort(
+        "created_at_ts", -1
+    ).limit(60):
+        news.append({
+            "id": str(item.get("_id", "")),
+            "kind": item.get("kind", "event"),
+            "message": item.get("message", ""),
+            "created_at_ts": float(item.get("created_at_ts", 0))
+        })
+
+    wars = []
+
+    async for war in ctw3_wars.find({
+        "status": {"$in": ["warning", "at_war"]},
+        "$or": [
+            {"aggressor_country_id": own_id},
+            {"target_country_id": own_id}
+        ]
+    }):
+        wars.append(ctw3_public_war(war))
+
+    warnings = []
+
+    async for war in ctw3_wars.find({
+        "status": "warning",
+        "target_country_id": own_id
+    }):
+        aggressor = await ctw3_diplomacy_country(
+            war.get("aggressor_country_id")
+        )
+
+        warnings.append({
+            **ctw3_public_war(war),
+            "aggressor_name": (
+                aggressor.get("name", "Неизвестное государство")
+                if aggressor else "Неизвестное государство"
+            ),
+            "aggressor_flag": (
+                aggressor.get("flag", "🏳️")
+                if aggressor else "🏳️"
+            )
+        })
+
+    return {
+        "registered": True,
+        "country_id": own_id,
+        "news": news,
+        "wars": wars,
+        "warnings": warnings
+    }
+
+
+@app.post("/api/ctw3/diplomacy/ultimatum")
+async def ctw3_diplomacy_ultimatum(request: Request):
+    _, country = await ctw3_get_country_for_request(request)
+
+    if not country:
+        raise HTTPException(status_code=404, detail="Государство не найдено")
+
+    data = await request.json()
+    target_id = str(data.get("target_country_id", "")).strip()
+    own_id = str(country["_id"])
+
+    if not target_id or target_id == own_id:
+        raise HTTPException(status_code=400, detail="Выберите другую страну")
+
+    target = await ctw3_diplomacy_country(target_id)
+
+    if not target:
+        raise HTTPException(status_code=404, detail="Страна не найдена")
+
+    existing = await ctw3_wars.find_one({
+        "status": {"$in": ["warning", "at_war"]},
+        "$or": [
+            {
+                "aggressor_country_id": own_id,
+                "target_country_id": target_id
+            },
+            {
+                "aggressor_country_id": target_id,
+                "target_country_id": own_id
+            }
+        ]
+    })
+
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="Между этими странами уже есть дипломатический конфликт"
+        )
+
+    now = time.time()
+
+    war = {
+        "id": str(uuid4()),
+        "aggressor_country_id": own_id,
+        "target_country_id": target_id,
+        "status": "warning",
+        "created_at": now,
+        "ready_at": now + 30,
+        "prompt_expires_at": now + 40
+    }
+
+    await ctw3_wars.insert_one(war)
+
+    await ctw3_add_news_event(
+        "war_warning",
+        f"⚠️ {country.get('name', 'Государство')} предупредило "
+        f"{target.get('name', 'государство')} о намерении объявить войну",
+        actor_country=country,
+        target_country=target
+    )
+
+    return {
+        "ok": True,
+        "war": ctw3_public_war(war)
+    }
+
+
+@app.post("/api/ctw3/diplomacy/declare")
+async def ctw3_diplomacy_declare(request: Request):
+    _, country = await ctw3_get_country_for_request(request)
+
+    if not country:
+        raise HTTPException(status_code=404, detail="Государство не найдено")
+
+    data = await request.json()
+    target_id = str(data.get("target_country_id", "")).strip()
+    own_id = str(country["_id"])
+
+    if not target_id or target_id == own_id:
+        raise HTTPException(status_code=400, detail="Нельзя объявить войну себе")
+
+    target = await ctw3_diplomacy_country(target_id)
+
+    if not target:
+        raise HTTPException(status_code=404, detail="Страна не найдена")
+
+    war = await ctw3_wars.find_one({
+        "aggressor_country_id": own_id,
+        "target_country_id": target_id,
+        "status": "warning"
+    })
+
+    if not war:
+        raise HTTPException(
+            status_code=409,
+            detail="Сначала отправьте предупреждение о войне"
+        )
+
+    now = time.time()
+
+    if now < float(war.get("ready_at", 0)):
+        raise HTTPException(
+            status_code=409,
+            detail="Дипломатический срок ещё не завершился"
+        )
+
+    await ctw3_wars.update_one(
+        {"id": war["id"]},
+        {
+            "$set": {
+                "status": "at_war",
+                "declared_at": now
+            }
+        }
+    )
+
+    await ctw3_add_news_event(
+        "war_declared",
+        f"⚔️ {country.get('name', 'Государство')} объявило войну "
+        f"{target.get('name', 'государству')}",
+        actor_country=country,
+        target_country=target
+    )
+
+    return {
+        "ok": True,
+        "war_id": war["id"],
+        "status": "at_war"
+    }
+
+
+@app.post("/api/ctw3/diplomacy/truce/offer")
+async def ctw3_diplomacy_truce_offer(request: Request):
+    _, country = await ctw3_get_country_for_request(request)
+
+    if not country:
+        raise HTTPException(status_code=404, detail="Государство не найдено")
+
+    data = await request.json()
+    war_id = str(data.get("war_id", "")).strip()
+    own_id = str(country["_id"])
+
+    war = await ctw3_wars.find_one({
+        "id": war_id,
+        "status": "at_war"
+    })
+
+    if not war or own_id not in [
+        war.get("aggressor_country_id"),
+        war.get("target_country_id")
+    ]:
+        raise HTTPException(status_code=404, detail="Активная война не найдена")
+
+    if war.get("truce_offer_by") == own_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Вы уже предложили перемирие"
+        )
+
+    other_id = (
+        war["target_country_id"]
+        if war["aggressor_country_id"] == own_id
+        else war["aggressor_country_id"]
+    )
+
+    other = await ctw3_diplomacy_country(other_id)
+
+    await ctw3_wars.update_one(
+        {"id": war_id, "status": "at_war"},
+        {
+            "$set": {
+                "truce_offer_by": own_id,
+                "truce_offer_at": time.time()
+            }
+        }
+    )
+
+    await ctw3_add_news_event(
+        "truce_offered",
+        f"🕊️ {country.get('name', 'Государство')} предложило "
+        f"{other.get('name', 'государству') if other else 'государству'} перемирие",
+        actor_country=country,
+        target_country=other
+    )
+
+    return {"ok": True}
+
+
+@app.post("/api/ctw3/diplomacy/truce/accept")
+async def ctw3_diplomacy_truce_accept(request: Request):
+    _, country = await ctw3_get_country_for_request(request)
+
+    if not country:
+        raise HTTPException(status_code=404, detail="Государство не найдено")
+
+    data = await request.json()
+    war_id = str(data.get("war_id", "")).strip()
+    own_id = str(country["_id"])
+
+    war = await ctw3_wars.find_one({
+        "id": war_id,
+        "status": "at_war"
+    })
+
+    if not war or own_id not in [
+        war.get("aggressor_country_id"),
+        war.get("target_country_id")
+    ]:
+        raise HTTPException(status_code=404, detail="Активная война не найдена")
+
+    if not war.get("truce_offer_by") or war.get("truce_offer_by") == own_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Перемирие должна принять другая сторона"
+        )
+
+    first = await ctw3_diplomacy_country(
+        war.get("aggressor_country_id")
+    )
+    second = await ctw3_diplomacy_country(
+        war.get("target_country_id")
+    )
+
+    await ctw3_wars.delete_one({"id": war_id})
+
+    await ctw3_add_news_event(
+        "truce_accepted",
+        f"🕊️ {first.get('name', 'Государство') if first else 'Государство'} "
+        f"и {second.get('name', 'государство') if second else 'государство'} "
+        f"заключили перемирие",
+        actor_country=first,
+        target_country=second
+    )
+
+    return {"ok": True}
 
 # =========================================================
 # CTW3 — WORLD CHAT
@@ -8558,6 +8919,17 @@ async def ctw3_attack(
     target = await ctw3_tick_country(
         target
     )
+
+    await ctw3_add_news_event(
+        "missile_launched",
+        f"🚀 {attacker.get('name', 'Государство')} запустило ракету по {target.get('name', 'государству')}",
+        actor_country=attacker,
+        target_country=target
+    )
+
+    # -----------------------------------------------------
+    # FIND TARGET OBJECT
+    # -----------------------------------------------------
 
     # -----------------------------------------------------
     # FIND TARGET OBJECT
