@@ -16926,20 +16926,29 @@ function startCTW3DiplomacyPolling() {
     }
 }
 
-let ctw3Terrain3DCoordinates = null;
 
-function openCTW3Terrain3D() {
+let ctw3Terrain3DCoordinates = null;
+let ctw3Terrain3DScene = null;
+let ctw3Terrain3DRenderer = null;
+let ctw3Terrain3DCamera = null;
+let ctw3Terrain3DFrame = null;
+let ctw3Terrain3DKeyHandler = null;
+let ctw3Terrain3DResizeHandler = null;
+let ctw3Terrain3DPointerHandler = null;
+let ctw3Terrain3DKeyUpHandler = null;
+
+async function openCTW3Terrain3D() {
     const overlay = document.getElementById("ctw3Terrain3DOverlay");
     const status = document.getElementById("ctw3Terrain3DStatus");
+    const container = document.getElementById("ctw3Terrain3DCanvas");
 
-    if (!overlay) {
-        console.error("[CTW3 3D] Окно 3D не найдено.");
+    if (!overlay || !status || !container) {
+        console.error("[CTW3 3D] Не найдены элементы окна.");
         return;
     }
 
     const coordinateText =
         document.getElementById("ctw3PointCoordinates")?.textContent || "";
-
     const numbers = coordinateText.match(/-?\d+(?:\.\d+)?/g);
 
     if (numbers && numbers.length >= 2) {
@@ -16953,23 +16962,469 @@ function openCTW3Terrain3D() {
             lat: center.lat,
             lon: center.lng
         };
-    } else {
-        status.textContent = "Не удалось определить координаты точки.";
+    }
+
+    if (!ctw3Terrain3DCoordinates ||
+        !Number.isFinite(ctw3Terrain3DCoordinates.lat) ||
+        !Number.isFinite(ctw3Terrain3DCoordinates.lon)) {
         overlay.style.display = "block";
+        status.textContent = "Не удалось определить координаты.";
         return;
     }
 
     overlay.style.display = "block";
-    status.textContent =
-        `Точка: ${ctw3Terrain3DCoordinates.lat.toFixed(4)}, ` +
-        `${ctw3Terrain3DCoordinates.lon.toFixed(4)} · Следующий этап: загрузка рельефа`;
+    status.textContent = "Загружаем Three.js...";
 
-    console.log("[CTW3 3D] Selected coordinates:", ctw3Terrain3DCoordinates);
+    try {
+        const THREE = await import(
+            "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"
+        );
+
+        closeCTW3Terrain3DCleanup();
+
+        const { lat, lon } = ctw3Terrain3DCoordinates;
+        const zoom = 10;
+        const centerTile = ctw3TerrainTileXY(lat, lon, zoom);
+
+        status.textContent = "Загружаем карту и высоты...";
+
+        const tileCount = 3;
+        const tileSize = 256;
+        const mosaicSize = tileCount * tileSize;
+
+        const textureCanvas = document.createElement("canvas");
+        textureCanvas.width = mosaicSize;
+        textureCanvas.height = mosaicSize;
+
+        const heightCanvas = document.createElement("canvas");
+        heightCanvas.width = mosaicSize;
+        heightCanvas.height = mosaicSize;
+
+        const textureContext = textureCanvas.getContext("2d");
+        const heightContext = heightCanvas.getContext("2d", {
+            willReadFrequently: true
+        });
+
+        textureContext.fillStyle = "#6f8762";
+        textureContext.fillRect(0, 0, mosaicSize, mosaicSize);
+
+        heightContext.fillStyle = "rgb(128,128,128)";
+        heightContext.fillRect(0, 0, mosaicSize, mosaicSize);
+
+        let loaded = 0;
+
+        for (let ty = -1; ty <= 1; ty++) {
+            for (let tx = -1; tx <= 1; tx++) {
+                const x = centerTile.x + tx;
+                const y = centerTile.y + ty;
+
+                const dx = (tx + 1) * tileSize;
+                const dy = (ty + 1) * tileSize;
+
+                const [mapImage, demImage] = await Promise.all([
+                    ctw3TerrainLoadImage(
+                        `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`
+                    ),
+                    ctw3TerrainLoadImage(
+                        `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${zoom}/${x}/${y}.png`
+                    )
+                ]);
+
+                textureContext.drawImage(
+                    mapImage, dx, dy, tileSize, tileSize
+                );
+
+                heightContext.drawImage(
+                    demImage, dx, dy, tileSize, tileSize
+                );
+
+                loaded++;
+                status.textContent =
+                    `Загружено тайлов: ${loaded}/9`;
+            }
+        }
+
+        const imageData = heightContext.getImageData(
+            0, 0, mosaicSize, mosaicSize
+        );
+
+        const pixels = imageData.data;
+        const segments = 192;
+        const positions = [];
+        const uvs = [];
+        const indices = [];
+
+        const worldWidth = 12000;
+        const heights = new Float32Array(
+            (segments + 1) * (segments + 1)
+        );
+
+        function sampleHeight(px, py) {
+            const ix = Math.max(0, Math.min(mosaicSize - 1, Math.round(px)));
+            const iy = Math.max(0, Math.min(mosaicSize - 1, Math.round(py)));
+            const p = (iy * mosaicSize + ix) * 4;
+
+            const red = pixels[p];
+            const green = pixels[p + 1];
+            const blue = pixels[p + 2];
+
+            return red * 256 + green + blue / 256 - 32768;
+        }
+
+        let minHeight = Infinity;
+        let maxHeight = -Infinity;
+
+        for (let z = 0; z <= segments; z++) {
+            for (let x = 0; x <= segments; x++) {
+                const px = (x / segments) * (mosaicSize - 1);
+                const py = (z / segments) * (mosaicSize - 1);
+
+                const h = sampleHeight(px, py);
+                heights[z * (segments + 1) + x] = h;
+
+                minHeight = Math.min(minHeight, h);
+                maxHeight = Math.max(maxHeight, h);
+            }
+        }
+
+        const heightScale = 1.0;
+
+        for (let z = 0; z <= segments; z++) {
+            for (let x = 0; x <= segments; x++) {
+                const h = heights[z * (segments + 1) + x];
+
+                positions.push(
+                    (x / segments - 0.5) * worldWidth,
+                    h * heightScale,
+                    (0.5 - z / segments) * worldWidth
+                );
+
+                uvs.push(x / segments, 1 - z / segments);
+            }
+        }
+
+        for (let z = 0; z < segments; z++) {
+            for (let x = 0; x < segments; x++) {
+                const a = z * (segments + 1) + x;
+                const b = a + 1;
+                const c = a + segments + 1;
+                const d = c + 1;
+
+                indices.push(a, c, b, b, c, d);
+            }
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute(
+            "position",
+            new THREE.Float32BufferAttribute(positions, 3)
+        );
+        geometry.setAttribute(
+            "uv",
+            new THREE.Float32BufferAttribute(uvs, 2)
+        );
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+
+        const texture = new THREE.CanvasTexture(textureCanvas);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.anisotropy = 4;
+
+        const material = new THREE.MeshStandardMaterial({
+            map: texture,
+            roughness: 1,
+            metalness: 0
+        });
+
+        const terrain = new THREE.Mesh(geometry, material);
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color("#91c8ed");
+        scene.fog = new THREE.Fog("#91c8ed", 10000, 26000);
+
+        const hemisphere = new THREE.HemisphereLight(
+            0xd9edff, 0x6a7354, 2.0
+        );
+        scene.add(hemisphere);
+
+        const sun = new THREE.DirectionalLight(0xfff1d2, 2.2);
+        sun.position.set(-5000, 9000, 3000);
+        scene.add(sun);
+
+        scene.add(terrain);
+
+        const skyGeometry = new THREE.SphereGeometry(50000, 24, 16);
+        const skyMaterial = new THREE.MeshBasicMaterial({
+            color: "#91c8ed",
+            side: THREE.BackSide
+        });
+        const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+        scene.add(sky);
+
+        const camera = new THREE.PerspectiveCamera(
+            65,
+            container.clientWidth / container.clientHeight,
+            0.1,
+            100000
+        );
+
+        const middleHeight = sampleHeight(
+            mosaicSize / 2, mosaicSize / 2
+        );
+
+        camera.position.set(
+            0,
+            middleHeight + 900,
+            1800
+        );
+
+        camera.lookAt(0, middleHeight, 0);
+
+        const renderer = new THREE.WebGLRenderer({
+            antialias: true,
+            powerPreference: "high-performance"
+        });
+
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+        container.replaceChildren(renderer.domElement);
+        renderer.domElement.style.width = "100%";
+        renderer.domElement.style.height = "100%";
+        renderer.domElement.style.display = "block";
+
+        ctw3Terrain3DScene = scene;
+        ctw3Terrain3DRenderer = renderer;
+        ctw3Terrain3DCamera = camera;
+
+        let yaw = 0;
+        let pitch = -0.15;
+        let dragging = false;
+        let lastX = 0;
+        let lastY = 0;
+
+        const keys = new Set();
+        const canvas = renderer.domElement;
+
+        canvas.style.cursor = "grab";
+        canvas.style.touchAction = "none";
+
+        ctw3Terrain3DPointerHandler = event => {
+            if (event.type === "pointerdown") {
+                dragging = true;
+                lastX = event.clientX;
+                lastY = event.clientY;
+                canvas.setPointerCapture?.(event.pointerId);
+                canvas.style.cursor = "grabbing";
+            } else if (event.type === "pointerup" ||
+                       event.type === "pointercancel") {
+                dragging = false;
+                canvas.style.cursor = "grab";
+            } else if (event.type === "pointermove" && dragging) {
+                yaw -= (event.clientX - lastX) * 0.004;
+                pitch -= (event.clientY - lastY) * 0.004;
+                pitch = Math.max(-1.35, Math.min(1.35, pitch));
+                lastX = event.clientX;
+                lastY = event.clientY;
+            }
+        };
+
+        canvas.addEventListener("pointerdown", ctw3Terrain3DPointerHandler);
+        canvas.addEventListener("pointermove", ctw3Terrain3DPointerHandler);
+        canvas.addEventListener("pointerup", ctw3Terrain3DPointerHandler);
+        canvas.addEventListener("pointercancel", ctw3Terrain3DPointerHandler);
+
+        ctw3Terrain3DKeyHandler = event => {
+            if (["w", "a", "s", "d", "ArrowUp", "ArrowDown",
+                 "ArrowLeft", "ArrowRight"].includes(event.key)) {
+                keys.add(event.key.toLowerCase());
+                if (event.key.startsWith("Arrow")) event.preventDefault();
+            }
+        };
+
+        ctw3Terrain3DKeyUpHandler = event => {
+            keys.delete(event.key.toLowerCase());
+        };
+
+        window.addEventListener("keydown", ctw3Terrain3DKeyHandler);
+        window.addEventListener("keyup", ctw3Terrain3DKeyUpHandler);
+
+        const wheelHandler = event => {
+            event.preventDefault();
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+            camera.position.addScaledVector(direction, event.deltaY * 0.8);
+        };
+
+        canvas.addEventListener("wheel", wheelHandler, { passive: false });
+        canvas._ctw3WheelHandler = wheelHandler;
+
+        ctw3Terrain3DResizeHandler = () => {
+            if (!container.clientWidth || !container.clientHeight) return;
+
+            camera.aspect =
+                container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(
+                container.clientWidth,
+                container.clientHeight
+            );
+        };
+
+        window.addEventListener("resize", ctw3Terrain3DResizeHandler);
+
+        status.textContent =
+            `Рельеф загружен · высоты ${Math.round(minHeight)}–` +
+            `${Math.round(maxHeight)} м · OSM / Terrarium`;
+
+        function animate() {
+            if (overlay.style.display === "none") return;
+
+            ctw3Terrain3DFrame = requestAnimationFrame(animate);
+
+            const forward = new THREE.Vector3(
+                -Math.sin(yaw), 0, -Math.cos(yaw)
+            );
+            const right = new THREE.Vector3(
+                Math.cos(yaw), 0, -Math.sin(yaw)
+            );
+
+            const speed = 18;
+            if (keys.has("w")) camera.position.addScaledVector(forward, speed);
+            if (keys.has("s")) camera.position.addScaledVector(forward, -speed);
+            if (keys.has("a")) camera.position.addScaledVector(right, -speed);
+            if (keys.has("d")) camera.position.addScaledVector(right, speed);
+
+            if (keys.has("arrowleft")) yaw += 0.025;
+            if (keys.has("arrowright")) yaw -= 0.025;
+            if (keys.has("arrowup")) pitch = Math.min(1.35, pitch + 0.02);
+            if (keys.has("arrowdown")) pitch = Math.max(-1.35, pitch - 0.02);
+
+            const direction = new THREE.Vector3(
+                -Math.sin(yaw) * Math.cos(pitch),
+                Math.sin(pitch),
+                -Math.cos(yaw) * Math.cos(pitch)
+            );
+
+            camera.lookAt(
+                camera.position.clone().add(direction)
+            );
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        console.log("[CTW3 3D] Terrain ready", {
+            lat, lon, minHeight, maxHeight
+        });
+
+    } catch (error) {
+        console.error("[CTW3 3D] Failed to load terrain:", error);
+        status.textContent =
+            "Не удалось загрузить рельеф. Проверь подключение и Console (F12).";
+    }
+}
+
+function ctw3TerrainTileXY(lat, lon, zoom) {
+    const n = 2 ** zoom;
+    const safeLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
+    const x = Math.floor((lon + 180) / 360 * n);
+    const latRad = safeLat * Math.PI / 180;
+    const y = Math.floor(
+        (1 - Math.asinh(Math.tan(latRad)) / Math.PI) / 2 * n
+    );
+
+    return {
+        x: Math.max(0, Math.min(n - 1, x)),
+        y: Math.max(0, Math.min(n - 1, y))
+    };
+}
+
+function ctw3TerrainLoadImage(url) {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.crossOrigin = "anonymous";
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(
+            new Error("Не удалось загрузить тайл: " + url)
+        );
+        image.src = url;
+    });
+}
+
+function closeCTW3Terrain3DCleanup() {
+    if (ctw3Terrain3DFrame !== null) {
+        cancelAnimationFrame(ctw3Terrain3DFrame);
+        ctw3Terrain3DFrame = null;
+    }
+
+    if (ctw3Terrain3DKeyHandler) {
+        window.removeEventListener("keydown", ctw3Terrain3DKeyHandler);
+        ctw3Terrain3DKeyHandler = null;
+    }
+
+    if (ctw3Terrain3DKeyUpHandler) {
+        window.removeEventListener("keyup", ctw3Terrain3DKeyUpHandler);
+        ctw3Terrain3DKeyUpHandler = null;
+    }
+
+    if (ctw3Terrain3DResizeHandler) {
+        window.removeEventListener("resize", ctw3Terrain3DResizeHandler);
+        ctw3Terrain3DResizeHandler = null;
+    }
+
+    const container = document.getElementById("ctw3Terrain3DCanvas");
+    const canvas = container?.querySelector("canvas");
+
+    if (canvas && ctw3Terrain3DPointerHandler) {
+        canvas.removeEventListener("pointerdown", ctw3Terrain3DPointerHandler);
+        canvas.removeEventListener("pointermove", ctw3Terrain3DPointerHandler);
+        canvas.removeEventListener("pointerup", ctw3Terrain3DPointerHandler);
+        canvas.removeEventListener("pointercancel", ctw3Terrain3DPointerHandler);
+    }
+
+    if (canvas?._ctw3WheelHandler) {
+        canvas.removeEventListener("wheel", canvas._ctw3WheelHandler);
+        delete canvas._ctw3WheelHandler;
+    }
+
+    ctw3Terrain3DPointerHandler = null;
+
+    if (ctw3Terrain3DRenderer) {
+        ctw3Terrain3DRenderer.dispose();
+        ctw3Terrain3DRenderer.domElement.remove();
+        ctw3Terrain3DRenderer = null;
+    }
+
+    if (ctw3Terrain3DScene) {
+        ctw3Terrain3DScene.traverse(object => {
+            object.geometry?.dispose();
+
+            if (object.material) {
+                const materials = Array.isArray(object.material)
+                    ? object.material
+                    : [object.material];
+
+                materials.forEach(material => {
+                    material.map?.dispose();
+                    material.dispose();
+                });
+            }
+        });
+
+        ctw3Terrain3DScene = null;
+    }
+
+    ctw3Terrain3DCamera = null;
 }
 
 function closeCTW3Terrain3D() {
     const overlay = document.getElementById("ctw3Terrain3DOverlay");
     if (overlay) overlay.style.display = "none";
+    closeCTW3Terrain3DCleanup();
 }
 
 </script>
