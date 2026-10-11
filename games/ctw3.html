@@ -3388,21 +3388,56 @@ select{
     white-space: nowrap;
 }
 
+
 #ctw3NewsItems {
     display: flex;
-    gap: 18px;
+    align-items: center;
+    gap: 36px;
     overflow: hidden;
     white-space: nowrap;
     flex: 1;
+    min-width: 0;
 }
 
 .ctw3-news-item {
+    display: inline-block;
+    flex: 0 0 auto;
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
     font-size: 11px;
     color: #e6edf6;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    animation: ctw3NewsSlide 14s linear forwards;
+    will-change: transform, opacity;
 }
+
+@keyframes ctw3NewsSlide {
+    0% {
+        transform: translateX(calc(100vw - 180px));
+        opacity: 0;
+    }
+
+    8% {
+        opacity: 1;
+    }
+
+    90% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateX(-110%);
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ctw3-news-item {
+        animation-duration: 1ms;
+    }
+}
+
 
 #ctw3DiplomacyPanel {
     position: fixed;
@@ -16602,19 +16637,39 @@ async function acceptCTW3Truce(warId) {
     }
 }
 
+
+let ctw3RenderedNewsSignature = "";
+
 function renderCTW3News() {
     const box = $("ctw3NewsItems");
     if (!box) return;
 
-    const news = (ctw3DiplomacyState.news || []).slice(0, 4);
+    const news = (ctw3DiplomacyState.news || []).slice(0, 20);
 
-    box.innerHTML = news.length
-        ? news.map(item =>
-            `<span class="ctw3-news-item" title="${
-                ctw3EscapeHtml(item.message)
-            }">${ctw3EscapeHtml(item.message)}</span>`
-          ).join("")
-        : '<span class="ctw3-news-item">Пока нет мировых событий.</span>';
+    if (!news.length) {
+        if (ctw3RenderedNewsSignature !== "__empty__") {
+            ctw3RenderedNewsSignature = "__empty__";
+            box.innerHTML =
+                '<span class="ctw3-news-item">Пока нет мировых событий.</span>';
+        }
+        return;
+    }
+
+    const signature = news
+        .map(item => String(item.id || item.created_at_ts || item.message))
+        .join("|");
+
+    if (signature === ctw3RenderedNewsSignature) return;
+
+    ctw3RenderedNewsSignature = signature;
+
+    box.innerHTML = news.map((item, index) => `
+        <span
+            class="ctw3-news-item"
+            style="animation-delay:${index * 0.7}s"
+            title="${ctw3EscapeHtml(item.message)}"
+        >${ctw3EscapeHtml(item.message)}</span>
+    `).join("");
 }
 
 function renderCTW3WarWarning() {
@@ -16646,6 +16701,7 @@ function dismissCTW3WarWarning() {
     $("ctw3WarWarning")?.classList.remove("visible");
 }
 
+
 function renderCTW3WarCountdown() {
     const box = $("ctw3WarCountdown");
     if (!box) return;
@@ -16663,44 +16719,52 @@ function renderCTW3WarCountdown() {
     }
 
     const now = Date.now() / 1000;
-    const total = 30;
-
-    const remaining = Math.max(
-        0,
-        Number(warning.ready_at || 0) - now
+    const readyAt = Number(warning.ready_at || 0);
+    const promptExpiresAt = Number(
+        warning.prompt_expires_at || readyAt + 5
     );
 
-    const elapsed = Math.min(total, total - remaining);
+    // После окончания пятисекундного окна убираем плашку.
+    if (now > promptExpiresAt) {
+        box.classList.remove("visible");
+        return;
+    }
 
-    $("ctw3WarProgressFill").style.width =
-        (elapsed / total * 100) + "%";
+    const total = Math.max(1, readyAt - Number(warning.created_at || readyAt - 30));
+    const remaining = Math.max(0, readyAt - now);
+    const elapsed = Math.max(0, Math.min(total, total - remaining));
+
+    const fill = $("ctw3WarProgressFill");
+    if (fill) {
+        fill.style.width = (elapsed / total * 100) + "%";
+    }
 
     const target = (countries || []).find(c =>
-        String(c.id || c._id) ===
-        String(warning.target_country_id)
+        String(c.id || c._id) === String(warning.target_country_id)
     );
 
-    $("ctw3WarCountdownLabel").textContent =
-        remaining > 0
-            ? `До объявления войны против ${target?.name || "государства"}: ${Math.ceil(remaining)} сек.`
-            : `Срок истёк: ${target?.name || "государство"}`;
-
+    const targetName = target?.name || "государства";
+    const label = $("ctw3WarCountdownLabel");
     const action = $("ctw3WarCountdownAction");
 
-    if (
-        now >= Number(warning.ready_at || 0) &&
-        now <= Number(warning.prompt_expires_at || 0)
-    ) {
-        action.innerHTML = `
-            <button
-                class="ctw3-diplomacy-action danger"
-                onclick="declareCTW3War('${warning.target_country_id}')">
-                ⚔️ Объявить войну
-            </button>`;
-    } else {
-        action.innerHTML = remaining > 0
-            ? '<div class="ctw3-diplomacy-muted">Кнопка появится после заполнения шкалы.</div>'
-            : '<div class="ctw3-diplomacy-muted">Объявить войну можно в блоке дипломатии.</div>';
+    if (label) {
+        label.textContent = remaining > 0
+            ? `До объявления войны против ${targetName}: ${Math.ceil(remaining)} сек.`
+            : `Время объявить войну: ${Math.max(0, Math.ceil(promptExpiresAt - now))} сек.`;
+    }
+
+    if (action) {
+        if (now >= readyAt && now <= promptExpiresAt) {
+            action.innerHTML = `
+                <button
+                    class="ctw3-diplomacy-action danger"
+                    onclick="declareCTW3War('${ctw3EscapeHtml(warning.target_country_id)}')">
+                    ⚔️ Объявить войну
+                </button>`;
+        } else {
+            action.innerHTML =
+                '<div class="ctw3-diplomacy-muted">Кнопка появится после заполнения шкалы.</div>';
+        }
     }
 
     box.classList.add("visible");
