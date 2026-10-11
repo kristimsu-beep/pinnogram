@@ -8525,7 +8525,7 @@ async def ctw3_diplomacy_ultimatum(request: Request):
         "status": "warning",
         "created_at": now,
         "ready_at": now + 30,
-        "prompt_expires_at": now + 40
+        "prompt_expires_at": now + 45
     }
 
     await ctw3_wars.insert_one(war)
