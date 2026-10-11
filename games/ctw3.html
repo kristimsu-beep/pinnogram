@@ -15337,6 +15337,21 @@ function handleCTW3AviationWS(data) {
 
     const flightId = String(flight.id);
 
+      // Штатное прибытие и подтверждённое уничтожение
+      // не должны превращаться в тревогу о потере связи.
+      if (
+          data.type === "aviation_flight_arrived" ||
+          data.type === "aviation_flight_destroyed"
+      ) {
+          ctw3RadarKnownFlightOutcomes.set(
+              flightId,
+              {
+                  type: data.type,
+                  expires: Date.now() + 15000
+              }
+          );
+      }
+
     if (data.type === "aviation_flight_update") {
         const index =
             ctw3AviationState.flights.findIndex(
@@ -15975,6 +15990,9 @@ let ctw3DispatcherTimer = null;
 let ctw3RadarPreviousFlights = new Map();
 let ctw3RadarAlerts = new Map();
 
+// Последствия, уже подтверждённые сервером.
+let ctw3RadarKnownFlightOutcomes = new Map();
+
 function openCTW3Dispatcher() {
     const modal = $("ctw3Dispatcher");
     if (!modal) return;
@@ -16156,30 +16174,51 @@ function renderCTW3DispatcherRadar() {
         points.push({ flight, lat, lng });
     });
 
-    // Если рейс пропал из списка активных, сохраняем его последнюю позицию
-    // как кратковременную красную отметку тревоги.
-    const currentIds = new Set(points.map(item => String(item.flight.id)));
-
-    for (const [id, previous] of ctw3RadarPreviousFlights.entries()) {
-        if (!currentIds.has(id) && !ctw3RadarAlerts.has(id)) {
-            ctw3RadarAlerts.set(id, {
-                ...previous,
-                expires: Date.now() + 2500
-            });
-        }
-    }
-
-    ctw3RadarPreviousFlights = new Map(
-        points.map(item => [
-            String(item.flight.id),
-            item
-        ])
-    );
-
-    const now = Date.now();
-    for (const [id, alert] of ctw3RadarAlerts.entries()) {
-        if (alert.expires <= now) ctw3RadarAlerts.delete(id);
-    }
+      // Сверяем с полным списком активных рейсов,
+      // а не только с самолётами над территорией радара.
+      const allFlightIds = new Set(
+          flights.map(flight => String(flight.id))
+      );
+      
+      const now = Date.now();
+      
+      // Удаляем устаревшие подтверждённые события.
+      for (const [id, outcome] of ctw3RadarKnownFlightOutcomes.entries()) {
+          if (outcome.expires <= now) {
+              ctw3RadarKnownFlightOutcomes.delete(id);
+          }
+      }
+      
+      // Не объявляем потерю связи, если сервер сообщил,
+      // что самолёт прибыл или был сбит.
+      for (const [id, previous] of ctw3RadarPreviousFlights.entries()) {
+          if (
+              !allFlightIds.has(id) &&
+              !ctw3RadarAlerts.has(id) &&
+              !ctw3RadarKnownFlightOutcomes.has(id)
+          ) {
+              ctw3RadarAlerts.set(id, {
+                  ...previous,
+                  alertType: "lost",
+                  expires: now + 2500
+              });
+          }
+      }
+      
+      // Сохраняем текущие наблюдаемые самолёты.
+      ctw3RadarPreviousFlights = new Map(
+          points.map(item => [
+              String(item.flight.id),
+              item
+          ])
+      );
+      
+      // Убираем завершившиеся тревоги.
+      for (const [id, alert] of ctw3RadarAlerts.entries()) {
+          if (alert.expires <= now) {
+              ctw3RadarAlerts.delete(id);
+          }
+      }
 
     // Центр радара — центр ограничивающего прямоугольника территории.
     // Это устойчивее, чем усреднять координаты всех вершин сложной границы.
