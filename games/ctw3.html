@@ -17021,14 +17021,15 @@ async function openCTW3Terrain3D() {
                 const dx = (tx + 1) * tileSize;
                 const dy = (ty + 1) * tileSize;
 
-                const [mapImage, demImage] = await Promise.all([
-                    ctw3TerrainLoadImage(
-                        `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`
-                    ),
-                    ctw3TerrainLoadImage(
-                        `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${zoom}/${x}/${y}.png`
-                    )
-                ]);
+
+                  const [mapImage, demImage] = await Promise.all([
+                      ctw3TerrainLoadImage(
+                          `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${y}/${x}`
+                      ),
+                      ctw3TerrainLoadImage(
+                          `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${zoom}/${x}/${y}.png`
+                      )
+                  ]);
 
                 textureContext.drawImage(
                     mapImage, dx, dy, tileSize, tileSize
@@ -17110,7 +17111,7 @@ async function openCTW3Terrain3D() {
                 const c = a + segments + 1;
                 const d = c + 1;
 
-                indices.push(a, c, b, b, c, d);
+                indices.push(a, b, c, b, d, c);
             }
         }
 
@@ -17277,7 +17278,7 @@ async function openCTW3Terrain3D() {
 
         status.textContent =
             `Рельеф загружен · высоты ${Math.round(minHeight)}–` +
-            `${Math.round(maxHeight)} м · OSM / Terrarium`;
+            `${Math.round(maxHeight)} м · Спутниковые снимки Esri`;
 
         function animate() {
             if (overlay.style.display === "none") return;
