@@ -4890,6 +4890,32 @@ select{
                 Подготовка 3D-рельефа...
             </div>
         </div>
+      
+      <div id="ctw3Terrain3DPlayerControls" style="
+          position:absolute;
+          top:58px;
+          left:16px;
+          z-index:20;
+          display:flex;
+          flex-wrap:wrap;
+          gap:8px;
+      ">
+          <button id="ctw3EnterPlayerMode" type="button"
+              onclick="ctw3EnterPlayerMode()"
+              style="padding:10px 14px;border:1px solid #ffffff55;
+              border-radius:10px;background:#172b38dd;color:white;
+              cursor:pointer;font-weight:600;">
+              🎮 Стать игроком
+          </button>
+      
+          <button id="ctw3ExitPlayerMode" type="button"
+              onclick="ctw3ExitPlayerMode()"
+              style="display:none;padding:10px 14px;
+              border:1px solid #ffffff55;border-radius:10px;
+              background:#172b38dd;color:white;cursor:pointer;">
+              📷 Вернуться к камере
+          </button>
+      </div>
 
         <button
             type="button"
@@ -16936,6 +16962,161 @@ let ctw3Terrain3DKeyHandler = null;
 let ctw3Terrain3DResizeHandler = null;
 let ctw3Terrain3DPointerHandler = null;
 let ctw3Terrain3DKeyUpHandler = null;
+let ctw3Terrain3DPlayerMode = false;
+let ctw3Terrain3DPlayer = null;
+let ctw3Terrain3DPlayerLabel = null;
+let ctw3Terrain3DPlayerCountry = "Страна не определена";
+let ctw3Terrain3DTHREE = null;
+let ctw3Terrain3DTerrain = null;
+let ctw3Terrain3DHeightData = null;
+
+function ctw3EnterPlayerMode() {
+    const THREE = ctw3Terrain3DTHREE;
+
+    if (!THREE || !ctw3Terrain3DScene ||
+        !ctw3Terrain3DCamera) {
+        return;
+    }
+
+    if (ctw3Terrain3DPlayerMode) return;
+
+    // Используем положение камеры, но ставим персонажа
+    // на поверхность рельефа.
+    const camera = ctw3Terrain3DCamera;
+    const terrain = ctw3Terrain3DTerrain;
+
+    const x = THREE.MathUtils.clamp(
+        camera.position.x, -5900, 5900
+    );
+    const z = THREE.MathUtils.clamp(
+        camera.position.z, -5900, 5900
+    );
+
+    const y = ctw3Terrain3DGetHeightAt(x, z);
+
+    const group = new THREE.Group();
+
+    // Голова
+    const head = new THREE.Mesh(
+        new THREE.SphereGeometry(12, 16, 12),
+        new THREE.MeshStandardMaterial({ color: 0xffd2a1 })
+    );
+    head.position.y = 66;
+    group.add(head);
+
+    // Туловище
+    const body = new THREE.Mesh(
+        new THREE.CapsuleGeometry(12, 30, 4, 8),
+        new THREE.MeshStandardMaterial({ color: 0x36a8ff })
+    );
+    body.position.y = 35;
+    group.add(body);
+
+    // Ноги
+    const legMaterial = new THREE.MeshStandardMaterial({
+        color: 0x26354a
+    });
+
+    for (const side of [-1, 1]) {
+        const leg = new THREE.Mesh(
+            new THREE.CapsuleGeometry(4.5, 18, 3, 6),
+            legMaterial
+        );
+        leg.position.set(side * 6, 10, 0);
+        group.add(leg);
+    }
+
+    group.position.set(x, y, z);
+    ctw3Terrain3DScene.add(group);
+
+    ctw3Terrain3DPlayer = group;
+    ctw3Terrain3DPlayerMode = true;
+
+    // Подпись над головой.
+    const label = document.createElement("div");
+    label.textContent = ctw3Terrain3DPlayerCountry;
+    label.style.cssText = `
+        position:absolute;
+        z-index:15;
+        transform:translate(-50%,-100%);
+        padding:5px 9px;
+        border-radius:8px;
+        color:white;
+        background:rgba(8,20,32,.72);
+        border:1px solid rgba(255,255,255,.3);
+        font:600 13px Arial,sans-serif;
+        white-space:nowrap;
+        pointer-events:none;
+        display:none;
+    `;
+
+    document.getElementById("ctw3Terrain3DOverlay")
+        .appendChild(label);
+
+    ctw3Terrain3DPlayerLabel = label;
+
+    document.getElementById("ctw3EnterPlayerMode").style.display =
+        "none";
+    document.getElementById("ctw3ExitPlayerMode").style.display =
+        "inline-block";
+
+    // Камера становится камерой от третьего лица.
+    camera.position.set(x, y + 180, z + 300);
+    camera.lookAt(x, y + 40, z);
+}
+
+function ctw3ExitPlayerMode() {
+    ctw3Terrain3DPlayerMode = false;
+
+    if (ctw3Terrain3DPlayer && ctw3Terrain3DScene) {
+        ctw3Terrain3DScene.remove(ctw3Terrain3DPlayer);
+
+        ctw3Terrain3DPlayer.traverse(object => {
+            object.geometry?.dispose();
+
+            if (object.material) {
+                if (Array.isArray(object.material)) {
+                    object.material.forEach(m => m.dispose());
+                } else {
+                    object.material.dispose();
+                }
+            }
+        });
+    }
+
+    ctw3Terrain3DPlayer = null;
+
+    ctw3Terrain3DPlayerLabel?.remove();
+    ctw3Terrain3DPlayerLabel = null;
+
+    document.getElementById("ctw3EnterPlayerMode").style.display =
+        "inline-block";
+    document.getElementById("ctw3ExitPlayerMode").style.display =
+        "none";
+}
+
+function ctw3Terrain3DGetHeightAt(x, z) {
+    if (!ctw3Terrain3DHeightData) return 0;
+
+    const { heights, segments, worldWidth } =
+        ctw3Terrain3DHeightData;
+
+    const gx = THREE_UNUSED_CLAMP(
+        (x / worldWidth + 0.5) * segments, 0, segments
+    );
+    const gz = THREE_UNUSED_CLAMP(
+        (0.5 - z / worldWidth) * segments, 0, segments
+    );
+
+    const ix = Math.round(gx);
+    const iz = Math.round(gz);
+
+    return heights[iz * (segments + 1) + ix];
+}
+
+function THREE_UNUSED_CLAMP(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
 
 async function openCTW3Terrain3D() {
     const overlay = document.getElementById("ctw3Terrain3DOverlay");
@@ -17089,6 +17270,11 @@ async function openCTW3Terrain3D() {
         }
 
         const heightScale = 1.0;
+        ctw3Terrain3DHeightData = {
+          heights,
+          segments,
+          worldWidth
+        };
 
         for (let z = 0; z <= segments; z++) {
             for (let x = 0; x <= segments; x++) {
@@ -17138,6 +17324,8 @@ async function openCTW3Terrain3D() {
         });
 
         const terrain = new THREE.Mesh(geometry, material);
+        ctw3Terrain3DTHREE = THREE;
+        ctw3Terrain3DTerrain = terrain;
 
         const scene = new THREE.Scene();
         scene.background = new THREE.Color("#91c8ed");
@@ -17292,16 +17480,75 @@ async function openCTW3Terrain3D() {
                 Math.cos(yaw), 0, -Math.sin(yaw)
             );
 
-            const speed = 18;
-            if (keys.has("w")) camera.position.addScaledVector(forward, speed);
-            if (keys.has("s")) camera.position.addScaledVector(forward, -speed);
-            if (keys.has("a")) camera.position.addScaledVector(right, -speed);
-            if (keys.has("d")) camera.position.addScaledVector(right, speed);
-
-            if (keys.has("arrowleft")) yaw += 0.025;
-            if (keys.has("arrowright")) yaw -= 0.025;
-            if (keys.has("arrowup")) pitch = Math.min(1.35, pitch + 0.02);
-            if (keys.has("arrowdown")) pitch = Math.max(-1.35, pitch - 0.02);
+            const speed = ctw3Terrain3DPlayerMode ? 8 : 18;
+            
+            if (ctw3Terrain3DPlayerMode && ctw3Terrain3DPlayer) {
+                const player = ctw3Terrain3DPlayer;
+            
+                const forward = new THREE.Vector3(
+                    -Math.sin(yaw), 0, -Math.cos(yaw)
+                );
+                const right = new THREE.Vector3(
+                    Math.cos(yaw), 0, -Math.sin(yaw)
+                );
+            
+                if (keys.has("w")) player.position.addScaledVector(forward, speed);
+                if (keys.has("s")) player.position.addScaledVector(forward, -speed);
+                if (keys.has("a")) player.position.addScaledVector(right, -speed);
+                if (keys.has("d")) player.position.addScaledVector(right, speed);
+            
+                player.position.x = THREE.MathUtils.clamp(
+                    player.position.x, -5900, 5900
+                );
+                player.position.z = THREE.MathUtils.clamp(
+                    player.position.z, -5900, 5900
+                );
+            
+                player.position.y = ctw3Terrain3DGetHeightAt(
+                    player.position.x, player.position.z
+                );
+            
+                player.rotation.y = yaw;
+            
+                const target = player.position.clone().add(
+                    new THREE.Vector3(0, 45, 0)
+                );
+            
+                const cameraTarget = player.position.clone().add(
+                    new THREE.Vector3(
+                        Math.sin(yaw) * 300,
+                        170,
+                        Math.cos(yaw) * 300
+                    )
+                );
+            
+                camera.position.lerp(cameraTarget, 0.12);
+                camera.lookAt(target);
+            
+                // Позиция подписи над персонажем.
+                if (ctw3Terrain3DPlayerLabel) {
+                    const projected = player.position.clone().add(
+                        new THREE.Vector3(0, 100, 0)
+                    );
+                    projected.project(camera);
+            
+                    const rect = renderer.domElement.getBoundingClientRect();
+            
+                    ctw3Terrain3DPlayerLabel.style.left =
+                        `${(projected.x * 0.5 + 0.5) * rect.width + rect.left - overlay.getBoundingClientRect().left}px`;
+            
+                    ctw3Terrain3DPlayerLabel.style.top =
+                        `${(-projected.y * 0.5 + 0.5) * rect.height + rect.top - overlay.getBoundingClientRect().top}px`;
+            
+                    ctw3Terrain3DPlayerLabel.style.display =
+                        projected.z < 1 ? "block" : "none";
+                }
+            } else {
+                if (keys.has("w")) camera.position.addScaledVector(forward, speed);
+                if (keys.has("s")) camera.position.addScaledVector(forward, -speed);
+                if (keys.has("a")) camera.position.addScaledVector(right, -speed);
+                if (keys.has("d")) camera.position.addScaledVector(right, speed);
+            }
 
             const direction = new THREE.Vector3(
                 -Math.sin(yaw) * Math.cos(pitch),
