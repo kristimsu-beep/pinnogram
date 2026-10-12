@@ -12459,6 +12459,10 @@ async def ai_voice(
 # =========================
 
 ctw3_players = {}
+
+# CTW3 — 3D MULTIPLAYER PLAYERS
+ctw3_3d_players = {}
+
 ctw3_world = {
     "countries": {}
 }
@@ -12480,6 +12484,46 @@ async def ctw3_broadcast():
 
     for player_id in disconnected:
         ctw3_players.pop(player_id, None)
+
+async def ctw3_broadcast_3d(event):
+    message = json.dumps(event, ensure_ascii=False)
+    disconnected = []
+
+    for player_id, player in list(ctw3_3d_players.items()):
+        ws = player.get("websocket")
+
+        if not ws:
+            disconnected.append(player_id)
+            continue
+
+        try:
+            await ws.send_text(message)
+        except Exception:
+            disconnected.append(player_id)
+
+    for player_id in disconnected:
+        ctw3_3d_players.pop(player_id, None)
+
+
+async def ctw3_broadcast_3d_players():
+    players = []
+
+    for player_id, player in ctw3_3d_players.items():
+        players.append({
+            "player_id": player_id,
+            "username": player.get("username", "Игрок"),
+            "country": player.get("country", "🌐 Нейтральная территория"),
+            "country_id": player.get("country_id", ""),
+            "x": player.get("x", 0),
+            "y": player.get("y", 0),
+            "z": player.get("z", 0),
+            "yaw": player.get("yaw", 0),
+        })
+
+    await ctw3_broadcast_3d({
+        "type": "players_update",
+        "players": players
+    })
 
 # =========================================================
 # CTW3 — GLOBAL MISSILE ATTACK EVENT
@@ -12581,11 +12625,62 @@ async def ctw3_websocket(websocket: WebSocket):
                 # Отправляем обновлённый мир всем
                 await ctw3_broadcast()
 
+            elif message_type == "player_move":
+                if not player_id:
+                    continue
+
+                try:
+                    x = max(-5900, min(5900, float(data.get("x", 0))))
+                    y = float(data.get("y", 0))
+                    z = max(-5900, min(5900, float(data.get("z", 0))))
+                    yaw = float(data.get("yaw", 0))
+                except (TypeError, ValueError):
+                    continue
+
+                ctw3_3d_players[player_id] = {
+                    "websocket": websocket,
+                    "username": str(data.get("username", "Игрок"))[:40],
+                    "country": str(data.get("country", "🌐 Нейтральная территория"))[:100],
+                    "country_id": str(data.get("country_id", ""))[:100],
+                    "x": x,
+                    "y": y,
+                    "z": z,
+                    "yaw": yaw,
+                }
+
+                await ctw3_broadcast_3d_players()
+
+            elif message_type == "player_leave":
+                if player_id:
+                    ctw3_3d_players.pop(player_id, None)
+                    await ctw3_broadcast_3d_players()
+
+            elif message_type == "player_chat":
+                if not player_id:
+                    continue
+
+                message = str(data.get("message", "")).strip()[:240]
+                if not message:
+                    continue
+
+                player = ctw3_3d_players.get(player_id)
+                if not player:
+                    continue
+
+                await ctw3_broadcast_3d({
+                    "type": "player_chat",
+                    "player_id": player_id,
+                    "username": player.get("username", "Игрок"),
+                    "country": player.get("country", ""),
+                    "message": message
+                })
+
     except WebSocketDisconnect:
 
         if player_id:
-            ctw3_players.pop(player_id, None)
-
+            ctw3_3d_players.pop(player_id, None)
+            await ctw3_broadcast_3d_players()
+            
             await ctw3_broadcast()
 
     except Exception:
