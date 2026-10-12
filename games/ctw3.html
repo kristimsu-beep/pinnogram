@@ -5158,6 +5158,8 @@ function connectCTW3WebSocket(){
                     event.data
                 );
 
+            ctw3Terrain3DHandleMessage(data);
+
             if (
                 data.type === "aviation_flight_update" ||
                 data.type === "aviation_flight_arrived" ||
@@ -16975,27 +16977,115 @@ let ctw3Terrain3DChatBox = null;
 let ctw3Terrain3DChatBubbles = new Map();
 let ctw3Terrain3DLastMoveSent = 0;
 
+let ctw3Terrain3DCountries = [];
+let ctw3Terrain3DCountriesLoaded = false;
+
+async function ctw3Terrain3DLoadCountries() {
+    try {
+        const response = await fetch("/api/ctw3/countries");
+        if (!response.ok) throw new Error("HTTP " + response.status);
+
+        const data = await response.json();
+        ctw3Terrain3DCountries = Array.isArray(data.countries)
+            ? data.countries
+            : [];
+
+        ctw3Terrain3DCountriesLoaded = true;
+    } catch (error) {
+        console.error("[CTW3 3D] Не удалось загрузить страны:", error);
+    }
+}
+
 function ctw3Terrain3DResolveCountry(lat, lon) {
-    for (const item of (Array.isArray(countries) ? countries : [])) {
+    for (const item of ctw3Terrain3DCountries) {
         const geometry = item?.territory?.geometry || item?.territory;
         if (!geometry?.coordinates) continue;
 
-        const rings = geometry.type === "Polygon"
-            ? [geometry.coordinates[0]]
+        const polygons = geometry.type === "Polygon"
+            ? [geometry.coordinates]
             : geometry.type === "MultiPolygon"
-                ? geometry.coordinates.map(p => p?.[0]).filter(Boolean)
+                ? geometry.coordinates
                 : [];
 
-        if (rings.some(ring => pointInsideTerritory(lat, lon, ring))) {
-            return {
-                id: String(item.id || item._id || ""),
-                name: String(item.name || item.country_name || "Государство"),
-                flag: String(item.flag || "🏳️")
-            };
+        for (const polygon of polygons) {
+            const outerRing = polygon?.[0];
+            if (outerRing && pointInsideTerritory(lat, lon, outerRing)) {
+                return {
+                    id: String(item.id || item._id || ""),
+                    name: String(item.name || "Государство"),
+                    flag: String(item.flag || "🏳️")
+                };
+            }
         }
     }
 
-    return { id: "", name: "Нейтральная территория", flag: "🌐" };
+    return {
+        id: "",
+        name: ctw3Terrain3DCountriesLoaded
+            ? "Нейтральная территория"
+            : "Загрузка стран…",
+        flag: "🌐"
+    };
+}
+
+function ctw3Terrain3DHandleMessage(data) {
+    if (data.type === "players_update") {
+        const seen = new Set();
+
+        for (const player of data.players || []) {
+            const id = String(player.player_id || "");
+            if (!id || id === String(ctw3PlayerId || "")) continue;
+
+            seen.add(id);
+
+            let model = ctw3Terrain3DRemotePlayers.get(id);
+
+            if (!model && ctw3Terrain3DScene && ctw3Terrain3DTHREE) {
+                const T = ctw3Terrain3DTHREE;
+                model = new T.Group();
+
+                const body = new T.Mesh(
+                    new T.CylinderGeometry(10, 13, 42, 10),
+                    new T.MeshStandardMaterial({ color: 0x36a8ff })
+                );
+                body.position.y = 34;
+
+                const head = new T.Mesh(
+                    new T.SphereGeometry(12, 12, 10),
+                    new T.MeshStandardMaterial({ color: 0xffd2a1 })
+                );
+                head.position.y = 64;
+
+                model.add(body, head);
+                ctw3Terrain3DScene.add(model);
+                ctw3Terrain3DRemotePlayers.set(id, model);
+            }
+
+            if (model) {
+                model.position.set(
+                    Number(player.x) || 0,
+                    Number(player.y) || 0,
+                    Number(player.z) || 0
+                );
+                model.rotation.y = Number(player.yaw) || 0;
+            }
+        }
+
+        for (const [id, model] of ctw3Terrain3DRemotePlayers) {
+            if (!seen.has(id)) {
+                ctw3Terrain3DScene?.remove(model);
+                ctw3Terrain3DRemotePlayers.delete(id);
+            }
+        }
+    }
+
+    if (data.type === "player_chat") {
+        console.log(
+            "[CTW3 3D chat]",
+            data.username,
+            data.message
+        );
+    }
 }
 
 function ctw3Terrain3DGeo(x, z) {
@@ -17057,27 +17147,32 @@ function ctw3Terrain3DPublishPosition() {
         country_id: country.id || "",
         lat: geo.lat,
         lon: geo.lon
+        username:
+          localStorage.getItem("username") ||
+          localStorage.getItem("ctw3_username") ||
+          "Игрок",
     }));
 }
 
 function ctw3EnterPlayerMode() {
     const THREE = ctw3Terrain3DTHREE;
 
-    if (!THREE || !ctw3Terrain3DScene ||
-        !ctw3Terrain3DCamera) {
+    if (
+        !THREE ||
+        !ctw3Terrain3DScene ||
+        !ctw3Terrain3DCamera
+    ) {
         return;
     }
 
     if (ctw3Terrain3DPlayerMode) return;
 
-    // Используем положение камеры, но ставим персонажа
-    // на поверхность рельефа.
     const camera = ctw3Terrain3DCamera;
-    const terrain = ctw3Terrain3DTerrain;
 
     const x = THREE.MathUtils.clamp(
         camera.position.x, -5900, 5900
     );
+
     const z = THREE.MathUtils.clamp(
         camera.position.z, -5900, 5900
     );
@@ -17089,7 +17184,9 @@ function ctw3EnterPlayerMode() {
     // Голова
     const head = new THREE.Mesh(
         new THREE.SphereGeometry(12, 16, 12),
-        new THREE.MeshStandardMaterial({ color: 0xffd2a1 })
+        new THREE.MeshStandardMaterial({
+            color: 0xffd2a1
+        })
     );
     head.position.y = 66;
     group.add(head);
@@ -17097,25 +17194,42 @@ function ctw3EnterPlayerMode() {
     // Туловище
     const body = new THREE.Mesh(
         new THREE.CylinderGeometry(12, 14, 36, 12),
-        new THREE.MeshStandardMaterial({ color: 0x36a8ff })
+        new THREE.MeshStandardMaterial({
+            color: 0x36a8ff
+        })
     );
-
     body.position.y = 35;
     group.add(body);
 
-    // Ноги
+    // Ноги — без CapsuleGeometry, чтобы избежать ошибки
     const legMaterial = new THREE.MeshStandardMaterial({
         color: 0x26354a
     });
 
     for (const side of [-1, 1]) {
-         const leg = new THREE.Mesh(
-             new THREE.CapsuleGeometry(4.5, 18, 3, 6),
-             legMaterial
-         );
+        const leg = new THREE.Mesh(
+            new THREE.CylinderGeometry(4, 4.5, 20, 8),
+            legMaterial
+        );
 
         leg.position.set(side * 6, 10, 0);
         group.add(leg);
+    }
+
+    // Руки
+    const armMaterial = new THREE.MeshStandardMaterial({
+        color: 0x36a8ff
+    });
+
+    for (const side of [-1, 1]) {
+        const arm = new THREE.Mesh(
+            new THREE.CylinderGeometry(4, 4, 27, 8),
+            armMaterial
+        );
+
+        arm.position.set(side * 17, 37, 0);
+        arm.rotation.z = side * -0.12;
+        group.add(arm);
     }
 
     group.position.set(x, y, z);
@@ -17124,35 +17238,48 @@ function ctw3EnterPlayerMode() {
     ctw3Terrain3DPlayer = group;
     ctw3Terrain3DPlayerMode = true;
 
-    // Подпись над головой.
-    const label = document.createElement("div");
-    label.textContent = ctw3Terrain3DPlayerCountry;
-    label.style.cssText = `
-        position:absolute;
-        z-index:15;
-        transform:translate(-50%,-100%);
-        padding:5px 9px;
-        border-radius:8px;
-        color:white;
-        background:rgba(8,20,32,.72);
-        border:1px solid rgba(255,255,255,.3);
-        font:600 13px Arial,sans-serif;
-        white-space:nowrap;
-        pointer-events:none;
-        display:none;
-    `;
+    // Подпись над персонажем
+    const overlay = document.getElementById(
+        "ctw3Terrain3DOverlay"
+    );
 
-    document.getElementById("ctw3Terrain3DOverlay")
-        .appendChild(label);
+    if (overlay) {
+        const label = document.createElement("div");
 
-    ctw3Terrain3DPlayerLabel = label;
+        label.textContent =
+            ctw3Terrain3DPlayerCountry || "🌐 Нейтральная территория";
 
-    document.getElementById("ctw3EnterPlayerMode").style.display =
-        "none";
-    document.getElementById("ctw3ExitPlayerMode").style.display =
-        "inline-block";
+        label.style.cssText = `
+            position:absolute;
+            z-index:15;
+            transform:translate(-50%,-100%);
+            padding:5px 9px;
+            border-radius:8px;
+            color:white;
+            background:rgba(8,20,32,.82);
+            border:1px solid rgba(255,255,255,.3);
+            font:600 13px Arial,sans-serif;
+            white-space:nowrap;
+            pointer-events:none;
+            display:none;
+        `;
 
-    // Камера становится камерой от третьего лица.
+        overlay.appendChild(label);
+        ctw3Terrain3DPlayerLabel = label;
+    }
+
+    const enterButton = document.getElementById(
+        "ctw3EnterPlayerMode"
+    );
+
+    const exitButton = document.getElementById(
+        "ctw3ExitPlayerMode"
+    );
+
+    if (enterButton) enterButton.style.display = "none";
+    if (exitButton) exitButton.style.display = "inline-block";
+
+    // Камера от третьего лица
     camera.position.set(x, y + 180, z + 300);
     camera.lookAt(x, y + 40, z);
 }
