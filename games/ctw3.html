@@ -17139,6 +17139,12 @@ function ctw3Terrain3DPublishPosition() {
     ctw3Socket.send(JSON.stringify({
         type: "player_move",
         player_id: ctw3PlayerId || "",
+
+        username:
+            localStorage.getItem("username") ||
+            localStorage.getItem("ctw3_username") ||
+            "Игрок",
+
         x: ctw3Terrain3DPlayer.position.x,
         y: ctw3Terrain3DPlayer.position.y,
         z: ctw3Terrain3DPlayer.position.z,
@@ -17147,10 +17153,6 @@ function ctw3Terrain3DPublishPosition() {
         country_id: country.id || "",
         lat: geo.lat,
         lon: geo.lon
-        username:
-          localStorage.getItem("username") ||
-          localStorage.getItem("ctw3_username") ||
-          "Игрок",
     }));
 }
 
