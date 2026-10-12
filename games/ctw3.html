@@ -4893,7 +4893,7 @@ select{
       
       <div id="ctw3Terrain3DPlayerControls" style="
           position:absolute;
-          top:58px;
+          top:82px;
           left:16px;
           z-index:20;
           display:flex;
@@ -17007,9 +17007,10 @@ function ctw3EnterPlayerMode() {
 
     // Туловище
     const body = new THREE.Mesh(
-        new THREE.CapsuleGeometry(12, 30, 4, 8),
+        new THREE.CylinderGeometry(12, 14, 36, 12),
         new THREE.MeshStandardMaterial({ color: 0x36a8ff })
     );
+
     body.position.y = 35;
     group.add(body);
 
@@ -17019,10 +17020,11 @@ function ctw3EnterPlayerMode() {
     });
 
     for (const side of [-1, 1]) {
-        const leg = new THREE.Mesh(
-            new THREE.CapsuleGeometry(4.5, 18, 3, 6),
-            legMaterial
-        );
+         const leg = new THREE.Mesh(
+             new THREE.CapsuleGeometry(4.5, 18, 3, 6),
+             legMaterial
+         );
+
         leg.position.set(side * 6, 10, 0);
         group.add(leg);
     }
@@ -17551,15 +17553,18 @@ async function openCTW3Terrain3D() {
                 if (keys.has("d")) camera.position.addScaledVector(right, speed);
             }
 
-            const direction = new THREE.Vector3(
-                -Math.sin(yaw) * Math.cos(pitch),
-                Math.sin(pitch),
-                -Math.cos(yaw) * Math.cos(pitch)
-            );
 
-            camera.lookAt(
-                camera.position.clone().add(direction)
-            );
+            if (!ctw3Terrain3DPlayerMode) {
+                const direction = new THREE.Vector3(
+                    -Math.sin(yaw) * Math.cos(pitch),
+                    Math.sin(pitch),
+                    -Math.cos(yaw) * Math.cos(pitch)
+                );
+            
+                camera.lookAt(
+                    camera.position.clone().add(direction)
+                );
+            }
 
             renderer.render(scene, camera);
         }
