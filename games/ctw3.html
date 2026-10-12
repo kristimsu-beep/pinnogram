@@ -16970,6 +16970,95 @@ let ctw3Terrain3DPlayerCountry = "Страна не определена";
 let ctw3Terrain3DTHREE = null;
 let ctw3Terrain3DTerrain = null;
 let ctw3Terrain3DHeightData = null;
+let ctw3Terrain3DRemotePlayers = new Map();
+let ctw3Terrain3DChatBox = null;
+let ctw3Terrain3DChatBubbles = new Map();
+let ctw3Terrain3DLastMoveSent = 0;
+
+function ctw3Terrain3DResolveCountry(lat, lon) {
+    for (const item of (Array.isArray(countries) ? countries : [])) {
+        const geometry = item?.territory?.geometry || item?.territory;
+        if (!geometry?.coordinates) continue;
+
+        const rings = geometry.type === "Polygon"
+            ? [geometry.coordinates[0]]
+            : geometry.type === "MultiPolygon"
+                ? geometry.coordinates.map(p => p?.[0]).filter(Boolean)
+                : [];
+
+        if (rings.some(ring => pointInsideTerritory(lat, lon, ring))) {
+            return {
+                id: String(item.id || item._id || ""),
+                name: String(item.name || item.country_name || "Государство"),
+                flag: String(item.flag || "🏳️")
+            };
+        }
+    }
+
+    return { id: "", name: "Нейтральная территория", flag: "🌐" };
+}
+
+function ctw3Terrain3DGeo(x, z) {
+    const width = ctw3Terrain3DHeightData?.worldWidth || 12000;
+    const lat = ctw3Terrain3DCoordinates.lat - (z / width) * 1.0547;
+    const lon = ctw3Terrain3DCoordinates.lon +
+        (x / width) * 1.0547 /
+        Math.max(0.15, Math.cos(ctw3Terrain3DCoordinates.lat * Math.PI / 180));
+
+    return {
+        lat: Math.max(-85, Math.min(85, lat)),
+        lon: ((lon + 180) % 360 + 360) % 360 - 180
+    };
+}
+
+function ctw3Terrain3DUpdateCountry() {
+    if (!ctw3Terrain3DPlayer) {
+        return { id: "", name: "Нейтральная территория" };
+    }
+
+    const geo = ctw3Terrain3DGeo(
+        ctw3Terrain3DPlayer.position.x,
+        ctw3Terrain3DPlayer.position.z
+    );
+
+    const found = ctw3Terrain3DResolveCountry(geo.lat, geo.lon);
+    ctw3Terrain3DPlayerCountry = found.flag + " " + found.name;
+
+    if (ctw3Terrain3DPlayerLabel) {
+        ctw3Terrain3DPlayerLabel.textContent = ctw3Terrain3DPlayerCountry;
+    }
+
+    return { ...found, ...geo };
+}
+
+function ctw3Terrain3DPublishPosition() {
+    if (
+        !ctw3Terrain3DPlayerMode ||
+        !ctw3Terrain3DPlayer ||
+        typeof ctw3Socket === "undefined" ||
+        !ctw3Socket ||
+        ctw3Socket.readyState !== WebSocket.OPEN
+    ) return;
+
+    const country = ctw3Terrain3DUpdateCountry() || {};
+    const geo = ctw3Terrain3DGeo(
+        ctw3Terrain3DPlayer.position.x,
+        ctw3Terrain3DPlayer.position.z
+    );
+
+    ctw3Socket.send(JSON.stringify({
+        type: "player_move",
+        player_id: ctw3PlayerId || "",
+        x: ctw3Terrain3DPlayer.position.x,
+        y: ctw3Terrain3DPlayer.position.y,
+        z: ctw3Terrain3DPlayer.position.z,
+        yaw: ctw3Terrain3DPlayer.rotation.y,
+        country: ctw3Terrain3DPlayerCountry,
+        country_id: country.id || "",
+        lat: geo.lat,
+        lon: geo.lon
+    }));
+}
 
 function ctw3EnterPlayerMode() {
     const THREE = ctw3Terrain3DTHREE;
@@ -17512,7 +17601,13 @@ async function openCTW3Terrain3D() {
                 );
             
                 player.rotation.y = yaw;
-            
+                ctw3Terrain3DUpdateCountry();
+
+                  if (Date.now() - ctw3Terrain3DLastMoveSent > 100) {
+                      ctw3Terrain3DLastMoveSent = Date.now();
+                      ctw3Terrain3DPublishPosition();
+                  }
+
                 const target = player.position.clone().add(
                     new THREE.Vector3(0, 45, 0)
                 );
