@@ -17690,7 +17690,7 @@ async function openCTW3Terrain3D() {
                     (0.5 - z / segments) * worldWidth
                 );
 
-                uvs.push(x / segments, 1 - z / segments);
+                uvs.push(1 - x / segments, 1 - z / segments);
             }
         }
 
@@ -17774,12 +17774,22 @@ async function openCTW3Terrain3D() {
                 const north = pixelToLat(topPixel);
                 const south = pixelToLat(bottomPixel);
 
+                const buildingCenterLat = (north + south) / 2;
+                const buildingCenterLon = (west + east) / 2;
+            
+                const buildingHalfLat = (north - south) / 4;
+                const buildingHalfLon = (east - west) / 4;
+            
                 const query = `
-                    [out:json][timeout:25];
-                    way["building"](${south},${west},${north},${east});
+                    [out:json][timeout:20];
+                    way["building"](
+                        ${buildingCenterLat - buildingHalfLat},
+                        ${buildingCenterLon - buildingHalfLon},
+                        ${buildingCenterLat + buildingHalfLat},
+                        ${buildingCenterLon + buildingHalfLon}
+                    );
                     out geom;
                 `;
-
                 const response = await fetch(
                     "https://overpass-api.de/api/interpreter",
                     {
