@@ -12588,21 +12588,36 @@ async def ctw3_websocket(websocket: WebSocket):
             # -------------------------
 
             if message_type == "join":
-                player_id = str(data.get("player_id"))
+                raw_player_id = data.get("player_id")
 
-                if not player_id:
+                if not raw_player_id:
                     continue
 
+                player_id = str(raw_player_id)[:100]
                 ctw3_players[player_id] = websocket
 
-                # Сразу отправляем новому игроку
-                # текущее состояние всей карты
+                # Регистрируем игрока для 3D-чата
+                ctw3_3d_players[player_id] = {
+                    "websocket": websocket,
+                    "username": str(
+                        data.get("username", "Игрок")
+                    )[:40],
+                    "country": "🌐 Нейтральная территория",
+                    "country_id": "",
+                    "x": 0,
+                    "y": 0,
+                    "z": 0,
+                    "yaw": 0,
+                }
+
+                # Отправляем состояние мира
                 await websocket.send_text(json.dumps({
                     "type": "world_update",
                     "countries": ctw3_world["countries"]
                 }))
 
-                # Сообщаем остальным игрокам
+                # Отправляем список игроков и обновляем мир
+                await ctw3_broadcast_3d_players()
                 await ctw3_broadcast()
 
             # -------------------------
