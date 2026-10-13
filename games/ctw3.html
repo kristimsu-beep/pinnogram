@@ -4291,6 +4291,18 @@ select{
             >
                 🌐 3D View
             </button>
+            
+            <button
+                type="button"
+                id="ctw3Open3DDetalized"
+                class="ctw3-weather-toggle"
+                onclick="openCTW3Terrain3DDetalized()"
+                title="Открыть детализированный 3D-рельеф"
+                aria-label="Открыть детализированный 3D-рельеф"
+                style="width:auto;padding:0 12px;font-size:12px;white-space:nowrap;"
+            >
+                🏙️ 3D-detalized
+            </button>
 
             <button
                 type="button"
@@ -17038,6 +17050,13 @@ let ctw3Terrain3DLastMoveSent = 0;
 let ctw3Terrain3DCountries = [];
 let ctw3Terrain3DCountriesLoaded = false;
 
+let ctw3Terrain3DDetalizedMode = false;
+
+async function openCTW3Terrain3DDetalized() {
+    ctw3Terrain3DDetalizedMode = true;
+    await openCTW3Terrain3D();
+}
+
 async function ctw3Terrain3DLoadCountries() {
     try {
         const response = await fetch("/api/ctw3/countries");
@@ -17539,15 +17558,22 @@ async function openCTW3Terrain3D() {
 
         closeCTW3Terrain3DCleanup();
 
+
         const { lat, lon } = ctw3Terrain3DCoordinates;
-        const zoom = 10;
+      
+        const detailed = ctw3Terrain3DDetalizedMode;
+        const zoom = detailed ? 15 : 10;
         const centerTile = ctw3TerrainTileXY(lat, lon, zoom);
+
 
         status.textContent = "Загружаем карту и высоты...";
 
-        const tileCount = 3;
+
+        const tileCount = detailed ? 4 : 3;
         const tileSize = 256;
         const mosaicSize = tileCount * tileSize;
+        const tileStart = -Math.floor(tileCount / 2);
+
 
         const textureCanvas = document.createElement("canvas");
         textureCanvas.width = mosaicSize;
@@ -17570,37 +17596,39 @@ async function openCTW3Terrain3D() {
 
         let loaded = 0;
 
-        for (let ty = -1; ty <= 1; ty++) {
-            for (let tx = -1; tx <= 1; tx++) {
-                const x = centerTile.x + tx;
-                const y = centerTile.y + ty;
 
-                const dx = (tx + 1) * tileSize;
-                const dy = (ty + 1) * tileSize;
-
-
-                  const [mapImage, demImage] = await Promise.all([
-                      ctw3TerrainLoadImage(
-                          `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${y}/${x}`
-                      ),
-                      ctw3TerrainLoadImage(
-                          `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${zoom}/${x}/${y}.png`
-                      )
-                  ]);
-
+        for (let ty = 0; ty < tileCount; ty++) {
+            for (let tx = 0; tx < tileCount; tx++) {
+                const x = centerTile.x + tileStart + tx;
+                const y = centerTile.y + tileStart + ty;
+      
+                const dx = tx * tileSize;
+                const dy = ty * tileSize;
+      
+                const [mapImage, demImage] = await Promise.all([
+                    ctw3TerrainLoadImage(
+                        `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${y}/${x}`
+                    ),
+                    ctw3TerrainLoadImage(
+                        `https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${zoom}/${x}/${y}.png`
+                    )
+                ]);
+      
                 textureContext.drawImage(
                     mapImage, dx, dy, tileSize, tileSize
                 );
-
+      
                 heightContext.drawImage(
-                    demImage, dx, dy, tileSize, tileSize
+                  demImage, dx, dy, tileSize, tileSize
                 );
-
+      
                 loaded++;
+      
                 status.textContent =
-                    `Загружено тайлов: ${loaded}/9`;
+                    `Загружено тайлов: ${loaded}/${tileCount * tileCount}`;
             }
         }
+
 
         const imageData = heightContext.getImageData(
             0, 0, mosaicSize, mosaicSize
