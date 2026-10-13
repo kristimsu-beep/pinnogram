@@ -4936,6 +4936,64 @@ select{
         </button>
     </div>
 
+      <!-- CTW3 3D CHAT -->
+      <div id="ctw3Terrain3DChat" style="
+          position:absolute;
+          z-index:30;
+          left:16px;
+          bottom:52px;
+          width:min(360px,calc(100vw - 32px));
+          display:flex;
+          flex-direction:column;
+          gap:8px;
+          pointer-events:auto;
+      ">
+          <div id="ctw3Terrain3DChatMessages" style="
+              display:flex;
+              flex-direction:column;
+              gap:6px;
+              max-height:190px;
+              overflow-y:auto;
+              padding:8px;
+          "></div>
+      
+          <form id="ctw3Terrain3DChatForm" style="
+              display:flex;
+              gap:8px;
+              padding:8px;
+              background:#07111eeF;
+              border:1px solid #ffffff35;
+              border-radius:12px;
+              backdrop-filter:blur(10px);
+          ">
+              <input id="ctw3Terrain3DChatInput"
+                  type="text"
+                  maxlength="240"
+                  autocomplete="off"
+                  placeholder="Написать сообщение..."
+                  style="
+                      flex:1;
+                      min-width:0;
+                      padding:11px;
+                      border:1px solid #ffffff30;
+                      border-radius:8px;
+                      outline:none;
+                      background:#152437;
+                      color:white;
+                  ">
+      
+              <button type="submit" style="
+                  padding:10px 14px;
+                  border:0;
+                  border-radius:8px;
+                  background:#2585ed;
+                  color:white;
+                  font-weight:600;
+                  cursor:pointer;
+              ">➤</button>
+          </form>
+      </div>
+
     <div id="ctw3Terrain3DCanvas"
          style="position:absolute;inset:0;"></div>
 
@@ -17028,6 +17086,103 @@ function ctw3Terrain3DResolveCountry(lat, lon) {
     };
 }
 
+function ctw3Terrain3DSendChat(message) {
+    const text = String(message || "").trim().slice(0, 240);
+    if (!text) return;
+
+    if (
+        !ctw3Socket ||
+        ctw3Socket.readyState !== WebSocket.OPEN
+    ) {
+        ctw3Terrain3DAddChatMessage(
+            "Система",
+            "Нет подключения к серверу",
+            "🌐"
+        );
+        return;
+    }
+
+    ctw3Socket.send(JSON.stringify({
+        type: "player_chat",
+        player_id: ctw3PlayerId,
+        username:
+            document.getElementById("ctw3Terrain3DPlayerName")?.value ||
+            window.ctw3Username ||
+            "Игрок",
+        message: text
+    }));
+}
+
+function ctw3Terrain3DAddChatMessage(username, message, country) {
+    const box = document.getElementById(
+        "ctw3Terrain3DChatMessages"
+    );
+
+    if (!box) return;
+
+    const item = document.createElement("div");
+
+    item.style.cssText = `
+        padding:8px 10px;
+        border:1px solid #ffffff20;
+        border-radius:9px;
+        background:#07111edb;
+        color:white;
+        font:13px Arial,sans-serif;
+        overflow-wrap:anywhere;
+    `;
+
+    const title = document.createElement("strong");
+    title.textContent =
+        (country ? country + " " : "") +
+        (username || "Игрок") + ": ";
+
+    const body = document.createElement("span");
+    body.textContent = message || "";
+
+    item.append(title, body);
+    box.appendChild(item);
+
+    while (box.children.length > 40) {
+        box.firstElementChild.remove();
+    }
+
+    box.scrollTop = box.scrollHeight;
+}
+
+(function ctw3Terrain3DInitChat() {
+    const form = document.getElementById(
+        "ctw3Terrain3DChatForm"
+    );
+
+    const input = document.getElementById(
+        "ctw3Terrain3DChatInput"
+    );
+
+    if (!form || !input || form.dataset.ready) return;
+
+    form.dataset.ready = "1";
+
+    form.addEventListener("submit", function(event) {
+        event.preventDefault();
+
+        const message = input.value.trim();
+        if (!message) return;
+
+        ctw3Terrain3DSendChat(message);
+        input.value = "";
+        input.focus();
+    });
+
+    input.addEventListener("keydown", function(event) {
+        event.stopPropagation();
+    });
+
+    input.addEventListener("keyup", function(event) {
+        event.stopPropagation();
+    });
+})();
+
 function ctw3Terrain3DHandleMessage(data) {
     if (data.type === "players_update") {
         const seen = new Set();
@@ -17080,10 +17235,10 @@ function ctw3Terrain3DHandleMessage(data) {
     }
 
     if (data.type === "player_chat") {
-        console.log(
-            "[CTW3 3D chat]",
-            data.username,
-            data.message
+        ctw3Terrain3DAddChatMessage(
+            data.username || "Игрок",
+            data.message || "",
+            data.country || ""
         );
     }
 }
