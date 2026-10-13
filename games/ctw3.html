@@ -17504,22 +17504,31 @@ async function openCTW3Terrain3D() {
         return;
     }
 
-    const coordinateText =
-        document.getElementById("ctw3PointCoordinates")?.textContent || "";
-    const numbers = coordinateText.match(/-?\d+(?:\.\d+)?/g);
-
-    if (numbers && numbers.length >= 2) {
-        ctw3Terrain3DCoordinates = {
-            lat: Number(numbers[0]),
-            lon: Number(numbers[1])
-        };
-    } else if (typeof map !== "undefined" && map) {
-        const center = map.getCenter();
-        ctw3Terrain3DCoordinates = {
-            lat: center.lat,
-            lon: center.lng
-        };
-    }
+      const coordinateElement = document.getElementById(
+          "ctw3PointCoordinates"
+      );
+      
+      const coordinateText = coordinateElement?.textContent || "";
+      const numbers = coordinateText.match(/-?\d+(?:\.\d+)?/g);
+      
+      if (numbers && numbers.length >= 2) {
+          ctw3Terrain3DCoordinates = {
+              lat: Number(numbers[0]),
+              lon: Number(numbers[1])
+          };
+      } else if (typeof map !== "undefined" && map) {
+          const center = map.getCenter();
+      
+          ctw3Terrain3DCoordinates = {
+              lat: center.lat,
+              lon: center.lng
+          };
+      }
+      
+      console.log(
+          "[CTW3 3D] Центр загрузки:",
+          ctw3Terrain3DCoordinates
+      );
 
     if (!ctw3Terrain3DCoordinates ||
         !Number.isFinite(ctw3Terrain3DCoordinates.lat) ||
