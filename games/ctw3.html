@@ -17530,7 +17530,15 @@ async function openCTW3Terrain3D() {
     }
 
     overlay.style.display = "block";
-    status.textContent = "Загружаем Three.js...";
+    status.textContent = "Загружаем страны и Three.js...";
+
+    // Загружаем государства с сервера
+    await ctw3Terrain3DLoadCountries();
+
+    console.log(
+        "[CTW3 3D] Загружено стран:",
+        ctw3Terrain3DCountries.length
+    );
 
     try {
         const THREE = await import(
