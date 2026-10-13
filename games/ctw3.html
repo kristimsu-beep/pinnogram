@@ -17746,6 +17746,183 @@ async function openCTW3Terrain3D() {
 
         scene.add(terrain);
 
+        // Реальные объёмные здания — только в 3D-detalized
+        if (detailed) {
+            status.textContent = "Загружаем реальные 3D-здания…";
+
+            try {
+                const n = 2 ** zoom;
+                const pixelSize = 256 * n;
+
+                // Границы области загруженных 16 тайлов
+                const leftPixel = (centerTile.x + tileStart) * 256;
+                const topPixel = (centerTile.y + tileStart) * 256;
+                const rightPixel = leftPixel + mosaicSize;
+                const bottomPixel = topPixel + mosaicSize;
+
+                function pixelToLon(px) {
+                    return px / pixelSize * 360 - 180;
+                }
+
+                function pixelToLat(py) {
+                    const mercator = Math.PI * (1 - 2 * py / pixelSize);
+                    return Math.atan(Math.sinh(mercator)) * 180 / Math.PI;
+                }
+
+                const west = pixelToLon(leftPixel);
+                const east = pixelToLon(rightPixel);
+                const north = pixelToLat(topPixel);
+                const south = pixelToLat(bottomPixel);
+
+                const query = `
+                    [out:json][timeout:25];
+                    way["building"](${south},${west},${north},${east});
+                    out geom;
+                `;
+
+                const response = await fetch(
+                    "https://overpass-api.de/api/interpreter",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type":
+                                "application/x-www-form-urlencoded;charset=UTF-8"
+                        },
+                        body: "data=" + encodeURIComponent(query)
+                    }
+                );
+
+                if (!response.ok) {
+                    throw new Error("Overpass HTTP " + response.status);
+                }
+
+                const osm = await response.json();
+
+                const buildingMaterial = new THREE.MeshStandardMaterial({
+                    color: 0xb9b5ad,
+                    roughness: 0.92,
+                    metalness: 0.02
+                });
+
+                const roofMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x77736d,
+                    roughness: 1
+                });
+
+                function lonToWorldX(lon) {
+                    const px = (lon + 180) / 360 * pixelSize;
+                    return ((px - leftPixel) / mosaicSize - 0.5) * worldWidth;
+                }
+
+                function latToWorldZ(lat) {
+                    const latRad = Math.max(
+                        -85.05112878,
+                        Math.min(85.05112878, lat)
+                    ) * Math.PI / 180;
+
+                    const py =
+                        (1 - Math.asinh(Math.tan(latRad)) / Math.PI) /
+                        2 * pixelSize;
+
+                    return (0.5 - (py - topPixel) / mosaicSize) * worldWidth;
+                }
+
+                let addedBuildings = 0;
+
+                for (const way of (osm.elements || [])) {
+                    const points = way.geometry;
+                    if (!Array.isArray(points) || points.length < 4) continue;
+
+                    const first = points[0];
+                    const last = points[points.length - 1];
+
+                    // Нужен замкнутый контур
+                    if (
+                        first.lat !== last.lat ||
+                        first.lon !== last.lon
+                    ) continue;
+
+                    const shape = new THREE.Shape();
+
+                    points.forEach((point, index) => {
+                        const x = lonToWorldX(point.lon);
+                        const z = latToWorldZ(point.lat);
+
+                        if (index === 0) {
+                            shape.moveTo(x, -z);
+                        } else {
+                            shape.lineTo(x, -z);
+                        }
+                    });
+
+                    const tags = way.tags || {};
+                    let height = parseFloat(tags.height);
+
+                    if (!Number.isFinite(height) || height <= 0) {
+                        const levels = parseFloat(tags["building:levels"]);
+                        height = Number.isFinite(levels) && levels > 0
+                            ? levels * 3
+                            : 9;
+                    }
+
+                    // Не допускаем чрезмерно высоких случайных зданий
+                    height = Math.max(3, Math.min(height, 300));
+
+                    const geometry = new THREE.ExtrudeGeometry(shape, {
+                        depth: height,
+                        bevelEnabled: false,
+                        curveSegments: 1
+                    });
+
+                    // Превращаем глубину ExtrudeGeometry в вертикальную высоту
+                    geometry.rotateX(-Math.PI / 2);
+
+                    const building = new THREE.Mesh(
+                        geometry,
+                        buildingMaterial
+                    );
+
+                    const centerX = lonToWorldX(
+                        points.reduce((sum, p) => sum + p.lon, 0) /
+                        points.length
+                    );
+
+                    const centerZ = latToWorldZ(
+                        points.reduce((sum, p) => sum + p.lat, 0) /
+                        points.length
+                    );
+
+                    // Основание здания следует рельефу
+                    building.position.y = ctw3Terrain3DGetHeightAt(
+                        centerX,
+                        centerZ
+                    );
+
+                    building.castShadow = false;
+                    building.receiveShadow = true;
+                    scene.add(building);
+
+                    addedBuildings++;
+                }
+
+                status.textContent =
+                    `Здания загружены: ${addedBuildings}`;
+
+                console.log(
+                    "[CTW3 3D] Загружено объёмных зданий:",
+                    addedBuildings
+                );
+            } catch (buildingError) {
+                console.error(
+                    "[CTW3 3D] Ошибка загрузки зданий:",
+                    buildingError
+                );
+
+                status.textContent =
+                    "Рельеф загружен, но здания получить не удалось.";
+            }
+        }
+
         const skyGeometry = new THREE.SphereGeometry(50000, 24, 16);
         const skyMaterial = new THREE.MeshBasicMaterial({
             color: "#91c8ed",
