@@ -15,6 +15,14 @@
 <link rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"
+    }
+}
+</script>
+
 <style>
 
 *{
@@ -4928,7 +4936,40 @@ select{
               background:#172b38dd;color:white;cursor:pointer;">
               📷 Вернуться к камере
           </button>
-      </div>
+      
+            <button
+                id="ctw3AircraftSpawnButton"
+                type="button"
+                onclick="ctw3Terrain3DSpawnAircraft()"
+                style="
+                    padding:10px 14px;
+                    border:1px solid #ffffff55;
+                    border-radius:10px;
+                    background:#b52e3a;
+                    color:white;
+                    cursor:pointer;
+                    font-weight:600;
+                    pointer-events:auto;
+                "
+            >
+                ✈️ Заспавнить A320
+            </button>
+            
+            <div
+                id="ctw3AircraftStatus"
+                style="
+                    flex-basis:100%;
+                    max-width:min(560px,calc(100vw - 40px));
+                    padding:7px 10px;
+                    border-radius:8px;
+                    background:#07111edb;
+                    border:1px solid #ffffff25;
+                    color:#e8f2ff;
+                    font:12px/1.4 Arial,sans-serif;
+                "
+            >
+                Самолёт появится рядом с игроком.
+            </div>
 
         <button
             type="button"
@@ -17082,6 +17123,356 @@ let ctw3Terrain3DSkyDefaultMaterial = null;
 let ctw3Terrain3DSkyGeometry = null;
 let ctw3Terrain3DSkyTexture = null;
 
+let ctw3Terrain3DAircraft = null;
+let ctw3Terrain3DAircraftLoaderPromise = null;
+let ctw3Terrain3DLastFrameTimestamp = 0;
+
+function ctw3Terrain3DAircraftSetStatus(message) {
+    const status = document.getElementById("ctw3AircraftStatus");
+    if (status) status.textContent = message;
+}
+
+async function ctw3Terrain3DLoadAircraft() {
+    if (!ctw3Terrain3DTHREE) {
+        throw new Error("Сцена Three.js ещё не готова.");
+    }
+
+    if (!ctw3Terrain3DAircraftLoaderPromise) {
+        ctw3Terrain3DAircraftLoaderPromise = import(
+            "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/loaders/GLTFLoader.js"
+        ).then(module => module.GLTFLoader);
+    }
+
+    const GLTFLoader = await ctw3Terrain3DAircraftLoaderPromise;
+    const loader = new GLTFLoader();
+
+    return loader.loadAsync(
+        "/games_assets/airbus_a320_s7_airlines.glb"
+    );
+}
+
+async function ctw3Terrain3DSpawnAircraft() {
+    if (ctw3Terrain3DAircraft) {
+        ctw3Terrain3DDespawnAircraft();
+        return;
+    }
+
+    if (!ctw3Terrain3DScene || !ctw3Terrain3DRenderer) {
+        ctw3Terrain3DAircraftSetStatus(
+            "Сначала открой панораму 3D View."
+        );
+        return;
+    }
+
+    if (!ctw3Terrain3DPlayerMode || !ctw3Terrain3DPlayer) {
+        ctw3EnterPlayerMode();
+    }
+
+    const THREE = ctw3Terrain3DTHREE;
+    const player = ctw3Terrain3DPlayer;
+    const button = document.getElementById("ctw3AircraftSpawnButton");
+
+    if (!THREE || !player) {
+        ctw3Terrain3DAircraftSetStatus(
+            "Не удалось создать игрока. Перезапусти 3D-режим."
+        );
+        return;
+    }
+
+    if (button) button.disabled = true;
+
+    ctw3Terrain3DAircraftSetStatus("Загружаем Airbus A320…");
+
+    try {
+        const gltf = await ctw3Terrain3DLoadAircraft();
+        const model = gltf.scene;
+        const plane = new THREE.Group();
+
+        model.updateMatrixWorld(true);
+
+        let bounds = new THREE.Box3().setFromObject(model);
+        let size = bounds.getSize(new THREE.Vector3());
+
+        // Разворачиваем модель, если её длинная ось направлена по X.
+        if (size.x > size.z) {
+            model.rotation.y += Math.PI / 2;
+        }
+
+        model.updateMatrixWorld(true);
+
+        bounds = new THREE.Box3().setFromObject(model);
+        size = bounds.getSize(new THREE.Vector3());
+
+        const length = Math.max(size.x, size.z);
+
+        if (!Number.isFinite(length) || length <= 0) {
+            throw new Error("Не удалось определить размеры модели.");
+        }
+
+        // Ориентировочная длина A320 в игровых единицах.
+        model.scale.setScalar(45 / length);
+
+        model.updateMatrixWorld(true);
+        bounds = new THREE.Box3().setFromObject(model);
+
+        const center = bounds.getCenter(new THREE.Vector3());
+
+        model.position.x -= center.x;
+        model.position.z -= center.z;
+        model.position.y -= bounds.min.y;
+
+        model.traverse(object => {
+            if (object.isMesh) {
+                object.castShadow = true;
+                object.receiveShadow = true;
+            }
+        });
+
+        plane.add(model);
+
+        const heading = player.rotation.y || 0;
+
+        const forward = new THREE.Vector3(
+            -Math.sin(heading),
+            0,
+            -Math.cos(heading)
+        );
+
+        const x = THREE.MathUtils.clamp(
+            player.position.x + forward.x * 140,
+            -5000,
+            5000
+        );
+
+        const z = THREE.MathUtils.clamp(
+            player.position.z + forward.z * 140,
+            -5000,
+            5000
+        );
+
+        const ground = ctw3Terrain3DGetHeightAt(x, z);
+
+        plane.position.set(x, ground + 4, z);
+        plane.rotation.order = "YXZ";
+        plane.rotation.set(0, heading, 0);
+
+        plane.userData = {
+            heading,
+            pitch: 0,
+            roll: 0,
+            throttle: 0,
+            speed: 0,
+            modelLength: 45,
+            boundaryWarning: false
+        };
+
+        ctw3Terrain3DScene.add(plane);
+        ctw3Terrain3DAircraft = plane;
+
+        // Скрываем персонажа на время управления самолётом.
+        player.visible = false;
+
+        if (ctw3Terrain3DPlayerLabel) {
+            ctw3Terrain3DPlayerLabel.style.display = "none";
+        }
+
+        if (button) {
+            button.textContent = "🗑️ Удалить A320";
+            button.disabled = false;
+        }
+
+        ctw3Terrain3DAircraftSetStatus(
+            "A320 готов. W/S — тяга, A/D — поворот, ↑/↓ — тангаж."
+        );
+
+    } catch (error) {
+        console.error("[CTW3 AIRCRAFT]", error);
+
+        ctw3Terrain3DAircraftSetStatus(
+            "Ошибка загрузки самолёта: " +
+            (error?.message || error)
+        );
+
+        if (button) {
+            button.textContent = "✈️ Заспавнить A320";
+            button.disabled = false;
+        }
+    }
+}
+
+function ctw3Terrain3DDespawnAircraft() {
+    const plane = ctw3Terrain3DAircraft;
+    const button = document.getElementById("ctw3AircraftSpawnButton");
+
+    if (plane && ctw3Terrain3DScene) {
+        ctw3Terrain3DScene.remove(plane);
+
+        plane.traverse(object => {
+            object.geometry?.dispose();
+
+            if (!object.material) return;
+
+            const materials = Array.isArray(object.material)
+                ? object.material
+                : [object.material];
+
+            materials.forEach(material => {
+                material.dispose();
+            });
+        });
+    }
+
+    ctw3Terrain3DAircraft = null;
+
+    if (ctw3Terrain3DPlayer) {
+        ctw3Terrain3DPlayer.visible = true;
+    }
+
+    if (button) {
+        button.textContent = "✈️ Заспавнить A320";
+        button.disabled = false;
+    }
+
+    ctw3Terrain3DAircraftSetStatus(
+        "Самолёт удалён. Можно заспавнить его снова."
+    );
+}
+
+function ctw3Terrain3DAnimateAircraft(THREE, camera, keys, deltaTime) {
+    const plane = ctw3Terrain3DAircraft;
+    if (!plane) return;
+
+    const state = plane.userData;
+    const dt = Math.max(0, Math.min(0.05, deltaTime || 0.016));
+
+    if (keys.has("w")) {
+        state.throttle = Math.min(1, state.throttle + 0.38 * dt);
+    }
+
+    if (keys.has("s")) {
+        state.throttle = Math.max(0, state.throttle - 0.52 * dt);
+    }
+
+    const turn =
+        (keys.has("a") ? 1 : 0) -
+        (keys.has("d") ? 1 : 0);
+
+    state.heading += turn * (0.12 + state.speed / 500) * dt;
+
+    const pitchInput =
+        (keys.has("arrowup") ? 1 : 0) -
+        (keys.has("arrowdown") ? 1 : 0);
+
+    if (pitchInput) {
+        state.pitch = THREE.MathUtils.clamp(
+            state.pitch + pitchInput * 0.45 * dt,
+            -0.25,
+            0.38
+        );
+    } else {
+        state.pitch *= Math.exp(-0.45 * dt);
+    }
+
+    const targetRoll = -turn * 0.48;
+
+    state.roll +=
+        (targetRoll - state.roll) * Math.min(1, dt * 2.8);
+
+    const targetSpeed = state.throttle * 120;
+
+    state.speed +=
+        (targetSpeed - state.speed) * Math.min(1, dt * 0.8);
+
+    const forward = new THREE.Vector3(
+        -Math.sin(state.heading),
+        0,
+        -Math.cos(state.heading)
+    );
+
+    plane.position.x += forward.x * state.speed * dt;
+    plane.position.z += forward.z * state.speed * dt;
+
+    // Пока самолёт ограничен текущей загруженной областью.
+    const edge = 5400;
+
+    const hitEdge =
+        Math.abs(plane.position.x) >= edge ||
+        Math.abs(plane.position.z) >= edge;
+
+    plane.position.x = THREE.MathUtils.clamp(
+        plane.position.x, -edge, edge
+    );
+
+    plane.position.z = THREE.MathUtils.clamp(
+        plane.position.z, -edge, edge
+    );
+
+    const ground = ctw3Terrain3DGetHeightAt(
+        plane.position.x,
+        plane.position.z
+    );
+
+    const lift =
+        state.speed > 80 && state.throttle > 0.72 ? 8 : 0;
+
+    const climbRate =
+        state.speed * Math.sin(state.pitch) * 0.4 + lift;
+
+    plane.position.y += climbRate * dt;
+
+    if (plane.position.y < ground + 4) {
+        plane.position.y = ground + 4;
+    }
+
+    plane.rotation.set(
+        state.pitch,
+        state.heading,
+        state.roll,
+        "YXZ"
+    );
+
+    const distance = state.modelLength * 4;
+
+    const cameraOffset = new THREE.Vector3(
+        Math.sin(state.heading) * distance,
+        Math.max(70, state.modelLength * 1.5),
+        Math.cos(state.heading) * distance
+    );
+
+    const target = plane.position.clone().add(cameraOffset);
+
+    camera.position.lerp(
+        target,
+        Math.min(1, dt * 2.5)
+    );
+
+    camera.lookAt(
+        plane.position.clone().add(
+            new THREE.Vector3(0, state.modelLength * 0.2, 0)
+        )
+    );
+
+    if (hitEdge && !state.boundaryWarning) {
+        state.boundaryWarning = true;
+
+        ctw3Terrain3DAircraftSetStatus(
+            "Достигнут край карты. Динамическая загрузка новых " +
+            "тайлов ещё не подключена."
+        );
+
+    } else if (!hitEdge) {
+        state.boundaryWarning = false;
+
+        ctw3Terrain3DAircraftSetStatus(
+            "A320 · тяга " +
+            Math.round(state.throttle * 100) +
+            "% · скорость " +
+            Math.round(state.speed) +
+            " · W/S — тяга, A/D — курс, ↑/↓ — тангаж."
+        );
+    }
+}
+
 async function openCTW3Terrain3DDetalized() {
     ctw3Terrain3DDetalizedMode = true;
     await openCTW3Terrain3D();
@@ -18025,6 +18416,7 @@ async function openCTW3Terrain3D() {
         let lastY = 0;
 
         const keys = new Set();
+            ctw3Terrain3DLastFrameTimestamp = 0;
         const canvas = renderer.domElement;
 
         canvas.style.cursor = "grab";
@@ -18103,7 +18495,18 @@ async function openCTW3Terrain3D() {
             if (overlay.style.display === "none") return;
 
             ctw3Terrain3DFrame = requestAnimationFrame(animate);
-
+            
+            const frameNow = performance.now();
+            
+            const deltaTime = ctw3Terrain3DLastFrameTimestamp
+                ? Math.min(
+                    0.05,
+                    (frameNow - ctw3Terrain3DLastFrameTimestamp) / 1000
+                )
+                : 1 / 60;
+            
+            ctw3Terrain3DLastFrameTimestamp = frameNow;
+            
             const forward = new THREE.Vector3(
                 -Math.sin(yaw), 0, -Math.cos(yaw)
             );
@@ -18113,7 +18516,14 @@ async function openCTW3Terrain3D() {
 
             const speed = ctw3Terrain3DPlayerMode ? 8 : 18;
             
-            if (ctw3Terrain3DPlayerMode && ctw3Terrain3DPlayer) {
+            if (ctw3Terrain3DAircraft) {
+                ctw3Terrain3DAnimateAircraft(
+                    THREE,
+                    camera,
+                    keys,
+                    deltaTime
+                );
+            } else if (ctw3Terrain3DPlayerMode && ctw3Terrain3DPlayer) {
                 const player = ctw3Terrain3DPlayer;
             
                 const forward = new THREE.Vector3(
@@ -18280,6 +18690,18 @@ function closeCTW3Terrain3DCleanup() {
     }
 
     ctw3Terrain3DPointerHandler = null;
+
+    ctw3Terrain3DAircraft = null;
+    ctw3Terrain3DLastFrameTimestamp = 0;
+
+    const aircraftButton = document.getElementById(
+        "ctw3AircraftSpawnButton"
+    );
+
+    if (aircraftButton) {
+        aircraftButton.textContent = "✈️ Заспавнить A320";
+        aircraftButton.disabled = false;
+    }
 
     if (ctw3Terrain3DRenderer) {
         ctw3Terrain3DRenderer.dispose();
