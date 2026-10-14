@@ -6707,6 +6707,143 @@ async def ctw3_get_opensky_token():
             detail="OpenSky authentication failed"
         )
 
+# =========================================================
+# CTW3 — GENERATE WEATHER-BASED SKY WITH CLOUDFLARE
+# =========================================================
+
+@app.post("/api/ctw3/generate-sky")
+async def ctw3_generate_sky(data: dict):
+    account_id = os.getenv("CTW3_CLAUDFLARE_ACCOUNT_ID")
+    api_token = os.getenv("CTW3_CLAUDFLARE_TOKEN")
+
+    if not account_id or not api_token:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "CTW3_CLAUDFLARE_ACCOUNT_ID или "
+                "CTW3_CLAUDFLARE_TOKEN не настроен в Render"
+            )
+        )
+
+    try:
+        lat = float(data.get("lat"))
+        lon = float(data.get("lon"))
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="Не указаны корректные координаты"
+        )
+
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        raise HTTPException(
+            status_code=400,
+            detail="Координаты за пределами допустимого диапазона"
+        )
+
+    weather = str(data.get("weather", "переменная облачность"))[:200]
+    season = str(data.get("season", "лето"))[:30]
+    time_of_day = str(data.get("time_of_day", "день"))[:30]
+
+    image_prompt = f"""
+Create a breathtaking, photorealistic 360-degree panoramic sky
+environment for a realistic 3D world, viewed from ground level.
+
+Location coordinates: latitude {lat}, longitude {lon}.
+Current weather: {weather}.
+Season: {season}.
+Time of day: {time_of_day}.
+
+The sky must visually match the specified weather, season and time.
+Use physically believable atmospheric lighting, realistic clouds,
+natural colors and accurate sunlight direction for the time of day.
+For night, create a dark realistic sky with stars only when appropriate.
+For sunrise or sunset, use natural atmospheric gradients.
+
+IMPORTANT:
+- Sky and atmosphere only.
+- No ground, landscape, buildings, mountains, sea or horizon objects.
+- No text, logos, borders or watermarks.
+- Seamless panoramic composition suitable for a 360-degree sky dome.
+- Photorealistic, natural and immersive, not fantasy art.
+"""
+
+    model = "@cf/black-forest-labs/flux-1-schnell"
+
+    url = (
+        "https://api.cloudflare.com/client/v4/accounts/"
+        f"{account_id}/ai/run/{model}"
+    )
+
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                url,
+                headers=headers,
+                json={
+                    "prompt": image_prompt,
+                    "steps": 4
+                }
+            )
+
+        if response.status_code != 200:
+            print(
+                "[CTW3 SKY] Cloudflare error:",
+                response.status_code,
+                response.text[:1500]
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="Cloudflare не смог сгенерировать небо"
+            )
+
+        result_data = response.json()
+
+        if not result_data.get("success"):
+            print("[CTW3 SKY] API error:", result_data)
+            raise HTTPException(
+                status_code=502,
+                detail="Cloudflare вернул ошибку генерации"
+            )
+
+        image_base64 = (
+            result_data.get("result", {}).get("image")
+        )
+
+        if not image_base64:
+            raise HTTPException(
+                status_code=502,
+                detail="Cloudflare не вернул изображение"
+            )
+
+        # Поддерживаем ответ в Base64 и готовый data URL
+        if image_base64.startswith("data:image/"):
+            image_url = image_base64
+        else:
+            image_url = "data:image/png;base64," + image_base64
+
+        return {
+            "success": True,
+            "image": image_url,
+            "weather": weather,
+            "season": season,
+            "time_of_day": time_of_day
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as error:
+        print("[CTW3 SKY] Generation failed:", repr(error))
+        raise HTTPException(
+            status_code=502,
+            detail="Ошибка соединения с Cloudflare Workers AI"
+        )
+
 @app.get("/api/ctw3/opensky-api-test")
 async def ctw3_opensky_api_test():
 
