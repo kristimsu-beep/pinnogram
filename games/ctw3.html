@@ -4946,6 +4946,27 @@ select{
         >
             ✕ Закрыть
         </button>
+      
+        <button
+            type="button"
+            onclick="ctw3GenerateSky()"
+            style="padding:10px 14px;border:1px solid #ffffff55;
+            border-radius:10px;background:#25465ddd;color:white;
+            cursor:pointer;"
+        >
+            🌌 Сгенерировать небо
+        </button>
+      
+        <button
+            type="button"
+            onclick="ctw3RestoreSky()"
+            style="padding:10px 14px;border:1px solid #ffffff55;
+            border-radius:10px;background:#303944dd;color:white;
+            cursor:pointer;"
+        >
+            ☁️ Убрать небо
+        </button>
+
     </div>
 
       <!-- CTW3 3D CHAT -->
@@ -17052,6 +17073,11 @@ let ctw3Terrain3DCountriesLoaded = false;
 
 let ctw3Terrain3DDetalizedMode = false;
 
+let ctw3Terrain3DSky = null;
+let ctw3Terrain3DSkyDefaultMaterial = null;
+let ctw3Terrain3DSkyGeometry = null;
+let ctw3Terrain3DSkyTexture = null;
+
 async function openCTW3Terrain3DDetalized() {
     ctw3Terrain3DDetalizedMode = true;
     await openCTW3Terrain3D();
@@ -17933,13 +17959,23 @@ async function openCTW3Terrain3D() {
             }
         }
 
-        const skyGeometry = new THREE.SphereGeometry(50000, 24, 16);
+
+        const skyGeometry = new THREE.SphereGeometry(50000, 48, 32);
+      
         const skyMaterial = new THREE.MeshBasicMaterial({
             color: "#91c8ed",
-            side: THREE.BackSide
+            side: THREE.BackSide,
+            depthWrite: false
         });
+      
         const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+        sky.renderOrder = -1000;
         scene.add(sky);
+      
+        ctw3Terrain3DSky = sky;
+        ctw3Terrain3DSkyDefaultMaterial = skyMaterial;
+        ctw3Terrain3DSkyGeometry = skyGeometry;
+        ctw3Terrain3DSkyTexture = null;
 
         const camera = new THREE.PerspectiveCamera(
             65,
@@ -18273,6 +18309,136 @@ function closeCTW3Terrain3D() {
     const overlay = document.getElementById("ctw3Terrain3DOverlay");
     if (overlay) overlay.style.display = "none";
     closeCTW3Terrain3DCleanup();
+}
+
+async function ctw3GenerateSky() {
+    const status = document.getElementById("ctw3Terrain3DStatus");
+
+    if (!ctw3Terrain3DScene || !ctw3Terrain3DSky) {
+        if (status) status.textContent = "Сначала открой 3D-режим.";
+        return;
+    }
+
+    const { lat, lon } = ctw3Terrain3DCoordinates || {};
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        if (status) status.textContent = "Не удалось определить координаты.";
+        return;
+    }
+
+    try {
+        if (status) status.textContent = "Получаем погоду и генерируем небо…";
+
+        const weatherResponse = await fetch(
+            `/api/ctw3/weather?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`
+        );
+
+        if (!weatherResponse.ok) {
+            throw new Error("Не удалось получить погоду.");
+        }
+
+        const weatherData = await weatherResponse.json();
+        const current = weatherData.c || {};
+        const description =
+            current.weather?.[0]?.description ||
+            current.description ||
+            "переменная облачность";
+
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const season = month === 12 || month <= 2
+            ? "зима"
+            : month <= 5
+                ? "весна"
+                : month <= 8
+                    ? "лето"
+                    : "осень";
+
+        const hour = now.getHours();
+        const timeOfDay = hour < 5
+            ? "ночь"
+            : hour < 8
+                ? "рассвет"
+                : hour < 17
+                    ? "день"
+                    : hour < 20
+                        ? "закат"
+                        : "ночь";
+
+        const response = await fetch("/api/ctw3/generate-sky", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                lat,
+                lon,
+                weather: description,
+                season,
+                time_of_day: timeOfDay
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(await response.text());
+        }
+
+        const data = await response.json();
+
+        if (!data.image) {
+            throw new Error("Сервер не вернул изображение неба.");
+        }
+
+        const image = new Image();
+        image.onload = () => {
+            const THREE = ctw3Terrain3DTHREE;
+            const texture = new THREE.Texture(image);
+            texture.colorSpace = THREE.SRGBColorSpace;
+            texture.needsUpdate = true;
+
+            if (ctw3Terrain3DSkyTexture) {
+                ctw3Terrain3DSkyTexture.dispose();
+            }
+
+            ctw3Terrain3DSkyTexture = texture;
+            ctw3Terrain3DSky.material = new THREE.MeshBasicMaterial({
+                map: texture,
+                side: THREE.BackSide,
+                depthWrite: false
+            });
+
+            ctw3Terrain3DSky.material.needsUpdate = true;
+
+            if (status) status.textContent = "Сгенерированное небо установлено.";
+        };
+
+        image.onerror = () => {
+            if (status) status.textContent = "Не удалось открыть изображение неба.";
+        };
+
+        image.src = data.image;
+    } catch (error) {
+        console.error("[CTW3 SKY]", error);
+        if (status) status.textContent =
+            "Ошибка генерации неба: " + error.message;
+    }
+}
+
+function ctw3RestoreSky() {
+    if (!ctw3Terrain3DSky || !ctw3Terrain3DSkyDefaultMaterial) return;
+
+    if (ctw3Terrain3DSkyTexture) {
+        ctw3Terrain3DSkyTexture.dispose();
+        ctw3Terrain3DSkyTexture = null;
+    }
+
+    const currentMaterial = ctw3Terrain3DSky.material;
+    if (currentMaterial && currentMaterial !== ctw3Terrain3DSkyDefaultMaterial) {
+        currentMaterial.dispose();
+    }
+
+    ctw3Terrain3DSky.material = ctw3Terrain3DSkyDefaultMaterial;
+
+    const status = document.getElementById("ctw3Terrain3DStatus");
+    if (status) status.textContent = "Возвращено обычное небо.";
 }
 
 </script>
