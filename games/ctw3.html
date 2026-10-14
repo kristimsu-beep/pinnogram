@@ -18410,6 +18410,18 @@ async function ctw3GenerateSky() {
             });
 
             ctw3Terrain3DSky.material.needsUpdate = true;
+            // Убираем однотонный фон, чтобы было видно текстуру неба
+            if (ctw3Terrain3DScene) {
+                ctw3Terrain3DScene.background = null;
+            }
+            
+            // Убираем туман, который может перекрывать изображение
+            if (ctw3Terrain3DScene) {
+                ctw3Terrain3DScene.fog = null;
+            }
+            
+            ctw3Terrain3DSky.visible = true;
+            ctw3Terrain3DSky.renderOrder = -1000;
 
             if (status) status.textContent = "Сгенерированное небо установлено.";
         };
@@ -18438,6 +18450,11 @@ function ctw3RestoreSky() {
     if (currentMaterial && currentMaterial !== ctw3Terrain3DSkyDefaultMaterial) {
         currentMaterial.dispose();
     }
+
+    if (ctw3Terrain3DScene) {
+          ctw3Terrain3DScene.background = new THREE.Color("#91c8ed");
+          ctw3Terrain3DScene.fog = new THREE.Fog("#91c8ed", 10000, 26000);
+      }
 
     ctw3Terrain3DSky.material = ctw3Terrain3DSkyDefaultMaterial;
 
