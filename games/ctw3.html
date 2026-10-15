@@ -17198,12 +17198,14 @@ async function ctw3Terrain3DSpawnAircraft() {
         let bounds = new THREE.Box3().setFromObject(model);
         let size = bounds.getSize(new THREE.Vector3());
 
-        // Ориентируем длинную ось модели вдоль направления полёта.
+        // Сначала выравниваем длинную ось модели.
         if (size.x > size.z) {
             model.rotation.y += Math.PI / 2;
         }
-
-        // Не добавляем дополнительный разворот на 180 градусов.
+      
+        // Разворачиваем нос A320 в направление движения самолёта.
+        model.rotation.y += Math.PI;
+      
         model.updateMatrixWorld(true);
 
         bounds = new THREE.Box3().setFromObject(model);
@@ -17387,9 +17389,6 @@ function ctw3Terrain3DAnimateAircraft(THREE, camera, keys, deltaTime) {
     const targetSpeed = state.throttle * 200;
     state.speed += (targetSpeed - state.speed) * Math.min(1, dt * 0.8);
 
-    // Не двигаем самолёт, пока загружается новый участок карты.
-    if (ctw3Terrain3DTileReloadBusy) return;
-
     const forward = new THREE.Vector3(
         -Math.sin(state.heading),
         0,
@@ -17416,16 +17415,16 @@ function ctw3Terrain3DAnimateAircraft(THREE, camera, keys, deltaTime) {
             targetZoom !== ctw3Terrain3DMapState.zoom
         );
 
-    if (
-        needsNewTiles &&
-        Date.now() >= ctw3Terrain3DTileReloadRetryAfter
-    ) {
-        void ctw3Terrain3DReloadTilesAroundAircraft(
-            plane,
-            targetZoom
-        );
-        return;
-    }
+      if (
+          needsNewTiles &&
+          !ctw3Terrain3DTileReloadBusy &&
+          Date.now() >= ctw3Terrain3DTileReloadRetryAfter
+      ) {
+          void ctw3Terrain3DReloadTilesAroundAircraft(
+              plane,
+              targetZoom
+          );
+      }
 
     // Если загрузка временно не удалась — удерживаем самолёт в пределах карты.
     if (Date.now() < ctw3Terrain3DTileReloadRetryAfter) {
@@ -19003,17 +19002,19 @@ async function ctw3Terrain3DReloadTilesAroundAircraft(plane, zoom) {
 
     const THREE = ctw3Terrain3DTHREE;
     const scene = ctw3Terrain3DScene;
-    const oldX = plane.position.x;
-    const oldZ = plane.position.z;
-    const oldGround = ctw3Terrain3DGetHeightAt(oldX, oldZ);
-    const altitude = Math.max(0, plane.position.y - oldGround);
-    const centerGeo = ctw3Terrain3DGeo(oldX, oldZ);
+    const oldTerrain = ctw3Terrain3DTerrain;
+
+    // Запоминаем географический центр в старой системе координат.
+    const requestedGeo = ctw3Terrain3DGeo(
+        plane.position.x,
+        plane.position.z
+    );
 
     ctw3Terrain3DTileReloadBusy = true;
 
-    ctw3Terrain3DAircraftSetStatus(
-        "Загружаем новые спутниковые тайлы…"
-    );
+    let newGeometry = null;
+    let newTexture = null;
+    let newMaterial = null;
 
     try {
         zoom = Math.max(7, Math.min(16, Math.round(zoom)));
@@ -19022,9 +19023,10 @@ async function ctw3Terrain3DReloadTilesAroundAircraft(plane, zoom) {
         const tileSize = 256;
         const mosaicSize = tileCount * tileSize;
         const tileStart = -Math.floor(tileCount / 2);
+
         const centerTile = ctw3TerrainTileXY(
-            centerGeo.lat,
-            centerGeo.lon,
+            requestedGeo.lat,
+            requestedGeo.lon,
             zoom
         );
 
@@ -19057,19 +19059,30 @@ async function ctw3Terrain3DReloadTilesAroundAircraft(plane, zoom) {
         heightContext.fillStyle = "rgb(128,128,128)";
         heightContext.fillRect(0, 0, mosaicSize, mosaicSize);
 
+        // Скачиваем тайлы асинхронно, рядами, чтобы не перегружать сеть.
         for (let ty = 0; ty < tileCount; ty++) {
+            if (
+                ctw3Terrain3DScene !== scene ||
+                ctw3Terrain3DAircraft !== plane
+            ) {
+                return;
+            }
+
             const row = await Promise.all(
                 Array.from({ length: tileCount }, async (_, tx) => {
                     const x = centerTile.x + tileStart + tx;
                     const y = centerTile.y + tileStart + ty;
-
                     const maxTile = 2 ** zoom;
 
                     if (
                         x < 0 || x >= maxTile ||
                         y < 0 || y >= maxTile
                     ) {
-                        return { tx, mapImage: null, demImage: null };
+                        return {
+                            tx,
+                            mapImage: null,
+                            demImage: null
+                        };
                     }
 
                     const [mapImage, demImage] = await Promise.all([
@@ -19092,21 +19105,39 @@ async function ctw3Terrain3DReloadTilesAroundAircraft(plane, zoom) {
                 const dy = ty * tileSize;
 
                 textureContext.drawImage(
-                    item.mapImage, dx, dy, tileSize, tileSize
+                    item.mapImage,
+                    dx,
+                    dy,
+                    tileSize,
+                    tileSize
                 );
 
                 heightContext.drawImage(
-                    item.demImage, dx, dy, tileSize, tileSize
+                    item.demImage,
+                    dx,
+                    dy,
+                    tileSize,
+                    tileSize
                 );
             }
-
-            ctw3Terrain3DAircraftSetStatus(
-                `Загружаем карту: ${ty + 1}/${tileCount} рядов…`
-            );
         }
 
+        if (
+            ctw3Terrain3DScene !== scene ||
+            ctw3Terrain3DAircraft !== plane
+        ) {
+            return;
+        }
+
+        ctw3Terrain3DAircraftSetStatus(
+            "Подготавливаем новую поверхность карты…"
+        );
+
         const pixels = heightContext.getImageData(
-            0, 0, mosaicSize, mosaicSize
+            0,
+            0,
+            mosaicSize,
+            mosaicSize
         ).data;
 
         const segments = 128;
@@ -19119,11 +19150,13 @@ async function ctw3Terrain3DReloadTilesAroundAircraft(plane, zoom) {
 
         function sampleHeight(px, py) {
             const ix = Math.max(
-                0, Math.min(mosaicSize - 1, Math.round(px))
+                0,
+                Math.min(mosaicSize - 1, Math.round(px))
             );
 
             const iy = Math.max(
-                0, Math.min(mosaicSize - 1, Math.round(py))
+                0,
+                Math.min(mosaicSize - 1, Math.round(py))
             );
 
             const p = (iy * mosaicSize + ix) * 4;
@@ -19166,48 +19199,85 @@ async function ctw3Terrain3DReloadTilesAroundAircraft(plane, zoom) {
             }
         }
 
-        const geometry = new THREE.BufferGeometry();
+        newGeometry = new THREE.BufferGeometry();
 
-        geometry.setAttribute(
+        newGeometry.setAttribute(
             "position",
             new THREE.Float32BufferAttribute(positions, 3)
         );
 
-        geometry.setAttribute(
+        newGeometry.setAttribute(
             "uv",
             new THREE.Float32BufferAttribute(uvs, 2)
         );
 
-        geometry.setIndex(indices);
-        geometry.computeVertexNormals();
+        newGeometry.setIndex(indices);
+        newGeometry.computeVertexNormals();
 
-        const texture = new THREE.CanvasTexture(textureCanvas);
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.anisotropy = 4;
+        newTexture = new THREE.CanvasTexture(textureCanvas);
+        newTexture.colorSpace = THREE.SRGBColorSpace;
+        newTexture.anisotropy = 4;
 
-        const material = new THREE.MeshStandardMaterial({
-            map: texture,
+        newMaterial = new THREE.MeshStandardMaterial({
+            map: newTexture,
             roughness: 1,
-            metalness: 0
+            metalness: 0,
+            transparent: true,
+            opacity: 0,
+            depthWrite: false,
+            polygonOffset: true,
+            polygonOffsetFactor: -1
         });
 
-        const newTerrain = new THREE.Mesh(geometry, material);
-        newTerrain.userData.ctw3Terrain = true;
+        const newTerrain = new THREE.Mesh(
+            newGeometry,
+            newMaterial
+        );
 
+        newTerrain.userData.ctw3Terrain = true;
+        newTerrain.renderOrder = 2;
+
+        if (
+            ctw3Terrain3DScene !== scene ||
+            ctw3Terrain3DAircraft !== plane
+        ) {
+            newGeometry.dispose();
+            newTexture.dispose();
+            newMaterial.dispose();
+            return;
+        }
+
+        // Самолёт мог переместиться, пока тайлы загружались.
+        const currentX = plane.position.x;
+        const currentZ = plane.position.z;
+
+        const currentGeo = ctw3Terrain3DGeo(
+            currentX,
+            currentZ
+        );
+
+        const oldGround = ctw3Terrain3DGetHeightAt(
+            currentX,
+            currentZ
+        );
+
+        const altitude = Math.max(
+            0,
+            plane.position.y - oldGround
+        );
+
+        // Находим положение самолёта в новой системе координат.
         const newPlanePosition = ctw3Terrain3DWorldFromGeo(
-            centerGeo,
+            currentGeo,
             nextMapState
         );
 
-        const shiftX = oldX - newPlanePosition.x;
-        const shiftZ = oldZ - newPlanePosition.z;
+        const shiftX = currentX - newPlanePosition.x;
+        const shiftZ = currentZ - newPlanePosition.z;
 
-        // Убираем старую поверхность и здания старой области.
+        // Сохраняем старую карту до завершения плавного перехода.
         for (const object of [...scene.children]) {
-            if (
-                object === ctw3Terrain3DTerrain ||
-                object.userData?.ctw3DynamicBuilding
-            ) {
+            if (object.userData?.ctw3DynamicBuilding) {
                 scene.remove(object);
 
                 object.geometry?.dispose();
@@ -19217,22 +19287,21 @@ async function ctw3Terrain3DReloadTilesAroundAircraft(plane, zoom) {
                         ? object.material
                         : [object.material];
 
-                    materials.forEach(m => {
-                        m.map?.dispose();
-                        m.dispose();
+                    materials.forEach(material => {
+                        material.map?.dispose();
+                        material.dispose();
                     });
                 }
 
                 continue;
             }
 
-            // Свет и небо остаются на месте.
+            // Освещение и небо не перемещаем.
             if (object.isLight || object === ctw3Terrain3DSky) {
                 continue;
             }
 
-            // Переносим самолёт, игрока и остальных объектов,
-            // сохраняя их взаимное расположение.
+            // Переносим старую поверхность и остальные объекты.
             object.position.x -= shiftX;
             object.position.z -= shiftZ;
         }
@@ -19240,6 +19309,7 @@ async function ctw3Terrain3DReloadTilesAroundAircraft(plane, zoom) {
         ctw3Terrain3DCamera.position.x -= shiftX;
         ctw3Terrain3DCamera.position.z -= shiftZ;
 
+        // Сохраняем новую карту высот.
         ctw3Terrain3DHeightData = {
             heights,
             segments,
@@ -19247,7 +19317,7 @@ async function ctw3Terrain3DReloadTilesAroundAircraft(plane, zoom) {
         };
 
         ctw3Terrain3DMapState = nextMapState;
-        ctw3Terrain3DCoordinates = centerGeo;
+        ctw3Terrain3DCoordinates = currentGeo;
 
         ctw3Terrain3DTerrain = newTerrain;
         scene.add(newTerrain);
@@ -19259,25 +19329,104 @@ async function ctw3Terrain3DReloadTilesAroundAircraft(plane, zoom) {
 
         plane.position.y = newGround + altitude;
 
+        // Плавный переход: новая карта появляется, старая исчезает.
+        const fadeStart = performance.now();
+        const fadeDuration = 700;
+        const previousTerrain = oldTerrain;
+
+        if (previousTerrain?.material) {
+            const oldMaterials = Array.isArray(previousTerrain.material)
+                ? previousTerrain.material
+                : [previousTerrain.material];
+
+            oldMaterials.forEach(material => {
+                material.transparent = true;
+                material.opacity = 1;
+                material.depthWrite = false;
+                material.needsUpdate = true;
+            });
+
+            previousTerrain.renderOrder = 1;
+        }
+
+        function fadeTerrain(now) {
+            if (ctw3Terrain3DScene !== scene) return;
+
+            const progress = Math.min(
+                1,
+                (now - fadeStart) / fadeDuration
+            );
+
+            const eased = progress * progress * (3 - 2 * progress);
+
+            newTerrain.material.opacity = eased;
+
+            if (previousTerrain?.material) {
+                const oldMaterials = Array.isArray(previousTerrain.material)
+                    ? previousTerrain.material
+                    : [previousTerrain.material];
+
+                oldMaterials.forEach(material => {
+                    material.opacity = 1 - eased;
+                });
+            }
+
+            if (progress < 1) {
+                requestAnimationFrame(fadeTerrain);
+                return;
+            }
+
+            newTerrain.material.transparent = false;
+            newTerrain.material.opacity = 1;
+            newTerrain.material.depthWrite = true;
+            newTerrain.material.needsUpdate = true;
+
+            if (previousTerrain && previousTerrain !== newTerrain) {
+                scene.remove(previousTerrain);
+                previousTerrain.geometry?.dispose();
+
+                if (previousTerrain.material) {
+                    const materials = Array.isArray(previousTerrain.material)
+                        ? previousTerrain.material
+                        : [previousTerrain.material];
+
+                    materials.forEach(material => {
+                        material.map?.dispose();
+                        material.dispose();
+                    });
+                }
+            }
+        }
+
+        requestAnimationFrame(fadeTerrain);
+
         plane.userData.boundaryWarning = false;
+
         ctw3Terrain3DAircraftSetStatus(
-            `Карта обновлена · зум ${zoom} · ` +
-            "самолёт продолжает полёт."
+            `Карта обновлена · зум ${zoom} · скорость ` +
+            `${Math.round(plane.userData.speed || 0)}/200`
         );
 
         console.log("[CTW3 AIRCRAFT] Тайлы обновлены", {
-            lat: centerGeo.lat,
-            lon: centerGeo.lon,
+            lat: currentGeo.lat,
+            lon: currentGeo.lon,
             zoom
         });
 
     } catch (error) {
-        console.error("[CTW3 AIRCRAFT] Ошибка обновления тайлов:", error);
+        console.error(
+            "[CTW3 AIRCRAFT] Ошибка обновления тайлов:",
+            error
+        );
+
+        newGeometry?.dispose();
+        newTexture?.dispose();
+        newMaterial?.dispose();
 
         ctw3Terrain3DTileReloadRetryAfter = Date.now() + 5000;
 
         ctw3Terrain3DAircraftSetStatus(
-            "Ошибка загрузки новых тайлов. Повторим попытку через 5 секунд."
+            "Не удалось обновить тайлы. Повторим через 5 секунд."
         );
 
     } finally {
