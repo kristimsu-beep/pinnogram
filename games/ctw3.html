@@ -17198,14 +17198,12 @@ async function ctw3Terrain3DSpawnAircraft() {
         let bounds = new THREE.Box3().setFromObject(model);
         let size = bounds.getSize(new THREE.Vector3());
 
-        // Разворачиваем модель, если её длинная ось направлена по X.
+        // Ориентируем длинную ось модели вдоль направления полёта.
         if (size.x > size.z) {
             model.rotation.y += Math.PI / 2;
         }
-      
-        // Разворачиваем нос самолёта вперёд по направлению движения.
-        model.rotation.y += Math.PI;
 
+        // Не добавляем дополнительный разворот на 180 градусов.
         model.updateMatrixWorld(true);
 
         bounds = new THREE.Box3().setFromObject(model);
@@ -17217,7 +17215,7 @@ async function ctw3Terrain3DSpawnAircraft() {
             throw new Error("Не удалось определить размеры модели.");
         }
 
-        // Ориентировочная длина A320 в игровых единицах.
+        // Длина самолёта в игровых единицах.
         model.scale.setScalar(45 / length);
 
         model.updateMatrixWorld(true);
@@ -17240,77 +17238,29 @@ async function ctw3Terrain3DSpawnAircraft() {
 
         const heading = player.rotation.y || 0;
 
-            const forward = new THREE.Vector3(
-                -Math.sin(state.heading),
-                0,
-                -Math.cos(state.heading)
-            );
-            
-            plane.position.x += forward.x * state.speed * dt;
-            plane.position.z += forward.z * state.speed * dt;
-            
-            if (ctw3Terrain3DTileReloadBusy) return;
-            
-            const currentGround = ctw3Terrain3DGetHeightAt(
-                plane.position.x,
-                plane.position.z
-            );
-            
-            const altitudeForZoom = Math.max(
-                0,
-                plane.position.y - currentGround
-            );
-            
-            const targetZoom = ctw3Terrain3DZoomForAltitude(
-                altitudeForZoom
-            );
-            
-            const needsNewTiles =
-                Math.abs(plane.position.x) > 3000 ||
-                Math.abs(plane.position.z) > 3000 ||
-                (
-                    ctw3Terrain3DMapState &&
-                    targetZoom !== ctw3Terrain3DMapState.zoom
-                );
-            
-            if (
-                needsNewTiles &&
-                Date.now() >= ctw3Terrain3DTileReloadRetryAfter
-            ) {
-                void ctw3Terrain3DReloadTilesAroundAircraft(
-                    plane,
-                    targetZoom
-                );
-            
-                return;
-            }
-            
-            if (Date.now() < ctw3Terrain3DTileReloadRetryAfter) {
-                plane.position.x = THREE.MathUtils.clamp(
-                    plane.position.x, -5400, 5400
-                );
-            
-                plane.position.z = THREE.MathUtils.clamp(
-                    plane.position.z, -5400, 5400
-                );
-            }
-            
-            const ground = ctw3Terrain3DGetHeightAt(
-                plane.position.x,
-                plane.position.z
-            );
-            
-            const lift =
-                state.speed > 80 && state.throttle > 0.72 ? 8 : 0;
-            
-            const climbRate =
-                state.speed * Math.sin(state.pitch) * 0.4 + lift;
-            
-            plane.position.y += climbRate * dt;
-            
-            if (plane.position.y < ground + 4) {
-                plane.position.y = ground + 4;
-            }
+        // Спавним самолёт перед персонажем.
+        const forward = new THREE.Vector3(
+            -Math.sin(heading),
+            0,
+            -Math.cos(heading)
+        );
+
+        const x = THREE.MathUtils.clamp(
+            player.position.x + forward.x * 140,
+            -5000,
+            5000
+        );
+
+        const z = THREE.MathUtils.clamp(
+            player.position.z + forward.z * 140,
+            -5000,
+            5000
+        );
+
+        const ground = ctw3Terrain3DGetHeightAt(x, z);
+
+        plane.position.set(x, ground + 4, z);
+        plane.rotation.order = "YXZ";
         plane.rotation.set(0, heading, 0);
 
         plane.userData = {
@@ -17431,14 +17381,14 @@ function ctw3Terrain3DAnimateAircraft(THREE, camera, keys, deltaTime) {
     }
 
     const targetRoll = -turn * 0.48;
+    state.roll += (targetRoll - state.roll) * Math.min(1, dt * 2.8);
 
-    state.roll +=
-        (targetRoll - state.roll) * Math.min(1, dt * 2.8);
-
+    // Максимальная игровая скорость — 200.
     const targetSpeed = state.throttle * 200;
+    state.speed += (targetSpeed - state.speed) * Math.min(1, dt * 0.8);
 
-    state.speed +=
-        (targetSpeed - state.speed) * Math.min(1, dt * 0.8);
+    // Не двигаем самолёт, пока загружается новый участок карты.
+    if (ctw3Terrain3DTileReloadBusy) return;
 
     const forward = new THREE.Vector3(
         -Math.sin(state.heading),
@@ -17449,20 +17399,43 @@ function ctw3Terrain3DAnimateAircraft(THREE, camera, keys, deltaTime) {
     plane.position.x += forward.x * state.speed * dt;
     plane.position.z += forward.z * state.speed * dt;
 
-    // Пока самолёт ограничен текущей загруженной областью.
-    const edge = 5400;
-
-    const hitEdge =
-        Math.abs(plane.position.x) >= edge ||
-        Math.abs(plane.position.z) >= edge;
-
-    plane.position.x = THREE.MathUtils.clamp(
-        plane.position.x, -edge, edge
+    const currentGround = ctw3Terrain3DGetHeightAt(
+        plane.position.x,
+        plane.position.z
     );
 
-    plane.position.z = THREE.MathUtils.clamp(
-        plane.position.z, -edge, edge
-    );
+    const altitude = Math.max(0, plane.position.y - currentGround);
+    const targetZoom = ctw3Terrain3DZoomForAltitude(altitude);
+
+    // Подгружаем соседнюю область до того, как самолёт достигнет края.
+    const needsNewTiles =
+        Math.abs(plane.position.x) > 3000 ||
+        Math.abs(plane.position.z) > 3000 ||
+        (
+            ctw3Terrain3DMapState &&
+            targetZoom !== ctw3Terrain3DMapState.zoom
+        );
+
+    if (
+        needsNewTiles &&
+        Date.now() >= ctw3Terrain3DTileReloadRetryAfter
+    ) {
+        void ctw3Terrain3DReloadTilesAroundAircraft(
+            plane,
+            targetZoom
+        );
+        return;
+    }
+
+    // Если загрузка временно не удалась — удерживаем самолёт в пределах карты.
+    if (Date.now() < ctw3Terrain3DTileReloadRetryAfter) {
+        plane.position.x = THREE.MathUtils.clamp(
+            plane.position.x, -5400, 5400
+        );
+        plane.position.z = THREE.MathUtils.clamp(
+            plane.position.z, -5400, 5400
+        );
+    }
 
     const ground = ctw3Terrain3DGetHeightAt(
         plane.position.x,
@@ -17472,10 +17445,9 @@ function ctw3Terrain3DAnimateAircraft(THREE, camera, keys, deltaTime) {
     const lift =
         state.speed > 80 && state.throttle > 0.72 ? 8 : 0;
 
-    const climbRate =
-        state.speed * Math.sin(state.pitch) * 0.4 + lift;
-
-    plane.position.y += climbRate * dt;
+    plane.position.y += (
+        state.speed * Math.sin(state.pitch) * 0.4 + lift
+    ) * dt;
 
     if (plane.position.y < ground + 4) {
         plane.position.y = ground + 4;
@@ -17490,16 +17462,16 @@ function ctw3Terrain3DAnimateAircraft(THREE, camera, keys, deltaTime) {
 
     const distance = state.modelLength * 4;
 
-    const cameraOffset = new THREE.Vector3(
-        Math.sin(state.heading) * distance,
-        Math.max(70, state.modelLength * 1.5),
-        Math.cos(state.heading) * distance
+    const cameraTarget = plane.position.clone().add(
+        new THREE.Vector3(
+            Math.sin(state.heading) * distance,
+            Math.max(70, state.modelLength * 1.5),
+            Math.cos(state.heading) * distance
+        )
     );
 
-    const target = plane.position.clone().add(cameraOffset);
-
     camera.position.lerp(
-        target,
+        cameraTarget,
         Math.min(1, dt * 2.5)
     );
 
@@ -17509,25 +17481,12 @@ function ctw3Terrain3DAnimateAircraft(THREE, camera, keys, deltaTime) {
         )
     );
 
-    if (hitEdge && !state.boundaryWarning) {
-        state.boundaryWarning = true;
-
-        ctw3Terrain3DAircraftSetStatus(
-            "Достигнут край карты. Динамическая загрузка новых " +
-            "тайлов ещё не подключена."
-        );
-
-    } else if (!hitEdge) {
-        state.boundaryWarning = false;
-
-        ctw3Terrain3DAircraftSetStatus(
-            "A320 · тяга " +
-            Math.round(state.throttle * 100) +
-            "% · скорость " +
-            Math.round(state.speed) +
-            " · W/S — тяга, A/D — курс, ↑/↓ — тангаж."
-        );
-    }
+    ctw3Terrain3DAircraftSetStatus(
+        "A320 · тяга " + Math.round(state.throttle * 100) +
+        "% · скорость " + Math.round(state.speed) +
+        "/200 · высота " + Math.round(plane.position.y - ground) +
+        " м · зум карты " + (ctw3Terrain3DMapState?.zoom ?? "—")
+    );
 }
 
 async function openCTW3Terrain3DDetalized() {
