@@ -2094,39 +2094,185 @@ async def add_short_comment(data: dict):
 
 
 # 1. Роут для регистрации и входа
+
+import hmac
+import hashlib
+import secrets
+from datetime import datetime, timezone
+
+
+def pinnogram_password_hash(password: str, salt: str) -> str:
+    return hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        bytes.fromhex(salt),
+        310000
+    ).hex()
+
+
 @app.post("/auth")
 async def auth(data: dict):
-    username = data.get("username")
-    password = data.get("password")
-    async with aiosqlite.connect(DB_PATH) as db:
-        # Индексы: 0 - password, 1 - avatar
-        async with db.execute("SELECT password, avatar FROM users WHERE username = ?", (username,)) as cursor:
-            user = await cursor.fetchone()
-            if user:
-                if str(user[0]) == str(password): # Приводим к строке для надежности
-                    return {"status": "ok", "avatar": user[1]} # ИСПРАВЛЕНО: берем индекс 1
-                else:
-                    return {"status": "error", "message": "Неверный пароль"}
-            else:
-                # Если пользователя нет — регистрируем
-                await db.execute("INSERT INTO users (username, password, avatar) VALUES (?, ?, ?)", 
-                                (username, password, ""))
-                await db.commit()
-                return {"status": "ok", "avatar": ""}
+    username = str(data.get("username") or "").strip()
+    password = str(data.get("password") or "")
+
+    if not username or not password:
+        return {
+            "status": "error",
+            "message": "Введите никнейм и пароль"
+        }
+
+    username_lower = username.casefold()
+
+    user = await pinnogram_users.find_one({
+        "username_lower": username_lower
+    })
+
+    if user is None:
+        if username_lower == "joseff":
+            return {
+                "status": "error",
+                "message": (
+                    "Аккаунт Joseff ещё не восстановлен. "
+                    "Используйте защищённое восстановление."
+                )
+            }
+
+        # Новые аккаунты сохраняются в MongoDB.
+        salt = secrets.token_hex(16)
+        await pinnogram_users.insert_one({
+            "username": username,
+            "username_lower": username_lower,
+            "password_salt": salt,
+            "password_hash": pinnogram_password_hash(
+                password, salt
+            ),
+            "avatar": "",
+            "created_at": datetime.now(timezone.utc)
+        })
+
+        return {"status": "ok", "avatar": ""}
+
+    salt = user.get("password_salt")
+    stored_hash = user.get("password_hash")
+
+    if not salt or not stored_hash:
+        return {
+            "status": "error",
+            "message": "Для аккаунта требуется восстановление доступа"
+        }
+
+    supplied_hash = pinnogram_password_hash(password, salt)
+
+    if not hmac.compare_digest(supplied_hash, stored_hash):
+        return {
+            "status": "error",
+            "message": "Неверный никнейм или пароль"
+        }
+
+    return {
+        "status": "ok",
+        "avatar": user.get("avatar", "")
+    }
+
+
+@app.post("/api/account/recover")
+async def recover_pinnogram_account(data: dict):
+    recovery_key = os.getenv("PINNOGRAM_RECOVERY_KEY")
+
+    if not recovery_key:
+        raise HTTPException(
+            status_code=503,
+            detail="Восстановление временно не настроено"
+        )
+
+    supplied_key = str(data.get("recovery_key") or "")
+
+    if not hmac.compare_digest(supplied_key, recovery_key):
+        raise HTTPException(
+            status_code=403,
+            detail="Неверный ключ восстановления"
+        )
+
+    username = str(data.get("username") or "").strip()
+    password = str(data.get("password") or "")
+
+    if username.casefold() != "joseff":
+        raise HTTPException(
+            status_code=400,
+            detail="Этот маршрут предназначен для Joseff"
+        )
+
+    if len(password) < 12:
+        raise HTTPException(
+            status_code=400,
+            detail="Новый пароль должен содержать не менее 12 символов"
+        )
+
+    salt = secrets.token_hex(16)
+    password_hash = pinnogram_password_hash(password, salt)
+    now = datetime.now(timezone.utc)
+
+    await pinnogram_users.update_one(
+        {"username_lower": "joseff"},
+        {
+            "$set": {
+                "username": "Joseff",
+                "username_lower": "joseff",
+                "password_salt": salt,
+                "password_hash": password_hash,
+                "updated_at": now
+            },
+            "$setOnInsert": {
+                "avatar": "",
+                "created_at": now
+            }
+        },
+        upsert=True
+    )
+
+    return {
+        "status": "ok",
+        "message": "Аккаунт Joseff восстановлен. Теперь можно войти."
+    }
 
 # 2. Роут для обновления аватарки в базе
 @app.post("/update_avatar")
 async def update_avatar(data: dict):
-    username = data.get("username")
-    avatar_url = data.get("avatar")
-    async with aiosqlite.connect(DB_PATH) as db:
-        # Сохраняем в профиль юзера навсегда
-        await db.execute("UPDATE users SET avatar = ? WHERE username = ?", (avatar_url, username))
-        # Опционально: обновляем во всех старых сообщениях этого юзера
-        await db.execute("UPDATE messages SET avatar = ? WHERE username = ?", (avatar_url, username))
-        await db.commit()
-    return {"status": "ok"}
+    username = str(data.get("username") or "").strip()
+    avatar_url = str(data.get("avatar") or "")
 
+    if not username:
+        raise HTTPException(
+            status_code=400,
+            detail="Не указан никнейм"
+        )
+
+    result = await pinnogram_users.update_one(
+        {"username_lower": username.casefold()},
+        {"$set": {"avatar": avatar_url}}
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Аккаунт не найден"
+        )
+
+    # Старые сообщения обновляем, только если SQLite-таблица доступна.
+    try:
+        async with aiosqlite.connect(DB_PATH) as sqlite_db:
+            await sqlite_db.execute(
+                "UPDATE messages SET avatar = ? WHERE username = ?",
+                (avatar_url, username)
+            )
+            await sqlite_db.commit()
+    except Exception as exc:
+        print(
+            "[Pinnogram] Не удалось обновить аватары "
+            f"старых SQLite-сообщений: {exc}"
+        )
+
+    return {"status": "ok"}
 
 # 1. Эти объекты должны быть ВНЕ класса (в начале файла после импортов)
 admin_data_cache = {}
@@ -3909,7 +4055,12 @@ from uuid import uuid4
 from pydantic import BaseModel
 
 # ⚠️ Вставь сюда скопированную ссылку с экрана MongoDB и замени <db_password> на свой пароль!
-MONGO_URI = "mongodb+srv://admin:ZLSJpY8bZBmwuZBN@robux.wb9rz4o.mongodb.net/?appName=Robux"
+MONGO_URI = os.getenv("MONGO_URI")
+
+if not MONGO_URI:
+    raise RuntimeError(
+        "Переменная окружения MONGO_URI не задана"
+    )
 # =========================================================
 # MONGO DATABASE INITIALIZATION
 # =========================================================
@@ -3927,6 +4078,8 @@ try:
     mongo_client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_URI)
 
     db = mongo_client["robux_hub_db"]
+    # Основные аккаунты Pinnogram
+    pinnogram_users = db["pinnogram_users"]
     cities_db = mongo_client["ctw2_cities_db"]
     sessions_collection = db["user_sessions"]
 
