@@ -10187,15 +10187,23 @@ async def geragram_login(data: GeraLoginModel, response: Response):
 async def route_geragram_page():
     return FileResponse("static/geragram.html")
     
-async def get_current_gera_user(request: Request):
+
+@app.post("/api/geragram/logout")
+async def geragram_logout(request: Request, response: Response):
     token = request.cookies.get("geragram_session")
-    if not token:
-        raise HTTPException(status_code=401, detail="Неавторизован в Geragram")
-    
-    user = await geragram_users.find_one({"active_token": token})
-    if not user:
-        raise HTTPException(status_code=401, detail="Сессия устарела или недействительна")
-    return user
+
+    if token:
+        await geragram_users.update_one(
+            {"active_token": token},
+            {"$unset": {"active_token": ""}}
+        )
+
+    response.delete_cookie(
+        key="geragram_session",
+        path="/"
+    )
+
+    return {"status": "success", "message": "Вы вышли из Geragram"}
 
 # API: Глобальный поиск людей по части никнейма
 @app.get("/api/geragram/users/search")
