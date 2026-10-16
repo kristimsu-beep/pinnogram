@@ -1186,6 +1186,15 @@
                 <button class="auth-btn" style="margin: 15px; width: calc(100% - 30px); font-size: 13px; padding: 11px;" onclick="openWallpaperModal()">
                     <i class="fa-solid fa-palette"></i> Обои и Безопасность
                 </button>
+                
+                <button
+                    class="auth-btn"
+                    style="margin: 0 15px 15px; width: calc(100% - 30px); font-size: 13px; padding: 11px; background: #8b2635;"
+                    onclick="logoutGeragram()">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                    Выйти из аккаунта
+                </button>
+
             </div>
 
             <!-- ПРАВАЯ КОЛОНКА: ОКНО ПЕРЕПИСКИ (ОБНОВЛЕНО: ЗАКРЕПЫ И ОТВЕТЫ) -->
@@ -1490,12 +1499,13 @@
         function showAuthBox() {
             const auth = document.getElementById('authBox');
             const app = document.getElementById('messengerApp');
-            
-            // Заставляем оба блока быть видимыми, чтобы найти, где баг!
+        
             if (auth) auth.style.display = 'block';
-            if (app) app.style.display = 'flex'; 
-            console.log("⚠️ showAuthBox вызвана: оба экрана принудительно открыты!");
+            if (app) app.style.display = 'none';
+        
+            document.body.classList.remove('app-loaded');
         }
+
 
         function initMessengerApp() {
             // Просто включаем видимость мессенджера и прячем авторизацию
