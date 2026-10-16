@@ -1433,47 +1433,56 @@
             checkActiveSession();
         });
 
-        // Проверка наличия активного токена авторизации в куках (ОБНОВЛЕНО: ЛОВУШКА БАНА 403)
         async function checkActiveSession() {
-            const savedUser = localStorage.getItem('geraUsername');
-            if (savedUser) {
-                myUsername = savedUser;
-                window.geraCurrentUser = savedUser;
-                const myDisplay = document.getElementById('myUsernameDisplay');
-                if (myDisplay) myDisplay.innerText = `@${savedUser}`;
-            }
-            
             try {
-                const res = await fetch('/api/geragram/contacts/list');
-                
-                // 🚨 1. ЛОВУШКА БАНА ПРИ ЗАГРУЗКЕ СТРАНИЦЫ
+                const res = await fetch('/api/geragram/contacts/list', {
+                    credentials: 'same-origin'
+                });
+        
                 if (res.status === 403) {
                     const errorData = await res.json();
-                    // Если бэкенд подтвердил, что структура ответа — это бан
+        
                     if (errorData.detail && errorData.detail.is_banned) {
-                        console.error("🚨 [БЛОКИРОВКА] Доступ к СУБД заблокирован бэкендом!");
-                        showRobloxBanWindow(errorData.detail.reason, errorData.detail.unban_timestamp);
-                        return; // Полностью останавливаем запуск, мессенджер не откроется!
+                        showRobloxBanWindow(
+                            errorData.detail.reason,
+                            errorData.detail.unban_timestamp
+                        );
+                        return;
                     }
                 }
-
+        
                 if (res.ok) {
                     const data = await res.json();
                     const serverUser = data.current_user || data.username;
+        
                     if (serverUser) {
                         myUsername = serverUser;
                         window.geraCurrentUser = serverUser;
                         localStorage.setItem('geraUsername', serverUser);
-                        
-                        const myDisplay = document.getElementById('myUsernameDisplay');
-                        if (myDisplay) myDisplay.innerText = `@${serverUser}`;
+        
+                        const display = document.getElementById('myUsernameDisplay');
+                        if (display) {
+                            display.innerText = `@${serverUser}`;
+                        }
+        
+                        initMessengerApp();
+                        return;
                     }
-                    initMessengerApp();
-                } else {
-                    if (savedUser) initMessengerApp(); else showAuthBox();
                 }
-            } catch (err) {
-                if (savedUser) initMessengerApp(); else showAuthBox();
+        
+                // Сервер не подтвердил сессию — требуем настоящий вход.
+                myUsername = null;
+                window.geraCurrentUser = null;
+                localStorage.removeItem('geraUsername');
+                showAuthBox();
+        
+            } catch (error) {
+                console.error('Ошибка проверки сессии Geragram:', error);
+        
+                myUsername = null;
+                window.geraCurrentUser = null;
+                localStorage.removeItem('geraUsername');
+                showAuthBox();
             }
         }
 
@@ -1601,16 +1610,13 @@
                         initMessengerApp();
                     }
                 }
+
             } catch (error) {
-                console.error('Ошибка сети:', error);
-                
-                // 🔥 РЕЗЕРВНЫЙ ОБХОД: Если бэкенд недоступен, но ты вводишь правильные данные — пускаем в обход!
-                console.warn('Сбой сети, пробуем принудительный вход через локальные данные...');
-                myUsername = usernameInput;
-                window.geraCurrentUser = usernameInput;
-                localStorage.setItem('geraUsername', usernameInput);
-                initMessengerApp();
+                console.error('Ошибка авторизации Geragram:', error);
+            
+                alert('Не удалось связаться с сервером. Проверь подключение и попробуй ещё раз.');
             }
+
         }
 
 
