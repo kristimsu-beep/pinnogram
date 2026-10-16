@@ -4160,6 +4160,8 @@ class CTW3CountryCreate(BaseModel):
     flag: str
     language: str
 
+class CTW3Recover(BaseModel):
+    recovery_key: str
 
 class CTW3TerritorySelect(BaseModel):
     country_code: str
@@ -4288,12 +4290,12 @@ async def ctw3_init_aircraft_types():
 
 def get_ctw3_player_id(request: Request):
     return (
-        request.cookies.get("forum_user_id")
+        request.cookies.get("ctw3_recovery_player_id")
+        or request.cookies.get("forum_user_id")
         or request.cookies.get("forum_user_name")
         or request.cookies.get("ctw3_player_id")
         or str(uuid4())
     )
-
 
 def ctw3_json_safe(value):
     """
@@ -7825,6 +7827,48 @@ async def ctw3_get_country(
         "country": ctw3_country_for_client(country)
     }
 
+@app.post("/api/ctw3/recover")
+async def ctw3_recover(
+    data: CTW3Recover,
+    response: Response
+):
+    recovery_key = os.getenv("CTW3_RECOVERY_KEY", "")
+
+    if not recovery_key or not secrets.compare_digest(
+        data.recovery_key, recovery_key
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Ключ восстановления CTW3 недействителен"
+        )
+
+    country = await ctw3_countries.find_one({
+        "name": "Калмыкистан"
+    })
+
+    if not country or not country.get("player_id"):
+        raise HTTPException(
+            status_code=404,
+            detail="Калмыкистан не найден или не имеет player_id"
+        )
+
+    player_id = str(country["player_id"])
+
+    response.set_cookie(
+        key="ctw3_recovery_player_id",
+        value=player_id,
+        max_age=31536000,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        path="/"
+    )
+
+    return {
+        "success": True,
+        "message": "Доступ к существующему государству восстановлен",
+        "country": ctw3_country_for_client(country)
+    }
 
 # =========================================================
 # CTW3 — DRAW CUSTOM TERRITORY
