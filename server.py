@@ -15771,6 +15771,9 @@ class ParashagramLogin(BaseModel):
     username: str
     password: str
 
+class ParashagramRecover(BaseModel):
+    recovery_key: str
+    new_password: str
 
 class ParashagramLocation(BaseModel):
     latitude: float
@@ -16161,14 +16164,12 @@ async def parashagram_login(
 
 @app.post("/api/parashagram/recover")
 async def parashagram_recover(
-    request: Request,
+    data: ParashagramRecover,
     response: Response
 ):
-    data = await request.json()
-
     recovery_key = os.getenv("PARASHAGRAM_RECOVERY_KEY", "")
-    provided_key = str(data.get("recovery_key", ""))
-    new_password = str(data.get("new_password", ""))
+    provided_key = data.recovery_key
+    new_password = data.new_password
 
     if not recovery_key or not secrets.compare_digest(
         provided_key, recovery_key
