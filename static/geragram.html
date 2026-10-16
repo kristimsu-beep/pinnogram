@@ -1506,6 +1506,41 @@
             document.body.classList.remove('app-loaded');
         }
 
+        async function logoutGeragram() {
+            if (!confirm('Выйти из текущего аккаунта Geragram?')) {
+                return;
+            }
+        
+            try {
+                const res = await fetch('/api/geragram/logout', {
+                    method: 'POST',
+                    credentials: 'same-origin'
+                });
+        
+                if (!res.ok) {
+                    alert('Не удалось завершить сессию. Попробуй ещё раз.');
+                    return;
+                }
+        
+                localStorage.removeItem('geraUsername');
+        
+                myUsername = null;
+                window.geraCurrentUser = null;
+        
+                const usernameInput = document.getElementById('authUsername');
+                const passwordInput = document.getElementById('authPassword');
+                const twoFaInput = document.getElementById('auth2FaCode');
+        
+                if (usernameInput) usernameInput.value = '';
+                if (passwordInput) passwordInput.value = '';
+                if (twoFaInput) twoFaInput.value = '';
+        
+                showAuthBox();
+            } catch (error) {
+                console.error('Ошибка выхода из Geragram:', error);
+                alert('Нет соединения с сервером. Попробуй ещё раз.');
+            }
+        }
 
         function initMessengerApp() {
             // Просто включаем видимость мессенджера и прячем авторизацию
