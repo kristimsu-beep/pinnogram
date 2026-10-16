@@ -16159,6 +16159,80 @@ async def parashagram_login(
         )
     }
 
+@app.post("/api/parashagram/recover")
+async def parashagram_recover(
+    request: Request,
+    response: Response
+):
+    data = await request.json()
+
+    recovery_key = os.getenv("PARASHAGRAM_RECOVERY_KEY", "")
+    provided_key = str(data.get("recovery_key", ""))
+    new_password = str(data.get("new_password", ""))
+
+    if not recovery_key or not secrets.compare_digest(
+        provided_key, recovery_key
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Ключ восстановления недействителен"
+        )
+
+    if len(new_password) < 12:
+        raise HTTPException(
+            status_code=400,
+            detail="Новый пароль должен содержать минимум 12 символов"
+        )
+
+    # Ищем именно существующий аккаунт, не создаём новый.
+    user = await parashagram_users.find_one({
+        "username_lower": "йося"
+    })
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="Существующий аккаунт Йося не найден"
+        )
+
+    # Меняем только пароль старого пользователя.
+    await parashagram_users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {
+            "password_hash": parashagram_hash_password(new_password)
+        }}
+    )
+
+    # Отзываем старые сессии только этого пользователя.
+    await parashagram_sessions.delete_many({
+        "user_id": str(user["_id"])
+    })
+
+    # Создаём новую защищённую сессию.
+    session_id = secrets.token_urlsafe(48)
+
+    await parashagram_sessions.insert_one({
+        "session_id": session_id,
+        "user_id": str(user["_id"]),
+        "created_at": datetime.utcnow()
+    })
+
+    response.set_cookie(
+        "parashagram_session",
+        session_id,
+        max_age=60 * 60 * 24 * 30,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        path="/"
+    )
+
+    return {
+        "success": True,
+        "message": "Доступ к существующему аккаунту восстановлен",
+        "user": parashagram_public_user(user)
+    }
+
 @app.get("/api/parashagram/me")
 async def parashagram_me(
     request: Request
