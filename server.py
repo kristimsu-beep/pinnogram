@@ -16170,6 +16170,13 @@ async def parashagram_recover(
     recovery_key = os.getenv("PARASHAGRAM_RECOVERY_KEY", "")
     provided_key = data.recovery_key
     new_password = data.new_password
+    
+    print(
+        "[PARASHAGRAM RECOVERY] "
+        f"env_key_configured={bool(recovery_key)}; "
+        f"env_key_length={len(recovery_key)}; "
+        f"provided_key_length={len(provided_key)}"
+    )
 
     if not recovery_key or not secrets.compare_digest(
         provided_key, recovery_key
